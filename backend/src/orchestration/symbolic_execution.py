@@ -17,8 +17,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 SYMBOLIC_ENGINES = {
-    "angr": {"languages": ["python", "c", "cpp"], "pip": "angr", "docker_image": "argus-kali-runner:latest", "install_hint": "installed in argus-kali-runner image"},
-    "z3": {"languages": ["python", "c", "cpp"], "pip": "z3-solver", "docker_image": "argus-kali-runner:latest", "install_hint": "installed in argus-kali-runner image"},
+    "angr": {
+        "languages": ["python", "c", "cpp"],
+        "pip": "angr",
+        "docker_image": "argus-kali-runner:latest",
+        "install_hint": "installed in argus-kali-runner image",
+    },
+    "z3": {
+        "languages": ["python", "c", "cpp"],
+        "pip": "z3-solver",
+        "docker_image": "argus-kali-runner:latest",
+        "install_hint": "installed in argus-kali-runner image",
+    },
 }
 
 
@@ -83,6 +93,7 @@ SYMBOLIC_USER_TEMPLATE = (
 def build_symbolic_prompt(request: SymbolicExecutionRequest) -> tuple[str, str]:
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
@@ -135,21 +146,29 @@ def generate_angr_stub(
     )
 
 
-def _parse_angr_output(stdout: str, stderr: str) -> SymbolicExecutionResult:
+def _parse_angr_output(stdout: str, stderr: str) -> SymbolicExecutionResult:  # noqa: ARG001 - retained for signature/API compatibility
     """Parse angr script output for vulnerability evidence."""
     vulnerable = False
     input_values: dict[str, Any] = {}
     constraints: list[SymbolicPathConstraint] = []
 
     lower_stdout = stdout.lower()
-    if "no path found" in lower_stdout or "no active states" in lower_stdout or "exploitation failed" in lower_stdout:
+    if (
+        "no path found" in lower_stdout
+        or "no active states" in lower_stdout
+        or "exploitation failed" in lower_stdout
+    ):
         return SymbolicExecutionResult(vulnerable=False, proven=False)
 
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
             continue
-        if "VULNERABLE" in line.upper() or ("path found" in line.lower() and "no " not in line.lower()[:line.lower().find("path")] if "path" in line.lower() else True):
+        if "VULNERABLE" in line.upper() or (
+            "path found" in line.lower() and "no " not in line.lower()[: line.lower().find("path")]
+            if "path" in line.lower()
+            else True
+        ):
             vulnerable = True
         if line.startswith("Input:"):
             try:
@@ -160,11 +179,13 @@ def _parse_angr_output(stdout: str, stderr: str) -> SymbolicExecutionResult:
         if line.startswith("Constraint:"):
             try:
                 parts = line.split(":", 1)
-                constraints.append(SymbolicPathConstraint(
-                    variable=parts[0].replace("Constraint", "").strip(),
-                    constraint=parts[1].strip() if len(parts) > 1 else "",
-                    solvable=True,
-                ))
+                constraints.append(
+                    SymbolicPathConstraint(
+                        variable=parts[0].replace("Constraint", "").strip(),
+                        constraint=parts[1].strip() if len(parts) > 1 else "",
+                        solvable=True,
+                    )
+                )
             except Exception:
                 pass
 
@@ -205,10 +226,7 @@ async def run_symbolic_execution(
         with open(script_path, "w") as f:
             f.write(angr_script)
 
-        if use_sandbox:
-            command = f"python3 {script_path}"
-        else:
-            command = f"python3 {script_path}"
+        command = f"python3 {script_path}" if use_sandbox else f"python3 {script_path}"
 
         timeout = min(request.timeout_seconds, 300)
 
@@ -224,7 +242,11 @@ async def run_symbolic_execution(
         )
         parsed.duration_seconds = round(time.monotonic() - start, 2)
         parsed.angr_script = angr_script
-        parsed.error = result.get("stderr", "")[:1000] if not result.get("success", False) and not parsed.vulnerable else ""
+        parsed.error = (
+            result.get("stderr", "")[:1000]
+            if not result.get("success", False) and not parsed.vulnerable
+            else ""
+        )
         return parsed
 
     except Exception as exc:

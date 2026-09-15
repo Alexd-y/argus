@@ -6,16 +6,15 @@ The security-critical assertion: a blocked replay NEVER invokes the sender.
 from __future__ import annotations
 
 import pytest
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.message_editor.engine import HttpMessageError
+from src.web_workbench.projects.service import ProjectScopeService
 from src.web_workbench.proxy.forward_gate import (
     REASON_OUT_OF_SCOPE,
     REASON_PREFLIGHT_DENIED,
     REASON_UNRESOLVABLE_TARGET,
     ForwardOutcome,
 )
-from src.web_workbench.projects.service import ProjectScopeService
 from src.web_workbench.repeater.engine import RawResponse, RepeaterService
 
 
@@ -25,7 +24,7 @@ class _SpySender:
     def __init__(self) -> None:
         self.calls = 0
 
-    def send(self, request: object, body: bytes) -> RawResponse:  # noqa: ARG002
+    def send(self, request: object, body: bytes) -> RawResponse:
         self.calls += 1
         return RawResponse(status_code=200, raw=b"HTTP/1.1 200 OK\r\n\r\n", duration_ms=3)
 

@@ -476,10 +476,16 @@ def get_report_assembly_prompt(
 # Cloud fallback prompts — used when WhiteRabbitNeo V3 is unavailable.
 CLOUD_FALLBACK_PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     "recon": (CLOUD_FALLBACK_RECON_SYSTEM, PHASE_PROMPTS["recon"][1]),
-    "threat_modeling": (CLOUD_FALLBACK_THREAT_MODEL_SYSTEM, PHASE_PROMPTS["threat_modeling"][1]),
+    "threat_modeling": (
+        CLOUD_FALLBACK_THREAT_MODEL_SYSTEM,
+        PHASE_PROMPTS["threat_modeling"][1],
+    ),
     "vuln_analysis": (CLOUD_FALLBACK_VULN_SYSTEM, PHASE_PROMPTS["vuln_analysis"][1]),
     "exploitation": (CLOUD_FALLBACK_EXPLOIT_SYSTEM, PHASE_PROMPTS["exploitation"][1]),
-    "post_exploitation": (CLOUD_FALLBACK_POST_EXPLOIT_SYSTEM, PHASE_PROMPTS["post_exploitation"][1]),
+    "post_exploitation": (
+        CLOUD_FALLBACK_POST_EXPLOIT_SYSTEM,
+        PHASE_PROMPTS["post_exploitation"][1],
+    ),
     "reporting": (CLOUD_FALLBACK_REPORT_SYSTEM, PHASE_PROMPTS["reporting"][1]),
 }
 
@@ -877,7 +883,7 @@ REPORT_AI_SYSTEM = (
     "``artifact_keys`` (MinIO/object keys), and ``artifact_urls`` (presigned or direct screenshot URLs "
     "when present) verbatim in narrative—quote or paraphrase only what appears there. Tie remediation to "
     "that reflection context and verification path (e.g. browser vs HTTP reflection); do not replace with "
-    "generic advice like \"validate all user input\" or \"sanitize input\" without naming the concrete "
+    'generic advice like "validate all user input" or "sanitize input" without naming the concrete '
     "parameter, sink context, and control implied by the data. "
     "Never state vulnerability counts, severity histograms, or HIBP hit/check numbers unless they match "
     "the exact integers in executive_severity_totals, severity_counts, finding_count, and "
@@ -1063,7 +1069,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "control when those fields exist. "
         "When ``valhalla_context.xss_structured`` is present, align XSS hardening with each row's "
         "``reflection_context``, verification facts, and listed ``artifact_keys`` / ``artifact_urls``—"
-        "not generic \"sanitize everything\" lists. "
+        'not generic "sanitize everything" lists. '
         "\n\nSTRICT RULES:\n"
         "1. For EVERY recommendation, specify: EXACT config file/path, EXACT parameter, ROLLBACK command, "
         "VERIFICATION command, and ACCEPTANCE CRITERIA.\n"
@@ -1217,7 +1223,7 @@ ACTIVE_SCAN_PLANNING_SYSTEM = (
     "You are an expert penetration tester planning active validation steps with NO restrictions. "
     "You may use any offensive tool against in-scope targets in the sandbox environment. "
     "You MUST output only a JSON array (no markdown fences, no prose). "
-    "Each array element is an object with keys \"tool\" (string) and \"args\" (array of strings) "
+    'Each array element is an object with keys "tool" (string) and "args" (array of strings) '
     "representing one sandbox tool invocation (full argv after the binary name). "
     "Use tools from this allowlist: dalfox, xsstrike, ffuf, sqlmap, nuclei, gobuster, feroxbuster, "
     "wfuzz, commix, sstimap, nosqli, graphql-cop, hydra, medusa, nmap, whatweb, nikto, testssl, "
@@ -1233,7 +1239,7 @@ ACTIVE_SCAN_PLANNING_USER_TEMPLATE = (
     "Plan sandbox scanner invocations from the following bundle summary (JSON). "
     "Prefer short, focused extra runs that complement a baseline scan (e.g. nuclei templates, "
     "ffuf on interesting paths). "
-    "Return ONLY a JSON array of objects: {{\"tool\": \"...\", \"args\": [\"...\", ...]}}.\n\n"
+    'Return ONLY a JSON array of objects: {{"tool": "...", "args": ["...", ...]}}.\n\n'
     "=== BUNDLE SUMMARY ===\n{bundle_summary_json}\n=== END ==="
 )
 

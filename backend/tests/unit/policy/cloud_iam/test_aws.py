@@ -19,7 +19,6 @@ import asyncio
 from typing import Any
 
 import pytest
-
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam._common import hash_identifier
 from src.policy.cloud_iam.aws import (
@@ -37,8 +36,8 @@ from src.policy.ownership import (
     OwnershipMethod,
     OwnershipVerificationError,
 )
-from tests.unit.policy.cloud_iam.conftest import make_challenge
 
+from tests.unit.policy.cloud_iam.conftest import make_challenge
 
 # ---------------------------------------------------------------------------
 # Stub STS client
@@ -170,9 +169,7 @@ class TestAwsStsVerifier:
         assert verifier.cloud_provider == "aws"
 
     @pytest.mark.asyncio
-    async def test_happy_path_returns_proof(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_happy_path_returns_proof(self, aws_challenge_token: str) -> None:
         sts = _StubSts(responses=[_ok_response()])
         verifier = AwsStsVerifier(sts_client=sts)
         challenge = make_challenge(
@@ -188,9 +185,7 @@ class TestAwsStsVerifier:
         assert sts.calls[0]["duration_seconds"] == 900
 
     @pytest.mark.asyncio
-    async def test_session_name_derived_from_challenge(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_session_name_derived_from_challenge(self, aws_challenge_token: str) -> None:
         sts = _StubSts(responses=[_ok_response()])
         verifier = AwsStsVerifier(sts_client=sts)
         challenge = make_challenge(
@@ -205,9 +200,7 @@ class TestAwsStsVerifier:
         assert len(session_name) <= 64
 
     @pytest.mark.asyncio
-    async def test_method_mismatch_raises_invalid_arn(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_method_mismatch_raises_invalid_arn(self, aws_challenge_token: str) -> None:
         sts = _StubSts()
         verifier = AwsStsVerifier(sts_client=sts)
         challenge = make_challenge(
@@ -221,9 +214,7 @@ class TestAwsStsVerifier:
         assert sts.calls == []  # no SDK call made
 
     @pytest.mark.asyncio
-    async def test_invalid_arn_short_circuits(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_invalid_arn_short_circuits(self, aws_challenge_token: str) -> None:
         sts = _StubSts()
         verifier = AwsStsVerifier(sts_client=sts)
         challenge = make_challenge(
@@ -237,9 +228,7 @@ class TestAwsStsVerifier:
         assert sts.calls == []
 
     @pytest.mark.asyncio
-    async def test_account_mismatch_raises_region_mismatch(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_account_mismatch_raises_region_mismatch(self, aws_challenge_token: str) -> None:
         sts = _StubSts(responses=[_ok_response(account="999999999999")])
         verifier = AwsStsVerifier(sts_client=sts)
         challenge = make_challenge(
@@ -252,9 +241,7 @@ class TestAwsStsVerifier:
         assert exc.value.summary == REASON_AWS_STS_REGION_MISMATCH
 
     @pytest.mark.asyncio
-    async def test_role_name_mismatch_raises_invalid_arn(
-        self, aws_challenge_token: str
-    ) -> None:
+    async def test_role_name_mismatch_raises_invalid_arn(self, aws_challenge_token: str) -> None:
         bad_response = AssumeRoleResponse(
             Account="123456789012",
             AssumedRoleUser={
@@ -444,7 +431,7 @@ class TestBotoStsAdapter:
 
     def test_implements_protocol(self) -> None:
         class _Fake:
-            def assume_role(self, **_: Any) -> dict[str, Any]:  # noqa: ANN401
+            def assume_role(self, **_: Any) -> dict[str, Any]:
                 return {}
 
         adapter = BotoStsAdapter(sts_client=_Fake())

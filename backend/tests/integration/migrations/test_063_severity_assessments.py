@@ -55,7 +55,10 @@ def test_063_targets_four_finding_columns() -> None:
 def test_063_json_type_selects_dialect() -> None:
     module = _load_revision_module("063")
 
-    for dialect, expected in (("postgresql", sa.dialects.postgresql.JSONB), ("sqlite", sa.JSON)):
+    for dialect, expected in (
+        ("postgresql", sa.dialects.postgresql.JSONB),
+        ("sqlite", sa.JSON),
+    ):
         bind = MagicMock()
         bind.dialect.name = dialect
         with patch.object(module.op, "get_bind", return_value=bind):

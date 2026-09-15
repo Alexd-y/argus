@@ -100,8 +100,6 @@ class AiTmPriorityHypotheses(BaseModel):
 class Stage3ApplicationFlow(ApplicationFlow):
     """Stage 3 application flow — extends ApplicationFlow (id, source, sink, data_type, description)."""
 
-    pass
-
 
 class Stage2InputsArtifact(BaseModel):
     """Stage 2 inputs artifact: metadata + ThreatModelInputBundle-like structure for traceability."""

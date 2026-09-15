@@ -10,6 +10,7 @@ from src.pipeline.contracts.finding_dto import (
     FindingCategory,
     FindingStatus,
 )
+from src.web_workbench.checks.severity import CheckSeverity
 from src.web_workbench.checks.wordpress import (
     WordpressFinding,
     analyze,
@@ -18,7 +19,6 @@ from src.web_workbench.checks.wordpress import (
     wordpress_finding_to_dto,
     wordpress_findings_to_dtos,
 )
-from src.web_workbench.checks.severity import CheckSeverity
 from src.web_workbench.proxy.transport import NormalizedRequest, NormalizedResponse
 
 
@@ -97,7 +97,10 @@ def test_version_from_feed_generator() -> None:
 
 def test_version_from_readme_only_on_readme_path() -> None:
     body = "<h1>WordPress</h1><p>Version 6.1</p>"
-    assert detect_version(_request(target="/readme.html"), body) == ("6.1", "readme.html")
+    assert detect_version(_request(target="/readme.html"), body) == (
+        "6.1",
+        "readme.html",
+    )
     # Same body on a different path must not trigger the readme heuristic.
     assert detect_version(_request(target="/"), body) is None
 
@@ -176,7 +179,7 @@ def test_clean_response_yields_no_findings() -> None:
 
 
 def test_findings_deduplicated_by_code() -> None:
-    body = b'<meta name="generator" content="WordPress 6.4.2">' b'<link href="/wp-content/x.css">'
+    body = b'<meta name="generator" content="WordPress 6.4.2"><link href="/wp-content/x.css">'
     findings = analyze(_request(), _response(), body)
     codes = [f.code for f in findings]
     assert len(codes) == len(set(codes))

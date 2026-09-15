@@ -59,8 +59,10 @@ class TestPhaseToProgress:
 
     def test_unknown_phase_returns_zero(self) -> None:
         """Phase not in PHASE_PROGRESS returns 0."""
+
         class FakePhase:
             value = "unknown"
+
         assert _phase_to_progress(FakePhase()) == 0
 
 
@@ -94,14 +96,63 @@ class TestRunScanStateMachine:
         )
 
         with (
-            patch.object(sm, "_check_exploitation_approval_required", AsyncMock(return_value=False)),
-            patch.object(sm, "run_recon", AsyncMock(return_value=ReconOutput(assets=["93.184.216.34:80 nginx/1.18"], subdomains=["www.example.com"], ports=[80, 443]))),
-            patch.object(sm, "run_threat_modeling", AsyncMock(return_value=ThreatModelOutput(threat_model={"threats": ["Outdated nginx"], "attack_surface": ["80/tcp"]}))),
-            patch.object(sm, "run_vuln_analysis", AsyncMock(return_value=VulnAnalysisOutput(findings=[{"severity": "high", "title": "nginx CVE"}]))),
-            patch.object(sm, "run_exploit_attempt", AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[]))),
-            patch.object(sm, "run_exploit_verify", AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[]))),
-            patch.object(sm, "run_post_exploitation", AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[]))),
-            patch.object(sm, "run_reporting", AsyncMock(return_value=ReportingOutput(report={"summary": {"high": 1}}))),
+            patch.object(
+                sm,
+                "_check_exploitation_approval_required",
+                AsyncMock(return_value=False),
+            ),
+            patch.object(
+                sm,
+                "run_recon",
+                AsyncMock(
+                    return_value=ReconOutput(
+                        assets=["93.184.216.34:80 nginx/1.18"],
+                        subdomains=["www.example.com"],
+                        ports=[80, 443],
+                    )
+                ),
+            ),
+            patch.object(
+                sm,
+                "run_threat_modeling",
+                AsyncMock(
+                    return_value=ThreatModelOutput(
+                        threat_model={
+                            "threats": ["Outdated nginx"],
+                            "attack_surface": ["80/tcp"],
+                        }
+                    )
+                ),
+            ),
+            patch.object(
+                sm,
+                "run_vuln_analysis",
+                AsyncMock(
+                    return_value=VulnAnalysisOutput(
+                        findings=[{"severity": "high", "title": "nginx CVE"}]
+                    )
+                ),
+            ),
+            patch.object(
+                sm,
+                "run_exploit_attempt",
+                AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[])),
+            ),
+            patch.object(
+                sm,
+                "run_exploit_verify",
+                AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[])),
+            ),
+            patch.object(
+                sm,
+                "run_post_exploitation",
+                AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[])),
+            ),
+            patch.object(
+                sm,
+                "run_reporting",
+                AsyncMock(return_value=ReportingOutput(report={"summary": {"high": 1}})),
+            ),
         ):
             await run_scan_state_machine(
                 mock_session,
@@ -131,13 +182,41 @@ class TestRunScanStateMachine:
         )
 
         with (
-            patch.object(sm, "_check_exploitation_approval_required", AsyncMock(return_value=False)),
-            patch.object(sm, "run_recon", AsyncMock(return_value=ReconOutput(assets=[], subdomains=[], ports=[]))),
-            patch.object(sm, "run_threat_modeling", AsyncMock(return_value=ThreatModelOutput(threat_model={}))),
-            patch.object(sm, "run_vuln_analysis", AsyncMock(return_value=VulnAnalysisOutput(findings=[]))),
-            patch.object(sm, "run_exploit_attempt", AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[]))),
-            patch.object(sm, "run_exploit_verify", AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[]))),
-            patch.object(sm, "run_post_exploitation", AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[]))),
+            patch.object(
+                sm,
+                "_check_exploitation_approval_required",
+                AsyncMock(return_value=False),
+            ),
+            patch.object(
+                sm,
+                "run_recon",
+                AsyncMock(return_value=ReconOutput(assets=[], subdomains=[], ports=[])),
+            ),
+            patch.object(
+                sm,
+                "run_threat_modeling",
+                AsyncMock(return_value=ThreatModelOutput(threat_model={})),
+            ),
+            patch.object(
+                sm,
+                "run_vuln_analysis",
+                AsyncMock(return_value=VulnAnalysisOutput(findings=[])),
+            ),
+            patch.object(
+                sm,
+                "run_exploit_attempt",
+                AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[])),
+            ),
+            patch.object(
+                sm,
+                "run_exploit_verify",
+                AsyncMock(return_value=ExploitationOutput(exploits=[], evidence=[])),
+            ),
+            patch.object(
+                sm,
+                "run_post_exploitation",
+                AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[])),
+            ),
             patch.object(sm, "run_reporting", AsyncMock(return_value=ReportingOutput(report={}))),
         ):
             await run_scan_state_machine(
@@ -149,11 +228,7 @@ class TestRunScanStateMachine:
             )
 
         add_calls = mock_session.add.call_args_list
-        step_names = [
-            c[0][0].step_name
-            for c in add_calls
-            if hasattr(c[0][0], "step_name")
-        ]
+        step_names = [c[0][0].step_name for c in add_calls if hasattr(c[0][0], "step_name")]
         assert "recon" in step_names
         assert "reporting" in step_names
         assert len(step_names) == 6
@@ -186,13 +261,33 @@ class TestRunScanStateMachine:
         mock_verify = AsyncMock(return_value=verify_output)
 
         with (
-            patch.object(sm, "_check_exploitation_approval_required", AsyncMock(return_value=False)),
-            patch.object(sm, "run_recon", AsyncMock(return_value=ReconOutput(assets=["a1"], subdomains=[], ports=[80]))),
-            patch.object(sm, "run_threat_modeling", AsyncMock(return_value=ThreatModelOutput(threat_model={}))),
-            patch.object(sm, "run_vuln_analysis", AsyncMock(return_value=VulnAnalysisOutput(findings=[{"id": "f1"}]))),
+            patch.object(
+                sm,
+                "_check_exploitation_approval_required",
+                AsyncMock(return_value=False),
+            ),
+            patch.object(
+                sm,
+                "run_recon",
+                AsyncMock(return_value=ReconOutput(assets=["a1"], subdomains=[], ports=[80])),
+            ),
+            patch.object(
+                sm,
+                "run_threat_modeling",
+                AsyncMock(return_value=ThreatModelOutput(threat_model={})),
+            ),
+            patch.object(
+                sm,
+                "run_vuln_analysis",
+                AsyncMock(return_value=VulnAnalysisOutput(findings=[{"id": "f1"}])),
+            ),
             patch.object(sm, "run_exploit_attempt", mock_attempt),
             patch.object(sm, "run_exploit_verify", mock_verify),
-            patch.object(sm, "run_post_exploitation", AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[]))),
+            patch.object(
+                sm,
+                "run_post_exploitation",
+                AsyncMock(return_value=PostExploitationOutput(lateral=[], persistence=[])),
+            ),
             patch.object(sm, "run_reporting", AsyncMock(return_value=ReportingOutput(report={}))),
         ):
             await run_scan_state_machine(
@@ -213,28 +308,41 @@ class TestRunScanStateMachine:
         """When policy requires approval, ExploitationApprovalRequiredError is raised."""
         import src.orchestration.state_machine as sm
         from src.orchestration.phases import (
-            ExploitationOutput,
-            PostExploitationOutput,
             ReconOutput,
-            ReportingOutput,
             ThreatModelOutput,
             VulnAnalysisOutput,
         )
         from src.orchestration.state_machine import ExploitationApprovalRequiredError
 
         with (
-            patch.object(sm, "_check_exploitation_approval_required", AsyncMock(return_value=True)),
-            patch.object(sm, "run_recon", AsyncMock(return_value=ReconOutput(assets=["a1"], subdomains=[], ports=[80]))),
-            patch.object(sm, "run_threat_modeling", AsyncMock(return_value=ThreatModelOutput(threat_model={}))),
-            patch.object(sm, "run_vuln_analysis", AsyncMock(return_value=VulnAnalysisOutput(findings=[{"id": "f1"}]))),
+            patch.object(
+                sm,
+                "_check_exploitation_approval_required",
+                AsyncMock(return_value=True),
+            ),
+            patch.object(
+                sm,
+                "run_recon",
+                AsyncMock(return_value=ReconOutput(assets=["a1"], subdomains=[], ports=[80])),
+            ),
+            patch.object(
+                sm,
+                "run_threat_modeling",
+                AsyncMock(return_value=ThreatModelOutput(threat_model={})),
+            ),
+            patch.object(
+                sm,
+                "run_vuln_analysis",
+                AsyncMock(return_value=VulnAnalysisOutput(findings=[{"id": "f1"}])),
+            ),
             patch.object(sm, "run_exploit_attempt", AsyncMock()),
             patch.object(sm, "run_exploit_verify", AsyncMock()),
+            pytest.raises(ExploitationApprovalRequiredError),
         ):
-            with pytest.raises(ExploitationApprovalRequiredError):
-                await run_scan_state_machine(
-                    mock_session,
-                    scan_id="approval-gate-scan",
-                    tenant_id="approval-gate-tenant",
-                    target="https://target.com",
-                    options={},
-                )
+            await run_scan_state_machine(
+                mock_session,
+                scan_id="approval-gate-scan",
+                tenant_id="approval-gate-tenant",
+                target="https://target.com",
+                options={},
+            )

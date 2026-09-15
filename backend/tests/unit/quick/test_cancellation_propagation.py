@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.quick import cancellation as cancel_mod
 from src.quick.cancellation import (
     CancellationResult,

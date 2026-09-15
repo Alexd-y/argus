@@ -26,7 +26,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -60,7 +60,7 @@ _ANSWER_LINE_RE: Final[re.Pattern[str]] = re.compile(
     r"(?P<value>.+)$",
 )
 
-_DedupKey: TypeAlias = tuple[str, str, str]
+type _DedupKey = tuple[str, str, str]
 
 
 def parse_dig(
@@ -166,9 +166,8 @@ def _is_section_header(line: str, section_name: str | None = None) -> bool:
 def _clean_txt_value(record_type: str, raw: str) -> str:
     """Strip surrounding quotes and normalise TXT records."""
     cleaned = raw.strip('"').strip("'").strip()
-    if record_type == "TXT":
-        if cleaned.startswith('"') and cleaned.endswith('"'):
-            cleaned = cleaned[1:-1]
+    if record_type == "TXT" and cleaned.startswith('"') and cleaned.endswith('"'):
+        cleaned = cleaned[1:-1]
     return cleaned
 
 

@@ -12,40 +12,30 @@ class TestAdminHealthLogging:
     """M-15: admin.py should not swallow exceptions."""
 
     def test_no_except_pass_in_admin(self) -> None:
-        text = (BACKEND_SRC / "api" / "routers" / "admin.py").read_text(
-            encoding="utf-8"
-        )
+        text = (BACKEND_SRC / "api" / "routers" / "admin.py").read_text(encoding="utf-8")
         lines = text.splitlines()
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith("except") and i + 1 < len(lines):
                 next_line = lines[i + 1].strip()
-                assert next_line != "pass", (
-                    f"admin.py:{i + 2} has bare 'pass' after except"
-                )
+                assert next_line != "pass", f"admin.py:{i + 2} has bare 'pass' after except"
 
 
 class TestHealthLogging:
     """M-16: health.py should log DB failures."""
 
     def test_no_except_pass_in_health(self) -> None:
-        text = (BACKEND_SRC / "api" / "routers" / "health.py").read_text(
-            encoding="utf-8"
-        )
+        text = (BACKEND_SRC / "api" / "routers" / "health.py").read_text(encoding="utf-8")
         lines = text.splitlines()
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith("except") and i + 1 < len(lines):
                 next_line = lines[i + 1].strip()
-                assert next_line != "pass", (
-                    f"health.py:{i + 2} has bare 'pass' after except"
-                )
+                assert next_line != "pass", f"health.py:{i + 2} has bare 'pass' after except"
 
     def test_health_logs_db_failure(self) -> None:
         """health.py exception handlers should log warnings."""
-        text = (BACKEND_SRC / "api" / "routers" / "health.py").read_text(
-            encoding="utf-8"
-        )
+        text = (BACKEND_SRC / "api" / "routers" / "health.py").read_text(encoding="utf-8")
         assert "logger.warning" in text
 
 
@@ -60,13 +50,7 @@ class TestNoRussianComments:
         assert found == [], f"Cyrillic in config.py: {found[:5]}"
 
     def test_no_russian_in_planner(self) -> None:
-        planner = (
-            BACKEND_SRC
-            / "recon"
-            / "vulnerability_analysis"
-            / "active_scan"
-            / "planner.py"
-        )
+        planner = BACKEND_SRC / "recon" / "vulnerability_analysis" / "active_scan" / "planner.py"
         assert planner.exists(), "planner.py must exist in the project"
         text = planner.read_text(encoding="utf-8")
         found = self._CYRILLIC.findall(text)

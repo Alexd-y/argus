@@ -100,9 +100,7 @@ def _encode_password(plaintext: str) -> bytes:
         raise ValueError("plaintext must be non-empty")
     encoded = plaintext.encode("utf-8")
     if len(encoded) > _BCRYPT_MAX_PASSWORD_BYTES:
-        raise ValueError(
-            f"plaintext exceeds bcrypt limit of {_BCRYPT_MAX_PASSWORD_BYTES} bytes"
-        )
+        raise ValueError(f"plaintext exceeds bcrypt limit of {_BCRYPT_MAX_PASSWORD_BYTES} bytes")
     return encoded
 
 

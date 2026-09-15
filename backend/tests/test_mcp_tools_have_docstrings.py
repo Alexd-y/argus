@@ -21,15 +21,12 @@ from typing import Final
 
 import pytest
 from mcp.types import Prompt, Resource, ResourceTemplate, Tool
-
 from src.mcp.server import build_app
 
 MIN_DESCRIPTION_CHARS: Final[int] = 30
 
 
-def _collect_surface() -> tuple[
-    list[Tool], list[Resource], list[ResourceTemplate], list[Prompt]
-]:
+def _collect_surface() -> tuple[list[Tool], list[Resource], list[ResourceTemplate], list[Prompt]]:
     """Build the FastMCP app once and return its complete capability surface.
 
     Building the app touches the importable code path of every MCP
@@ -38,9 +35,7 @@ def _collect_surface() -> tuple[
     """
     app = build_app(name="argus-docstring-gate", log_level="WARNING")
 
-    async def _gather() -> tuple[
-        list[Tool], list[Resource], list[ResourceTemplate], list[Prompt]
-    ]:
+    async def _gather() -> tuple[list[Tool], list[Resource], list[ResourceTemplate], list[Prompt]]:
         return (
             await app.list_tools(),
             await app.list_resources(),
@@ -71,9 +66,7 @@ def test_mcp_tool_has_description(tool: Tool) -> None:
 @pytest.mark.parametrize("resource", _RESOURCES, ids=[r.name for r in _RESOURCES])
 def test_mcp_resource_has_description(resource: Resource) -> None:
     description = (resource.description or "").strip()
-    assert description, (
-        f"MCP resource '{resource.name}' ({resource.uri}) is missing a description"
-    )
+    assert description, f"MCP resource '{resource.name}' ({resource.uri}) is missing a description"
     assert len(description) >= MIN_DESCRIPTION_CHARS, (
         f"MCP resource '{resource.name}' description too short "
         f"({len(description)} < {MIN_DESCRIPTION_CHARS} chars): {description!r}"
@@ -84,8 +77,7 @@ def test_mcp_resource_has_description(resource: Resource) -> None:
 def test_mcp_resource_template_has_description(template: ResourceTemplate) -> None:
     description = (template.description or "").strip()
     assert description, (
-        f"MCP resource template '{template.name}' ({template.uriTemplate}) "
-        "is missing a description"
+        f"MCP resource template '{template.name}' ({template.uriTemplate}) is missing a description"
     )
     assert len(description) >= MIN_DESCRIPTION_CHARS, (
         f"MCP resource template '{template.name}' description too short "

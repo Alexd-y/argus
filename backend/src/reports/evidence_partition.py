@@ -19,6 +19,7 @@ across formats.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterable
 from typing import Any
 
@@ -57,11 +58,9 @@ def _set_attr(finding: Any, name: str, value: Any) -> None:
     if isinstance(finding, dict):
         finding[name] = value
         return
-    try:
+    # Frozen/extra-forbid models without the field — downstream recomputes instead.
+    with contextlib.suppress(AttributeError, ValueError, TypeError):
         setattr(finding, name, value)
-    except (AttributeError, ValueError, TypeError):
-        # Frozen/extra-forbid models without the field — downstream recomputes instead.
-        pass
 
 
 def _evidence_type(finding: Any) -> str:
@@ -120,8 +119,18 @@ def unconfirmed_reason(finding: Any) -> str | None:
 # (``confirmed`` > ``likely`` > ``possible`` > ``advisory``) maps onto the
 # INFORMATIONAL/SUSPECTED/CONFIRMED/EXPLOITED evidence tiers; "not above the
 # SUSPECTED tier" therefore caps at ``possible``.
-_CONFIDENCE_RANK: dict[str, int] = {"advisory": 0, "possible": 1, "likely": 2, "confirmed": 3}
-_RANK_TO_CONFIDENCE: dict[int, str] = {0: "advisory", 1: "possible", 2: "likely", 3: "confirmed"}
+_CONFIDENCE_RANK: dict[str, int] = {
+    "advisory": 0,
+    "possible": 1,
+    "likely": 2,
+    "confirmed": 3,
+}
+_RANK_TO_CONFIDENCE: dict[int, str] = {
+    0: "advisory",
+    1: "possible",
+    2: "likely",
+    3: "confirmed",
+}
 
 # Highest confidence each evidence-quality band can justify. A finding's stated
 # confidence is clamped DOWN to this cap so confidence tracks evidence strength
@@ -191,9 +200,7 @@ def reconcile_finding_evidence_view(finding: Any) -> dict[str, Any]:
     }
 
 
-def partition_findings(
-    findings: Iterable[Any], *, tag: bool = True
-) -> tuple[list[Any], list[Any]]:
+def partition_findings(findings: Iterable[Any], *, tag: bool = True) -> tuple[list[Any], list[Any]]:
     """Split findings into ``(confirmed_provable, unconfirmed)``.
 
     When ``tag`` is True (default) each finding is annotated in place with

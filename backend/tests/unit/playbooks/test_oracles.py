@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.playbooks.actions import HttpExchange, HttpRequestSpec, HttpResponse
 from src.playbooks.oracles import (
     OracleNotImplemented,
@@ -180,11 +179,15 @@ def test_race_without_state_field_uses_success_count() -> None:
     baseline = _exchange(200, "")
     mutated = _exchange(200, "")
     finding = get_oracle(OracleType.RACE).evaluate(
-        baseline, mutated, {"expected_max_success": 1, "observed_statuses": [200, 200, 201]}
+        baseline,
+        mutated,
+        {"expected_max_success": 1, "observed_statuses": [200, 200, 201]},
     )
     assert finding.verdict is OracleVerdict.FINDING
     clean = get_oracle(OracleType.RACE).evaluate(
-        baseline, mutated, {"expected_max_success": 1, "observed_statuses": [200, 429, 429]}
+        baseline,
+        mutated,
+        {"expected_max_success": 1, "observed_statuses": [200, 429, 429]},
     )
     assert clean.verdict is OracleVerdict.NO_FINDING
 
@@ -192,9 +195,7 @@ def test_race_without_state_field_uses_success_count() -> None:
 def test_race_unreadable_state_is_inconclusive() -> None:
     before = _exchange(200, "not json")
     after = _exchange(200, "not json")
-    result = get_oracle(OracleType.RACE).evaluate(
-        before, after, {"state_field": "balance"}
-    )
+    result = get_oracle(OracleType.RACE).evaluate(before, after, {"state_field": "balance"})
     assert result.verdict is OracleVerdict.INCONCLUSIVE
 
 

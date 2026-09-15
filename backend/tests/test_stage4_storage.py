@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
-
-from src.recon.stage_object_download import StageObjectFetchError
 from src.recon.stage4_storage import (
     STAGE4_ROOT_FILES,
     _build_object_key,
@@ -17,7 +15,7 @@ from src.recon.stage4_storage import (
     ensure_stage4_artifacts_bucket,
     upload_stage4_artifacts,
 )
-
+from src.recon.stage_object_download import StageObjectFetchError
 
 # ---------------------------------------------------------------------------
 # _build_object_key

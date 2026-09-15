@@ -28,7 +28,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -63,7 +63,7 @@ _LOAD_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_jadx(

@@ -121,9 +121,12 @@ def _matches(response: NormalizedResponse, body: bytes, rules: dict[str, Any] | 
     }:
         return False
     body_contains = rules.get("body_contains")
-    if isinstance(body_contains, str) and body_contains:
-        if body_contains.encode("latin-1") not in body:
-            return False
+    if (
+        isinstance(body_contains, str)
+        and body_contains
+        and body_contains.encode("latin-1") not in body
+    ):
+        return False
     header_contains = rules.get("header_contains")
     if isinstance(header_contains, dict):
         for name, needle in header_contains.items():
@@ -131,10 +134,11 @@ def _matches(response: NormalizedResponse, body: bytes, rules: dict[str, Any] | 
             if str(needle).lower() not in value.lower():
                 return False
     cookie_present = rules.get("cookie_present")
-    if isinstance(cookie_present, str) and cookie_present:
-        if cookie_present not in parse_set_cookies(response):
-            return False
-    return True
+    return not (
+        isinstance(cookie_present, str)
+        and cookie_present
+        and cookie_present not in parse_set_cookies(response)
+    )
 
 
 class MacroRunner:

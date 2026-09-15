@@ -152,8 +152,7 @@ def make_proof(
     valid_until = min(verified_at + ttl, challenge.expires_at)
     if valid_until <= verified_at:
         valid_until = verified_at + timedelta(seconds=1)
-    if valid_until > challenge.expires_at:
-        valid_until = challenge.expires_at
+    valid_until = min(valid_until, challenge.expires_at)
     if len(notes) > 256:
         notes = notes[:256]
     return OwnershipProof(
@@ -167,7 +166,7 @@ def make_proof(
     )
 
 
-async def run_with_timeout(
+async def run_with_timeout[T](
     coro_factory: Callable[[], Awaitable[T]],
     *,
     timeout_s: float | None = None,
@@ -243,9 +242,7 @@ def emit_cloud_attempt(
                 "id_token",
                 "raw_response",
             }:
-                raise ValueError(
-                    "extra cloud audit field would leak a raw secret"
-                )
+                raise ValueError("extra cloud audit field would leak a raw secret")
             payload[key] = value
     audit_logger.emit(
         event_type=AuditEventType.OWNERSHIP_VERIFY,

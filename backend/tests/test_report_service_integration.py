@@ -24,7 +24,6 @@ import json
 
 import pytest
 from defusedxml import ElementTree as DET
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -43,9 +42,15 @@ from src.reports.report_service import (
 def canonical_report_data() -> ReportData:
     """Representative ReportData with at least one of every interesting field."""
     summary = ReportSummary(
-        critical=2, high=1, medium=1, low=1, info=0,
+        critical=2,
+        high=1,
+        medium=1,
+        low=1,
+        info=0,
         technologies=["nginx", "django"],
-        sslIssues=1, headerIssues=2, leaksFound=False,
+        sslIssues=1,
+        headerIssues=2,
+        leaksFound=False,
     )
     findings = [
         Finding(
@@ -89,9 +94,7 @@ def canonical_report_data() -> ReportData:
         scan_id="scan-int-1",
         tenant_id="tenant-int-1",
         evidence=[
-            EvidenceEntry(
-                finding_id="f1", object_key="evidence/dump.txt", description="HTTP dump"
-            )
+            EvidenceEntry(finding_id="f1", object_key="evidence/dump.txt", description="HTTP dump")
         ],
         screenshots=[ScreenshotEntry(object_key="shots/login.png", url_or_email="login")],
         timeline=[

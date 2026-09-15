@@ -99,7 +99,14 @@ def _verdict_rank(verdict: FindingTriageVerdict) -> int:
 
 
 def _severity_rank(severity: str) -> int:
-    order = {"info": 0, "informational": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    order = {
+        "info": 0,
+        "informational": 0,
+        "low": 1,
+        "medium": 2,
+        "high": 3,
+        "critical": 4,
+    }
     return order.get(severity.lower(), 2)
 
 
@@ -354,7 +361,9 @@ def to_logical_finding(correlated: CorrelatedFinding) -> LogicalFinding:
     )
 
 
-def to_lifecycle_occurrences(correlated: CorrelatedFinding) -> tuple[FindingOccurrence, ...]:
+def to_lifecycle_occurrences(
+    correlated: CorrelatedFinding,
+) -> tuple[FindingOccurrence, ...]:
     """Lifecycle occurrences — all evidence refs retained."""
     now = datetime.now(tz=UTC)
     finding = correlated.finding

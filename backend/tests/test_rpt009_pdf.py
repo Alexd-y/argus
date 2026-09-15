@@ -323,41 +323,44 @@ def test_vhl005_valhalla_sections_csv_roundtrip() -> None:
         findings=[],
         technologies=[],
     )
-    jctx = {"tier": "valhalla", "valhalla_context": {}, "ai_sections": {}, "recon_summary": {}}
+    jctx = {
+        "tier": "valhalla",
+        "valhalla_context": {},
+        "ai_sections": {},
+        "recon_summary": {},
+    }
     raw = generate_valhalla_sections_csv(data, jinja_context=jctx).decode("utf-8")
     lines = [ln for ln in raw.strip().split("\n") if ln]
     assert lines[0].startswith("section,")
     assert "title_meta" in raw
     payload = build_valhalla_report_payload(jctx, data)
-    assert set(payload.keys()) == set(
-        [
-            "title_meta",
-            "executive_summary_counts",
-            "owasp_compliance",
-            "robots_sitemap",
-            "tech_stack",
-            "outdated_components",
-            "emails",
-            "ssl_tls",
-            "headers",
-            "dependencies",
-            "risk_matrix",
-            "critical_vulns",
-            "threat_modeling_ref",
-            "findings",
-            "exploit_chains_text",
-            "remediation_stages_text",
-            "zero_day_text",
-            "conclusion_text",
-                "hibp_pwned_password_summary",
-                "appendices",
-                "ssl_tls_table_rows",
-                "security_headers_table_rows",
-                "evidence_inventory",
-                "tool_health_summary",
-                "full_valhalla",
-            ]
-        )
+    assert set(payload.keys()) == {
+        "title_meta",
+        "executive_summary_counts",
+        "owasp_compliance",
+        "robots_sitemap",
+        "tech_stack",
+        "outdated_components",
+        "emails",
+        "ssl_tls",
+        "headers",
+        "dependencies",
+        "risk_matrix",
+        "critical_vulns",
+        "threat_modeling_ref",
+        "findings",
+        "exploit_chains_text",
+        "remediation_stages_text",
+        "zero_day_text",
+        "conclusion_text",
+        "hibp_pwned_password_summary",
+        "appendices",
+        "ssl_tls_table_rows",
+        "security_headers_table_rows",
+        "evidence_inventory",
+        "tool_health_summary",
+        "full_valhalla",
+    }
 
 
 @pytest.mark.weasyprint_pdf

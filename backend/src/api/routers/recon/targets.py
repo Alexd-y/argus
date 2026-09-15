@@ -42,11 +42,11 @@ async def create(
         target = await create_target(db, tenant_id, engagement_id, data)
         return ReconTargetResponse.model_validate(target)
     except TargetOutOfScopeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except DuplicateTargetError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except TargetServiceError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get(
@@ -62,9 +62,7 @@ async def list_all(
 
 
 @router.get("/recon/targets/{target_id}", response_model=ReconTargetResponse)
-async def get_one(
-    target_id: str, db: AsyncSession = Depends(get_db)
-) -> ReconTargetResponse:
+async def get_one(target_id: str, db: AsyncSession = Depends(get_db)) -> ReconTargetResponse:
     """Get target detail."""
     tenant_id = _get_tenant_id()
     target = await get_target(db, tenant_id, target_id)
@@ -74,9 +72,7 @@ async def get_one(
 
 
 @router.delete("/recon/targets/{target_id}", status_code=204)
-async def remove(
-    target_id: str, db: AsyncSession = Depends(get_db)
-) -> None:
+async def remove(target_id: str, db: AsyncSession = Depends(get_db)) -> None:
     """Delete target."""
     tenant_id = _get_tenant_id()
     deleted = await delete_target(db, tenant_id, target_id)

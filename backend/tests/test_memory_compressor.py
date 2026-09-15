@@ -4,7 +4,6 @@ import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.agents.memory_compressor import ScanMemoryCompressor
 
 
@@ -86,7 +85,10 @@ class TestMaybeCompress:
         c = ScanMemoryCompressor("scan-1", compression_threshold_chars=50)
         history = [{"role": "user", "content": "x" * 100}]
 
-        with patch("src.agents.memory_compressor.call_llm_for_task", side_effect=RuntimeError("LLM down")):
+        with patch(
+            "src.agents.memory_compressor.call_llm_for_task",
+            side_effect=RuntimeError("LLM down"),
+        ):
             result = await c.maybe_compress(history)
             assert result is None
             assert c.compressed_summary is None

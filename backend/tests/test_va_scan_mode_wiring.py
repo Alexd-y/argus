@@ -8,6 +8,7 @@ import pytest
 # Class 1: TestScanModeWiring
 # ---------------------------------------------------------------------------
 
+
 class TestScanModeWiring:
     """FIX-001 — canonical scan_mode wins over legacy scanType."""
 
@@ -85,6 +86,7 @@ class TestScanModeWiring:
 # Class 1b: TestDeepReconFeatureSet
 # ---------------------------------------------------------------------------
 
+
 class TestDeepReconFeatureSet:
     """Lab = Lab + deep: the deep tier (``deep`` + ``lab``) enables the full-depth
     recon feature set; lab additionally keeps its lab-injection semantics."""
@@ -144,6 +146,7 @@ class TestDeepReconFeatureSet:
 # Class 2: TestVulnFlagMapping
 # ---------------------------------------------------------------------------
 
+
 class TestVulnFlagMapping:
     """FIX-003 — _map_vuln_flags maps short API flag names to planner flags."""
 
@@ -153,6 +156,7 @@ class TestVulnFlagMapping:
             from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
                 _map_vuln_flags,
             )
+
             self._map_vuln_flags = _map_vuln_flags
         except ImportError:
             pytest.skip("_map_vuln_flags not importable (module dependency missing)")
@@ -183,9 +187,25 @@ class TestVulnFlagMapping:
         assert "lfi" not in result, "short key removed after mapping"
 
     def test_all_short_flags(self) -> None:
-        inp = {"xss": True, "sqli": True, "csrf": True, "ssrf": False, "lfi": True, "rce": False, "idor": True}
+        inp = {
+            "xss": True,
+            "sqli": True,
+            "csrf": True,
+            "ssrf": False,
+            "lfi": True,
+            "rce": False,
+            "idor": True,
+        }
         result = self._map_vuln_flags(inp)
-        expected_keys = {"xss_enabled", "sqli_enabled", "csrf_enabled", "ssrf_enabled", "lfi_enabled", "rce_enabled", "idor_enabled"}
+        expected_keys = {
+            "xss_enabled",
+            "sqli_enabled",
+            "csrf_enabled",
+            "ssrf_enabled",
+            "lfi_enabled",
+            "rce_enabled",
+            "idor_enabled",
+        }
         assert set(result.keys()) == expected_keys
         assert result["xss_enabled"] is True
         assert result["ssrf_enabled"] is False
@@ -200,6 +220,7 @@ class TestVulnFlagMapping:
 # Class 3: TestAIDedup
 # ---------------------------------------------------------------------------
 
+
 class TestAIDedup:
     """FIX-005 — AITextDeduplicator.deduplicate_sections removes cross-section duplicates."""
 
@@ -207,6 +228,7 @@ class TestAIDedup:
     def _import_deduplicator(self) -> None:
         try:
             from src.reports.ai_text_generation import AITextDeduplicator
+
             self._cls = AITextDeduplicator
         except ImportError:
             pytest.skip("AITextDeduplicator not importable (module dependency missing)")

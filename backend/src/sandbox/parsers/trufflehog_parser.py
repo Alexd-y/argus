@@ -111,7 +111,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -199,7 +199,7 @@ _HIGH_DETECTORS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -292,9 +292,7 @@ def _sort_key(record: dict[str, Any]) -> tuple[int, str, str, int]:
 
 
 def _build_finding(record: dict[str, Any]) -> FindingDTO:
-    confidence = (
-        ConfidenceLevel.CONFIRMED if record.get("verified") else ConfidenceLevel.LIKELY
-    )
+    confidence = ConfidenceLevel.CONFIRMED if record.get("verified") else ConfidenceLevel.LIKELY
     return make_finding_dto(
         category=FindingCategory.SECRET_LEAK,
         cwe=[_CWE_HARDCODED_CREDS, _CWE_CLEARTEXT_STORAGE],
@@ -430,7 +428,7 @@ def _extract_extra_keys(raw: Any) -> list[str]:
     """
     if not isinstance(raw, dict):
         return []
-    return sorted(str(key) for key in raw.keys())
+    return sorted(str(key) for key in raw)
 
 
 # ---------------------------------------------------------------------------

@@ -40,9 +40,7 @@ def registry(monkeypatch: pytest.MonkeyPatch) -> UnifiedRegistry:
         ModelRecord(
             provider_id="local_qwythos",
             model="qwythos-9b-claude-mythos-5-1m",
-            capabilities=ProviderCapability(
-                json_schema=True, tool_calling=True, max_context=65536
-            ),
+            capabilities=ProviderCapability(json_schema=True, tool_calling=True, max_context=65536),
             base_url="http://qwythos:8000/v1",
             adapter_kind="openai_compatible",
         )
@@ -98,7 +96,9 @@ def test_lab_offensive_not_refused_without_cloud(registry: UnifiedRegistry) -> N
     assert chain[0].provider_id == "local_qwythos"
 
 
-def test_default_security_reasoner_prefers_qwythos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_security_reasoner_prefers_qwythos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("QWYTHOS_URL", "http://qwythos:8000/v1")
     monkeypatch.setenv("WHITERABBITNEO_URL", "http://wrb:8000/v1")
     reset_unified_registry()

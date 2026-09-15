@@ -187,7 +187,10 @@ def invalidate_scan_cache(scan_id: str) -> int:
     if not cache._redis:
         logger.warning(
             "cache_invalidation_skipped_redis_unavailable",
-            extra={"event": "argus.tool_cache.invalidate_scan_skip", "scan_id": scan_id},
+            extra={
+                "event": "argus.tool_cache.invalidate_scan_skip",
+                "scan_id": scan_id,
+            },
         )
         return 0
     try:
@@ -213,7 +216,10 @@ def invalidate_scan_cache(scan_id: str) -> int:
     except Exception:
         logger.warning(
             "cache_invalidation_scan_failed",
-            extra={"event": "argus.tool_cache.invalidate_scan_failed", "scan_id": scan_id},
+            extra={
+                "event": "argus.tool_cache.invalidate_scan_failed",
+                "scan_id": scan_id,
+            },
         )
         return 0
 
@@ -229,7 +235,10 @@ def invalidate_target_cache(target: str) -> int:
     if not cache._redis:
         logger.warning(
             "cache_invalidation_skipped_redis_unavailable",
-            extra={"event": "argus.tool_cache.invalidate_target_skip", "target": target[:128]},
+            extra={
+                "event": "argus.tool_cache.invalidate_target_skip",
+                "target": target[:128],
+            },
         )
         return 0
     try:

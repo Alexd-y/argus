@@ -167,9 +167,7 @@ class LinearAdapter(NotifierBase):
         return await self._client.post(target, json=body, headers=headers)
 
 
-def build_linear_payload(
-    event: NotificationEvent, *, team_id: str
-) -> dict[str, object]:
+def build_linear_payload(event: NotificationEvent, *, team_id: str) -> dict[str, object]:
     """Render the GraphQL ``issueCreate`` body."""
     external_id = event.root_cause_hash or event.event_id
     description_parts = [event.summary]
@@ -181,8 +179,7 @@ def build_linear_payload(
         description_parts.append(f"\n**Finding:** `{event.finding_id}`")
     description_parts.append(f"\n**Tenant:** `{event.tenant_id}`")
     description_parts.append(
-        f"\n**Severity:** `{event.severity.value}` "
-        f"({_LABEL_BY_SEVERITY[event.severity]})"
+        f"\n**Severity:** `{event.severity.value}` ({_LABEL_BY_SEVERITY[event.severity]})"
     )
     description = "".join(description_parts)
     issue_input: dict[str, object] = {

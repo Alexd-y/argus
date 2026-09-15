@@ -21,13 +21,12 @@ runs entirely in-process without requiring a broker, Postgres, or Redis.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.policy.kill_switch import (
     KillSwitchScope,
     KillSwitchUnavailableError,
@@ -44,7 +43,6 @@ from src.scheduling.scan_trigger import (
     _should_skip_for_maintenance_window,
     run_scheduled_scan,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -97,7 +95,7 @@ class _AsyncSessionCM:
     async def __aenter__(self) -> Any:
         return self._session
 
-    async def __aexit__(self, *exc_info: Any) -> None:
+    async def __aexit__(self, *exc_info: object) -> None:
         return None
 
 
@@ -143,22 +141,16 @@ def _patch_kill_switch(verdict: KillSwitchVerdict | Exception) -> Any:
 
 class TestShouldSkipForMaintenanceWindow:
     def test_returns_false_for_none_cron(self) -> None:
-        assert (
-            _should_skip_for_maintenance_window(window_cron=None, at=_FIRED_AT) is False
-        )
+        assert _should_skip_for_maintenance_window(window_cron=None, at=_FIRED_AT) is False
 
     def test_returns_false_for_empty_string_cron(self) -> None:
-        assert (
-            _should_skip_for_maintenance_window(window_cron="", at=_FIRED_AT) is False
-        )
+        assert _should_skip_for_maintenance_window(window_cron="", at=_FIRED_AT) is False
 
     def test_delegates_to_is_in_maintenance_window_when_in_window(self) -> None:
         with patch.object(
             scan_trigger, "is_in_maintenance_window", return_value=True
         ) as window_mock:
-            result = _should_skip_for_maintenance_window(
-                window_cron="0 12 * * *", at=_FIRED_AT
-            )
+            result = _should_skip_for_maintenance_window(window_cron="0 12 * * *", at=_FIRED_AT)
         assert result is True
         window_mock.assert_called_once_with(
             "0 12 * * *",
@@ -169,29 +161,25 @@ class TestShouldSkipForMaintenanceWindow:
     def test_returns_false_when_outside_window(self) -> None:
         with patch.object(scan_trigger, "is_in_maintenance_window", return_value=False):
             assert (
-                _should_skip_for_maintenance_window(
-                    window_cron="0 3 * * *", at=_FIRED_AT
-                )
-                is False
+                _should_skip_for_maintenance_window(window_cron="0 3 * * *", at=_FIRED_AT) is False
             )
 
     def test_invalid_cron_logs_warning_and_returns_false(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Failing-open: a bad cron must NOT silently suppress every fire."""
-        with patch.object(
-            scan_trigger,
-            "is_in_maintenance_window",
-            side_effect=CronValidationError("bad"),
+        with (
+            patch.object(
+                scan_trigger,
+                "is_in_maintenance_window",
+                side_effect=CronValidationError("bad"),
+            ),
+            caplog.at_level("WARNING", logger=scan_trigger.logger.name),
         ):
-            with caplog.at_level("WARNING", logger=scan_trigger.logger.name):
-                result = _should_skip_for_maintenance_window(
-                    window_cron="not a cron", at=_FIRED_AT
-                )
+            result = _should_skip_for_maintenance_window(window_cron="not a cron", at=_FIRED_AT)
         assert result is False
         assert any(
-            "scan_trigger.maintenance_window_invalid" in record.message
-            for record in caplog.records
+            "scan_trigger.maintenance_window_invalid" in record.message for record in caplog.records
         )
 
 
@@ -220,14 +208,10 @@ class TestComputeNextRunAt:
 class TestRunScheduledScanAsyncGates:
     @pytest.mark.asyncio
     async def test_kill_switch_blocked_skips_without_opening_session(self) -> None:
-        verdict = KillSwitchVerdict(
-            blocked=True, scope=KillSwitchScope.GLOBAL, reason="exercise"
-        )
+        verdict = KillSwitchVerdict(blocked=True, scope=KillSwitchScope.GLOBAL, reason="exercise")
         with (
             _patch_kill_switch(verdict),
-            patch.object(
-                scan_trigger, "create_task_engine_and_session"
-            ) as factory_mock,
+            patch.object(scan_trigger, "create_task_engine_and_session") as factory_mock,
             patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
         ):
             result = await _run_scheduled_scan_async(
@@ -246,9 +230,7 @@ class TestRunScheduledScanAsyncGates:
     async def test_kill_switch_unavailable_fails_closed(self) -> None:
         with (
             _patch_kill_switch(KillSwitchUnavailableError("redis down")),
-            patch.object(
-                scan_trigger, "create_task_engine_and_session"
-            ) as factory_mock,
+            patch.object(scan_trigger, "create_task_engine_and_session") as factory_mock,
             patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
         ):
             result = await _run_scheduled_scan_async(
@@ -276,9 +258,7 @@ class TestRunScheduledScanAsyncGates:
                 return_value=(engine, factory),
             ),
             patch.object(scan_trigger, "set_session_tenant", new=AsyncMock()),
-            patch.object(
-                scan_trigger, "_load_schedule", new=AsyncMock(return_value=None)
-            ),
+            patch.object(scan_trigger, "_load_schedule", new=AsyncMock(return_value=None)),
             patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
         ):
             result = await _run_scheduled_scan_async(
@@ -386,19 +366,17 @@ class TestRunScheduledScanAsyncHappyPath:
                 "create_task_engine_and_session",
                 return_value=(engine, factory),
             ),
-            patch.object(
-                scan_trigger, "set_session_tenant", new=AsyncMock()
-            ) as tenant_mock,
+            patch.object(scan_trigger, "set_session_tenant", new=AsyncMock()) as tenant_mock,
             patch.object(
                 scan_trigger,
                 "_load_schedule",
                 new=AsyncMock(return_value=schedule),
             ),
+            patch.object(scan_trigger, "_ensure_tenant", new=AsyncMock()) as ensure_tenant_mock,
             patch.object(
-                scan_trigger, "_ensure_tenant", new=AsyncMock()
-            ) as ensure_tenant_mock,
-            patch.object(
-                scan_trigger, "try_pick_queued_scan", new=AsyncMock(return_value="scan-uuid-123")
+                scan_trigger,
+                "try_pick_queued_scan",
+                new=AsyncMock(return_value="scan-uuid-123"),
             ),
             patch.object(
                 scan_trigger,
@@ -413,7 +391,11 @@ class TestRunScheduledScanAsyncHappyPath:
                 "_update_run_timestamps",
                 new=AsyncMock(),
             ) as update_mock,
-            patch.object(scan_trigger, "try_pick_queued_scan", new=AsyncMock(return_value="scan-uuid-123")),
+            patch.object(
+                scan_trigger,
+                "try_pick_queued_scan",
+                new=AsyncMock(return_value="scan-uuid-123"),
+            ),
         ):
             result = await _run_scheduled_scan_async(
                 schedule_id=_SCHEDULE_ID,
@@ -472,12 +454,8 @@ class TestRunScheduledScanAsyncHappyPath:
                 new=AsyncMock(return_value="scan-1"),
             ),
             patch.object(scan_trigger, "_compute_next_run_at", return_value=None),
-            patch.object(
-                scan_trigger, "try_pick_queued_scan", new=AsyncMock()
-            ),
-            patch.object(
-                scan_trigger, "_update_run_timestamps", new=AsyncMock()
-            ) as update_mock,
+            patch.object(scan_trigger, "try_pick_queued_scan", new=AsyncMock()),
+            patch.object(scan_trigger, "_update_run_timestamps", new=AsyncMock()) as update_mock,
         ):
             result = await _run_scheduled_scan_async(
                 schedule_id=_SCHEDULE_ID,
@@ -507,9 +485,7 @@ class TestCeleryWrapper:
         """
         captured: dict[str, Any] = {}
 
-        async def _fake(
-            *, schedule_id: str, tenant_id: str, fired_at: datetime
-        ) -> dict[str, Any]:
+        async def _fake(*, schedule_id: str, tenant_id: str, fired_at: datetime) -> dict[str, Any]:
             captured["schedule_id"] = schedule_id
             captured["tenant_id"] = tenant_id
             captured["fired_at"] = fired_at
@@ -525,7 +501,7 @@ class TestCeleryWrapper:
         }
         assert captured["schedule_id"] == _SCHEDULE_ID
         assert captured["tenant_id"] == _TENANT_ID
-        assert captured["fired_at"].tzinfo is timezone.utc
+        assert captured["fired_at"].tzinfo is UTC
 
 
 # ===========================================================================
@@ -563,9 +539,7 @@ class TestSkipPathAuditEmission:
                 "async_session_factory",
                 audit_factory,
             ),
-            patch.object(
-                scan_trigger, "create_task_engine_and_session"
-            ) as engine_factory_mock,
+            patch.object(scan_trigger, "create_task_engine_and_session") as engine_factory_mock,
             patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
         ):
             result = await _run_scheduled_scan_async(

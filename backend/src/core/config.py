@@ -1914,7 +1914,10 @@ def _sync_llm_api_keys_to_environ() -> None:
         ("POC_GENERATION_ENABLED", str(settings.poc_generation_enabled).lower()),
         ("SCAN_MODE", settings.scan_mode),
         ("LLM_DEDUP_ENABLED", str(settings.llm_dedup_enabled).lower()),
-        ("MEMORY_COMPRESSION_ENABLED", str(settings.memory_compression_enabled).lower()),
+        (
+            "MEMORY_COMPRESSION_ENABLED",
+            str(settings.memory_compression_enabled).lower(),
+        ),
         ("LLM_PRIMARY_PROVIDER", settings.llm_primary_provider),
     ]
     for env_key, val in flag_pairs:

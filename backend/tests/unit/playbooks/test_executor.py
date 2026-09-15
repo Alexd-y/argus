@@ -6,13 +6,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.auth.session_store import SessionStore
 from src.orchestration.auth_config import PrincipalRole
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
@@ -32,7 +31,6 @@ from src.policy.engagement_authorization import (
     EngagementAuthorizationService,
 )
 from src.sandbox.signing import KeyManager
-
 
 # ---------------------------------------------------------------------------
 # Stub network transport
@@ -227,9 +225,7 @@ def test_session_isolation_across_principals(
 # ---------------------------------------------------------------------------
 
 
-def test_cleanup_runs_even_when_rejected(
-    session_store: SessionStore, target: TargetSpec
-) -> None:
+def test_cleanup_runs_even_when_rejected(session_store: SessionStore, target: TargetSpec) -> None:
     transport = StubTransport(_secure_responder)
     executor = ScenarioExecutor(
         transport=transport, session_store=session_store, sleep=lambda _s: None
@@ -257,9 +253,7 @@ def test_approval_gated_without_gate_is_not_executed(
         transport=transport, session_store=session_store, sleep=lambda _s: None
     )
     playbook = Playbook(
-        **_base_playbook(
-            playbook_id="idor.exec-gated", risk_level="high", requires_approval=True
-        )
+        **_base_playbook(playbook_id="idor.exec-gated", risk_level="high", requires_approval=True)
     )
     result = executor.execute(playbook, target=target)
 
@@ -283,9 +277,7 @@ def test_approval_gated_with_denying_gate_is_not_executed(
         sleep=lambda _s: None,
     )
     playbook = Playbook(
-        **_base_playbook(
-            playbook_id="idor.exec-gated2", risk_level="high", requires_approval=True
-        )
+        **_base_playbook(playbook_id="idor.exec-gated2", risk_level="high", requires_approval=True)
     )
     result = executor.execute(playbook, target=target)
     assert result.executed is False
@@ -321,7 +313,7 @@ def test_approval_gated_with_eap_preauthorization_executes(
             # authorization category → INJECTION_SAFE (default_action_class).
             allow_action_classes=frozenset({ActionClass.INJECTION_SAFE}),
             max_request_budget=1000,
-            expires=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            expires=datetime.now(tz=UTC) + timedelta(days=1),
         ),
         private_key=priv,
     )
@@ -338,9 +330,7 @@ def test_approval_gated_with_eap_preauthorization_executes(
         sleep=lambda _s: None,
     )
     playbook = Playbook(
-        **_base_playbook(
-            playbook_id="idor.exec-eap", risk_level="high", requires_approval=True
-        )
+        **_base_playbook(playbook_id="idor.exec-eap", risk_level="high", requires_approval=True)
     )
     result = executor.execute(playbook, target=target)
 

@@ -33,7 +33,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import dispatch_parse
@@ -41,7 +40,6 @@ from src.sandbox.parsers._base import SENTINEL_CVSS_SCORE
 from src.sandbox.parsers.httpx_parser import EVIDENCE_SIDECAR_NAME
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 # Shell metacharacters audited on the rendered argv. Mirrors the static
 # audit done at YAML-author time in test_yaml_http_fingerprint_semantics.py.
@@ -205,9 +203,7 @@ def test_dispatch_parse_with_three_records_yields_three_findings(
         tool_id="httpx",
     )
 
-    assert len(findings) == 3, (
-        f"expected 3 findings (one per record), got {len(findings)}"
-    )
+    assert len(findings) == 3, f"expected 3 findings (one per record), got {len(findings)}"
     for finding in findings:
         # The httpx parser maps tech-disclosure findings to the INFO category
         # with the sentinel CVSS score; this is the parser-layer representation

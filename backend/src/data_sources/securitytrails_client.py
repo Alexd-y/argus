@@ -52,7 +52,9 @@ class SecurityTrailsClient(DataSourceClient):
                     return _finish_response(resp)
 
                 if query_type == "dns_history":
-                    record = (kwargs.get("record_type") or kwargs.get("dns_type") or "a").strip().lower()
+                    record = (
+                        (kwargs.get("record_type") or kwargs.get("dns_type") or "a").strip().lower()
+                    )
                     url = f"{self._base_url}/history/{domain}/dns/{record}"
                     resp = await client.get(url, headers=headers)
                     return _finish_response(resp)

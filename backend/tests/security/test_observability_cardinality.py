@@ -22,7 +22,6 @@ from typing import Any
 
 import pytest
 from prometheus_client import CollectorRegistry
-
 from src.core import observability as obs
 from src.core.logging_config import (
     OTelTraceContextFilter,
@@ -35,7 +34,6 @@ from src.core.observability import (
     reset_metrics_registry,
     tenant_hash,
 )
-
 
 # This module is intentionally decoupled from the FastAPI app — the test
 # suite stays offline (no DB / Redis dependency) so it can run on a bare
@@ -114,9 +112,7 @@ def test_label_value_truncated_to_64_chars(
     _isolated_registry: CollectorRegistry,
 ) -> None:
     long_tool = "x" * 1024
-    record_llm_tokens(
-        provider="openai", model=long_tool, direction="in", tokens=1
-    )
+    record_llm_tokens(provider="openai", model=long_tool, direction="in", tokens=1)
     seen_models: set[str] = set()
     for family in _isolated_registry.collect():
         for sample in family.samples:
@@ -134,8 +130,13 @@ def test_label_value_truncated_to_64_chars(
 
 def _record(payload: dict[str, Any]) -> logging.LogRecord:
     rec = logging.LogRecord(
-        name="argus", level=logging.INFO, pathname=__file__, lineno=1,
-        msg="event", args=(), exc_info=None,
+        name="argus",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="event",
+        args=(),
+        exc_info=None,
     )
     for k, v in payload.items():
         setattr(rec, k, v)

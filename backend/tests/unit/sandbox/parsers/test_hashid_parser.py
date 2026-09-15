@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -91,9 +90,7 @@ def test_raw_hash_never_in_sidecar(tmp_path: Path) -> None:
     parse_hashid_json(_payload(_entry()), b"", tmp_path, "hashid")
     sidecar_bytes = (tmp_path / EVIDENCE_SIDECAR_NAME).read_bytes()
     assert _RAW_MD5.encode("utf-8") not in sidecar_bytes
-    assert not _HEX32_RE.search(sidecar_bytes), (
-        "raw 32-char hex hash leaked into hashid sidecar"
-    )
+    assert not _HEX32_RE.search(sidecar_bytes), "raw 32-char hex hash leaked into hashid sidecar"
 
 
 def test_raw_sha1_never_in_sidecar(tmp_path: Path) -> None:
@@ -112,9 +109,7 @@ def test_raw_sha1_never_in_sidecar(tmp_path: Path) -> None:
     sidecar_bytes = (tmp_path / EVIDENCE_SIDECAR_NAME).read_bytes()
     assert _RAW_SHA1.encode("utf-8") not in sidecar_bytes
     assert _RAW_SHA1.lower().encode("utf-8") not in sidecar_bytes
-    assert not _HEX40_RE.search(sidecar_bytes), (
-        "raw SHA-1 hex hash leaked into hashid sidecar"
-    )
+    assert not _HEX40_RE.search(sidecar_bytes), "raw SHA-1 hex hash leaked into hashid sidecar"
 
 
 def test_stable_hash_12_used_for_id(tmp_path: Path) -> None:
@@ -165,9 +160,7 @@ def test_no_modes_dropped_silently(tmp_path: Path) -> None:
     assert len(findings) == 1
 
 
-def test_payload_not_array_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_payload_not_array_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     canonical = tmp_path / "hashid.json"
     canonical.write_bytes(b'{"hash": "x"}')
     with caplog.at_level("WARNING"):
@@ -192,10 +185,7 @@ def test_cap_reached_emits_warning_and_truncates(
 ) -> None:
     monkeypatch.setattr(hashid_module, "_MAX_FINDINGS", 2)
     payload = _payload(
-        *(
-            _entry(hash_value=f"{i:032x}", modes=[{"name": f"M{i}", "hashcat": i}])
-            for i in range(5)
-        )
+        *(_entry(hash_value=f"{i:032x}", modes=[{"name": f"M{i}", "hashcat": i}]) for i in range(5))
     )
     with caplog.at_level("WARNING"):
         findings = parse_hashid_json(payload, b"", tmp_path, "hashid")

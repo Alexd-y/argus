@@ -277,11 +277,9 @@ class UnifiedLlmGateway:
                         trace_id=trace_id,
                     )
 
-                gated_text, inferred_claims, citations, cve_rows = (
-                    postprocess_response_text(
-                        call_result.text,
-                        evidence_refs=request.evidence_refs,
-                    )
+                gated_text, inferred_claims, citations, cve_rows = postprocess_response_text(
+                    call_result.text,
+                    evidence_refs=request.evidence_refs,
                 )
                 if "text" in parsed:
                     parsed = {**parsed, "text": gated_text}
@@ -337,7 +335,12 @@ class UnifiedLlmGateway:
                     },
                 )
                 continue
-            except (httpx.HTTPError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            except (
+                httpx.HTTPError,
+                ValueError,
+                RuntimeError,
+                json.JSONDecodeError,
+            ) as exc:
                 error_code = self._classify_error(exc)
                 latency_ms = int((time.monotonic() - started) * 1000)
                 self._registry.health.record_failure(route.provider_id, error_code)
@@ -571,7 +574,10 @@ class UnifiedLlmGateway:
             try:
                 jsonschema.validate(instance=parsed, schema=schema)
             except jsonschema.ValidationError:
-                return {"raw_text": text, "parsed": parsed}, LlmResponseStatus.SCHEMA_ERROR
+                return {
+                    "raw_text": text,
+                    "parsed": parsed,
+                }, LlmResponseStatus.SCHEMA_ERROR
 
         return parsed, LlmResponseStatus.OK
 

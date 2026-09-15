@@ -57,12 +57,10 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ParseStrategy, ToolCategory, ToolDescriptor
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # ---------------------------------------------------------------------------
 # Tool-id inventories (hard-coded so silent shrink/grow breaks CI)
@@ -177,25 +175,23 @@ CATEGORY_BY_TOOL: Final[dict[str, ToolCategory]] = {
 
 IMAGE_BY_TOOL: Final[dict[str, str]] = {
     # §4.11 — OAST + SSRF tooling lives in the standard web image.
-    **{tool_id: "argus-kali-web:latest" for tool_id in OAST_TOOL_IDS},
+    **dict.fromkeys(OAST_TOOL_IDS, "argus-kali-web:latest"),
     # §4.12 — auth/brute split per ARG-058 / T03: the 4 generic
     # HTTP/HTTPS-surface brute-forcers stay on ``argus-kali-web``; the
     # 6 AD / SMB / SNMP / Kerberos / WinRM probes moved to the dedicated
     # ``argus-kali-network`` image carved out from the heavier web one.
-    **{
-        "hydra": "argus-kali-web:latest",
-        "medusa": "argus-kali-web:latest",
-        "ncrack": "argus-kali-web:latest",
-        "patator": "argus-kali-web:latest",
-        "crackmapexec": "argus-kali-network:latest",
-        "evil_winrm": "argus-kali-network:latest",
-        "impacket_examples": "argus-kali-network:latest",
-        "kerbrute": "argus-kali-network:latest",
-        "smbclient": "argus-kali-network:latest",
-        "snmp_check": "argus-kali-network:latest",
-    },
+    "hydra": "argus-kali-web:latest",
+    "medusa": "argus-kali-web:latest",
+    "ncrack": "argus-kali-web:latest",
+    "patator": "argus-kali-web:latest",
+    "crackmapexec": "argus-kali-network:latest",
+    "evil_winrm": "argus-kali-network:latest",
+    "impacket_examples": "argus-kali-network:latest",
+    "kerbrute": "argus-kali-network:latest",
+    "smbclient": "argus-kali-network:latest",
+    "snmp_check": "argus-kali-network:latest",
     # §4.13 — hash crackers live in the heavy-compute "cloud" image.
-    **{tool_id: "argus-kali-cloud:latest" for tool_id in HASH_TOOL_IDS},
+    **dict.fromkeys(HASH_TOOL_IDS, "argus-kali-cloud:latest"),
 }
 
 
@@ -215,9 +211,9 @@ NETWORK_POLICY_BY_TOOL: Final[dict[str, str]] = {
     "gopherus": "offline-no-egress",
     "oast_dns_probe": "oast-egress",
     # §4.12 — auth-bruteforce policy for every tool.
-    **{tool_id: "auth-bruteforce" for tool_id in AUTH_TOOL_IDS},
+    **dict.fromkeys(AUTH_TOOL_IDS, "auth-bruteforce"),
     # §4.13 — offline-no-egress for every cracker.
-    **{tool_id: "offline-no-egress" for tool_id in HASH_TOOL_IDS},
+    **dict.fromkeys(HASH_TOOL_IDS, "offline-no-egress"),
 }
 
 
@@ -229,7 +225,7 @@ PARSE_STRATEGY_BY_TOOL: Final[dict[str, ParseStrategy]] = {
     "gopherus": ParseStrategy.TEXT_LINES,
     "oast_dns_probe": ParseStrategy.TEXT_LINES,
     # §4.12 — text_lines for every tool (parsers deferred to Cycle 3).
-    **{tool_id: ParseStrategy.TEXT_LINES for tool_id in AUTH_TOOL_IDS},
+    **dict.fromkeys(AUTH_TOOL_IDS, ParseStrategy.TEXT_LINES),
     # §4.13 — hashid/hash_analyzer emit JSON; the three crackers emit text.
     "hashcat": ParseStrategy.TEXT_LINES,
     "john": ParseStrategy.TEXT_LINES,
@@ -328,9 +324,7 @@ def catalog_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -380,8 +374,7 @@ def test_category_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = CATEGORY_BY_TOOL[tool_id]
     assert descriptor.category is expected, (
-        f"{tool_id}: category={descriptor.category.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: category={descriptor.category.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -390,8 +383,7 @@ def test_phase_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = PHASE_BY_TOOL[tool_id]
     assert descriptor.phase is expected, (
-        f"{tool_id}: phase={descriptor.phase.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: phase={descriptor.phase.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -405,9 +397,7 @@ def test_image_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG017_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -444,9 +434,7 @@ def test_parse_strategy_matches_per_tool_pin(catalog_dir: Path, tool_id: str) ->
 
 
 @pytest.mark.parametrize("tool_id", ARG017_TOOL_IDS)
-def test_requires_approval_matches_per_tool_pin(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_requires_approval_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
     """Approval gate matches the documented destructiveness profile."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = REQUIRES_APPROVAL_BY_TOOL[tool_id]
@@ -460,9 +448,7 @@ def test_requires_approval_matches_per_tool_pin(
     "tool_id",
     [t for t in ARG017_TOOL_IDS if REQUIRES_APPROVAL_BY_TOOL[t] is True],
 )
-def test_approval_required_tools_carry_high_or_medium_risk(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_approval_required_tools_carry_high_or_medium_risk(catalog_dir: Path, tool_id: str) -> None:
     """Every approval-gated tool ships with risk_level ≥ medium.
 
     Defence-in-depth: the orchestrator's risk-classification check fires
@@ -487,8 +473,7 @@ def test_oast_tool_carries_cwe918(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.11 tool ships CWE-918 (SSRF) — the cohort floor."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert OAST_REQUIRED_CWE in descriptor.cwe_hints, (
-        f"{tool_id}: must declare CWE-918 (Server-Side Request Forgery); "
-        f"got {descriptor.cwe_hints}"
+        f"{tool_id}: must declare CWE-918 (Server-Side Request Forgery); got {descriptor.cwe_hints}"
     )
 
 
@@ -505,9 +490,7 @@ def test_oast_tool_carries_wstg_inpv19(catalog_dir: Path, tool_id: str) -> None:
     "tool_id",
     [t for t in AUTH_TOOL_IDS if t != "snmp_check"],
 )
-def test_auth_tool_carries_at_least_one_auth_cwe(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_auth_tool_carries_at_least_one_auth_cwe(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.12 tool except snmp_check ships at least one of CWE-287 / CWE-307.
 
     snmp_check is the exception: SNMPv1/v2c walks are fundamentally an
@@ -518,8 +501,7 @@ def test_auth_tool_carries_at_least_one_auth_cwe(
     descriptor = _load_descriptor(catalog_dir, tool_id)
     intersect = set(descriptor.cwe_hints) & AUTH_REQUIRED_CWE_SET
     assert intersect, (
-        f"{tool_id}: must declare at least one auth CWE "
-        f"(287 / 307); got {descriptor.cwe_hints}"
+        f"{tool_id}: must declare at least one auth CWE (287 / 307); got {descriptor.cwe_hints}"
     )
 
 
@@ -531,15 +513,12 @@ def test_snmp_check_carries_information_disclosure_cwe(
     """
     descriptor = _load_descriptor(catalog_dir, "snmp_check")
     assert 200 in descriptor.cwe_hints, (
-        "snmp_check: must declare CWE-200 (Information Exposure); "
-        f"got {descriptor.cwe_hints}"
+        f"snmp_check: must declare CWE-200 (Information Exposure); got {descriptor.cwe_hints}"
     )
 
 
 @pytest.mark.parametrize("tool_id", AUTH_TOOL_IDS)
-def test_auth_tool_owasp_wstg_includes_athn_or_info(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_auth_tool_owasp_wstg_includes_athn_or_info(catalog_dir: Path, tool_id: str) -> None:
     """§4.12 tools surface either WSTG-ATHN-* (auth) or WSTG-INFO-* (info disclosure).
 
     snmp_check is the lone outlier: it lives in the auth cohort but the
@@ -547,12 +526,9 @@ def test_auth_tool_owasp_wstg_includes_athn_or_info(
     surfaces WSTG-INFO-09 instead of WSTG-ATHN-*.
     """
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for §4.12 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for §4.12 tools"
     assert any(
-        tag.startswith("WSTG-ATHN") or tag.startswith("WSTG-INFO")
-        for tag in descriptor.owasp_wstg
+        tag.startswith("WSTG-ATHN") or tag.startswith("WSTG-INFO") for tag in descriptor.owasp_wstg
     ), (
         f"{tool_id}: owasp_wstg must include at least one WSTG-ATHN-* "
         f"or WSTG-INFO-* hint; got {descriptor.owasp_wstg}"
@@ -560,22 +536,17 @@ def test_auth_tool_owasp_wstg_includes_athn_or_info(
 
 
 @pytest.mark.parametrize("tool_id", HASH_TOOL_IDS)
-def test_hash_tool_carries_at_least_one_crypto_cwe(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_hash_tool_carries_at_least_one_crypto_cwe(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.13 tool ships at least one of CWE-916 / CWE-326."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     intersect = set(descriptor.cwe_hints) & HASH_REQUIRED_CWE_SET
     assert intersect, (
-        f"{tool_id}: must declare at least one crypto CWE "
-        f"(916 / 326); got {descriptor.cwe_hints}"
+        f"{tool_id}: must declare at least one crypto CWE (916 / 326); got {descriptor.cwe_hints}"
     )
 
 
 @pytest.mark.parametrize("tool_id", HASH_TOOL_IDS)
-def test_hash_tool_owasp_wstg_includes_cryp_family(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_hash_tool_owasp_wstg_includes_cryp_family(catalog_dir: Path, tool_id: str) -> None:
     """§4.13 tools surface at least one WSTG-CRYP-* hint."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert any(tag.startswith("WSTG-CRYP") for tag in descriptor.owasp_wstg), (
@@ -596,8 +567,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -667,9 +637,7 @@ def test_command_template_outer_tokens_have_no_shell_metachars(
 
 
 @pytest.mark.parametrize("tool_id", OAST_TOOL_IDS)
-def test_oast_description_references_section_4_11(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_oast_description_references_section_4_11(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert "§4.11" in descriptor.description, (
         f"{tool_id}: description must reference Backlog §4.11 for traceability"
@@ -677,9 +645,7 @@ def test_oast_description_references_section_4_11(
 
 
 @pytest.mark.parametrize("tool_id", AUTH_TOOL_IDS)
-def test_auth_description_references_section_4_12(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_auth_description_references_section_4_12(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert "§4.12" in descriptor.description, (
         f"{tool_id}: description must reference Backlog §4.12 for traceability"
@@ -687,9 +653,7 @@ def test_auth_description_references_section_4_12(
 
 
 @pytest.mark.parametrize("tool_id", HASH_TOOL_IDS)
-def test_hash_description_references_section_4_13(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_hash_description_references_section_4_13(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert "§4.13" in descriptor.description, (
         f"{tool_id}: description must reference Backlog §4.13 for traceability"
@@ -724,13 +688,9 @@ def test_description_references_arg017(catalog_dir: Path, tool_id: str) -> None:
 def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
     """Whatever evidence path is declared lives under ``/out``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.evidence_artifacts, (
-        f"{tool_id}: must declare at least one evidence artefact"
-    )
+    assert descriptor.evidence_artifacts, f"{tool_id}: must declare at least one evidence artefact"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 # ---------------------------------------------------------------------------
@@ -739,9 +699,7 @@ def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ("interactsh_client", "oastify_client"))
-def test_oast_receivers_emit_canonical_jsonl_artifact(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_oast_receivers_emit_canonical_jsonl_artifact(catalog_dir: Path, tool_id: str) -> None:
     """interactsh / oastify must declare ``/out/interactsh.jsonl`` —
     that's the canonical artifact :func:`parse_interactsh_jsonl` looks
     for first.
@@ -760,9 +718,7 @@ def test_oast_receivers_emit_canonical_jsonl_artifact(
 
 
 @pytest.mark.parametrize("tool_id", HASH_TOOL_IDS)
-def test_hash_tool_consumes_hashes_file_placeholder(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_hash_tool_consumes_hashes_file_placeholder(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.13 tool reads its hashes from ``{hashes_file}``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     rendered = " ".join(descriptor.command_template)

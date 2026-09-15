@@ -45,7 +45,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -75,7 +75,7 @@ _PREFERRED_HASHCAT_MODES: Final[frozenset[int]] = frozenset(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 def parse_hashid_json(
@@ -176,9 +176,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "modes": record.get("modes"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 

@@ -14,13 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from src.oast.canary import CanaryGenerator, CanaryKind, CanaryVerifier
 from src.oast.correlator import (
     InteractionKind,
@@ -36,12 +35,11 @@ from src.oast.provisioner import (
     DisabledOASTProvisioner,
     InternalOASTProvisioner,
 )
-from src.payloads.builder import PayloadBuildError, PayloadBuilder
+from src.payloads.builder import PayloadBuilder, PayloadBuildError
 from src.payloads.registry import PayloadRegistry
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.policy.policy_engine import PolicyContext
-
 
 _TENANT = UUID("33333333-3333-3333-3333-333333333333")
 _SCAN = UUID("44444444-4444-4444-4444-444444444444")
@@ -60,8 +58,7 @@ def real_payload_registry() -> PayloadRegistry:
     catalog = backend_dir / "config" / "payloads"
     if not catalog.is_dir():
         pytest.skip(
-            f"signed payload catalog not present at {catalog}; "
-            "OAST integration test requires it"
+            f"signed payload catalog not present at {catalog}; OAST integration test requires it"
         )
     registry = PayloadRegistry(payloads_dir=catalog)
     registry.load()
@@ -70,7 +67,7 @@ def real_payload_registry() -> PayloadRegistry:
 
 @pytest.fixture()
 def fixed_clock() -> Callable[[], datetime]:
-    moment = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    moment = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
     return lambda: moment
 
 
@@ -92,9 +89,7 @@ def deterministic_token_factory() -> Callable[[int], str]:
         index = next(counter)
         marker = format(index, "x")
         if len(marker) > nbytes * 2:
-            raise AssertionError(
-                "deterministic_token_factory exhausted; raise the upper bound"
-            )
+            raise AssertionError("deterministic_token_factory exhausted; raise the upper bound")
         return marker.rjust(nbytes * 2, "a")
 
     return _factory
@@ -476,9 +471,7 @@ class TestCanaryVerifierRoundTrip:
         assert prep.canary.expected_delay_ms is not None
 
         verifier = CanaryVerifier()
-        result = verifier.verify(
-            prep.canary, response_time_ms=prep.canary.expected_delay_ms
-        )
+        result = verifier.verify(prep.canary, response_time_ms=prep.canary.expected_delay_ms)
         assert result.verified is True
         result = verifier.verify(prep.canary, response_time_ms=10)
         assert result.verified is False
@@ -515,11 +508,7 @@ class TestBuilderErrorSurfaces:
         broken = PayloadBuildRequest(
             family_id=prep.payload_request.family_id,
             correlation_key=prep.payload_request.correlation_key,
-            parameters={
-                k: v
-                for k, v in prep.payload_request.parameters.items()
-                if k != "canary"
-            },
+            parameters={k: v for k, v in prep.payload_request.parameters.items() if k != "canary"},
             max_payloads=prep.payload_request.max_payloads,
         )
         builder = PayloadBuilder(real_payload_registry)

@@ -49,12 +49,10 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ParseStrategy, ToolCategory, ToolDescriptor
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # §4.8 batch — hard-coded so a silent drop / addition breaks CI.
 WEB_VULN_TOOL_IDS: Final[tuple[str, ...]] = (
@@ -90,9 +88,7 @@ PARSE_STRATEGY_BY_TOOL: Final[dict[str, ParseStrategy]] = {
 
 
 # Tools that require explicit operator approval (MEDIUM-risk active scans).
-APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"arachni", "skipfish", "w3af_console"}
-)
+APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset({"arachni", "skipfish", "w3af_console"})
 
 
 RISK_LEVEL_BY_TOOL: Final[dict[str, RiskLevel]] = {
@@ -161,9 +157,7 @@ def catalog_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -254,9 +248,7 @@ def test_image_is_argus_kali_web_latest(catalog_dir: Path, tool_id: str) -> None
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -282,13 +274,9 @@ def test_network_policy_is_recon_active_tcp(catalog_dir: Path, tool_id: str) -> 
 def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
     """Whatever evidence path is declared lives under ``/out``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.evidence_artifacts, (
-        f"{tool_id}: must declare at least one evidence artefact"
-    )
+    assert descriptor.evidence_artifacts, f"{tool_id}: must declare at least one evidence artefact"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
@@ -296,9 +284,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.8 tool ships at least one CWE hint."""
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     assert "cwe_hints" in payload, f"{tool_id}.yaml missing the cwe_hints key"
-    assert isinstance(payload["cwe_hints"], list), (
-        f"{tool_id}.yaml: cwe_hints must be a list"
-    )
+    assert isinstance(payload["cwe_hints"], list), f"{tool_id}.yaml: cwe_hints must be a list"
     assert payload["cwe_hints"], f"{tool_id}.yaml: cwe_hints must be non-empty"
 
 
@@ -306,9 +292,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
 def test_owasp_wstg_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.8 tool ships an OWASP-WSTG taxonomy hint."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for §4.8 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for §4.8 tools"
 
 
 # ---------------------------------------------------------------------------
@@ -333,15 +317,12 @@ def test_parse_strategy_matches_per_tool_split(catalog_dir: Path, tool_id: str) 
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
-def test_default_timeout_matches_per_tool_floor(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_default_timeout_matches_per_tool_floor(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.8 tool floors at the per-tool minimum from the cycle plan."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = DEFAULT_TIMEOUT_S_BY_TOOL[tool_id]
     assert descriptor.default_timeout_s >= expected, (
-        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s "
-        f"below floor of {expected}s"
+        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s below floor of {expected}s"
     )
 
 
@@ -352,8 +333,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -363,9 +343,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
-def test_command_template_has_no_shell_metachars(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_has_no_shell_metachars(catalog_dir: Path, tool_id: str) -> None:
     """No argv token may contain shell metacharacters — defence in depth."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     for index, token in enumerate(descriptor.command_template):
@@ -377,9 +355,7 @@ def test_command_template_has_no_shell_metachars(
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
-def test_command_template_first_token_is_real_binary(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_first_token_is_real_binary(catalog_dir: Path, tool_id: str) -> None:
     """The first argv token must be the real binary, never a shell."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.command_template, f"{tool_id}: command_template must be non-empty"
@@ -397,9 +373,7 @@ def test_command_template_first_token_is_real_binary(
 
 
 @pytest.mark.parametrize("tool_id", WEB_VULN_TOOL_IDS)
-def test_description_includes_upstream_attribution(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_description_includes_upstream_attribution(catalog_dir: Path, tool_id: str) -> None:
     """Description must include both the upstream author / source URL.
 
     Catalog hygiene: the YAML carries enough provenance metadata that
@@ -432,9 +406,7 @@ URL_DIRECT_TOOLS: Final[frozenset[str]] = frozenset(
 
 
 @pytest.mark.parametrize("tool_id", sorted(URL_DIRECT_TOOLS))
-def test_command_template_consumes_url_placeholder(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_consumes_url_placeholder(catalog_dir: Path, tool_id: str) -> None:
     """Every direct-targeting §4.8 tool references the ``{url}`` placeholder."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     rendered = " ".join(descriptor.command_template)

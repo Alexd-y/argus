@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import (
@@ -82,9 +81,7 @@ class TestBuildCallContext:
 
     def test_headers_extracted(self, auth_ctx: MCPAuthContext) -> None:
         set_auth_override(auth_ctx)
-        fake = _fake_ctx_with_headers(
-            {"Authorization": "Bearer abc", "X-Tenant-ID": "t1"}
-        )
+        fake = _fake_ctx_with_headers({"Authorization": "Bearer abc", "X-Tenant-ID": "t1"})
         ctx = build_call_context(fake)
         assert ctx.headers.get("Authorization") == "Bearer abc"
         assert ctx.headers.get("X-Tenant-ID") == "t1"
@@ -99,7 +96,7 @@ class TestBuildCallContext:
     def test_call_context_is_frozen(self, auth_ctx: MCPAuthContext) -> None:
         set_auth_override(auth_ctx)
         ctx = build_call_context(None)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):  # FrozenInstanceError subclasses AttributeError
             ctx.transport = "http"  # type: ignore[misc]
 
 

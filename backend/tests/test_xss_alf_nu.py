@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from src.recon.vulnerability_analysis.xsstrike_adapter import (
     XSStrikeAdapter,
     normalize_xsstrike_findings,

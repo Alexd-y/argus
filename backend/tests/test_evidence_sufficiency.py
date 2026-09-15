@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
+from src.recon.vulnerability_analysis.evidence_sufficiency import (
+    evaluate_evidence_sufficiency,
+)
 from src.schemas.vulnerability_analysis.evidence_sufficiency import (
     EvidenceSufficiencyThresholdConfig,
-    FindingSufficiencyDetail,
     SufficiencyStatus,
 )
-from src.recon.vulnerability_analysis.evidence_sufficiency import evaluate_evidence_sufficiency
 
 
 def test_evaluate_empty_ai_results() -> None:
@@ -28,7 +27,11 @@ def test_evaluate_sufficient_finding() -> None:
             "checks": [
                 {
                     "target_id": "ep_1",
-                    "evidence_refs": ["artifact:stage1_a", "recon:stage2_b", "section:s3"],
+                    "evidence_refs": [
+                        "artifact:stage1_a",
+                        "recon:stage2_b",
+                        "section:s3",
+                    ],
                     "confidence": 0.85,
                     "statement_type": "evidence",
                 },
@@ -79,9 +82,7 @@ def test_evaluate_contradiction_penalty() -> None:
             ],
         },
     }
-    result = evaluate_evidence_sufficiency(
-        ai, "r1", "j1", contradiction_map={"ep_3": True}
-    )
+    result = evaluate_evidence_sufficiency(ai, "r1", "j1", contradiction_map={"ep_3": True})
     assert len(result.findings) == 1
     f = result.findings[0]
     assert f.has_contradictions is True
@@ -129,7 +130,11 @@ def test_evaluate_finding_correlation() -> None:
 
 def test_evaluate_to_json_dict() -> None:
     """Result serializes to JSON."""
-    ai = {"authorization_analysis": {"checks": [{"target_id": "x", "evidence_refs": ["a"], "confidence": 0.5}]}}
+    ai = {
+        "authorization_analysis": {
+            "checks": [{"target_id": "x", "evidence_refs": ["a"], "confidence": 0.5}]
+        }
+    }
     result = evaluate_evidence_sufficiency(ai, "r1", "j1")
     d = result.to_json_dict()
     assert "run_id" in d

@@ -81,11 +81,14 @@ def build_hydra_argv(
         argv += ["-L", f"{staged_dir}/users.txt", "-P", f"{staged_dir}/pass.txt"]
 
     argv += [
-        "-t", _HYDRA_THREADS,  # bounded concurrency
-        "-f",                  # stop on first valid credential
-        "-I",                  # ignore restore file (deterministic)
-        "-o", _HYDRA_OUTPUT,
-        "-s", str(form.port),
+        "-t",
+        _HYDRA_THREADS,  # bounded concurrency
+        "-f",  # stop on first valid credential
+        "-I",  # ignore restore file (deterministic)
+        "-o",
+        _HYDRA_OUTPUT,
+        "-s",
+        str(form.port),
         form.host,
         service,
         form_str,

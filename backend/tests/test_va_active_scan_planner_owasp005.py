@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from dataclasses import replace
 
 from src.recon.vulnerability_analysis.active_scan.planner import (
-    ActiveScanPlanStep,
     DB_SQL_TOOL_SEQUENCE,
     DEFAULT_TOOL_SEQUENCE,
+    ActiveScanPlanStep,
     artifact_slug_for_plan_step,
     build_va_active_scan_plan,
     plan_step_to_public_dict,
@@ -17,6 +16,7 @@ from src.recon.vulnerability_analysis.active_scan_planner import (
     merge_base_plan_with_ai_steps,
 )
 from src.recon.vulnerability_analysis.xsstrike_targets import collect_xsstrike_scan_jobs
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _fixed_bundle_no_tech() -> VulnerabilityAnalysisInputBundle:
@@ -96,7 +96,13 @@ def test_owasp002_default_sequence_includes_nuclei_gobuster_wfuzz_commix() -> No
     plan = build_va_active_scan_plan(_fixed_bundle_no_tech())
     assert plan[0].extra_hints["tool_sequence"] == list(DEFAULT_TOOL_SEQUENCE)
     assert DEFAULT_TOOL_SEQUENCE[:2] == ("whatweb", "nikto")
-    assert DEFAULT_TOOL_SEQUENCE[6:11] == ("nuclei", "gobuster", "feroxbuster", "wfuzz", "commix")
+    assert DEFAULT_TOOL_SEQUENCE[6:11] == (
+        "nuclei",
+        "gobuster",
+        "feroxbuster",
+        "wfuzz",
+        "commix",
+    )
     assert DEFAULT_TOOL_SEQUENCE[-3:] == ("wfuzz", "commix", "testssl")
 
 
@@ -104,7 +110,13 @@ def test_owasp002_db_sequence_includes_tail_after_sql_core() -> None:
     plan = build_va_active_scan_plan(_fixed_bundle_php())
     assert plan[0].extra_hints["tool_sequence"] == list(DB_SQL_TOOL_SEQUENCE)
     assert DB_SQL_TOOL_SEQUENCE[:4] == ("whatweb", "nikto", "sqlmap", "dalfox")
-    assert DB_SQL_TOOL_SEQUENCE[4:9] == ("xsstrike", "ffuf", "nuclei", "gobuster", "feroxbuster")
+    assert DB_SQL_TOOL_SEQUENCE[4:9] == (
+        "xsstrike",
+        "ffuf",
+        "nuclei",
+        "gobuster",
+        "feroxbuster",
+    )
     assert DB_SQL_TOOL_SEQUENCE[-3:] == ("wfuzz", "commix", "testssl")
 
 

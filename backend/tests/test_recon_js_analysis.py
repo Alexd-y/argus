@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.recon.recon_js_analysis import (
     extract_endpoints_regex,
     extract_query_param_names,
@@ -69,7 +68,10 @@ async def test_run_recon_js_analysis_bundle_no_fetch_when_max_downloads_zero() -
     )
     tool_results = {
         "url_history_urls": {
-            "urls": ["https://example.com/app.js?token=1", "https://example.com/page?sort=asc"],
+            "urls": [
+                "https://example.com/app.js?token=1",
+                "https://example.com/page?sort=asc",
+            ],
         },
     }
     fake_settings = MagicMock()

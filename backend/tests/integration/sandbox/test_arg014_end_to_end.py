@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -62,7 +61,6 @@ from src.sandbox.signing import (
 )
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 _SHELL_METACHARS: Final[tuple[str, ...]] = (
     ";",
@@ -138,9 +136,7 @@ def isolated_catalog(
         assert src.is_file(), f"source YAML missing: {src}"
         shutil.copy2(src, tools_dir / f"{tool_id}.yaml")
 
-    priv_path, _, key_id = KeyManager.generate_dev_keypair(
-        keys_dir, name="arg014_e2e_signing"
-    )
+    priv_path, _, key_id = KeyManager.generate_dev_keypair(keys_dir, name="arg014_e2e_signing")
     private_key = load_private_key_bytes(priv_path.read_bytes())
     priv_path.unlink()  # private material lives only in this test process
 
@@ -303,9 +299,7 @@ def test_dispatch_parse_yields_expected_finding_breakdown(
     )
 
     info_count = sum(1 for f in findings if f.category is FindingCategory.INFO)
-    misconfig_count = sum(
-        1 for f in findings if f.category is FindingCategory.MISCONFIG
-    )
+    misconfig_count = sum(1 for f in findings if f.category is FindingCategory.MISCONFIG)
     assert info_count == 3, f"expected 3 INFO findings, got {info_count}"
     assert misconfig_count == 2, f"expected 2 MISCONFIG findings, got {misconfig_count}"
 

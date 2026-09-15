@@ -17,7 +17,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -88,9 +87,9 @@ async def test_docker_run_executes_and_captures_output(tmp_path: Path) -> None:
         out_dir_root=tmp_path / "out",
     )
     result = await adapter.run(_echo_job(), descriptor)
-    assert (
-        result.completed is True
-    ), f"docker run failed: {result.failure_reason}: {result.logs_excerpt}"
+    assert result.completed is True, (
+        f"docker run failed: {result.failure_reason}: {result.logs_excerpt}"
+    )
     assert result.exit_code == 0
     assert _CANARY in result.logs_excerpt
 

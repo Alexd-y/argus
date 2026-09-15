@@ -26,7 +26,8 @@ def _reg_vuln(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
     # Broken: the case-fold variant is accepted as a brand-new identity.
     if "ADMIN@" in (spec.body or ""):
         return HttpResponse(
-            status=201, body=json.dumps({"registration_status": "created", "user_id": 2})
+            status=201,
+            body=json.dumps({"registration_status": "created", "user_id": 2}),
         )
     return HttpResponse(
         status=201, body=json.dumps({"registration_status": "created", "user_id": 1})
@@ -87,7 +88,7 @@ def test_registration_casefold_rejected_when_enforced(
 # ---------------------------------------------------------------------------
 
 
-def _make_reset_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_reset_vuln() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"posts": 0}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
@@ -102,7 +103,7 @@ def _make_reset_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse
     return _r
 
 
-def _make_reset_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_reset_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"posts": 0}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
@@ -121,12 +122,12 @@ def test_reset_token_reuse_planning_routes_by_approval(
     plan_pb: Callable[..., object],
 ) -> None:
     pb = get_playbook("reset.token-reuse-after-password-change")
-    kwargs = dict(
-        method=HttpMethod.POST,
-        path="/api/v1/password/reset",
-        input_kinds=frozenset({InputKind.BODY_JSON}),
-        principals=frozenset({"victim"}),
-    )
+    kwargs = {
+        "method": HttpMethod.POST,
+        "path": "/api/v1/password/reset",
+        "input_kinds": frozenset({InputKind.BODY_JSON}),
+        "principals": frozenset({"victim"}),
+    }
     # No EAP on file -> routed to WAITING_APPROVAL (never a silent skip).
     waiting = plan_pb(pb, **kwargs)
     assert waiting.status is ScenarioStatus.WAITING_APPROVAL

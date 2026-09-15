@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -19,12 +19,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-class PatchType(str, Enum):
-    MINIMAL = "minimal"       # Только фикс, минимальные изменения
-    HARDENING = "hardening"   # Усиленная защита с дополнительными проверками
+class PatchType(StrEnum):
+    MINIMAL = "minimal"  # Только фикс, минимальные изменения
+    HARDENING = "hardening"  # Усиленная защита с дополнительными проверками
 
 
-class PatchStatus(str, Enum):
+class PatchStatus(StrEnum):
     PENDING = "pending"
     GENERATED = "generated"
     VALIDATED = "validated"
@@ -67,18 +67,18 @@ def _prompt_patch_generation(
     return f"""Generate a security fix for this vulnerability.
 
 === FINDING ===
-Title: {finding.get('title', 'N/A')}
-Severity: {finding.get('severity', 'unknown')}
-CWE: {finding.get('cwe', 'N/A')}
-Description: {finding.get('description', '')[:1000]}
-File: {finding.get('file_path', '')}
-Line: {finding.get('line_start', 0)}
+Title: {finding.get("title", "N/A")}
+Severity: {finding.get("severity", "unknown")}
+CWE: {finding.get("cwe", "N/A")}
+Description: {finding.get("description", "")[:1000]}
+File: {finding.get("file_path", "")}
+Line: {finding.get("line_start", 0)}
 
 === VULNERABLE CODE ===
 {original_code[:3000]}
 
 === PATCH TYPE ===
-{patch_type.value} — {'minimum fix only' if patch_type == PatchType.MINIMAL else 'hardened with extra guards'}
+{patch_type.value} — {"minimum fix only" if patch_type == PatchType.MINIMAL else "hardened with extra guards"}
 
 === TASK ===
 Output JSON with:
@@ -130,7 +130,8 @@ async def generate_patch(
 
     try:
         response = await call_llm_unified(
-            system, prompt,
+            system,
+            prompt,
             task=LLMTask.REMEDIATION_PLAN,
             phase="patch_generation",
         )
@@ -181,15 +182,17 @@ async def validate_patch(result: PatchResult) -> PatchResult:
 
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "python3", "-m", "pytest", str(test_file), "-q",
+                    "python3",
+                    "-m",
+                    "pytest",
+                    str(test_file),
+                    "-q",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
                 result.tests_passed = proc.returncode == 0
-                result.validation_output = (
-                    (stdout or b"").decode(errors="replace")[:2000]
-                )
+                result.validation_output = (stdout or b"").decode(errors="replace")[:2000]
             except TimeoutError:
                 result.tests_passed = False
                 result.validation_output = "Test execution timed out"

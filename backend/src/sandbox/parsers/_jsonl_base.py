@@ -127,9 +127,7 @@ def load_canonical_or_stdout_json(
     Returns the parsed JSON value (which may be a dict, list, or
     scalar) or ``None`` when both sources are empty / malformed.
     """
-    raw = _read_canonical_bytes(
-        artifacts_dir, canonical_name=canonical_name, tool_id=tool_id
-    )
+    raw = _read_canonical_bytes(artifacts_dir, canonical_name=canonical_name, tool_id=tool_id)
     if raw.strip():
         payload = safe_load_json(raw, tool_id=tool_id)
         if payload is not None:
@@ -159,9 +157,7 @@ def iter_jsonl_records(
     :func:`safe_load_jsonl`), so a single broken record cannot drop
     the entire scan.
     """
-    raw = _read_canonical_bytes(
-        artifacts_dir, canonical_name=canonical_name, tool_id=tool_id
-    )
+    raw = _read_canonical_bytes(artifacts_dir, canonical_name=canonical_name, tool_id=tool_id)
     source: bytes = raw if raw.strip() else stdout
     if not source or not source.strip():
         return

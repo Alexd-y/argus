@@ -9,12 +9,12 @@ import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-
 from src.orchestration.handlers import run_vuln_analysis
 from src.orchestration.phases import VulnAnalysisOutput
-from src.recon.vulnerability_analysis.active_scan.planner import build_va_active_scan_plan
+from src.recon.vulnerability_analysis.active_scan.planner import (
+    build_va_active_scan_plan,
+)
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _alf_nu_bundle() -> VulnerabilityAnalysisInputBundle:

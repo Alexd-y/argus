@@ -52,9 +52,7 @@ from src.owasp_top10_2025 import (
 )
 from src.reports.generators import ReportData
 
-SARIF_SCHEMA_URL: Final[str] = (
-    "https://json.schemastore.org/sarif-2.1.0.json"
-)
+SARIF_SCHEMA_URL: Final[str] = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION: Final[str] = "2.1.0"
 
 # Tool driver name shown to consumers (GitHub Code Scanning displays this
@@ -132,8 +130,7 @@ def _cwe_id(raw: str | None) -> str | None:
     if not raw:
         return None
     s = str(raw).strip().upper()
-    if s.startswith("CWE-"):
-        s = s[4:]
+    s = s.removeprefix("CWE-")
     if s.isdigit():
         return s
     return None
@@ -254,14 +251,16 @@ def _result_fingerprint(f: Finding, target: str | None) -> str:
     severity, title, cwe, cvss)`` — independent of finding ordering and
     immune to whitespace differences in the source data.
     """
-    key = "|".join([
-        (target or "").strip().lower(),
-        _rule_id_for_finding(f),
-        (f.severity or "").lower().strip(),
-        (f.title or "").strip().lower(),
-        (f.cwe or "").strip().upper(),
-        f"{float(f.cvss):.1f}" if f.cvss is not None else "",
-    ])
+    key = "|".join(
+        [
+            (target or "").strip().lower(),
+            _rule_id_for_finding(f),
+            (f.severity or "").lower().strip(),
+            (f.title or "").strip().lower(),
+            (f.cwe or "").strip().upper(),
+            f"{float(f.cvss):.1f}" if f.cvss is not None else "",
+        ]
+    )
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
@@ -300,7 +299,7 @@ def _ordered(obj: Any) -> Any:
 def _ordered_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Type-narrowed wrapper around ``_ordered`` for top-level payloads."""
     ordered = _ordered(payload)
-    assert isinstance(ordered, dict)  # noqa: S101 — invariant maintained by _ordered for dict input
+    assert isinstance(ordered, dict)
     return ordered
 
 
@@ -310,7 +309,7 @@ def build_sarif_payload(
     tool_version: str | None = None,
 ) -> dict[str, Any]:
     """Build a SARIF v2.1.0 dict from ``data`` (no I/O, no JSON encoding)."""
-    findings_sorted = sorted(list(data.findings or []), key=_finding_priority_key)
+    findings_sorted = sorted(data.findings or [], key=_finding_priority_key)
 
     rules_by_id: dict[str, dict[str, Any]] = {}
     for f in findings_sorted:
@@ -341,10 +340,12 @@ def build_sarif_payload(
 
     artifacts: list[dict[str, Any]] = []
     if data.target:
-        artifacts.append({
-            "location": {"uri": _truncate(data.target, 2048)},
-            "description": {"text": "Scan target"},
-        })
+        artifacts.append(
+            {
+                "location": {"uri": _truncate(data.target, 2048)},
+                "description": {"text": "Scan target"},
+            }
+        )
     if artifacts:
         run["artifacts"] = artifacts
 

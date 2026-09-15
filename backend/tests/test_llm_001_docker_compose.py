@@ -47,9 +47,7 @@ class TestLLM001DockerComposeLLMKeys:
         assert "services" in compose_config
 
     @pytest.mark.parametrize("service", SERVICES_WITH_LLM)
-    def test_service_has_environment_section(
-        self, compose_config: dict, service: str
-    ) -> None:
+    def test_service_has_environment_section(self, compose_config: dict, service: str) -> None:
         """Backend and worker have environment section."""
         services = compose_config.get("services", {})
         assert service in services, f"Service '{service}' must be defined"
@@ -59,13 +57,8 @@ class TestLLM001DockerComposeLLMKeys:
 
     @pytest.mark.parametrize("service", SERVICES_WITH_LLM)
     @pytest.mark.parametrize("key", REQUIRED_LLM_ENV_VARS)
-    def test_service_has_llm_env_var(
-        self, compose_config: dict, service: str, key: str
-    ) -> None:
+    def test_service_has_llm_env_var(self, compose_config: dict, service: str, key: str) -> None:
         """Each LLM env var is present in backend and worker."""
         services = compose_config.get("services", {})
         env = services.get(service, {}).get("environment", {})
-        assert key in env, (
-            f"LLM-001: '{key}' must be in {service}.environment "
-            f"(docker-compose.yml)"
-        )
+        assert key in env, f"LLM-001: '{key}' must be in {service}.environment (docker-compose.yml)"

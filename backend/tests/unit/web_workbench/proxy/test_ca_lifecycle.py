@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from cryptography.fernet import Fernet
-
 from src.web_workbench.proxy.ca_lifecycle import (
     SEALING_KEY_REF,
     FernetSecretSealer,

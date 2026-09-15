@@ -20,7 +20,6 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
-
 from src.scheduling import cron_parser
 from src.scheduling.cron_parser import (
     MAX_CRON_FIELDS,
@@ -33,7 +32,6 @@ from src.scheduling.cron_parser import (
     normalize_to_utc,
     validate_cron,
 )
-
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -139,9 +137,7 @@ class TestValidateCron:
         try:
             validate_cron(operator_input)
         except CronValidationError as exc:
-            formatted = "".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
-            )
+            formatted = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         else:  # pragma: no cover — the call MUST raise on garbage input
             pytest.fail("validate_cron should have raised CronValidationError")
         assert leaky_token not in formatted, (
@@ -179,9 +175,7 @@ class TestNextFireTime:
         """Naive ``after`` is interpreted as UTC, matching the default."""
         naive = datetime(2026, 4, 22, 10, 0)
         aware = datetime(2026, 4, 22, 10, 0, tzinfo=UTC)
-        assert next_fire_time("0 0 * * *", after=naive) == next_fire_time(
-            "0 0 * * *", after=aware
-        )
+        assert next_fire_time("0 0 * * *", after=naive) == next_fire_time("0 0 * * *", after=aware)
 
     def test_next_fire_time_naive_after_is_utc_not_local(self) -> None:
         """Locks the contract: naive ``after`` is treated as UTC even when
@@ -299,18 +293,12 @@ class TestIsInMaintenanceWindow:
     def test_in_maintenance_window_outside_returns_false(self) -> None:
         """90 minutes after fire, 60-min duration → outside."""
         at = datetime(2026, 4, 22, 23, 30, tzinfo=UTC)
-        assert (
-            is_in_maintenance_window("0 22 * * *", at=at, window_duration_minutes=60)
-            is False
-        )
+        assert is_in_maintenance_window("0 22 * * *", at=at, window_duration_minutes=60) is False
 
     def test_in_maintenance_window_at_window_end_inclusive(self) -> None:
         """Exactly ``duration`` minutes after the fire → still inside (inclusive)."""
         at = datetime(2026, 4, 22, 23, 0, tzinfo=UTC)
-        assert (
-            is_in_maintenance_window("0 22 * * *", at=at, window_duration_minutes=60)
-            is True
-        )
+        assert is_in_maintenance_window("0 22 * * *", at=at, window_duration_minutes=60) is True
 
     def test_in_maintenance_window_timezone_aware(self) -> None:
         """Window defined in NY local; ``at`` arrives in UTC.
@@ -335,9 +323,9 @@ class TestIsInMaintenanceWindow:
         """A naive ``at`` is treated as UTC, matching the default tz."""
         naive = datetime(2026, 4, 22, 22, 30)
         aware = datetime(2026, 4, 22, 22, 30, tzinfo=UTC)
-        assert is_in_maintenance_window(
-            "0 22 * * *", at=naive
-        ) == is_in_maintenance_window("0 22 * * *", at=aware)
+        assert is_in_maintenance_window("0 22 * * *", at=naive) == is_in_maintenance_window(
+            "0 22 * * *", at=aware
+        )
 
     def test_in_maintenance_window_rejects_non_positive_duration(self) -> None:
         """Programmer error → stdlib :class:`ValueError`."""
@@ -374,9 +362,7 @@ class TestIsInMaintenanceWindow:
         closed-taxonomy boundary.
         """
         operator_input = "abc def ghi jkl mno"
-        with pytest.raises(
-            CronValidationError, match="invalid cron syntax"
-        ) as exc_info:
+        with pytest.raises(CronValidationError, match="invalid cron syntax") as exc_info:
             is_in_maintenance_window(
                 operator_input,
                 at=datetime(2026, 4, 22, 12, 0, tzinfo=UTC),
@@ -409,13 +395,9 @@ class TestIsInMaintenanceWindow:
                 window_duration_minutes=60,
             )
         except CronValidationError as exc:
-            formatted = "".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
-            )
+            formatted = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         else:  # pragma: no cover — call MUST raise on garbage input
-            pytest.fail(
-                "is_in_maintenance_window should have raised CronValidationError"
-            )
+            pytest.fail("is_in_maintenance_window should have raised CronValidationError")
         assert leaky_token not in formatted, (
             f"operator window expression leaked through traceback: {formatted!r}"
         )
@@ -450,9 +432,7 @@ class TestNormalizeToUtc:
 
     def test_normalize_to_utc_unknown_timezone_remaps(self) -> None:
         with pytest.raises(CronValidationError, match="unknown timezone"):
-            normalize_to_utc(
-                datetime(2026, 4, 22, 12, 0), assume_timezone="Nowhere/Land"
-            )
+            normalize_to_utc(datetime(2026, 4, 22, 12, 0), assume_timezone="Nowhere/Land")
 
 
 # ---------------------------------------------------------------------------
@@ -494,9 +474,7 @@ class TestModuleHygiene:
 
     def test_public_api_surface_matches_module_all(self) -> None:
         """Defensive: ``__all__`` controls the public surface."""
-        module_all = (
-            set(cron_parser.__all__) if hasattr(cron_parser, "__all__") else None
-        )
+        module_all = set(cron_parser.__all__) if hasattr(cron_parser, "__all__") else None
         # Module does not declare __all__ explicitly; verify the package
         # re-export at least exposes every documented public name.
         from src import scheduling

@@ -48,7 +48,9 @@ class TestContractDocStructure:
 
     def test_contract_has_endpoints_section(self, contract_content: str) -> None:
         """Section 2 REST API Endpoints is present."""
-        assert "## 2. REST API Endpoints" in contract_content or "## 2. REST API" in contract_content
+        assert (
+            "## 2. REST API Endpoints" in contract_content or "## 2. REST API" in contract_content
+        )
 
     def test_contract_has_scans_endpoints_table(self, contract_content: str) -> None:
         """Scans endpoints table (POST /scans, GET /scans/:id, etc.) is documented."""

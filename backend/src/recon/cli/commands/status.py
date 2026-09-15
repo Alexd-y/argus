@@ -29,9 +29,7 @@ async def _show_status(engagement_id: str) -> None:
     from src.db.session import async_session_factory
 
     async with async_session_factory() as session:
-        eng = await session.execute(
-            select(Engagement).where(Engagement.id == engagement_id)
-        )
+        eng = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
         engagement = eng.scalar_one_or_none()
         if not engagement:
             console.print(f"[red]Engagement {engagement_id} not found[/red]")
@@ -50,8 +48,7 @@ async def _show_status(engagement_id: str) -> None:
         jobs_data = jobs_result.all()
 
         artifacts_result = await session.execute(
-            select(func.count(Artifact.id))
-            .where(Artifact.engagement_id == engagement_id)
+            select(func.count(Artifact.id)).where(Artifact.engagement_id == engagement_id)
         )
         artifact_count = artifacts_result.scalar() or 0
 

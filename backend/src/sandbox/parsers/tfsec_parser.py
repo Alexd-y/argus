@@ -64,7 +64,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -113,7 +113,7 @@ _SEVERITY_RANK: Final[dict[str, int]] = {
 }
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -318,9 +318,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    raw_results: list[Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(raw_results: list[Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for raw in raw_results:
         if not isinstance(raw, dict):
             continue

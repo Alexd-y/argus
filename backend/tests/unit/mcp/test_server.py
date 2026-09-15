@@ -16,9 +16,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from src.mcp.server import _parse_port, _resolve_transport, build_app
-
 
 _EXPECTED_TOOLS = {
     "scan.create",

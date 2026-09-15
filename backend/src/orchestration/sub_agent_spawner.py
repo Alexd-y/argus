@@ -126,7 +126,8 @@ class SubAgentSpawner:
 
         error = exec_error or budget_error
         return SubAgentResult(
-            task_id=task_id, session_id=task.session_id,
+            task_id=task_id,
+            session_id=task.session_id,
             depth=task.depth,
             output={} if exec_error else output,
             error=error,
@@ -160,7 +161,8 @@ class SubAgentSpawner:
 
         error = exec_error or budget_error
         return SubAgentResult(
-            task_id=task_id, session_id=task.session_id,
+            task_id=task_id,
+            session_id=task.session_id,
             depth=task.depth,
             output={} if exec_error else output,
             error=error,
@@ -180,7 +182,7 @@ class SubAgentSpawner:
 
 
 __all__ = [
+    "SubAgentResult",
     "SubAgentSpawner",
     "SubAgentTask",
-    "SubAgentResult",
 ]

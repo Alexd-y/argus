@@ -22,7 +22,6 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.oast.canary import (
     Canary,
     CanaryFailureReason,
@@ -33,7 +32,6 @@ from src.oast.canary import (
     CanaryVerifier,
 )
 from src.pipeline.contracts.finding_dto import ConfidenceLevel
-
 
 # ---------------------------------------------------------------------------
 # Canary model
@@ -81,9 +79,7 @@ class TestCanaryModel:
                 created_at=fixed_clock(),
             )
 
-    def test_dom_marker_requires_url_safe_value(
-        self, fixed_clock: Callable[[], datetime]
-    ) -> None:
+    def test_dom_marker_requires_url_safe_value(self, fixed_clock: Callable[[], datetime]) -> None:
         with pytest.raises(ValidationError):
             Canary(
                 id=uuid4(),
@@ -92,9 +88,7 @@ class TestCanaryModel:
                 created_at=fixed_clock(),
             )
 
-    def test_header_marker_requires_header_name(
-        self, fixed_clock: Callable[[], datetime]
-    ) -> None:
+    def test_header_marker_requires_header_name(self, fixed_clock: Callable[[], datetime]) -> None:
         with pytest.raises(ValidationError):
             Canary(
                 id=uuid4(),
@@ -103,9 +97,7 @@ class TestCanaryModel:
                 created_at=fixed_clock(),
             )
 
-    def test_cookie_marker_requires_cookie_name(
-        self, fixed_clock: Callable[[], datetime]
-    ) -> None:
+    def test_cookie_marker_requires_cookie_name(self, fixed_clock: Callable[[], datetime]) -> None:
         with pytest.raises(ValidationError):
             Canary(
                 id=uuid4(),
@@ -155,29 +147,19 @@ class TestCanaryGenerator:
         assert canary.header_name is None
         assert canary.cookie_name is None
 
-    def test_generate_header_marker_requires_name(
-        self, canary_generator: CanaryGenerator
-    ) -> None:
+    def test_generate_header_marker_requires_name(self, canary_generator: CanaryGenerator) -> None:
         with pytest.raises(CanaryGenerationError):
             canary_generator.generate(CanaryKind.HEADER_MARKER)
-        canary = canary_generator.generate(
-            CanaryKind.HEADER_MARKER, header_name="X-Test-Marker"
-        )
+        canary = canary_generator.generate(CanaryKind.HEADER_MARKER, header_name="X-Test-Marker")
         assert canary.header_name == "X-Test-Marker"
 
-    def test_generate_cookie_marker_requires_name(
-        self, canary_generator: CanaryGenerator
-    ) -> None:
+    def test_generate_cookie_marker_requires_name(self, canary_generator: CanaryGenerator) -> None:
         with pytest.raises(CanaryGenerationError):
             canary_generator.generate(CanaryKind.COOKIE_MARKER)
-        canary = canary_generator.generate(
-            CanaryKind.COOKIE_MARKER, cookie_name="argus_canary"
-        )
+        canary = canary_generator.generate(CanaryKind.COOKIE_MARKER, cookie_name="argus_canary")
         assert canary.cookie_name == "argus_canary"
 
-    def test_time_delay_rejects_header_name(
-        self, canary_generator: CanaryGenerator
-    ) -> None:
+    def test_time_delay_rejects_header_name(self, canary_generator: CanaryGenerator) -> None:
         with pytest.raises(CanaryGenerationError):
             canary_generator.generate(CanaryKind.TIME_DELAY, header_name="X-Hi")
 
@@ -297,9 +279,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker"
-        )
+        canary = canary_generator.generate(CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker")
         result = verifier.verify(
             canary,
             response_headers={"x-argus-marker": canary.secret_value},
@@ -312,9 +292,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker"
-        )
+        canary = canary_generator.generate(CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker")
         result = verifier.verify(canary, response_headers={"X-Other": "anything"})
         assert result.verified is False
         assert result.failure_reason is CanaryFailureReason.MISSING_HEADER
@@ -324,9 +302,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker"
-        )
+        canary = canary_generator.generate(CanaryKind.HEADER_MARKER, header_name="X-Argus-Marker")
         result = verifier.verify(canary, response_headers=None)
         assert result.verified is False
         assert result.failure_reason is CanaryFailureReason.NO_RESPONSE
@@ -338,9 +314,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.COOKIE_MARKER, cookie_name="argus_canary"
-        )
+        canary = canary_generator.generate(CanaryKind.COOKIE_MARKER, cookie_name="argus_canary")
         result = verifier.verify(
             canary,
             response_cookies={"ARGUS_CANARY": canary.secret_value},
@@ -352,9 +326,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.COOKIE_MARKER, cookie_name="argus_canary"
-        )
+        canary = canary_generator.generate(CanaryKind.COOKIE_MARKER, cookie_name="argus_canary")
         result = verifier.verify(canary, response_cookies={"other": "x"})
         assert result.verified is False
         assert result.failure_reason is CanaryFailureReason.MISSING_COOKIE
@@ -364,9 +336,7 @@ class TestCanaryVerifier:
         canary_generator: CanaryGenerator,
         verifier: CanaryVerifier,
     ) -> None:
-        canary = canary_generator.generate(
-            CanaryKind.COOKIE_MARKER, cookie_name="argus_canary"
-        )
+        canary = canary_generator.generate(CanaryKind.COOKIE_MARKER, cookie_name="argus_canary")
         result = verifier.verify(canary, response_cookies=None)
         assert result.verified is False
         assert result.failure_reason is CanaryFailureReason.NO_RESPONSE

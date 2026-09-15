@@ -94,7 +94,17 @@ ROLE_PATTERNS: list[tuple[str, list[str], str]] = [
     ),
     (
         "cdn/static",
-        ["cdn.", "static.", "assets.", "media.", "files.", "img.", "images.", "js.", "css."],
+        [
+            "cdn.",
+            "static.",
+            "assets.",
+            "media.",
+            "files.",
+            "img.",
+            "images.",
+            "js.",
+            "css.",
+        ],
         "medium",
     ),
     ("auth/sso", ["auth.", "login.", "sso.", "oauth.", "saml.", "identity."], "high"),

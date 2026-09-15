@@ -49,12 +49,10 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ParseStrategy, ToolDescriptor
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # §4.5 batch — hard-coded so a silent drop / addition breaks CI.
 CONTENT_DISCOVERY_TOOL_IDS: Final[tuple[str, ...]] = (
@@ -203,9 +201,7 @@ def images_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -249,15 +245,12 @@ def test_phase_matches_expected_split(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_risk_level_is_low_except_paramspider_passive(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_risk_level_is_low_except_paramspider_passive(catalog_dir: Path, tool_id: str) -> None:
     """Active probing tools are LOW; paramspider (Wayback only) is PASSIVE."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = RISK_BY_TOOL[tool_id]
     assert descriptor.risk_level is expected, (
-        f"{tool_id}: risk_level must be {expected.value}, "
-        f"got {descriptor.risk_level.value}"
+        f"{tool_id}: risk_level must be {expected.value}, got {descriptor.risk_level.value}"
     )
 
 
@@ -304,9 +297,7 @@ def test_argus_kali_web_dockerfile_stub_exists(images_dir: Path) -> None:
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -317,17 +308,14 @@ def test_network_policy_name_is_a_known_template(
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_network_policy_matches_active_passive_split(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_matches_active_passive_split(catalog_dir: Path, tool_id: str) -> None:
     """paramspider sits behind ``recon-passive`` (Wayback only); every other
     §4.5 tool probes the in-scope target via ``recon-active-tcp``.
     """
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = NETWORK_POLICY_BY_TOOL[tool_id]
     assert descriptor.network_policy.name == expected, (
-        f"{tool_id}: expected network_policy {expected!r}, "
-        f"got {descriptor.network_policy.name!r}"
+        f"{tool_id}: expected network_policy {expected!r}, got {descriptor.network_policy.name!r}"
     )
 
 
@@ -342,15 +330,11 @@ def test_evidence_artifacts_non_empty(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.evidence_artifacts, f"{tool_id}: must declare evidence_artifacts"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_cwe_hints_field_present_with_information_exposure(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_cwe_hints_field_present_with_information_exposure(catalog_dir: Path, tool_id: str) -> None:
     """CWE-200 (Information Exposure) is the universal CWE for §4.5 tools.
 
     Re-reads the raw YAML to assert the key is *explicitly* present
@@ -358,12 +342,9 @@ def test_cwe_hints_field_present_with_information_exposure(
     """
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     assert "cwe_hints" in payload, f"{tool_id}.yaml missing the cwe_hints key"
-    assert isinstance(payload["cwe_hints"], list), (
-        f"{tool_id}.yaml: cwe_hints must be a list"
-    )
+    assert isinstance(payload["cwe_hints"], list), f"{tool_id}.yaml: cwe_hints must be a list"
     assert 200 in payload["cwe_hints"], (
-        f"{tool_id}.yaml: cwe_hints must include CWE-200 "
-        "(Information Exposure) for §4.5 tools"
+        f"{tool_id}.yaml: cwe_hints must include CWE-200 (Information Exposure) for §4.5 tools"
     )
 
 
@@ -371,9 +352,7 @@ def test_cwe_hints_field_present_with_information_exposure(
 def test_owasp_wstg_matches_per_tool_taxonomy(catalog_dir: Path, tool_id: str) -> None:
     """OWASP-WSTG hint set matches the per-tool taxonomy from the cycle plan."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for §4.5 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for §4.5 tools"
     expected = OWASP_WSTG_BY_TOOL[tool_id]
     assert frozenset(descriptor.owasp_wstg) == expected, (
         f"{tool_id}: owasp_wstg drift; got {sorted(descriptor.owasp_wstg)}, "
@@ -418,8 +397,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -429,9 +407,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_command_template_has_no_shell_metacharacters(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_has_no_shell_metacharacters(catalog_dir: Path, tool_id: str) -> None:
     """No argv token may contain shell metacharacters.
 
     Defence-in-depth on top of the templating allow-list: an author who
@@ -446,15 +422,11 @@ def test_command_template_has_no_shell_metacharacters(
         for meta in SHELL_METACHARS:
             if meta in token:
                 offenders.append((token, meta))
-    assert not offenders, (
-        f"{tool_id}: command_template contains shell metacharacters: {offenders}"
-    )
+    assert not offenders, f"{tool_id}: command_template contains shell metacharacters: {offenders}"
 
 
 @pytest.mark.parametrize("tool_id", CONTENT_DISCOVERY_TOOL_IDS)
-def test_command_template_first_token_is_real_binary_name(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_first_token_is_real_binary_name(catalog_dir: Path, tool_id: str) -> None:
     """First argv token is the binary name — no leading ``sh``, ``bash``,
     ``cmd``, or path-traversal prefix.
     """
@@ -464,6 +436,4 @@ def test_command_template_first_token_is_real_binary_name(
     assert first not in forbidden_first, (
         f"{tool_id}: first argv token {first!r} would launch a shell"
     )
-    assert ".." not in first, (
-        f"{tool_id}: first argv token {first!r} contains path traversal"
-    )
+    assert ".." not in first, f"{tool_id}: first argv token {first!r} contains path traversal"

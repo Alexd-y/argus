@@ -75,12 +75,7 @@ class TestDeprecatedSteps:
     """L-3: STUB_STEPS renamed to DEPRECATED_STEPS."""
 
     def test_deprecated_steps_exists(self) -> None:
-        registry = (
-            Path(__file__).resolve().parent.parent
-            / "src"
-            / "recon"
-            / "step_registry.py"
-        )
+        registry = Path(__file__).resolve().parent.parent / "src" / "recon" / "step_registry.py"
         text = registry.read_text(encoding="utf-8")
         assert "DEPRECATED_STEPS" in text
 

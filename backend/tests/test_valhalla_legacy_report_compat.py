@@ -6,7 +6,6 @@ import json
 from unittest.mock import patch
 
 import pytest
-
 from src.reports.data_collector import FindingRow, ScanReportData
 from src.reports.template_env import get_report_jinja_environment
 from src.reports.valhalla_report_context import (
@@ -67,7 +66,9 @@ def test_legacy_finding_builds_valhalla_context_and_ai_serialization() -> None:
     "src.services.reporting.get_finding_poc_screenshot_presigned_url",
     return_value=None,
 )
-def test_legacy_finding_jinja_findings_table_renders_without_error(_mock_presign: object) -> None:
+def test_legacy_finding_jinja_findings_table_renders_without_error(
+    _mock_presign: object,
+) -> None:
     f = _legacy_xss_finding_dict()
     row = FindingRow(
         id=f["id"],

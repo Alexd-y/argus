@@ -110,7 +110,7 @@ _ADAPTER_FACTORY: Final[dict[str, type[NotifierBase]]] = {
     queue="argus.notifications",
     max_retries=0,
 )
-def webhook_dlq_replay(self: Any) -> dict[str, int]:  # noqa: ARG001 — Celery bind=True signature
+def webhook_dlq_replay(self: Any) -> dict[str, int]:  # noqa: ARG001 - Celery task/signal signature
     """Sync wrapper for the async loop body (Celery task call shape).
 
     Mirrors the canonical async-in-Celery-sync pattern from
@@ -182,9 +182,7 @@ async def _process_abandon_batch(
     counts: dict[str, int],
 ) -> None:
     """Abandon every row whose age >= :data:`DLQ_MAX_AGE_DAYS` (one batch)."""
-    aged_rows = await list_abandoned_candidates(
-        session, now=when, limit=ABANDON_BATCH_LIMIT
-    )
+    aged_rows = await list_abandoned_candidates(session, now=when, limit=ABANDON_BATCH_LIMIT)
     for entry in aged_rows:
         try:
             await mark_abandoned(
@@ -263,9 +261,7 @@ async def _replay_entry(session: AsyncSession, entry: WebhookDlqEntry) -> bool:
 
     if result.delivered:
         try:
-            await mark_replayed(
-                session, entry_id=entry.id, tenant_id=entry.tenant_id
-            )
+            await mark_replayed(session, entry_id=entry.id, tenant_id=entry.tenant_id)
         except AlreadyTerminalError:
             # Operator marked the row terminal between SELECT and UPDATE —
             # the dispatch already shipped, so we still count it as replayed.

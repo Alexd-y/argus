@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -187,9 +186,7 @@ def test_endpoint_fallback_emits_info_findings(tmp_path: Path) -> None:
     assert all(f.cvss_v3_score == pytest.approx(0.0) for f in findings)
 
 
-def test_finding_missing_id_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_finding_missing_id_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bogus = _vuln()
     bogus.pop("id")
     payload = _payload(findings=[bogus, _vuln(finding_id="ok")])
@@ -197,8 +194,7 @@ def test_finding_missing_id_skipped(
         findings = parse_openapi_scanner_json(payload, b"", tmp_path, "openapi_scanner")
     assert len(findings) == 1
     assert any(
-        "openapi_scanner_parser_finding_missing_id"
-        in (record.__dict__.get("event") or "")
+        "openapi_scanner_parser_finding_missing_id" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -212,8 +208,7 @@ def test_envelope_not_object_emits_warning(
         findings = parse_openapi_scanner_json(b"", b"", tmp_path, "openapi_scanner")
     assert findings == []
     assert any(
-        "openapi_scanner_parser_envelope_not_object"
-        in (record.__dict__.get("event") or "")
+        "openapi_scanner_parser_envelope_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 

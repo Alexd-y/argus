@@ -26,14 +26,16 @@ def _login_vuln(_spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
     return HttpResponse(status=401, body='{"error":"bad_credentials"}')
 
 
-def _make_login_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_login_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"n": 0}
 
     def _r(_spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
         state["n"] += 1
         if state["n"] >= 2:
             return HttpResponse(
-                status=429, body='{"error":"rate_limited"}', headers={"Retry-After": "60"}
+                status=429,
+                body='{"error":"rate_limited"}',
+                headers={"Retry-After": "60"},
             )
         return HttpResponse(status=401, body='{"error":"bad_credentials"}')
 
@@ -89,14 +91,16 @@ def _otp_vuln(_spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
     return HttpResponse(status=200, body=json.dumps({"status": "sent", "otp": "123456"}))
 
 
-def _make_otp_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_otp_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"n": 0}
 
     def _r(_spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
         state["n"] += 1
         if state["n"] >= 2:
             return HttpResponse(
-                status=429, body='{"error":"rate_limited"}', headers={"Retry-After": "30"}
+                status=429,
+                body='{"error":"rate_limited"}',
+                headers={"Retry-After": "30"},
             )
         return HttpResponse(status=200, body=json.dumps({"status": "sent"}))
 

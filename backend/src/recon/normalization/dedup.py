@@ -19,7 +19,9 @@ def dedup_key(finding: dict[str, Any]) -> str:
 
     if finding_type == "dns_record":
         data = finding.get("data", {})
-        return f"dns:{data.get('hostname', '')}:{data.get('record_type', '')}:{data.get('value', '')}"
+        return (
+            f"dns:{data.get('hostname', '')}:{data.get('record_type', '')}:{data.get('value', '')}"
+        )
 
     if finding_type == "ip_address":
         return f"ip:{value.strip()}"

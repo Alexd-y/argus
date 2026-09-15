@@ -10,7 +10,10 @@ from src.reports.data_collector import (
     ScanReportData,
     ScanRowData,
 )
-from src.reports.template_env import get_report_jinja_environment, render_tier_report_html
+from src.reports.template_env import (
+    get_report_jinja_environment,
+    render_tier_report_html,
+)
 from src.services.reporting import ReportGenerator
 
 
@@ -90,7 +93,7 @@ def test_rpt008_render_tier_smoke(tier: str) -> None:
         assert "Title Page" in html
         assert "Executive Summary" in html
         assert "Detailed Vulnerability Descriptions (Findings)" in html
-        assert "id=\"exploitation\"" in html
+        assert 'id="exploitation"' in html
         assert "exploit chain" in html.lower()
         assert "Appendix A" in html
         assert "Conclusion" in html
@@ -98,7 +101,7 @@ def test_rpt008_render_tier_smoke(tier: str) -> None:
         assert "Recon summary" in html
         assert "Findings" in html
         assert "AI Conclusions" in html
-        assert "id=\"exploitation\"" not in html
+        assert 'id="exploitation"' not in html
 
 
 def test_rpt008_autoescape_finding_title() -> None:

@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -200,9 +199,7 @@ def test_missing_title_emits_warning_and_is_skipped(
     )
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_kube_hunter_json(b"[]", b"", tmp_path, "kube_hunter")
     assert findings == []
@@ -221,7 +218,9 @@ def test_no_vulnerabilities_key_returns_empty(tmp_path: Path) -> None:
     assert parse_kube_hunter_json(payload, b"", tmp_path, "kube_hunter") == []
 
 
-def test_evidence_sidecar_includes_tool_id_kind_and_category_raw(tmp_path: Path) -> None:
+def test_evidence_sidecar_includes_tool_id_kind_and_category_raw(
+    tmp_path: Path,
+) -> None:
     payload = _payload(_vuln(vid="KHV050", category="Remote Code Execution"))
     parse_kube_hunter_json(payload, b"", tmp_path, "kube_hunter-mng")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())

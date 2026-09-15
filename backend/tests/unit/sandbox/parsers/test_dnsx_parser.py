@@ -69,9 +69,7 @@ def test_dedup_collapses_duplicate_records(tmp_path: Path) -> None:
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    (tmp_path / "dnsx.json").write_bytes(
-        b'{"host":"canonical.example.com","a":["10.0.0.1"]}\n'
-    )
+    (tmp_path / "dnsx.json").write_bytes(b'{"host":"canonical.example.com","a":["10.0.0.1"]}\n')
     findings = parse_dnsx(
         b'{"host":"decoy.example.com","a":["10.0.0.2"]}\n',
         b"",

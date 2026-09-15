@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
-
 from src.reports.data_collector import (
     FindingRow,
     PhaseOutputRow,
@@ -16,11 +15,11 @@ from src.reports.data_collector import (
 )
 from src.reports.template_env import render_tier_report_html
 from src.services.reporting import (
+    ACTIVE_WEB_SCAN_CURL_XSS_EXAMPLE,
     ReportGenerator,
     _artifact_display_file_name,
     _is_raw_tool_output_file_name,
     _phase_bucket_for_artifact_key,
-    ACTIVE_WEB_SCAN_CURL_XSS_EXAMPLE,
     build_active_web_scan_section_context,
     build_scan_artifacts_section_context,
 )
@@ -28,7 +27,10 @@ from src.services.reporting import (
 
 def test_phase_bucket_for_artifact_key_phase_raw() -> None:
     assert _phase_bucket_for_artifact_key("t1/s1/recon/raw/x.txt", "t1", "s1") == "recon"
-    assert _phase_bucket_for_artifact_key("t1/s1/threat_modeling/raw/a.json", "t1", "s1") == "threat_modeling"
+    assert (
+        _phase_bucket_for_artifact_key("t1/s1/threat_modeling/raw/a.json", "t1", "s1")
+        == "threat_modeling"
+    )
 
 
 def test_phase_bucket_for_artifact_key_legacy_raw() -> None:
@@ -51,7 +53,10 @@ def test_artifact_display_file_name_does_not_split_inside_script_tag() -> None:
     assert _artifact_display_file_name(key, "t1", "s1") == evil
 
 
-@patch("src.services.reporting.get_presigned_url_by_key", return_value="https://example.com/presigned")
+@patch(
+    "src.services.reporting.get_presigned_url_by_key",
+    return_value="https://example.com/presigned",
+)
 @patch("src.services.reporting.list_scan_artifacts")
 def test_build_scan_artifacts_groups_ordered_phases(mock_list, _mock_presign) -> None:
     mock_list.return_value = [
@@ -74,7 +79,10 @@ def test_build_scan_artifacts_groups_ordered_phases(mock_list, _mock_presign) ->
     assert ctx["phase_blocks"][0]["rows"][0]["download_url"] == "https://example.com/presigned"
 
 
-@patch("src.services.reporting.get_presigned_url_by_key", return_value="https://example.com/p")
+@patch(
+    "src.services.reporting.get_presigned_url_by_key",
+    return_value="https://example.com/p",
+)
 @patch("src.services.reporting.list_scan_artifacts")
 def test_build_scan_artifacts_splits_tool_outputs_when_keys_match(mock_list, _mock_presign) -> None:
     mock_list.return_value = [
@@ -255,7 +263,10 @@ def test_rpt008_templates_include_artifacts_heading(tier: str) -> None:
 
 def test_artifacts_partial_shows_tool_outputs_subsection() -> None:
     with (
-        patch("src.services.reporting.get_presigned_url_by_key", return_value="https://p.example/x"),
+        patch(
+            "src.services.reporting.get_presigned_url_by_key",
+            return_value="https://p.example/x",
+        ),
         patch("src.services.reporting.list_scan_artifacts") as mock_list,
     ):
         mock_list.return_value = [
@@ -278,7 +289,9 @@ def test_artifacts_partial_shows_tool_outputs_subsection() -> None:
     gen = ReportGenerator()
     html = render_tier_report_html(
         "midgard",
-        gen.prepare_template_context("midgard", data, {"executive_summary": "x"}, extra={"scan_artifacts": ctx}),
+        gen.prepare_template_context(
+            "midgard", data, {"executive_summary": "x"}, extra={"scan_artifacts": ctx}
+        ),
     )
     assert "Raw Tool Outputs" in html
     assert "Other Artifacts" in html
@@ -317,9 +330,25 @@ def test_owasp008_json_export_merges_jinja_ai_and_scan_artifacts() -> None:
                 "phase_key": "recon",
                 "phase_label": "Разведка",
                 "phase_query": "recon",
-                "rows": [{"file_name": "x.txt", "key": "k", "size": 1, "last_modified": "z", "download_url": None}],
+                "rows": [
+                    {
+                        "file_name": "x.txt",
+                        "key": "k",
+                        "size": 1,
+                        "last_modified": "z",
+                        "download_url": None,
+                    }
+                ],
                 "tool_output_rows": [],
-                "other_rows": [{"file_name": "x.txt", "key": "k", "size": 1, "last_modified": "z", "download_url": None}],
+                "other_rows": [
+                    {
+                        "file_name": "x.txt",
+                        "key": "k",
+                        "size": 1,
+                        "last_modified": "z",
+                        "download_url": None,
+                    }
+                ],
             }
         ],
     }
@@ -397,7 +426,7 @@ def test_active_web_scan_section_escapes_ai_xss_payload() -> None:
         data,
         {
             "executive_summary_valhalla": "e",
-            "vulnerability_description": '<script>alert(1)</script>',
+            "vulnerability_description": "<script>alert(1)</script>",
             "remediation_step": "r",
             "business_risk": "b",
             "compliance_check": "c",

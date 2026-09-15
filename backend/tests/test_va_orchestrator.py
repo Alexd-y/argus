@@ -1,10 +1,7 @@
 """Tests for the Multi-Agent VA Orchestrator (ENH-V3)."""
 
-import pytest
-
 from src.agents.va_orchestrator import (
     CATEGORY_SKILL_MAP,
-    REASONING_EFFORT,
     ScanMode,
     VAMultiAgentOrchestrator,
 )

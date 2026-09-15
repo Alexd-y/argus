@@ -73,7 +73,11 @@ class TestScanCreateRequest:
         )
         assert r.scan_mode == "lab"
         assert r.options.active_injection_mode == "lab"
-        assert r.options.lab_allowed_targets == ["https://x.com", "localhost", "127.0.0.1"]
+        assert r.options.lab_allowed_targets == [
+            "https://x.com",
+            "localhost",
+            "127.0.0.1",
+        ]
         assert r.options.argus_lab_allowed_targets == "https://x.com,localhost,127.0.0.1"
         assert r.options.scan_approval_flags["sqlmap"] is True
 

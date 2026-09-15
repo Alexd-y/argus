@@ -32,7 +32,6 @@ import logging
 from pathlib import Path
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -42,7 +41,6 @@ from src.sandbox.parsers.sqlmap_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_sqlmap_output,
 )
-
 
 # ---------------------------------------------------------------------------
 # Builders for canonical fixture shapes
@@ -251,9 +249,7 @@ def test_parse_sqlmap_multiple_techniques_fold_into_one_finding(
     )
     assert len(findings) == 1  # collapsed by (url, param, location)
 
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sorted(sidecar["techniques"]) == [
         "boolean-based blind",
         "time-based blind",
@@ -273,9 +269,7 @@ def test_parse_sqlmap_dbms_carries_into_evidence(tmp_path: Path) -> None:
         artifacts_dir=tmp_path,
         tool_id="sqlmap_safe",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["dbms"] == "PostgreSQL 15.4"
 
 
@@ -299,9 +293,7 @@ def test_parse_sqlmap_target_url_persists_across_blocks(tmp_path: Path) -> None:
     assert len(findings) == 2
     sidecar_lines = [
         json.loads(line)
-        for line in (tmp_path / EVIDENCE_SIDECAR_NAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert {r["target_url"] for r in sidecar_lines} == {"https://t.test/api?q=x"}
@@ -382,9 +374,7 @@ def test_parse_sqlmap_sidecar_records_carry_tool_id(tmp_path: Path) -> None:
         artifacts_dir=tmp_path,
         tool_id="sqlmap_confirm",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["tool_id"] == "sqlmap_confirm"
     assert sidecar["kind"] == "sqlmap_injection"
     assert sidecar["parameter"] == "x"
@@ -520,8 +510,7 @@ def test_parse_sqlmap_canonical_unreadable_falls_back_to_stdout(
     assert "from_stdout" in sidecar
     assert "canonical" not in sidecar
     assert any(
-        getattr(r, "event", "") == "sqlmap_parser_canonical_read_failed"
-        for r in caplog.records
+        getattr(r, "event", "") == "sqlmap_parser_canonical_read_failed" for r in caplog.records
     )
 
 
@@ -552,9 +541,7 @@ def test_parse_sqlmap_log_with_timestamp_and_level_prefixes_parses(
         tool_id="sqlmap_safe",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["target_url"] == "https://example.test/?id=1"
     assert sidecar["dbms"] == "MySQL"
     assert sidecar["techniques"] == ["boolean-based blind"]
@@ -572,9 +559,7 @@ def test_parse_sqlmap_param_block_without_url_uses_empty_target(
         tool_id="sqlmap_safe",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar.get("target_url", "") == "" or "target_url" not in sidecar
     assert sidecar["parameter"] == "orphan"
     assert sidecar["location"] == "POST"
@@ -608,9 +593,7 @@ def test_parse_sqlmap_payload_over_evidence_cap_is_truncated(
         artifacts_dir=tmp_path,
         tool_id="sqlmap_safe",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["payloads"]
     assert all(p.endswith("...[truncated]") for p in sidecar["payloads"])
 
@@ -641,8 +624,7 @@ def test_parse_sqlmap_canonical_glob_failure_falls_back_to_stdout(
         )
     assert len(findings) == 1
     assert any(
-        getattr(r, "event", "") == "sqlmap_parser_canonical_glob_failed"
-        for r in caplog.records
+        getattr(r, "event", "") == "sqlmap_parser_canonical_glob_failed" for r in caplog.records
     )
 
 

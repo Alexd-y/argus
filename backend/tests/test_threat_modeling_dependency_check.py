@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
-
 from src.recon.threat_modeling.dependency_check import (
     INCOMPLETE_RECON_NOTICE,
     MISSING_RECON_NOTICE,
@@ -126,9 +125,7 @@ async def test_check_stage1_readiness_db_unlinked_target() -> None:
             MagicMock(filename="stage2_inputs.md", target_id="other-target-id"),
         ]
 
-        result = await check_stage1_readiness(
-            "e1", target_id="my-target-id", db=AsyncMock()
-        )
+        result = await check_stage1_readiness("e1", target_id="my-target-id", db=AsyncMock())
 
     assert result.ready is True
     assert result.blocking_reason == UNLINKED_RECON_NOTICE
@@ -144,12 +141,13 @@ async def test_check_stage1_readiness_db_linked_target() -> None:
         mock_get.return_value = [
             MagicMock(filename="stage2_structured.json", target_id="my-target-id"),
             MagicMock(filename="stage2_inputs.md", target_id=None),
-            MagicMock(filename="ai_stage2_preparation_summary_normalized.json", target_id="my-target-id"),
+            MagicMock(
+                filename="ai_stage2_preparation_summary_normalized.json",
+                target_id="my-target-id",
+            ),
         ]
 
-        result = await check_stage1_readiness(
-            "e1", target_id="my-target-id", db=AsyncMock()
-        )
+        result = await check_stage1_readiness("e1", target_id="my-target-id", db=AsyncMock())
 
     assert result.ready is True
     assert result.blocking_reason is None

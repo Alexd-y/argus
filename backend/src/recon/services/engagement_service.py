@@ -31,9 +31,7 @@ class EngagementStateError(EngagementServiceError):
     """Invalid state transition."""
 
 
-async def create_engagement(
-    db: AsyncSession, tenant_id: str, data: EngagementCreate
-) -> Engagement:
+async def create_engagement(db: AsyncSession, tenant_id: str, data: EngagementCreate) -> Engagement:
     """Create a new engagement."""
     engagement = Engagement(
         tenant_id=tenant_id,
@@ -46,13 +44,14 @@ async def create_engagement(
     )
     db.add(engagement)
     await db.flush()
-    logger.info("Engagement created", extra={"engagement_id": engagement.id, "engagement_name": engagement.name})
+    logger.info(
+        "Engagement created",
+        extra={"engagement_id": engagement.id, "engagement_name": engagement.name},
+    )
     return engagement
 
 
-async def get_engagement(
-    db: AsyncSession, tenant_id: str, engagement_id: str
-) -> Engagement | None:
+async def get_engagement(db: AsyncSession, tenant_id: str, engagement_id: str) -> Engagement | None:
     """Get engagement by ID, scoped to tenant."""
     result = await db.execute(
         select(Engagement).where(
@@ -108,18 +107,14 @@ async def update_engagement(
     return engagement
 
 
-async def activate_engagement(
-    db: AsyncSession, tenant_id: str, engagement_id: str
-) -> Engagement:
+async def activate_engagement(db: AsyncSession, tenant_id: str, engagement_id: str) -> Engagement:
     """Activate engagement - validates scope is configured."""
     engagement = await get_engagement(db, tenant_id, engagement_id)
     if not engagement:
         raise EngagementNotFoundError(f"Engagement {engagement_id} not found")
 
     if engagement.status not in ("draft", "paused"):
-        raise EngagementStateError(
-            f"Cannot activate engagement in status: {engagement.status}"
-        )
+        raise EngagementStateError(f"Cannot activate engagement in status: {engagement.status}")
 
     scope_data = engagement.scope_config or {}
     scope = ScopeConfig(**scope_data) if scope_data else ScopeConfig()
@@ -134,18 +129,14 @@ async def activate_engagement(
     return engagement
 
 
-async def complete_engagement(
-    db: AsyncSession, tenant_id: str, engagement_id: str
-) -> Engagement:
+async def complete_engagement(db: AsyncSession, tenant_id: str, engagement_id: str) -> Engagement:
     """Mark engagement as completed."""
     engagement = await get_engagement(db, tenant_id, engagement_id)
     if not engagement:
         raise EngagementNotFoundError(f"Engagement {engagement_id} not found")
 
     if engagement.status != "active":
-        raise EngagementStateError(
-            f"Cannot complete engagement in status: {engagement.status}"
-        )
+        raise EngagementStateError(f"Cannot complete engagement in status: {engagement.status}")
 
     engagement.status = "completed"
     engagement.completed_at = datetime.now(UTC)
@@ -156,31 +147,39 @@ async def complete_engagement(
 
 async def get_engagement_stats(db: AsyncSession, engagement_id: str) -> dict:
     """Get aggregate stats for an engagement."""
-    targets = (await db.execute(
-        select(func.count()).select_from(
-            select(ReconTarget.id).where(ReconTarget.engagement_id == engagement_id).subquery()
+    targets = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(ReconTarget.id).where(ReconTarget.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
-    jobs = (await db.execute(
-        select(func.count()).select_from(
-            select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+    jobs = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
-    findings = (await db.execute(
-        select(func.count()).select_from(
-            select(NormalizedFinding.id).where(
-                NormalizedFinding.engagement_id == engagement_id
-            ).subquery()
+    findings = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(NormalizedFinding.id)
+                .where(NormalizedFinding.engagement_id == engagement_id)
+                .subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
-    artifacts = (await db.execute(
-        select(func.count()).select_from(
-            select(Artifact.id).where(Artifact.engagement_id == engagement_id).subquery()
+    artifacts = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(Artifact.id).where(Artifact.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     return {
         "target_count": targets,

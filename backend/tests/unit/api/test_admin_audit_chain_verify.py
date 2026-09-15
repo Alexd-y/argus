@@ -30,13 +30,11 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
@@ -46,6 +44,7 @@ from src.policy.audit import (
     _compute_audit_log_hash,
     verify_audit_log_chain,
 )
+from starlette.testclient import TestClient
 
 VERIFY = "/api/v1/admin/audit-logs/verify-chain"
 _ADMIN_KEY = "secret-admin-key"
@@ -95,7 +94,7 @@ def _build_clean_chain(
     uses, so the resulting chain MUST validate cleanly. This mirrors what an
     audit-aware emitter would write at row-creation time.
     """
-    base = start_at or datetime(2026, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
+    base = start_at or datetime(2026, 4, 1, 12, 0, 0, tzinfo=UTC)
     rows: list[SimpleNamespace] = []
     prev_hash = GENESIS_HASH
     for i in range(count):
@@ -158,7 +157,7 @@ class TestVerifyAuditLogChainHelper:
         rows = [
             _audit_row(
                 tenant_id=tid,
-                created_at=datetime(2026, 4, 1, tzinfo=timezone.utc) + timedelta(seconds=i),
+                created_at=datetime(2026, 4, 1, tzinfo=UTC) + timedelta(seconds=i),
                 details={"step": i},
             )
             for i in range(3)
@@ -207,9 +206,7 @@ class TestVerifyChainRbac:
         assert body["verified_count"] == 2
         assert body["last_verified_index"] == 1
 
-    def test_admin_role_with_matching_tenant_returns_200(
-        self, client: TestClient
-    ) -> None:
+    def test_admin_role_with_matching_tenant_returns_200(self, client: TestClient) -> None:
         tid = str(uuid.uuid4())
         rows = _build_clean_chain(tid, count=3)
         _override_db(rows)
@@ -287,7 +284,7 @@ class TestVerifyChainRbac:
 class TestVerifyChainTimeWindow:
     def test_window_too_large_returns_400(self, client: TestClient) -> None:
         # 100-day window — over the 90-day cap.
-        until = datetime(2026, 4, 21, tzinfo=timezone.utc)
+        until = datetime(2026, 4, 21, tzinfo=UTC)
         since = until - timedelta(days=100)
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.post(
@@ -305,7 +302,7 @@ class TestVerifyChainTimeWindow:
     def test_window_at_cap_is_accepted(self, client: TestClient) -> None:
         # Exactly 90 days — must succeed (boundary).
         tid = str(uuid.uuid4())
-        until = datetime(2026, 4, 21, tzinfo=timezone.utc)
+        until = datetime(2026, 4, 21, tzinfo=UTC)
         since = until - timedelta(days=90)
         rows = _build_clean_chain(tid, count=1, start_at=since + timedelta(seconds=1))
         _override_db(rows)
@@ -335,9 +332,7 @@ class TestVerifyChainTimeWindow:
             )
         assert r.status_code == 422
 
-    def test_unbounded_window_defaults_to_last_90_days(
-        self, client: TestClient
-    ) -> None:
+    def test_unbounded_window_defaults_to_last_90_days(self, client: TestClient) -> None:
         """No bounds → implicit "last 90 days" anchored to ``utcnow``.
 
         Confirms the verifier is callable without timestamps for the common
@@ -345,7 +340,7 @@ class TestVerifyChainTimeWindow:
         Also verifies the response echoes the resolved bounds (S2-2).
         """
         _override_db([])
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         try:
             with patch.object(settings, "admin_api_key", _ADMIN_KEY):
                 r = client.post(
@@ -354,7 +349,7 @@ class TestVerifyChainTimeWindow:
                 )
         finally:
             _clear_db_override()
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["ok"] is True
@@ -425,9 +420,7 @@ class TestVerifyChainHappyPath:
 
 
 class TestVerifyChainDriftDetection:
-    def test_synthetic_drift_returns_ok_false_with_drift_event(
-        self, client: TestClient
-    ) -> None:
+    def test_synthetic_drift_returns_ok_false_with_drift_event(self, client: TestClient) -> None:
         tid = str(uuid.uuid4())
         rows = _build_clean_chain(tid, count=4)
         # Manually corrupt the prev_event_hash on row index 2.
@@ -490,18 +483,17 @@ class TestVerifyChainAuditEmit:
         rows = _build_clean_chain(tid, count=2)
         _override_db(rows)
         try:
-            with caplog.at_level(logging.INFO):
-                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                    r = client.post(
-                        VERIFY,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "admin",
-                            "X-Admin-Tenant": tid,
-                            "X-Operator-Subject": operator,
-                        },
-                        params={"tenant_id": tid},
-                    )
+            with caplog.at_level(logging.INFO), patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={
+                        **_ADMIN_HEADERS,
+                        "X-Admin-Role": "admin",
+                        "X-Admin-Tenant": tid,
+                        "X-Operator-Subject": operator,
+                    },
+                    params={"tenant_id": tid},
+                )
         finally:
             _clear_db_override()
         assert r.status_code == 200, r.text
@@ -543,12 +535,11 @@ class TestVerifyChainAuditEmit:
         rows = _build_clean_chain(tid, count=1)
         _override_db(rows)
         try:
-            with caplog.at_level(logging.INFO):
-                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                    r = client.post(
-                        VERIFY,
-                        headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
-                    )
+            with caplog.at_level(logging.INFO), patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                )
         finally:
             _clear_db_override()
         assert r.status_code == 200
@@ -598,9 +589,7 @@ class TestVerifyChainPerformance:
 
 
 class TestVerifyChainNoPiiLeak:
-    def test_response_body_never_contains_raw_operator_string(
-        self, client: TestClient
-    ) -> None:
+    def test_response_body_never_contains_raw_operator_string(self, client: TestClient) -> None:
         tid = str(uuid.uuid4())
         operator = "carol@argus.example"
         rows = _build_clean_chain(tid, count=2)
@@ -624,8 +613,8 @@ class TestVerifyChainNoPiiLeak:
         """Same params → same fingerprint (helper must be deterministic)."""
         from src.api.routers.admin_audit_chain import _query_fingerprint
 
-        since = datetime(2026, 4, 1, tzinfo=timezone.utc)
-        until = datetime(2026, 4, 21, tzinfo=timezone.utc)
+        since = datetime(2026, 4, 1, tzinfo=UTC)
+        until = datetime(2026, 4, 21, tzinfo=UTC)
         tid = str(uuid.uuid4())
         fp_a = _query_fingerprint(
             tenant_id=tid, since=since, until=until, event_type="policy.decision"
@@ -636,18 +625,14 @@ class TestVerifyChainNoPiiLeak:
         assert fp_a == fp_b
         assert len(fp_a) == 24
         # Sanity: changing event_type changes the fingerprint.
-        fp_c = _query_fingerprint(
-            tenant_id=tid, since=since, until=until, event_type="other"
-        )
+        fp_c = _query_fingerprint(tenant_id=tid, since=since, until=until, event_type="other")
         assert fp_c != fp_a
 
     def test_query_fingerprint_uses_tenant_hash_not_raw_id(self) -> None:
         from src.api.routers.admin_audit_chain import _query_fingerprint
 
         tid = str(uuid.uuid4())
-        fp = _query_fingerprint(
-            tenant_id=tid, since=None, until=None, event_type=None
-        )
+        fp = _query_fingerprint(tenant_id=tid, since=None, until=None, event_type=None)
         # The raw uuid never travels into the canonical payload — only its hash.
         canonical_with_raw = json.dumps(
             {"tenant_id": tid, "since": None, "until": None, "event_type": None},
@@ -684,8 +669,8 @@ class TestVerifyChainFingerprintEffectiveWindow:
         # wide so the cap-guard does not trip. The router calls
         # ``_resolve_chain_window(None, None)`` once per request, so a
         # side-effect generator yields the next window per invocation.
-        anchor_until_a = datetime(2026, 5, 1, 6, 0, tzinfo=timezone.utc)
-        anchor_until_b = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+        anchor_until_a = datetime(2026, 5, 1, 6, 0, tzinfo=UTC)
+        anchor_until_b = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
         windows: list[tuple[datetime, datetime]] = [
             (anchor_until_a - timedelta(days=90), anchor_until_a),
             (anchor_until_b - timedelta(days=90), anchor_until_b),
@@ -703,36 +688,32 @@ class TestVerifyChainFingerprintEffectiveWindow:
 
         _override_db([])
         try:
-            with patch.object(
-                router_mod, "_resolve_chain_window", side_effect=stubbed_resolve
+            with (
+                patch.object(router_mod, "_resolve_chain_window", side_effect=stubbed_resolve),
+                caplog.at_level(logging.INFO),
+                patch.object(settings, "admin_api_key", _ADMIN_KEY),
             ):
-                with caplog.at_level(logging.INFO):
-                    with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                        r1 = client.post(
-                            VERIFY,
-                            headers={
-                                **_ADMIN_HEADERS,
-                                "X-Admin-Role": "super-admin",
-                            },
-                        )
-                        r2 = client.post(
-                            VERIFY,
-                            headers={
-                                **_ADMIN_HEADERS,
-                                "X-Admin-Role": "super-admin",
-                            },
-                        )
+                r1 = client.post(
+                    VERIFY,
+                    headers={
+                        **_ADMIN_HEADERS,
+                        "X-Admin-Role": "super-admin",
+                    },
+                )
+                r2 = client.post(
+                    VERIFY,
+                    headers={
+                        **_ADMIN_HEADERS,
+                        "X-Admin-Role": "super-admin",
+                    },
+                )
         finally:
             _clear_db_override()
 
         assert r1.status_code == 200, r1.text
         assert r2.status_code == 200, r2.text
 
-        records = [
-            rec
-            for rec in caplog.records
-            if rec.message == "admin.audit_chain_verify"
-        ]
+        records = [rec for rec in caplog.records if rec.message == "admin.audit_chain_verify"]
         assert len(records) >= 2, "expected two audit_chain_verify log records"
         fp_first = getattr(records[-2], "query_fingerprint", None)
         fp_second = getattr(records[-1], "query_fingerprint", None)
@@ -804,15 +785,14 @@ class TestVerifyChainAuditEmitDriftFields:
         drifted_at = rows[2].created_at
         _override_db(rows)
         try:
-            with caplog.at_level(logging.INFO):
-                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                    r = client.post(
-                        VERIFY,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "super-admin",
-                        },
-                    )
+            with caplog.at_level(logging.INFO), patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={
+                        **_ADMIN_HEADERS,
+                        "X-Admin-Role": "super-admin",
+                    },
+                )
         finally:
             _clear_db_override()
         assert r.status_code == 200, r.text
@@ -837,12 +817,11 @@ class TestVerifyChainAuditEmitDriftFields:
         rows = _build_clean_chain(tid, count=3)
         _override_db(rows)
         try:
-            with caplog.at_level(logging.INFO):
-                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                    r = client.post(
-                        VERIFY,
-                        headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
-                    )
+            with caplog.at_level(logging.INFO), patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                )
         finally:
             _clear_db_override()
         assert r.status_code == 200, r.text
@@ -856,8 +835,8 @@ class TestVerifyChainAuditEmitDriftFields:
         # on a stable schema rather than absence-vs-presence to mean "no drift".
         assert hasattr(record, "drift_event_id")
         assert hasattr(record, "drift_detected_at")
-        assert getattr(record, "drift_event_id") is None
-        assert getattr(record, "drift_detected_at") is None
+        assert record.drift_event_id is None
+        assert record.drift_detected_at is None
 
 
 # ---------------------------------------------------------------------------
@@ -874,7 +853,7 @@ class TestVerifyChainResponseEffectiveWindow:
         self, client: TestClient
     ) -> None:
         _override_db([])
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         try:
             with patch.object(settings, "admin_api_key", _ADMIN_KEY):
                 r = client.post(
@@ -883,7 +862,7 @@ class TestVerifyChainResponseEffectiveWindow:
                 )
         finally:
             _clear_db_override()
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert r.status_code == 200, r.text
         body = r.json()
         assert "effective_since" in body and "effective_until" in body, (
@@ -892,18 +871,16 @@ class TestVerifyChainResponseEffectiveWindow:
         eff_until = datetime.fromisoformat(body["effective_until"])
         eff_since = datetime.fromisoformat(body["effective_since"])
         # Server-side anchor sits between client-side `before` and `after`.
-        assert before - timedelta(seconds=1) <= eff_until <= after + timedelta(
-            seconds=1
-        ), "effective_until must be ~utcnow at request time"
+        assert before - timedelta(seconds=1) <= eff_until <= after + timedelta(seconds=1), (
+            "effective_until must be ~utcnow at request time"
+        )
         assert eff_until - eff_since == timedelta(days=90), (
             "Implicit default window MUST be exactly 90 days wide."
         )
 
-    def test_response_echoes_explicit_bounds_unchanged(
-        self, client: TestClient
-    ) -> None:
+    def test_response_echoes_explicit_bounds_unchanged(self, client: TestClient) -> None:
         """Explicit bounds → response echoes them verbatim (no surprise rebase)."""
-        until = datetime(2026, 4, 21, 12, 0, tzinfo=timezone.utc)
+        until = datetime(2026, 4, 21, 12, 0, tzinfo=UTC)
         since = until - timedelta(days=30)
         _override_db([])
         try:

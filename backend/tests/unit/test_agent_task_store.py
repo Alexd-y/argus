@@ -52,9 +52,13 @@ async def test_stale_worker_cannot_complete_over_newer_attempt():
     fresh = await store.claim("worker-B")  # token 2
     assert fresh.fencing_token == 2
     # The stale worker (token 1) must NOT be able to complete.
-    assert await store.complete(stale.task_id, stale.fencing_token, AgentTaskState.SUCCEEDED) is False
+    assert (
+        await store.complete(stale.task_id, stale.fencing_token, AgentTaskState.SUCCEEDED) is False
+    )
     # The current owner can.
-    assert await store.complete(fresh.task_id, fresh.fencing_token, AgentTaskState.SUCCEEDED) is True
+    assert (
+        await store.complete(fresh.task_id, fresh.fencing_token, AgentTaskState.SUCCEEDED) is True
+    )
 
 
 async def test_retry_is_bounded_and_uses_outbox():
@@ -66,7 +70,9 @@ async def test_retry_is_bounded_and_uses_outbox():
         c = await store.claim("w")
         if c is None:
             break
-        states.append(await store.retry_or_fail(c.task_id, c.fencing_token, retryable=True, error="x"))
+        states.append(
+            await store.retry_or_fail(c.task_id, c.fencing_token, retryable=True, error="x")
+        )
     assert states[-1] == AgentTaskState.FAILED.value
     assert states.count(AgentTaskState.RETRY_WAIT.value) == 2  # attempts 1,2 -> retry; 3 -> fail
 
@@ -86,9 +92,9 @@ async def test_non_retryable_fails_immediately():
     store = InMemoryAgentTaskStore()
     await store.enqueue(_spec())
     c = await store.claim("w")
-    assert await store.retry_or_fail(c.task_id, c.fencing_token, retryable=False, error="fatal") == (
-        AgentTaskState.FAILED.value
-    )
+    assert await store.retry_or_fail(
+        c.task_id, c.fencing_token, retryable=False, error="fatal"
+    ) == (AgentTaskState.FAILED.value)
 
 
 if __name__ == "__main__":  # pragma: no cover

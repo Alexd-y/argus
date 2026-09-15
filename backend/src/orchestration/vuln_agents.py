@@ -46,8 +46,14 @@ VULN_AGENT_SPECS: dict[AgentDomain, VulnAgentSpec] = {
         display_name="Injection Analyst",
         prompt_key="vuln-injection",
         tool_allowlist=(
-            "sqlmap", "commix", "ffuf", "gobuster", "wfuzz",
-            "httpx", "curl", "nuclei",
+            "sqlmap",
+            "commix",
+            "ffuf",
+            "gobuster",
+            "wfuzz",
+            "httpx",
+            "curl",
+            "nuclei",
         ),
         cwe_focus=(89, 78, 77, 564, 917, 94, 943, 639),
         description=(
@@ -64,8 +70,14 @@ VULN_AGENT_SPECS: dict[AgentDomain, VulnAgentSpec] = {
         display_name="XSS Analyst",
         prompt_key="vuln-xss",
         tool_allowlist=(
-            "dalfox", "xsstrike", "nuclei", "httpx",
-            "curl", "browser_navigate", "browser_execute_js", "browser_screenshot",
+            "dalfox",
+            "xsstrike",
+            "nuclei",
+            "httpx",
+            "curl",
+            "browser_navigate",
+            "browser_execute_js",
+            "browser_screenshot",
         ),
         cwe_focus=(79, 80, 81, 83, 87, 692, 1021),
         description=(
@@ -81,8 +93,13 @@ VULN_AGENT_SPECS: dict[AgentDomain, VulnAgentSpec] = {
         display_name="Auth Analyst",
         prompt_key="vuln-auth",
         tool_allowlist=(
-            "hydra", "medusa", "nuclei", "httpx",
-            "curl", "browser_navigate", "browser_login",
+            "hydra",
+            "medusa",
+            "nuclei",
+            "httpx",
+            "curl",
+            "browser_navigate",
+            "browser_login",
         ),
         cwe_focus=(287, 290, 294, 308, 307, 521, 640, 255, 256, 259),
         description=(
@@ -98,8 +115,13 @@ VULN_AGENT_SPECS: dict[AgentDomain, VulnAgentSpec] = {
         display_name="Authz Analyst",
         prompt_key="vuln-authz",
         tool_allowlist=(
-            "ffuf", "gobuster", "nuclei", "httpx",
-            "curl", "browser_navigate", "browser_click",
+            "ffuf",
+            "gobuster",
+            "nuclei",
+            "httpx",
+            "curl",
+            "browser_navigate",
+            "browser_click",
         ),
         cwe_focus=(862, 863, 284, 639, 285, 648, 918),
         description=(
@@ -115,8 +137,12 @@ VULN_AGENT_SPECS: dict[AgentDomain, VulnAgentSpec] = {
         display_name="SSRF Analyst",
         prompt_key="vuln-ssrf",
         tool_allowlist=(
-            "nuclei", "httpx", "curl", "ffuf",
-            "browser_navigate", "browser_execute_js",
+            "nuclei",
+            "httpx",
+            "curl",
+            "ffuf",
+            "browser_navigate",
+            "browser_execute_js",
         ),
         cwe_focus=(918, 922, 441, 406, 236, 384),
         description=(
@@ -142,33 +168,83 @@ ALL_VULN_CLASSES: list[VulnClass] = list(VulnClass)
 # an explicit, evidence-based reason: either a CWE in that domain's focus set or
 # a category phrase that unambiguously belongs to the domain.
 _CATEGORY_DOMAIN_KEYWORDS: dict[AgentDomain, frozenset[str]] = {
-    AgentDomain.INJECTION: frozenset({
-        "injection", "sqli", "sql injection", "sql",
-        "command injection", "cmdi", "os command injection", "os command",
-        "code injection", "ldap injection", "nosql injection", "nosqli",
-        "template injection", "ssti", "rce", "remote code execution",
-        "xxe", "xml external entity",
-    }),
-    AgentDomain.XSS: frozenset({
-        "xss", "cross site scripting", "reflected xss", "stored xss",
-        "dom xss", "dom based xss", "mutation xss",
-    }),
-    AgentDomain.AUTH: frozenset({
-        "auth", "authentication", "broken authentication", "broken auth",
-        "credential", "credentials", "credential stuffing", "weak password",
-        "weak credentials", "default credentials", "session fixation", "mfa",
-        "missing mfa",
-    }),
-    AgentDomain.AUTHZ: frozenset({
-        "authz", "authorization", "access control", "broken access control",
-        "idor", "insecure direct object reference", "privilege escalation",
-        "privesc", "directory traversal", "path traversal", "mass assignment",
-        "bola", "bfla", "missing authorization", "missing access control",
-    }),
-    AgentDomain.SSRF: frozenset({
-        "ssrf", "server side request forgery", "open redirect",
-        "dns rebinding",
-    }),
+    AgentDomain.INJECTION: frozenset(
+        {
+            "injection",
+            "sqli",
+            "sql injection",
+            "sql",
+            "command injection",
+            "cmdi",
+            "os command injection",
+            "os command",
+            "code injection",
+            "ldap injection",
+            "nosql injection",
+            "nosqli",
+            "template injection",
+            "ssti",
+            "rce",
+            "remote code execution",
+            "xxe",
+            "xml external entity",
+        }
+    ),
+    AgentDomain.XSS: frozenset(
+        {
+            "xss",
+            "cross site scripting",
+            "reflected xss",
+            "stored xss",
+            "dom xss",
+            "dom based xss",
+            "mutation xss",
+        }
+    ),
+    AgentDomain.AUTH: frozenset(
+        {
+            "auth",
+            "authentication",
+            "broken authentication",
+            "broken auth",
+            "credential",
+            "credentials",
+            "credential stuffing",
+            "weak password",
+            "weak credentials",
+            "default credentials",
+            "session fixation",
+            "mfa",
+            "missing mfa",
+        }
+    ),
+    AgentDomain.AUTHZ: frozenset(
+        {
+            "authz",
+            "authorization",
+            "access control",
+            "broken access control",
+            "idor",
+            "insecure direct object reference",
+            "privilege escalation",
+            "privesc",
+            "directory traversal",
+            "path traversal",
+            "mass assignment",
+            "bola",
+            "bfla",
+            "missing authorization",
+            "missing access control",
+        }
+    ),
+    AgentDomain.SSRF: frozenset(
+        {
+            "ssrf",
+            "server side request forgery",
+            "open redirect",
+            "dns rebinding",
+        }
+    ),
 }
 
 
@@ -285,25 +361,27 @@ def build_agent_tasks(
         relevant = filter_findings_by_domain(findings, domain)
         if not relevant:
             continue
-        tasks.append({
-            "domain": domain.value,
-            "display_name": spec.display_name,
-            "prompt_key": spec.prompt_key,
-            "tool_allowlist": list(spec.tool_allowlist),
-            "cwe_focus": list(spec.cwe_focus),
-            "findings": relevant,
-            "target": target,
-            "scan_id": scan_id,
-            "tenant_id": tenant_id,
-        })
+        tasks.append(
+            {
+                "domain": domain.value,
+                "display_name": spec.display_name,
+                "prompt_key": spec.prompt_key,
+                "tool_allowlist": list(spec.tool_allowlist),
+                "cwe_focus": list(spec.cwe_focus),
+                "findings": relevant,
+                "target": target,
+                "scan_id": scan_id,
+                "tenant_id": tenant_id,
+            }
+        )
     return tasks
 
 
 __all__ = [
     "ALL_AGENT_DOMAINS",
     "ALL_VULN_CLASSES",
-    "AgentDomain",
     "VULN_AGENT_SPECS",
+    "AgentDomain",
     "VulnAgentSpec",
     "filter_findings_by_domain",
     "get_agent_spec",

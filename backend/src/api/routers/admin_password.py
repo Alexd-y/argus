@@ -103,7 +103,7 @@ class _RateBucket:
 _rate_limit_map: OrderedDict[str, _RateBucket] = OrderedDict()
 
 
-def _check_rate_limit(ip: str, key: str, capacity: int = 5, window: float = 300.0) -> None:
+def _check_rate_limit(ip: str, key: str, capacity: int = 5, window: float = 300.0) -> None:  # noqa: ARG001 - FastAPI route signature; param bound by the framework
     now = time.monotonic()
     bucket = _rate_limit_map.get(key)
     if bucket is None:
@@ -124,9 +124,7 @@ def _check_rate_limit(ip: str, key: str, capacity: int = 5, window: float = 300.
 
 
 def _hash_token(token: str) -> str:
-    return hashlib.sha256(
-        (settings.admin_session_pepper + token).encode()
-    ).hexdigest()
+    return hashlib.sha256((settings.admin_session_pepper + token).encode()).hexdigest()
 
 
 def _generate_otp() -> str:
@@ -183,17 +181,24 @@ async def change_password(
     try:
         encoded_new = _encode_password(body.new_password)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long"
+        ) from None
 
     new_hash = bcrypt.hashpw(encoded_new, bcrypt.gensalt(rounds=12)).decode("ascii")
 
-    stmt = update(AdminUser).where(AdminUser.subject == admin.subject).values(password_hash=new_hash)
+    stmt = (
+        update(AdminUser).where(AdminUser.subject == admin.subject).values(password_hash=new_hash)
+    )
     await db.execute(stmt)
     await db.commit()
 
     await _revoke_user_sessions(db, admin.subject)
 
-    logger.info("admin_password_changed", extra={"event": "argus.auth.admin_password.changed", "subject": admin.subject})
+    logger.info(
+        "admin_password_changed",
+        extra={"event": "argus.auth.admin_password.changed", "subject": admin.subject},
+    )
     return ChangePasswordResponse()
 
 
@@ -246,7 +251,10 @@ async def request_reset(
             base_url=base_url,
         )
     except Exception:
-        logger.exception("admin_reset_email_failed", extra={"event": "argus.auth.admin_reset.email_failed", "subject": subject})
+        logger.exception(
+            "admin_reset_email_failed",
+            extra={"event": "argus.auth.admin_reset.email_failed", "subject": subject},
+        )
 
     return RequestResetResponse()
 
@@ -275,23 +283,33 @@ async def confirm_reset(
     reset_token = result.scalar_one_or_none()
 
     if reset_token is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
 
     now = datetime.now(tz=UTC)
     if reset_token.expires_at < now:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token has expired")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token has expired"
+        )
 
     if not hmac.compare_digest(reset_token.otp_code, body.otp_code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code")
 
     admin_user = await db.get(AdminUser, reset_token.subject)
     if admin_user is None or admin_user.disabled_at is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found or disabled")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account not found or disabled",
+        )
 
     try:
         encoded_new = _encode_password(body.new_password)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long"
+        ) from None
 
     new_hash = bcrypt.hashpw(encoded_new, bcrypt.gensalt(rounds=12)).decode("ascii")
 
@@ -301,7 +319,13 @@ async def confirm_reset(
 
     await _revoke_user_sessions(db, reset_token.subject)
 
-    logger.info("admin_password_reset_confirmed", extra={"event": "argus.auth.admin_reset.confirmed", "subject": reset_token.subject})
+    logger.info(
+        "admin_password_reset_confirmed",
+        extra={
+            "event": "argus.auth.admin_reset.confirmed",
+            "subject": reset_token.subject,
+        },
+    )
     return ConfirmResetResponse()
 
 
@@ -321,7 +345,10 @@ async def admin_reset_password(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     if admin.role != "super-admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only super-admin can reset passwords")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super-admin can reset passwords",
+        )
 
     target_subject = subject.strip()
     target = await db.get(AdminUser, target_subject)
@@ -331,7 +358,9 @@ async def admin_reset_password(
     try:
         encoded_new = _encode_password(body.new_password)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long"
+        ) from None
 
     new_hash = bcrypt.hashpw(encoded_new, bcrypt.gensalt(rounds=12)).decode("ascii")
     target.password_hash = new_hash
@@ -339,5 +368,12 @@ async def admin_reset_password(
 
     await _revoke_user_sessions(db, target_subject)
 
-    logger.info("admin_password_admin_reset", extra={"event": "argus.auth.admin_password.admin_reset", "subject": target_subject, "reset_by": admin.subject})
+    logger.info(
+        "admin_password_admin_reset",
+        extra={
+            "event": "argus.auth.admin_password.admin_reset",
+            "subject": target_subject,
+            "reset_by": admin.subject,
+        },
+    )
     return AdminResetPasswordResponse(subject=target_subject)

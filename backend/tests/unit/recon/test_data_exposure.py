@@ -26,9 +26,7 @@ class TestAnalyzeBreach:
         assert analyze_breach_exposure(D, {}) == []
 
     def test_breach_without_passwords_is_low(self):
-        results = {
-            "sd@alleksy.com": [{"Name": "Collection1", "DataClasses": ["Email addresses"]}]
-        }
+        results = {"sd@alleksy.com": [{"Name": "Collection1", "DataClasses": ["Email addresses"]}]}
         f = analyze_breach_exposure(D, results)
         assert len(f) == 1
         assert f[0]["severity"] == "low"
@@ -44,9 +42,7 @@ class TestAnalyzeBreach:
         assert f[0]["severity"] == "medium"
 
     def test_emails_masked_and_no_password_values(self):
-        results = {
-            "john.doe@alleksy.com": [{"Name": "X", "DataClasses": ["Passwords"]}]
-        }
+        results = {"john.doe@alleksy.com": [{"Name": "X", "DataClasses": ["Passwords"]}]}
         f = analyze_breach_exposure(D, results)
         evidence = f[0]["evidence"]
         assert "j******e@alleksy.com" in evidence

@@ -35,7 +35,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -364,9 +363,7 @@ def test_synthetic_id_is_stable_across_calls(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_max_findings_cap_enforced(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_max_findings_cap_enforced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Hard cap of 5 000 — defends against runaway SSRF campaigns.
 
     We monkey-patch ``_MAX_FINDINGS`` to a small value so the test stays
@@ -437,9 +434,7 @@ def test_record_without_attribution_skipped(
     """A record with NO unique-id, NO full-id, NO remote-address is
     dropped with a structured warning.
     """
-    raw = json.dumps({"protocol": "http", "timestamp": "2026-04-19T12:00:00Z"}).encode(
-        "utf-8"
-    )
+    raw = json.dumps({"protocol": "http", "timestamp": "2026-04-19T12:00:00Z"}).encode("utf-8")
 
     with caplog.at_level(logging.WARNING):
         findings = parse_interactsh_jsonl(
@@ -473,9 +468,7 @@ def test_top_level_non_dict_lines_dropped(tmp_path: Path) -> None:
     """JSON lines containing arrays / scalars are silently dropped — every
     record must be a per-callback dict.
     """
-    payload = (json.dumps([1, 2, 3]) + "\n" + json.dumps("scalar") + "\n").encode(
-        "utf-8"
-    )
+    payload = (json.dumps([1, 2, 3]) + "\n" + json.dumps("scalar") + "\n").encode("utf-8")
 
     findings = parse_interactsh_jsonl(
         stdout=payload,
@@ -503,9 +496,7 @@ def test_sidecar_records_carry_required_fields(tmp_path: Path) -> None:
         tool_id="interactsh_client",
     )
 
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["protocol"] == "http"
     assert sidecar["full_id"] == "c2vhx10sxxx.oast.argus.local"
     assert sidecar["remote_address"] == "203.0.113.55:48372"
@@ -524,17 +515,14 @@ def test_sidecar_smtp_from_carried_when_present(tmp_path: Path) -> None:
         tool_id="interactsh_client",
     )
 
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["smtp_from"] == "attacker@example.com"
 
 
 def test_sidecar_sorted_deterministically(tmp_path: Path) -> None:
     """Sidecar records render in stable order (sort key reproducible)."""
     records = [
-        _record(unique_id=f"id_{i}", remote_address=f"198.51.100.{i}:48000")
-        for i in (3, 1, 2)
+        _record(unique_id=f"id_{i}", remote_address=f"198.51.100.{i}:48000") for i in (3, 1, 2)
     ]
     parse_interactsh_jsonl(
         stdout=_to_jsonl(records),
@@ -589,9 +577,7 @@ def test_works_for_oastify_client_tool_id(tmp_path: Path) -> None:
     )
 
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["tool_id"] == "oastify_client"
 
 
@@ -610,9 +596,7 @@ def test_works_for_oastify_client_tool_id(tmp_path: Path) -> None:
         "2026-04-19T12:34:56+0500",
     ],
 )
-def test_timestamp_variants_parse_into_minute_bucket(
-    tmp_path: Path, timestamp: str
-) -> None:
+def test_timestamp_variants_parse_into_minute_bucket(tmp_path: Path, timestamp: str) -> None:
     """All RFC-3339 variants the OAST plane can emit parse cleanly."""
     findings = parse_interactsh_jsonl(
         stdout=_to_jsonl([_record(timestamp=timestamp)]),
@@ -661,9 +645,7 @@ def test_raw_request_as_int_list_decodes_to_string(tmp_path: Path) -> None:
         tool_id="interactsh_client",
     )
 
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["raw_request"].startswith("GET /")
     assert sidecar["raw_response"].startswith("HTTP")
 
@@ -685,9 +667,7 @@ def test_raw_request_as_invalid_int_list_falls_back_to_empty(
         tool_id="interactsh_client",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar.get("raw_request", "") == ""
     assert sidecar.get("raw_response", "") == ""
 
@@ -707,9 +687,7 @@ def test_raw_request_as_unexpected_type_coerces_to_str(tmp_path: Path) -> None:
         tool_id="interactsh_client",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar.get("raw_request") == "12345"
     assert sidecar.get("raw_response") == "67890"
 
@@ -802,9 +780,9 @@ def test_evidence_sidecar_oserror_does_not_abort_findings(
         )
 
     assert len(findings) == 1, "sidecar write failure must NOT swallow the finding list"
-    assert any(
-        "evidence_sidecar_write_failed" in rec.getMessage() for rec in caplog.records
-    ), "sidecar write failure must surface a structured warning"
+    assert any("evidence_sidecar_write_failed" in rec.getMessage() for rec in caplog.records), (
+        "sidecar write failure must surface a structured warning"
+    )
 
 
 def test_truncate_text_handles_empty_string(tmp_path: Path) -> None:

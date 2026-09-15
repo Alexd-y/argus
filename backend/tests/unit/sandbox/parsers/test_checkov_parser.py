@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -182,9 +181,7 @@ def test_secret_check_routes_to_secret_leak(tmp_path: Path) -> None:
 
 
 def test_dedup_collapses_identical_check(tmp_path: Path) -> None:
-    duplicate = _failed_check(
-        check_id="CKV_AWS_20", file_path="/main.tf", file_line_range=[10, 20]
-    )
+    duplicate = _failed_check(check_id="CKV_AWS_20", file_path="/main.tf", file_line_range=[10, 20])
     payload = _payload_single(duplicate, dict(duplicate))
     findings = parse_checkov_json(payload, b"", tmp_path, "checkov")
     assert len(findings) == 1
@@ -211,15 +208,12 @@ def test_envelope_unexpected_type_returns_empty(
         findings = parse_checkov_json(b'"a string"', b"", tmp_path, "checkov")
     assert findings == []
     assert any(
-        "checkov_parser_envelope_unexpected_type"
-        in (record.__dict__.get("event") or "")
+        "checkov_parser_envelope_unexpected_type" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
 
-def test_missing_check_id_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_check_id_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _failed_check()
     bad.pop("check_id")
     payload = _payload_single(bad, _failed_check(check_id="CKV_AWS_99"))

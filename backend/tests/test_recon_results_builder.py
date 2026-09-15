@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from src.recon.reporting.recon_results_builder import build_recon_results
 
 
@@ -94,7 +93,17 @@ def test_build_recon_results_empty_dir(tmp_path: Path) -> None:
     assert result.target_domain in ("unknown", tmp_path.name)
     assert result.scan_id == "empty-scan"
     assert result.dns == {}
-    assert result.whois in ({}, {"raw": "", "registrar": "", "expiry": "", "nameservers": [], "registrant": "", "creation_date": ""})
+    assert result.whois in (
+        {},
+        {
+            "raw": "",
+            "registrar": "",
+            "expiry": "",
+            "nameservers": [],
+            "registrant": "",
+            "creation_date": "",
+        },
+    )
 
 
 def test_build_recon_results_serializes_to_json(minimal_recon_dir: Path) -> None:

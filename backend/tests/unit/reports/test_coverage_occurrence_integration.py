@@ -157,7 +157,7 @@ def test_occurrences_referenced_by_key_hash():
 def test_report_path_has_no_finding_deletion_api():
     module = importlib.import_module("src.reports.coverage_occurrence_context")
     forbidden = ("delete", "remove", "purge", "erase")
-    for name, obj in inspect.getmembers(module):
+    for name, _obj in inspect.getmembers(module):
         if name.startswith("_"):
             continue
         lowered = name.lower()

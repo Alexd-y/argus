@@ -84,10 +84,7 @@ def _ensure_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("datetime must be timezone-aware UTC; got naive")
     if value.utcoffset() != timedelta(0):
-        raise ValueError(
-            "datetime must be UTC (+00:00); got offset "
-            f"{value.utcoffset()!r}"
-        )
+        raise ValueError(f"datetime must be UTC (+00:00); got offset {value.utcoffset()!r}")
     return value
 
 
@@ -126,9 +123,7 @@ class MFAEnrollResponse(BaseModel):
 
     secret_uri: str = Field(
         ...,
-        description=(
-            "otpauth:// URL the admin pastes into their authenticator app."
-        ),
+        description=("otpauth:// URL the admin pastes into their authenticator app."),
     )
     qr_data_uri: str | None = Field(
         default=None,
@@ -295,8 +290,7 @@ class MFAStatusResponse(BaseModel):
     enabled: bool = Field(
         ...,
         description=(
-            "True iff the admin has completed enrolment "
-            "(``admin_users.mfa_enabled`` is True)."
+            "True iff the admin has completed enrolment (``admin_users.mfa_enabled`` is True)."
         ),
     )
     enrolled_at: AwareUtcDatetime | None = Field(

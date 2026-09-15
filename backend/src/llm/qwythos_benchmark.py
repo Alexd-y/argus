@@ -124,9 +124,10 @@ def run_qwythos_benchmark(
     if resolved_invoke is None:
         url = resolve_qwythos_base_url(base_url)
         if url:
-            resolved_invoke = lambda tokens, _url=url: live_qwythos_invoke(
-                tokens, base_url=_url
-            )
+
+            def resolved_invoke(tokens, _url=url):
+                return live_qwythos_invoke(tokens, base_url=_url)
+
     return [
         evaluate_window(
             tokens=window,
@@ -143,9 +144,7 @@ def benchmark_summary(results: list[WindowResult]) -> dict[str, object]:
         "windows": [r.tokens for r in results],
         "accepted": [r.tokens for r in results if r.accepted],
         "failed": [
-            {"tokens": r.tokens, "error_code": r.error_code}
-            for r in results
-            if not r.accepted
+            {"tokens": r.tokens, "error_code": r.error_code} for r in results if not r.accepted
         ],
         "all_accepted": all(r.accepted for r in results),
         "live": any(r.latency_ms > 0 for r in results),

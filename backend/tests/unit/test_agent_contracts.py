@@ -36,20 +36,26 @@ def test_empty_result_is_not_success():
     # A result must declare outcome/coverage explicitly; an empty payload with a
     # FAILED/NOT_TESTED coverage is not success.
     r = AgentResult(
-        task_id="t", attempt_id="a",
-        outcome=AttemptOutcome.FAILED, coverage=CoverageStatus.FAILED,
+        task_id="t",
+        attempt_id="a",
+        outcome=AttemptOutcome.FAILED,
+        coverage=CoverageStatus.FAILED,
     )
     assert r.is_success is False
 
 
 def test_tested_no_findings_is_success_but_distinct_from_not_tested():
     tested = AgentResult(
-        task_id="t", attempt_id="a",
-        outcome=AttemptOutcome.SUCCEEDED, coverage=CoverageStatus.TESTED_NO_FINDINGS,
+        task_id="t",
+        attempt_id="a",
+        outcome=AttemptOutcome.SUCCEEDED,
+        coverage=CoverageStatus.TESTED_NO_FINDINGS,
     )
     not_tested = AgentResult(
-        task_id="t", attempt_id="a",
-        outcome=AttemptOutcome.INCONCLUSIVE, coverage=CoverageStatus.NOT_TESTED,
+        task_id="t",
+        attempt_id="a",
+        outcome=AttemptOutcome.INCONCLUSIVE,
+        coverage=CoverageStatus.NOT_TESTED,
     )
     assert tested.is_success is True
     assert not_tested.is_success is False

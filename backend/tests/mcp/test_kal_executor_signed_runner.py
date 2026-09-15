@@ -48,7 +48,9 @@ def test_signed_runner_routes_kal(monkeypatch: pytest.MonkeyPatch) -> None:
     assert out["policy_reason"] is None
 
 
-def test_signed_runner_falls_back_to_legacy_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_signed_runner_falls_back_to_legacy_when_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "argus_recon_signed_runner", True)
 
     async def _fake_none(*_a: object, **_k: object) -> None:
@@ -58,7 +60,12 @@ def test_signed_runner_falls_back_to_legacy_when_none(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         ke,
         "run_argv_simple_sync",
-        lambda *_a, **_k: {"success": True, "stdout": "legacy-out", "stderr": "", "return_code": 0},
+        lambda *_a, **_k: {
+            "success": True,
+            "stdout": "legacy-out",
+            "stderr": "",
+            "return_code": 0,
+        },
     )
 
     out = ke.run_kal_mcp_tool(
@@ -83,7 +90,12 @@ def test_flag_off_uses_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ke,
         "run_argv_simple_sync",
-        lambda *_a, **_k: {"success": True, "stdout": "legacy-out", "stderr": "", "return_code": 0},
+        lambda *_a, **_k: {
+            "success": True,
+            "stdout": "legacy-out",
+            "stderr": "",
+            "return_code": 0,
+        },
     )
 
     out = ke.run_kal_mcp_tool(

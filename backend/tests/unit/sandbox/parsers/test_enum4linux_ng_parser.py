@@ -59,10 +59,7 @@ def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
 
 def test_garbage_input_returns_no_findings(tmp_path: Path) -> None:
     assert (
-        parse_enum4linux_ng(
-            b"random text without sections\n", b"", tmp_path, "enum4linux_ng"
-        )
-        == []
+        parse_enum4linux_ng(b"random text without sections\n", b"", tmp_path, "enum4linux_ng") == []
     )
 
 

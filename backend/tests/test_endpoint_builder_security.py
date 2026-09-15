@@ -5,7 +5,10 @@ from __future__ import annotations
 import csv
 import io
 
-from src.recon.reporting.endpoint_builder import ENDPOINT_PATHS, build_endpoint_inventory
+from src.recon.reporting.endpoint_builder import (
+    ENDPOINT_PATHS,
+    build_endpoint_inventory,
+)
 
 
 def _csv_rows(content: str) -> list[dict[str, str]]:

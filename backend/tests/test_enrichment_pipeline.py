@@ -1,8 +1,9 @@
 """Integration tests for src.intel.enrichment_pipeline."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass, field
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 # Test fixtures
@@ -26,6 +27,7 @@ def _make_finding(**overrides):
 
 def _make_shodan_result():
     """Create a mock ShodanResult dataclass."""
+
     @dataclass
     class MockShodanResult:
         ip: str = "1.2.3.4"
@@ -38,6 +40,7 @@ def _make_shodan_result():
         services: list = field(default_factory=list)
         vulns: list = field(default_factory=lambda: ["CVE-2024-1234", "CVE-2024-5678"])
         tags: list = field(default_factory=list)
+
     return MockShodanResult()
 
 
@@ -61,6 +64,7 @@ class MockPocResult:
 
 # ═══ Tests ═══
 
+
 class TestEnrichmentPipelineAllDisabled:
     """Pipeline with all features disabled should pass through findings unchanged."""
 
@@ -76,6 +80,7 @@ class TestEnrichmentPipelineAllDisabled:
         }
         with patch.dict("os.environ", env, clear=False):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings, target_ip="1.2.3.4")
 
         assert result["findings"] == findings
@@ -102,11 +107,24 @@ class TestShodanEnrichmentStep:
             "EXPLOITABILITY_VALIDATION_ENABLED": "false",
             "POC_GENERATION_ENABLED": "false",
         }
-        with patch.dict("os.environ", env, clear=False), \
-             patch("src.intel.shodan_enricher.enrich_target_host", new_callable=AsyncMock, return_value=shodan_res), \
-             patch("src.intel.shodan_enricher.cross_reference_findings", return_value=findings) as mock_xref, \
-             patch("src.intel.shodan_enricher.create_findings_from_shodan_vulns", return_value=[_make_finding(id="f-shodan-001", title="Shodan CVE")]):
+        with (
+            patch.dict("os.environ", env, clear=False),
+            patch(
+                "src.intel.shodan_enricher.enrich_target_host",
+                new_callable=AsyncMock,
+                return_value=shodan_res,
+            ),
+            patch(
+                "src.intel.shodan_enricher.cross_reference_findings",
+                return_value=findings,
+            ),
+            patch(
+                "src.intel.shodan_enricher.create_findings_from_shodan_vulns",
+                return_value=[_make_finding(id="f-shodan-001", title="Shodan CVE")],
+            ),
+        ):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings, target_ip="1.2.3.4")
 
         assert result["stats"]["shodan_enriched"] is True
@@ -125,6 +143,7 @@ class TestShodanEnrichmentStep:
         }
         with patch.dict("os.environ", env, clear=False):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings, target_ip=None)
 
         assert result["stats"]["shodan_enriched"] is False
@@ -139,9 +158,16 @@ class TestShodanEnrichmentStep:
             "EXPLOITABILITY_VALIDATION_ENABLED": "false",
             "POC_GENERATION_ENABLED": "false",
         }
-        with patch.dict("os.environ", env, clear=False), \
-             patch("src.intel.shodan_enricher.enrich_target_host", new_callable=AsyncMock, side_effect=RuntimeError("API down")):
+        with (
+            patch.dict("os.environ", env, clear=False),
+            patch(
+                "src.intel.shodan_enricher.enrich_target_host",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("API down"),
+            ),
+        ):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings, target_ip="1.2.3.4")
 
         assert result["stats"]["shodan_enriched"] is False
@@ -163,6 +189,7 @@ class TestAdversarialScoring:
         }
         with patch.dict("os.environ", env, clear=False):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings)
 
         assert result["stats"]["adversarial_scored"] is True
@@ -184,9 +211,16 @@ class TestValidationStep:
             "EXPLOITABILITY_VALIDATION_ENABLED": "true",
             "POC_GENERATION_ENABLED": "false",
         }
-        with patch.dict("os.environ", env, clear=False), \
-             patch("src.validation.exploitability.validate_findings_batch", new_callable=AsyncMock, return_value=[mock_result]):
+        with (
+            patch.dict("os.environ", env, clear=False),
+            patch(
+                "src.validation.exploitability.validate_findings_batch",
+                new_callable=AsyncMock,
+                return_value=[mock_result],
+            ),
+        ):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings)
 
         assert result["stats"]["validation_run"] is True
@@ -208,9 +242,16 @@ class TestPocGeneration:
             "EXPLOITABILITY_VALIDATION_ENABLED": "false",
             "POC_GENERATION_ENABLED": "true",
         }
-        with patch.dict("os.environ", env, clear=False), \
-             patch("src.exploit.generator.generate_pocs_batch", new_callable=AsyncMock, return_value=[mock_poc]):
+        with (
+            patch.dict("os.environ", env, clear=False),
+            patch(
+                "src.exploit.generator.generate_pocs_batch",
+                new_callable=AsyncMock,
+                return_value=[mock_poc],
+            ),
+        ):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
+
             result = await run_enrichment_pipeline(findings)
 
         assert result["stats"]["pocs_generated"] == 1
@@ -234,14 +275,37 @@ class TestEnrichmentFullPipeline:
             "EXPLOITABILITY_VALIDATION_ENABLED": "true",
             "POC_GENERATION_ENABLED": "true",
         }
-        with patch.dict("os.environ", env, clear=False), \
-             patch("src.intel.shodan_enricher.enrich_target_host", new_callable=AsyncMock, return_value=shodan_res), \
-             patch("src.intel.shodan_enricher.cross_reference_findings", return_value=findings), \
-             patch("src.intel.shodan_enricher.create_findings_from_shodan_vulns", return_value=[]), \
-             patch("src.validation.exploitability.validate_findings_batch", new_callable=AsyncMock, return_value=[mock_validation]), \
-             patch("src.exploit.generator.generate_pocs_batch", new_callable=AsyncMock, return_value=[mock_poc]):
+        with (
+            patch.dict("os.environ", env, clear=False),
+            patch(
+                "src.intel.shodan_enricher.enrich_target_host",
+                new_callable=AsyncMock,
+                return_value=shodan_res,
+            ),
+            patch(
+                "src.intel.shodan_enricher.cross_reference_findings",
+                return_value=findings,
+            ),
+            patch(
+                "src.intel.shodan_enricher.create_findings_from_shodan_vulns",
+                return_value=[],
+            ),
+            patch(
+                "src.validation.exploitability.validate_findings_batch",
+                new_callable=AsyncMock,
+                return_value=[mock_validation],
+            ),
+            patch(
+                "src.exploit.generator.generate_pocs_batch",
+                new_callable=AsyncMock,
+                return_value=[mock_poc],
+            ),
+        ):
             from src.intel.enrichment_pipeline import run_enrichment_pipeline
-            result = await run_enrichment_pipeline(findings, target_ip="1.2.3.4", scan_id="scan-123")
+
+            result = await run_enrichment_pipeline(
+                findings, target_ip="1.2.3.4", scan_id="scan-123"
+            )
 
         stats = result["stats"]
         assert stats["shodan_enriched"] is True

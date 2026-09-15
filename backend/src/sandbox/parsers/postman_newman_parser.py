@@ -39,7 +39,7 @@ import logging
 import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -120,7 +120,7 @@ _TOKEN_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, str, str]
+type DedupKey = tuple[str, str, str, str]
 
 
 def parse_postman_newman_json(
@@ -235,9 +235,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "response_preview": record.get("response_preview"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
@@ -247,9 +245,7 @@ def _iter_records(run: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, An
     yield from _iter_server_errors(run, tool_id=tool_id)
 
 
-def _iter_assertion_failures(
-    run: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_assertion_failures(run: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     failures = run.get("failures")
     if not isinstance(failures, list):
         return
@@ -265,9 +261,7 @@ def _iter_assertion_failures(
             )
             continue
         source = failure.get("source")
-        request_name = (
-            _string_field(source, "name") if isinstance(source, dict) else None
-        )
+        request_name = _string_field(source, "name") if isinstance(source, dict) else None
         error = failure.get("error")
         if not isinstance(error, dict):
             continue
@@ -293,9 +287,7 @@ def _iter_assertion_failures(
         }
 
 
-def _iter_server_errors(
-    run: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_server_errors(run: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     executions = run.get("executions")
     if not isinstance(executions, list):
         return

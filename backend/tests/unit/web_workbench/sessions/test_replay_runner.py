@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.checks.authorization_analyzer import AuthzClass
-from src.web_workbench.proxy.forward_gate import ForwardGate
 from src.web_workbench.projects.service import ProjectScopeService
+from src.web_workbench.proxy.forward_gate import ForwardGate
 from src.web_workbench.repeater.engine import RawResponse
 from src.web_workbench.sessions.replay_runner import (
     AuthorizationReplayRunner,
@@ -30,7 +30,7 @@ def _gate() -> ForwardGate:
 class _IdorSender:
     """Returns the victim's data to everyone except principals denied by cookie."""
 
-    def send(self, request, body: bytes) -> RawResponse:  # noqa: ARG002
+    def send(self, request, body: bytes) -> RawResponse:
         cookie = request.header("Cookie") or ""
         if "denied" in cookie:
             raw = b"HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\n\r\n{}"

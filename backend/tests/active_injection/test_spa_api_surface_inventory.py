@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from src.orchestration.handlers import (
+    _collect_recon_surface_artifacts,
+    _normalize_scan_mode_for_va,
+)
 from src.recon.vulnerability_analysis.active_scan.injection_planner import (
     ActiveInjectionPlannerFlags,
     build_injection_plan,
@@ -12,10 +16,6 @@ from src.recon.vulnerability_analysis.active_scan.input_surface_inventory import
 from src.recon.vulnerability_analysis.active_scan.spa_api_surface import (
     extract_script_urls_from_html,
     extract_spa_api_surfaces,
-)
-from src.orchestration.handlers import (
-    _collect_recon_surface_artifacts,
-    _normalize_scan_mode_for_va,
 )
 
 
@@ -38,7 +38,9 @@ def test_next_vercel_bundle_routes_feed_endpoint_inventory() -> None:
         script_bodies={scripts[0]: js},
     )
     endpoints = surfaces.endpoint_inventory
-    assert any(r["url"] == "https://app.example/api/login" and r["method"] == "POST" for r in endpoints)
+    assert any(
+        r["url"] == "https://app.example/api/login" and r["method"] == "POST" for r in endpoints
+    )
     login = next(r for r in endpoints if r["url"] == "https://app.example/api/login")
     assert login["content_type"] == "application/json"
     assert {"email", "password"}.issubset(set(login["json_fields"]))
@@ -62,8 +64,13 @@ def test_recon_context_urls_and_js_feed_spa_extractor() -> None:
         discovered_urls=urls,
         script_bodies=scripts,
     )
-    assert any(r["url"].startswith("https://app.example/api/users") for r in surfaces.endpoint_inventory)
-    assert any(r["url"] == "https://app.example/api/profile" and r["method"] == "POST" for r in surfaces.endpoint_inventory)
+    assert any(
+        r["url"].startswith("https://app.example/api/users") for r in surfaces.endpoint_inventory
+    )
+    assert any(
+        r["url"] == "https://app.example/api/profile" and r["method"] == "POST"
+        for r in surfaces.endpoint_inventory
+    )
 
 
 def test_scan_mode_prefers_canonical_scan_mode_over_legacy_scan_type() -> None:
@@ -113,7 +120,9 @@ def test_hidden_post_body_uses_conservative_field_hints() -> None:
             "bundle.js": "fetch('/api/login', { method: 'POST', body: credentials })",
         },
     )
-    login = next(r for r in surfaces.endpoint_inventory if r["url"] == "https://app.example/api/login")
+    login = next(
+        r for r in surfaces.endpoint_inventory if r["url"] == "https://app.example/api/login"
+    )
     assert login["method"] == "POST"
     assert {"email", "username", "password"}.issubset(set(login["json_fields"]))
     inv = build_input_surface_inventory({"endpoint_inventory": surfaces.endpoint_inventory})
@@ -126,7 +135,9 @@ def test_numeric_api_path_segments_create_idor_surface() -> None:
         discovered_urls=["/api/users/123"],
     )
     inv = build_input_surface_inventory({"endpoint_inventory": surfaces.endpoint_inventory})
-    assert any(item.location == "path" and item.param_name in {"id", "userId"} for item in inv.items)
+    assert any(
+        item.location == "path" and item.param_name in {"id", "userId"} for item in inv.items
+    )
 
 
 def test_deep_plan_covers_sqli_xss_ssrf_ssti_xxe_idor_for_confirmed_surfaces() -> None:
@@ -156,4 +167,6 @@ def test_deep_plan_covers_sqli_xss_ssrf_ssti_xxe_idor_for_confirmed_surfaces() -
     runnable = {s.family for s in steps if not s.not_assessed_reason}
     assert {"xss", "sqli", "ssrf", "ssti", "xxe", "idor"}.issubset(runnable)
     assert any(s.family == "sqli" and s.tool == "sqlmap" for s in steps)
-    assert any(s.family == "idor" and s.param == "userId" for s in steps if not s.not_assessed_reason)
+    assert any(
+        s.family == "idor" and s.param == "userId" for s in steps if not s.not_assessed_reason
+    )

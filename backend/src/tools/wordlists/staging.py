@@ -50,9 +50,7 @@ def plan_wordlist_staging(plan: CredentialTestPlan) -> list[WordlistStage]:
     if plan.username_path is not None:
         stages.append(WordlistStage(USERS_FILE, source=plan.username_path))
     elif plan.inline_usernames:
-        stages.append(
-            WordlistStage(USERS_FILE, content="\n".join(plan.inline_usernames) + "\n")
-        )
+        stages.append(WordlistStage(USERS_FILE, content="\n".join(plan.inline_usernames) + "\n"))
     if plan.password_path is not None:
         stages.append(WordlistStage(PASS_FILE, source=plan.password_path))
     if plan.credential_pair_path is not None:

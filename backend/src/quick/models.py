@@ -113,7 +113,9 @@ class QuickTaskRow(Base):
         String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     plan_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("quick_scan_plans.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("quick_scan_plans.id", ondelete="CASCADE"),
+        nullable=False,
     )
     stage: Mapped[str] = mapped_column(String(32), nullable=False)
     target_ref: Mapped[str] = mapped_column(String(256), nullable=False)

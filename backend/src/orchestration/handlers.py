@@ -180,9 +180,7 @@ def _lab_tool_dispatch_allowed(
     return False
 
 
-_QUICK_RECON_STEPS = (
-    "dig,dns_depth,whois,crtsh,nmap_port_scan,http_surface,security_headers"
-)
+_QUICK_RECON_STEPS = "dig,dns_depth,whois,crtsh,nmap_port_scan,http_surface,security_headers"
 _QUICK_PRIORITY_PORTS = "80,443,8080,8443,8000,3000"
 _QUICK_TOOL_TO_RECON_STEP: dict[str, str] = {
     "nmap": "nmap_port_scan",
@@ -255,7 +253,11 @@ def _apply_quick_va_constraints(
     opts = dict(options)
     opts["scan_mode"] = "quick"
     opts["execution_mode"] = "quick"
-    vulns = dict(opts.get("vulnerabilities") or {}) if isinstance(opts.get("vulnerabilities"), dict) else {}
+    vulns = (
+        dict(opts.get("vulnerabilities") or {})
+        if isinstance(opts.get("vulnerabilities"), dict)
+        else {}
+    )
     for flag in _QUICK_VA_VULN_FLAGS:
         vulns[flag] = False
     opts["vulnerabilities"] = vulns
@@ -270,11 +272,7 @@ def _apply_quick_va_constraints(
         completed_ids=set(),
         cancelled=bool(scan_id and is_scan_cancelled(scan_id)),
     )
-    allowed = [
-        task.tool_id
-        for task in eligible
-        if task.stage.value in _QUICK_VA_STAGES
-    ]
+    allowed = [task.tool_id for task in eligible if task.stage.value in _QUICK_VA_STAGES]
     if not allowed:
         breaker = default_circuit_breaker()
         allowed = [
@@ -368,7 +366,14 @@ def _truncate_query_values_for_log(url: str, max_value_len: int = 80) -> str:
         pairs.append((k, v))
     new_query = urlencode(pairs)
     rebuilt = urlunparse(
-        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment),
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment,
+        ),
     )
     return rebuilt[:500]
 
@@ -412,11 +417,13 @@ class _FormHTMLParser(HTMLParser):
         elif tag == "input" and self._current_form is not None:
             input_name = attr_map.get("name", "")
             if input_name:
-                self._current_form["inputs"].append({
-                    "name": input_name,
-                    "type": attr_map.get("type", "text"),
-                    "value": attr_map.get("value", ""),
-                })
+                self._current_form["inputs"].append(
+                    {
+                        "name": input_name,
+                        "type": attr_map.get("type", "text"),
+                        "value": attr_map.get("value", ""),
+                    }
+                )
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "form" and self._current_form is not None:
@@ -430,15 +437,19 @@ def _extract_url_query_params(target: str) -> list[dict[str, Any]]:
     if not parsed.query:
         return []
 
-    base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else target.split("?")[0]
+    base_url = (
+        f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else target.split("?")[0]
+    )
     params_inventory: list[dict[str, Any]] = []
     for param_name, values in parse_qs(parsed.query, keep_blank_values=True).items():
-        params_inventory.append({
-            "url": base_url,
-            "param": param_name,
-            "value": values[0] if values else "",
-            "method": "GET",
-        })
+        params_inventory.append(
+            {
+                "url": base_url,
+                "param": param_name,
+                "value": values[0] if values else "",
+                "method": "GET",
+            }
+        )
     return params_inventory
 
 
@@ -472,17 +483,21 @@ def _parse_forms_from_html(html: str, page_url: str) -> list[dict[str, Any]]:
         if not inputs:
             continue
         for inp in inputs:
-            forms_inventory.append({
-                "page_url": page_url,
-                "action": action,
-                "method": method,
-                "input_name": inp["name"],
-                "input_type": inp.get("type", "text"),
-            })
+            forms_inventory.append(
+                {
+                    "page_url": page_url,
+                    "action": action,
+                    "method": method,
+                    "input_name": inp["name"],
+                    "input_type": inp.get("type", "text"),
+                }
+            )
     return forms_inventory
 
 
-def _auth_profile_from_scan_options(scan_options: dict[str, Any] | None) -> dict[str, Any]:
+def _auth_profile_from_scan_options(
+    scan_options: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Sanitize optional authenticated scan profile/test credentials for surface planning.
 
     Secret values are intentionally not returned; only presence and field names are kept.
@@ -502,10 +517,7 @@ def _auth_profile_from_scan_options(scan_options: dict[str, Any] | None) -> dict
             return {"enabled": True}
         return {"enabled": False}
     username_field = str(
-        raw.get("username_field")
-        or raw.get("user_field")
-        or raw.get("login_field")
-        or "username"
+        raw.get("username_field") or raw.get("user_field") or raw.get("login_field") or "username"
     ).strip()[:80]
     password_field = str(raw.get("password_field") or "password").strip()[:80]
     headers = raw.get("headers")
@@ -517,8 +529,12 @@ def _auth_profile_from_scan_options(scan_options: dict[str, Any] | None) -> dict
         "password_field": password_field or "password",
         "username_present": bool(raw.get("username") or raw.get("email")),
         "password_present": bool(raw.get("password")),
-        "headers_present": sorted(str(k)[:80] for k in headers) if isinstance(headers, dict) else [],
-        "cookies_present": sorted(str(k)[:80] for k in cookies) if isinstance(cookies, dict) else [],
+        "headers_present": sorted(str(k)[:80] for k in headers)
+        if isinstance(headers, dict)
+        else [],
+        "cookies_present": sorted(str(k)[:80] for k in cookies)
+        if isinstance(cookies, dict)
+        else [],
     }
 
 
@@ -552,12 +568,18 @@ def _add_auth_profile_login_endpoint(
         "source": "authenticated_scan_profile",
         "evidence_ref": "scan_options:authenticated_scan_profile",
         "confidence": "medium",
-        "confirmed": bool(auth_profile.get("username_present") and auth_profile.get("password_present")),
+        "confirmed": bool(
+            auth_profile.get("username_present") and auth_profile.get("password_present")
+        ),
         "auth_context": "anonymous",
     }
     key = (row["url"], row["method"], tuple(row["json_fields"]))
     existing = {
-        (str(r.get("url") or ""), str(r.get("method") or ""), tuple(r.get("json_fields") or []))
+        (
+            str(r.get("url") or ""),
+            str(r.get("method") or ""),
+            tuple(r.get("json_fields") or []),
+        )
         for r in endpoint_inventory
         if isinstance(r, dict)
     }
@@ -678,7 +700,16 @@ def _collect_recon_surface_artifacts(
         if (
             len(script_bodies) < max_scripts
             and any(h in key_low for h in _RECON_JS_KEY_HINTS)
-            and any(token in clipped for token in ("fetch(", "axios.", "XMLHttpRequest", "/api/", "__NEXT_DATA__"))
+            and any(
+                token in clipped
+                for token in (
+                    "fetch(",
+                    "axios.",
+                    "XMLHttpRequest",
+                    "/api/",
+                    "__NEXT_DATA__",
+                )
+            )
         ):
             script_bodies[f"recon:{label[:120]}:{len(script_bodies)}"] = clipped
 
@@ -749,7 +780,14 @@ async def _extract_url_params_forms_and_spa_surfaces(
             endpoint_inventory,
             route_inventory,
         )
-        return params_inventory, forms_inventory, endpoint_inventory, route_inventory, api_surface, js_findings
+        return (
+            params_inventory,
+            forms_inventory,
+            endpoint_inventory,
+            route_inventory,
+            api_surface,
+            js_findings,
+        )
 
     try:
         async with httpx.AsyncClient(
@@ -788,7 +826,14 @@ async def _extract_url_params_forms_and_spa_surfaces(
                 endpoint_inventory,
                 route_inventory,
             )
-            return params_inventory, forms_inventory, endpoint_inventory, route_inventory, api_surface, js_findings
+            return (
+                params_inventory,
+                forms_inventory,
+                endpoint_inventory,
+                route_inventory,
+                api_surface,
+                js_findings,
+            )
 
         body = response.text[:500_000]
         forms_inventory = _parse_forms_from_html(body, str(response.url))
@@ -809,7 +854,9 @@ async def _extract_url_params_forms_and_spa_surfaces(
                 except httpx.HTTPError:
                     continue
                 ctype = sr.headers.get("content-type", "").lower()
-                if sr.status_code >= 400 or ("javascript" not in ctype and not script_url.lower().endswith(".js")):
+                if sr.status_code >= 400 or (
+                    "javascript" not in ctype and not script_url.lower().endswith(".js")
+                ):
                     continue
                 script_bodies[script_url] = sr.text[:1_000_000]
 
@@ -910,7 +957,14 @@ async def _extract_url_params_and_forms(
     target: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Backward-compatible helper kept for older tests and callers."""
-    params, forms, _endpoints, _routes, _api, _js = await _extract_url_params_forms_and_spa_surfaces(target)
+    (
+        params,
+        forms,
+        _endpoints,
+        _routes,
+        _api,
+        _js,
+    ) = await _extract_url_params_forms_and_spa_surfaces(target)
     return params, forms
 
 
@@ -1026,7 +1080,11 @@ def _format_tool_results(results: dict[str, Any]) -> str:
             if stdout:
                 parts.append(stdout[:15000])
             structured = result.get("structured")
-            if tool_name == "nmap" and isinstance(structured, dict) and structured.get("mode") == "sandbox_cycle":
+            if (
+                tool_name == "nmap"
+                and isinstance(structured, dict)
+                and structured.get("mode") == "sandbox_cycle"
+            ):
                 parts.append(_safe_json(structured, 12000))
             if stderr and not result.get("success", True):
                 parts.append(f"[stderr] {stderr[:2000]}")
@@ -1130,11 +1188,19 @@ async def _query_shodan(target: str) -> dict[str, Any]:
     """Query Shodan for host information."""
     client = ShodanClient()
     if not client.is_available():
-        return {"success": False, "stdout": "", "stderr": "Shodan API key not configured"}
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": "Shodan API key not configured",
+        }
 
     ip = target if _is_ip(target) else _resolve_ip(target)
     if not ip:
-        return {"success": False, "stdout": "", "stderr": f"Cannot resolve {target} to IP"}
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": f"Cannot resolve {target} to IP",
+        }
 
     try:
         data = await client.query(endpoint=f"shodan/host/{ip}")
@@ -1220,9 +1286,7 @@ async def run_recon(
     if is_quick_execution(options):
         if scan_id and is_scan_cancelled(scan_id):
             return ReconOutput(assets=[target] if target else [])
-        options = _apply_quick_recon_constraints(
-            options, target=target, scan_id=scan_id
-        )
+        options = _apply_quick_recon_constraints(options, target=target, scan_id=scan_id)
     ports = options.get("ports", "1-1000")
     recon_cfg = build_recon_runtime_config(options)
     planned_steps = frozenset(plan_recon_steps(recon_cfg))
@@ -1251,7 +1315,9 @@ async def run_recon(
             ),
         }
 
-    tool_results["recon_pipeline_summary"] = build_recon_summary_document(tool_results, target=target)
+    tool_results["recon_pipeline_summary"] = build_recon_summary_document(
+        tool_results, target=target
+    )
 
     tool_results_str = _format_tool_results(tool_results)
     logger.info("Recon tool results collected (%d chars), sending to LLM", len(tool_results_str))
@@ -1287,9 +1353,7 @@ async def run_recon(
     # empty / omitted ports). Deterministically reconcile ports from raw tool
     # output, enforce the 443-on-live-TLS sanity check, and fall back to
     # scheme-default ports so downstream phases are never starved on a live host.
-    recon_out.ports = reconcile_ports(
-        recon_out.ports, tool_results, target, scan_id=scan_id
-    )
+    recon_out.ports = reconcile_ports(recon_out.ports, tool_results, target, scan_id=scan_id)
     if not recon_out.technologies:
         recon_out.technologies = parse_technologies(tool_results)
 
@@ -1307,17 +1371,16 @@ async def run_recon(
     # Block 2: DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR, CAA,
     # subdomain enum, breach). Findings are stashed for vuln_analysis to merge;
     # discovered subdomains extend the surface. Skipped in quick mode.
-    if not is_quick_execution(options) and getattr(
-        settings, "dns_security_recon_enabled", True
-    ):
+    if not is_quick_execution(options) and getattr(settings, "dns_security_recon_enabled", True):
         try:
+
             async def _dns_run_cmd(cmd: str, use_sandbox: bool = False) -> dict[str, Any]:
-                return await asyncio.to_thread(
-                    execute_command, cmd, use_sandbox=use_sandbox
-                )
+                return await asyncio.to_thread(execute_command, cmd, use_sandbox=use_sandbox)
 
             dns_subdomains, dns_findings = await collect_dns_security_findings(
-                domain, run_cmd=_dns_run_cmd, emails=_harvest_emails(tool_results, domain)
+                domain,
+                run_cmd=_dns_run_cmd,
+                emails=_harvest_emails(tool_results, domain),
             )
             if dns_findings:
                 tool_results["dns_security_findings"] = dns_findings
@@ -1364,16 +1427,50 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
         for keyword in parts:
             if len(keyword) < 3 or keyword in keywords_seen:
                 continue
-            if keyword in ("tcp", "udp", "open", "port", "http", "https", "the", "and", "for"):
+            if keyword in (
+                "tcp",
+                "udp",
+                "open",
+                "port",
+                "http",
+                "https",
+                "the",
+                "and",
+                "for",
+            ):
                 continue
             keywords_seen.add(keyword)
 
     tech_keywords = {
-        "nginx", "apache", "cloudflare", "wordpress", "joomla", "drupal",
-        "bootstrap", "jquery", "react", "vue", "angular", "laravel",
-        "django", "flask", "express", "spring", "tomcat", "iis",
-        "php", "python", "ruby", "node", "mysql", "postgresql", "mariadb",
-        "redis", "mongodb", "elasticsearch", "memcached",
+        "nginx",
+        "apache",
+        "cloudflare",
+        "wordpress",
+        "joomla",
+        "drupal",
+        "bootstrap",
+        "jquery",
+        "react",
+        "vue",
+        "angular",
+        "laravel",
+        "django",
+        "flask",
+        "express",
+        "spring",
+        "tomcat",
+        "iis",
+        "php",
+        "python",
+        "ruby",
+        "node",
+        "mysql",
+        "postgresql",
+        "mariadb",
+        "redis",
+        "mongodb",
+        "elasticsearch",
+        "memcached",
     }
     keyword_priority = sorted(
         tech_keywords & keywords_seen,
@@ -1386,9 +1483,7 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
 
     for keyword in list(keywords_seen)[:8]:
         try:
-            data = await client.query(
-                params={"keywordSearch": keyword, "resultsPerPage": 10}
-            )
+            data = await client.query(params={"keywordSearch": keyword, "resultsPerPage": 10})
             vulns = data.get("vulnerabilities", [])
             for v in vulns[:8]:
                 cve_item = v.get("cve", {})
@@ -1401,16 +1496,16 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
                 metrics = cve_item.get("metrics", {})
                 cvss_data = metrics.get("cvssMetricV31", [{}])
                 base_score = (
-                    cvss_data[0].get("cvssData", {}).get("baseScore", 0.0)
-                    if cvss_data
-                    else 0.0
+                    cvss_data[0].get("cvssData", {}).get("baseScore", 0.0) if cvss_data else 0.0
                 )
-                all_cves.append({
-                    "cve_id": cve_id,
-                    "description": desc[:500],
-                    "base_score": base_score,
-                    "keyword": keyword,
-                })
+                all_cves.append(
+                    {
+                        "cve_id": cve_id,
+                        "description": desc[:500],
+                        "base_score": base_score,
+                        "keyword": keyword,
+                    }
+                )
         except Exception:  # noqa: BLE001
             logger.warning("NVD query for '%s' failed", keyword)
 
@@ -1484,6 +1579,7 @@ async def run_quick_fuzz(
 
     try:
         from src.recon.quick_fuzz.quick_fuzzer import run_quick_fuzz as _run_qf
+
         fuzz_categories = tuple(categories) if categories else None
         result = await _run_qf(
             target,
@@ -1564,10 +1660,7 @@ async def run_threat_modeling(
                     f"- [{_qff.get('severity', 'medium').upper()}] {_qff.get('title', 'unknown')}"
                     f" (category: {_qff.get('category', 'unknown')})"
                 )
-            recon_context_str += (
-                "\n\n[Quick Fuzz Pre-Scan Findings]:\n"
-                + "\n".join(_qf_lines)
-            )
+            recon_context_str += "\n\n[Quick Fuzz Pre-Scan Findings]:\n" + "\n".join(_qf_lines)
         except Exception:  # noqa: BLE001, S110
             pass
     logger.info(
@@ -1582,7 +1675,10 @@ async def run_threat_modeling(
     )
 
     nvd_data = await _query_nvd_for_technologies(assets)
-    logger.info("NVD data collected (%d chars), sending to LLM for threat modeling", len(nvd_data))
+    logger.info(
+        "NVD data collected (%d chars), sending to LLM for threat modeling",
+        len(nvd_data),
+    )
 
     inp = ThreatModelInput(assets=assets, source_analysis=source_analysis)
     raw_output = await ai_threat_modeling(
@@ -1850,9 +1946,13 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
         cvss = f.get("cvss")
 
         # Never auto-assign CWE-79/CVSS-7.2 to FUZZ_HIT or COMMAND_INJECTION_CANDIDATE — those are scanner hits, not confirmed XSS
-        is_unconfirmed_scanner_hit = "fuzz_hit" in title_lower or "command_injection_candidate" in title_lower
+        is_unconfirmed_scanner_hit = (
+            "fuzz_hit" in title_lower or "command_injection_candidate" in title_lower
+        )
 
-        is_xss = not is_unconfirmed_scanner_hit and any(kw in title_lower or kw in desc_lower for kw in ("xss", "cross-site scripting"))
+        is_xss = not is_unconfirmed_scanner_hit and any(
+            kw in title_lower or kw in desc_lower for kw in ("xss", "cross-site scripting")
+        )
         is_sqli = any(kw in title_lower or kw in desc_lower for kw in ("sqli", "sql injection"))
 
         if is_xss:
@@ -1870,7 +1970,11 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
                 f["cvss"] = _MIN_CONFIRMED_ACTIVE_CVSS
 
         raw_oc = f.get("owasp_category")
-        oc = parse_owasp_category(raw_oc.strip()) if isinstance(raw_oc, str) and raw_oc.strip() else None
+        oc = (
+            parse_owasp_category(raw_oc.strip())
+            if isinstance(raw_oc, str) and raw_oc.strip()
+            else None
+        )
         if oc is None:
             cwe_s = str(f["cwe"]).strip() if f.get("cwe") else None
             st = str(f.get("source_tool") or "").strip() or None
@@ -1907,7 +2011,7 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
 async def _run_sast_scan(
     repo_path: str,
     *,
-    scan_id: str | None = None,  # noqa: ARG001
+    scan_id: str | None = None,  # noqa: ARG001 - retained for signature/API compatibility
 ) -> list[dict[str, Any]]:
     """Run SAST + secrets scan on a repository path."""
     findings: list[dict[str, Any]] = []
@@ -1919,13 +2023,16 @@ async def _run_sast_scan(
         )
         data = json.loads(result["stdout"]) if result["stdout"] else {}
         for r in data.get("results", []):
-            findings.append({
-                "type": "sast", "tool": "semgrep",
-                "rule": r.get("check_id", ""),
-                "file": r.get("path", ""),
-                "severity": r.get("extra", {}).get("severity", "medium"),
-                "description": r.get("extra", {}).get("message", ""),
-            })
+            findings.append(
+                {
+                    "type": "sast",
+                    "tool": "semgrep",
+                    "rule": r.get("check_id", ""),
+                    "file": r.get("path", ""),
+                    "severity": r.get("extra", {}).get("severity", "medium"),
+                    "description": r.get("extra", {}).get("message", ""),
+                }
+            )
     except Exception:  # noqa: BLE001, S110
         pass
 
@@ -1938,13 +2045,16 @@ async def _run_sast_scan(
             raw = result["stdout"]
             leaks = json.loads(raw) if isinstance(raw, str) else raw
             for leak in leaks if isinstance(leaks, list) else []:
-                findings.append({
-                    "type": "secret", "tool": "gitleaks",
-                    "rule": leak.get("RuleID", ""),
-                    "file": leak.get("File", ""),
-                    "severity": "high",
-                    "description": f"Secret found: {leak.get('Description', '')}",
-                })
+                findings.append(
+                    {
+                        "type": "secret",
+                        "tool": "gitleaks",
+                        "rule": leak.get("RuleID", ""),
+                        "file": leak.get("File", ""),
+                        "severity": "high",
+                        "description": f"Secret found: {leak.get('Description', '')}",
+                    }
+                )
     except Exception:  # noqa: BLE001, S110
         pass
 
@@ -2033,9 +2143,7 @@ async def run_vuln_analysis(
     if is_quick_execution(scan_options) and scan_id and is_scan_cancelled(scan_id):
         return VulnAnalysisOutput(findings=[])
     if is_quick_execution(scan_options):
-        scan_options = _apply_quick_va_constraints(
-            scan_options, target=target, scan_id=scan_id
-        )
+        scan_options = _apply_quick_va_constraints(scan_options, target=target, scan_id=scan_id)
     active_scan_findings: list[dict[str, Any]] = []
     active_scan_context = ""
     active_injection_coverage: dict[str, Any] = {}
@@ -2197,9 +2305,7 @@ async def run_vuln_analysis(
                         params_inv,
                         forms_inv,
                         timeout=20.0,
-                        max_payloads=(
-                            80 if (_lab_active or settings.va_aggressive_scan) else 50
-                        ),
+                        max_payloads=(80 if (_lab_active or settings.va_aggressive_scan) else 50),
                         max_total_requests=0 if _lab_active else 200,
                         aggressive=_lab_active or bool(settings.va_aggressive_scan),
                     )
@@ -2227,7 +2333,10 @@ async def run_vuln_analysis(
                 await asyncio.to_thread(
                     raw_sink.upload_json,
                     "active_scan_findings",
-                    {"findings": active_scan_findings, "count": len(active_scan_findings)},
+                    {
+                        "findings": active_scan_findings,
+                        "count": len(active_scan_findings),
+                    },
                 )
 
             logger.info(
@@ -2268,12 +2377,12 @@ async def run_vuln_analysis(
             if not params_inv and not forms_inv:
                 params_inv, forms_inv = await _extract_url_params_and_forms(target)
             heuristic_findings = await run_web_vuln_heuristics(
-                target, params_inv, forms_inv,
+                target,
+                params_inv,
+                forms_inv,
             )
             if heuristic_findings:
-                heuristic_normalized = [
-                    _normalize_intel_finding(f) for f in heuristic_findings
-                ]
+                heuristic_normalized = [_normalize_intel_finding(f) for f in heuristic_findings]
                 active_scan_findings.extend(heuristic_normalized)
                 active_scan_context = _build_active_scan_context(active_scan_findings)
                 logger.info(
@@ -2366,32 +2475,39 @@ async def run_vuln_analysis(
         message=f"Active scan complete — {len(active_scan_findings)} raw findings; starting AI analysis",
     )
 
-    inp = VulnAnalysisInput(
-        threat_model=threat_model, assets=assets, attack_surface=attack_surface
-    )
+    inp = VulnAnalysisInput(threat_model=threat_model, assets=assets, attack_surface=attack_surface)
     code_aware_section = ""
     if source_analysis is not None:
         try:
             from src.orchestration.code_aware_prompts import (
                 build_code_aware_prompt_section,
             )
+
             code_aware_section = build_code_aware_prompt_section(source_analysis)
         except Exception:  # noqa: BLE001, S110
             pass
     memory_context = ""
     try:
         from src.orchestration.episodic_memory import EpisodicMemory
+
         _em = EpisodicMemory()
         memory_context = _em.build_context_prompt(f"vuln_analysis {target}", max_entries=3)
     except Exception:  # noqa: BLE001, S110
         pass
     active_scan_combined = active_scan_context
     if quick_fuzz_section:
-        active_scan_combined = (active_scan_combined + quick_fuzz_section) if active_scan_combined else quick_fuzz_section
+        active_scan_combined = (
+            (active_scan_combined + quick_fuzz_section)
+            if active_scan_combined
+            else quick_fuzz_section
+        )
 
     llm_output = await ai_vuln_analysis(
-        inp, active_scan_context=active_scan_combined, scan_id=scan_id,
-        code_aware_section=code_aware_section, memory_context=memory_context,
+        inp,
+        active_scan_context=active_scan_combined,
+        scan_id=scan_id,
+        code_aware_section=code_aware_section,
+        memory_context=memory_context,
         use_react=scan_options.get("use_react", False),
         scan_options=scan_options,
     )
@@ -2415,18 +2531,29 @@ async def run_vuln_analysis(
         try:
             for _qc in quick_fuzz_candidates[:20]:
                 _sev = _qc.get("severity", "medium")
-                if isinstance(_sev, str) and _sev.lower() not in ("info", "informational"):
+                if isinstance(_sev, str) and _sev.lower() not in (
+                    "info",
+                    "informational",
+                ):
                     _existing_titles = {f.get("title", "").lower() for f in llm_output.findings}
                     _qtitle = f"Quick-fuzz: {_qc.get('category', 'unknown')} on {_qc.get('url', _qc.get('endpoint', ''))}"
                     if _qtitle.lower() not in _existing_titles:
-                        llm_output.findings.append({
-                            "title": _qtitle,
-                            "severity": _sev,
-                            "category": _qc.get("category", "quick_fuzz"),
-                            "description": _qc.get("reason", _qc.get("description", "Flagged by quick fuzzer for deep analysis")),
-                            "source": "quick_fuzz",
-                            "url": _qc.get("url", _qc.get("endpoint", "")),
-                        })
+                        llm_output.findings.append(
+                            {
+                                "title": _qtitle,
+                                "severity": _sev,
+                                "category": _qc.get("category", "quick_fuzz"),
+                                "description": _qc.get(
+                                    "reason",
+                                    _qc.get(
+                                        "description",
+                                        "Flagged by quick fuzzer for deep analysis",
+                                    ),
+                                ),
+                                "source": "quick_fuzz",
+                                "url": _qc.get("url", _qc.get("endpoint", "")),
+                            }
+                        )
         except Exception as _qf_merge_exc:  # noqa: BLE001
             logger.debug("quick_fuzz_merge_failed", extra={"error": str(_qf_merge_exc)})
 
@@ -2465,44 +2592,60 @@ async def run_vuln_analysis(
         except Exception as _tig_exc:  # noqa: BLE001 — gate must never break VA
             logger.debug("typed_intent_gate_failed", extra={"error": str(_tig_exc)})
 
-    if scan_options.get("aiml_scan") or (source_analysis and hasattr(source_analysis, "frameworks") and any("llm" in str(f).lower() or "ai" in str(f).lower() for f in (getattr(source_analysis, "frameworks", None) or []))):
+    if scan_options.get("aiml_scan") or (
+        source_analysis
+        and hasattr(source_analysis, "frameworks")
+        and any(
+            "llm" in str(f).lower() or "ai" in str(f).lower()
+            for f in (getattr(source_analysis, "frameworks", None) or [])
+        )
+    ):
         try:
             from src.orchestration.aiml_security import AIMLSecurityScanner
+
             _aiml = AIMLSecurityScanner()
-            _pi_findings = _aiml.scan_prompt_inputs({"target_url": target, "scan_options": json.dumps(scan_options)})
+            _pi_findings = _aiml.scan_prompt_inputs(
+                {"target_url": target, "scan_options": json.dumps(scan_options)}
+            )
             for _pif in _pi_findings:
-                llm_output.findings.append({
-                    "title": f"AI/ML: {_pif.finding_type}",
-                    "severity": _pif.severity,
-                    "description": _pif.description,
-                    "recommendation": _pif.recommendation,
-                    "cwe": "prompt-injection",
-                    "source": "aiml_scanner",
-                })
+                llm_output.findings.append(
+                    {
+                        "title": f"AI/ML: {_pif.finding_type}",
+                        "severity": _pif.severity,
+                        "description": _pif.description,
+                        "recommendation": _pif.recommendation,
+                        "cwe": "prompt-injection",
+                        "source": "aiml_scanner",
+                    }
+                )
             _mcp_tool_list = scan_options.get("mcp_tools", [])
             if _mcp_tool_list:
                 _mcp_risks = _aiml.scan_mcp_tools(_mcp_tool_list)
                 for _mr in _mcp_risks:
-                    llm_output.findings.append({
-                        "title": f"AI/ML: {_mr.risk_type}",
-                        "severity": _mr.severity,
-                        "description": _mr.description,
-                        "recommendation": f"Review MCP tool '{_mr.tool_name}' for {_mr.risk_type}",
-                        "cwe": "supply-chain",
-                        "source": "aiml_scanner",
-                    })
+                    llm_output.findings.append(
+                        {
+                            "title": f"AI/ML: {_mr.risk_type}",
+                            "severity": _mr.severity,
+                            "description": _mr.description,
+                            "recommendation": f"Review MCP tool '{_mr.tool_name}' for {_mr.risk_type}",
+                            "cwe": "supply-chain",
+                            "source": "aiml_scanner",
+                        }
+                    )
             _td_findings = _aiml.scan_training_data_leaks(
                 [str(f) for f in (llm_output.findings or [])],
             )
             for _td in _td_findings:
-                llm_output.findings.append({
-                    "title": "AI/ML: Training data leak risk",
-                    "severity": "medium",
-                    "description": _td,
-                    "recommendation": "Review LLM output for sensitive data exposure",
-                    "cwe": "information-disclosure",
-                    "source": "aiml_scanner",
-                })
+                llm_output.findings.append(
+                    {
+                        "title": "AI/ML: Training data leak risk",
+                        "severity": "medium",
+                        "description": _td,
+                        "recommendation": "Review LLM output for sensitive data exposure",
+                        "cwe": "information-disclosure",
+                        "source": "aiml_scanner",
+                    }
+                )
         except Exception:  # noqa: BLE001, S110
             pass
     llm_output.active_injection_coverage = active_injection_coverage
@@ -2513,12 +2656,11 @@ async def run_vuln_analysis(
             AgentDomain,
             filter_findings_by_domain,
         )
+
         agent_findings_map: dict[str, list[dict[str, Any]]] = {}
         for domain in AgentDomain:
             spec = VULN_AGENT_SPECS[domain]
-            relevant = filter_findings_by_domain(
-                llm_output.findings, domain
-            )
+            relevant = filter_findings_by_domain(llm_output.findings, domain)
             if relevant:
                 agent_findings_map[domain.value] = relevant
                 logger.debug(
@@ -2536,7 +2678,7 @@ async def run_vuln_analysis(
                 if scan_options.get("enable_vuln_agents", True):
                     try:
                         domain_context = "\n".join(
-                            f"- [{f.get('severity','?').upper()}] {f.get('title','?')} (CWE {f.get('cwe','?')})"
+                            f"- [{f.get('severity', '?').upper()}] {f.get('title', '?')} (CWE {f.get('cwe', '?')})"
                             for f in relevant[:10]
                         )
                         domain_prompt = (
@@ -2562,6 +2704,7 @@ async def run_vuln_analysis(
                         )
                         if domain_analysis:
                             import json as _json
+
                             try:
                                 hypotheses = _json.loads(domain_analysis)
                                 if isinstance(hypotheses, list):
@@ -2582,7 +2725,10 @@ async def run_vuln_analysis(
                     except Exception as _agent_llm_exc:  # noqa: BLE001
                         logger.debug(
                             "vuln_agent_llm_failed",
-                            extra={"domain": domain.value, "error": str(_agent_llm_exc)},
+                            extra={
+                                "domain": domain.value,
+                                "error": str(_agent_llm_exc),
+                            },
                         )
 
         if agent_findings_map:
@@ -2617,15 +2763,21 @@ async def run_vuln_analysis(
                 run_fuzzing_campaign,
                 select_engine,
             )
+
             _fuzz_targets = []
-            _sa_dict = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            _sa_dict = (
+                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            )
             _code_files = _sa_dict.get("code_files", [])
             for _cf in (_code_files or [])[:3]:
                 _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
                 _engine = select_engine(_lang)
                 _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
             if _fuzz_targets:
-                logger.info("fuzzing_campaign_starting", extra={"scan_id": scan_id, "targets": len(_fuzz_targets)})
+                logger.info(
+                    "fuzzing_campaign_starting",
+                    extra={"scan_id": scan_id, "targets": len(_fuzz_targets)},
+                )
                 for _ft in _fuzz_targets:
                     try:
                         _freq = FuzzingRequest(
@@ -2635,22 +2787,45 @@ async def run_vuln_analysis(
                             scan_id=scan_id or "",
                             timeout_seconds=min(int(scan_options.get("fuzz_timeout", 300)), 600),
                         )
-                        _fresult = await run_fuzzing_campaign(_freq, use_sandbox=bool(settings.sandbox_enabled))
+                        _fresult = await run_fuzzing_campaign(
+                            _freq, use_sandbox=bool(settings.sandbox_enabled)
+                        )
                         if _fresult.crashes:
                             for _fc in _fresult.crashes:
-                                llm_output.findings.append({
-                                    "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
-                                    "severity": "high" if _fc.crash_type == "crash" else "medium",
-                                    "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
-                                    "source": "fuzzing",
-                                    "cwe": "CWE-20",
-                                    "evidence_tier": 3,
-                                })
-                            logger.info("fuzzing_crashes_found", extra={"scan_id": scan_id, "target": _ft["file"], "crashes": len(_fresult.crashes)})
+                                llm_output.findings.append(
+                                    {
+                                        "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
+                                        "severity": "high"
+                                        if _fc.crash_type == "crash"
+                                        else "medium",
+                                        "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
+                                        "source": "fuzzing",
+                                        "cwe": "CWE-20",
+                                        "evidence_tier": 3,
+                                    }
+                                )
+                            logger.info(
+                                "fuzzing_crashes_found",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "target": _ft["file"],
+                                    "crashes": len(_fresult.crashes),
+                                },
+                            )
                         else:
-                            logger.info("fuzzing_campaign_clean", extra={"scan_id": scan_id, "target": _ft["file"], "runs": _fresult.total_runs})
+                            logger.info(
+                                "fuzzing_campaign_clean",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "target": _ft["file"],
+                                    "runs": _fresult.total_runs,
+                                },
+                            )
                     except Exception as _fuzz_exc:  # noqa: BLE001
-                        logger.debug("fuzzing_target_failed", extra={"target": _ft["file"], "error": str(_fuzz_exc)})
+                        logger.debug(
+                            "fuzzing_target_failed",
+                            extra={"target": _ft["file"], "error": str(_fuzz_exc)},
+                        )
         except Exception as _fuzz_outer:  # noqa: BLE001
             logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
 
@@ -2661,10 +2836,15 @@ async def run_vuln_analysis(
                 detect_binary_type,
                 run_binary_analysis,
             )
-            _sa_dict_ba = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+
+            _sa_dict_ba = (
+                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            )
             _code_files_ba = _sa_dict_ba.get("code_files", []) or []
             for _cf_ba in _code_files_ba[:3]:
-                _path_ba = str(_cf_ba.get("path", _cf_ba)) if isinstance(_cf_ba, dict) else str(_cf_ba)
+                _path_ba = (
+                    str(_cf_ba.get("path", _cf_ba)) if isinstance(_cf_ba, dict) else str(_cf_ba)
+                )
                 _btype_ba = detect_binary_type(_path_ba)
                 if _btype_ba != "unknown":
                     try:
@@ -2674,21 +2854,39 @@ async def run_vuln_analysis(
                             architecture=_btype_ba,
                             scan_id=scan_id or "",
                         )
-                        _ba_result = await run_binary_analysis(_ba_req, use_sandbox=bool(settings.sandbox_enabled))
+                        _ba_result = await run_binary_analysis(
+                            _ba_req, use_sandbox=bool(settings.sandbox_enabled)
+                        )
                         if _ba_result and _ba_result.vulnerabilities:
                             for _bv in _ba_result.vulnerabilities:
-                                llm_output.findings.append({
-                                    "title": f"Binary: {_bv.vuln_type} in {_path_ba}",
-                                    "severity": _bv.severity,
-                                    "description": _bv.description,
-                                    "source": "binary_analysis",
-                                    "cwe": getattr(_bv, "cwe", ""),
-                                    "evidence_tier": 2,
-                                    "code_location": _path_ba,
-                                })
-                            logger.info("binary_analysis_vulns_found", extra={"scan_id": scan_id, "file": _path_ba, "vulns": len(_ba_result.vulnerabilities)})
+                                llm_output.findings.append(
+                                    {
+                                        "title": f"Binary: {_bv.vuln_type} in {_path_ba}",
+                                        "severity": _bv.severity,
+                                        "description": _bv.description,
+                                        "source": "binary_analysis",
+                                        "cwe": getattr(_bv, "cwe", ""),
+                                        "evidence_tier": 2,
+                                        "code_location": _path_ba,
+                                    }
+                                )
+                            logger.info(
+                                "binary_analysis_vulns_found",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "file": _path_ba,
+                                    "vulns": len(_ba_result.vulnerabilities),
+                                },
+                            )
                     except Exception as _ba_exc:  # noqa: BLE001
-                        logger.debug("binary_analysis_target_failed", extra={"scan_id": scan_id, "file": _path_ba, "error": str(_ba_exc)})
+                        logger.debug(
+                            "binary_analysis_target_failed",
+                            extra={
+                                "scan_id": scan_id,
+                                "file": _path_ba,
+                                "error": str(_ba_exc),
+                            },
+                        )
         except Exception as _ba_outer:  # noqa: BLE001
             logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
 
@@ -2932,7 +3130,10 @@ async def run_exploit_attempt(
                     for step in (login.login_flow or [])
                 ]
                 success_condition = (
-                    {"type": login.success_condition.type, "value": login.success_condition.value}
+                    {
+                        "type": login.success_condition.type,
+                        "value": login.success_condition.value,
+                    }
                     if login.success_condition
                     else None
                 )
@@ -2987,7 +3188,9 @@ async def run_exploit_attempt(
 
     # Fallback: LLM theoretical exploitation
     inp = ExploitationInput(findings=findings)
-    _use_react = auth_config is not None and isinstance(auth_config, dict) and auth_config.get("use_react")
+    _use_react = (
+        auth_config is not None and isinstance(auth_config, dict) and auth_config.get("use_react")
+    )
     exploit_out = await ai_exploitation(
         inp,
         scan_id=scan_id,
@@ -3005,9 +3208,7 @@ async def run_exploit_attempt(
         try:
             from src.orchestration.react_agent import ReActAgent
 
-            async def _react_llm(
-                system_prompt, user_prompt, scan_id=None, phase=None
-            ):
+            async def _react_llm(system_prompt, user_prompt, scan_id=None, phase=None):
                 return await llm_facade.call_llm_with_escalation(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
@@ -3049,7 +3250,7 @@ async def run_exploit_attempt(
                 extra={"scan_id": scan_id, "error": str(_react_exc)},
             )
 
-    for _exploit in (exploit_out.exploits or []):
+    for _exploit in exploit_out.exploits or []:
         _sev = str(_exploit.get("severity", "")).lower()
         if _sev in ("critical", "high"):
             try:
@@ -3057,6 +3258,7 @@ async def run_exploit_attempt(
                     SymbolicExecutionRequest,
                     run_symbolic_execution,
                 )
+
                 _ser = SymbolicExecutionRequest(
                     binary_path=str(_exploit.get("target_url", target)),
                     source_function=str(_exploit.get("parameter", "input")),
@@ -3064,19 +3266,48 @@ async def run_exploit_attempt(
                     scan_id=scan_id or "",
                     timeout_seconds=300,
                 )
-                _sym_result = await run_symbolic_execution(_ser, use_sandbox=bool(settings.sandbox_enabled))
+                _sym_result = await run_symbolic_execution(
+                    _ser, use_sandbox=bool(settings.sandbox_enabled)
+                )
                 if _sym_result.vulnerable:
                     _exploit["symbolic_execution_proven"] = True
-                    _exploit["symbolic_input_values"] = json.dumps(_sym_result.input_values, default=str)[:1000]
-                _exploit["symbolic_execution_prompt"] = _sym_result.angr_script[:500] if _sym_result.angr_script else ""
-                logger.info("symbolic_execution_result", extra={"scan_id": scan_id, "proven": _sym_result.proven, "error": _sym_result.error[:200] if _sym_result.error else ""})
+                    _exploit["symbolic_input_values"] = json.dumps(
+                        _sym_result.input_values, default=str
+                    )[:1000]
+                _exploit["symbolic_execution_prompt"] = (
+                    _sym_result.angr_script[:500] if _sym_result.angr_script else ""
+                )
+                logger.info(
+                    "symbolic_execution_result",
+                    extra={
+                        "scan_id": scan_id,
+                        "proven": _sym_result.proven,
+                        "error": _sym_result.error[:200] if _sym_result.error else "",
+                    },
+                )
             except Exception as _sym_exc:  # noqa: BLE001
-                logger.debug("symbolic_execution_failed", extra={"scan_id": scan_id, "error": str(_sym_exc)})
+                logger.debug(
+                    "symbolic_execution_failed",
+                    extra={"scan_id": scan_id, "error": str(_sym_exc)},
+                )
 
     # Playwright screenshot evidence for browser-verifiable exploits (XSS, auth bypass)
-    _xss_vuln_types = {"xss", "cross-site scripting", "reflected xss", "stored xss", "dom xss"}
-    _browser_vuln_types = {"xss", "cross-site scripting", "auth", "authentication", "csrf", "open-redirect"}
-    for _exploit in (exploit_out.exploits or []):
+    _xss_vuln_types = {
+        "xss",
+        "cross-site scripting",
+        "reflected xss",
+        "stored xss",
+        "dom xss",
+    }
+    _browser_vuln_types = {
+        "xss",
+        "cross-site scripting",
+        "auth",
+        "authentication",
+        "csrf",
+        "open-redirect",
+    }
+    for _exploit in exploit_out.exploits or []:
         _vtype = str(_exploit.get("vuln_type", "")).lower()
         _is_browser_verifiable = any(_bt in _vtype for _bt in _browser_vuln_types)
         if _is_browser_verifiable and _exploit.get("poc_url") or _exploit.get("poc_curl"):
@@ -3084,13 +3315,16 @@ async def run_exploit_attempt(
                 from src.sandbox.playwright_adapter import (
                     PlaywrightAdapter,
                 )
+
                 _pa = PlaywrightAdapter(scan_id=scan_id or "")
                 await _pa._start_session()
                 _poc_url = _exploit.get("poc_url", target)
                 _nav_resp = await _pa.navigate(_poc_url)
                 if _nav_resp.success:
                     _shot_resp = await _pa.screenshot()
-                    if _shot_resp.success and (_shot_resp.screenshot_base64 or _shot_resp.screenshot_path):
+                    if _shot_resp.success and (
+                        _shot_resp.screenshot_base64 or _shot_resp.screenshot_path
+                    ):
                         if _shot_resp.screenshot_base64:
                             _exploit["screenshot_base64"] = _shot_resp.screenshot_base64
                         if _shot_resp.screenshot_path:
@@ -3100,7 +3334,10 @@ async def run_exploit_attempt(
                             "title": _nav_resp.title,
                             "body_snippet": (_nav_resp.body_text or "")[:500],
                         }
-                        logger.info("Playwright screenshot captured", extra={"scan_id": scan_id, "url": _poc_url})
+                        logger.info(
+                            "Playwright screenshot captured",
+                            extra={"scan_id": scan_id, "url": _poc_url},
+                        )
                 _pa._session.stop()
             except Exception as _pw_exc:  # noqa: BLE001
                 logger.debug("Playwright screenshot failed (non-fatal): %s", _pw_exc)
@@ -3145,7 +3382,9 @@ async def run_exploit_attempt(
     return exploit_out
 
 
-async def run_exploit_verify(candidates_output: ExploitationOutput) -> ExploitationOutput:
+async def run_exploit_verify(
+    candidates_output: ExploitationOutput,
+) -> ExploitationOutput:
     """
     EXPLOIT_VERIFY sub-phase: PoC verification of exploit candidates.
     Only candidates that pass verification are returned as verified exploits.
@@ -3232,7 +3471,9 @@ async def run_post_exploitation(
         fid = str(exploit.get("finding_id", "") or "")
         if fid and fid in _evidenced_finding_ids:
             return True
-        return any(exploit.get(k) for k in ("poc_url", "poc_curl", "browser_evidence", "screenshot_base64"))
+        return any(
+            exploit.get(k) for k in ("poc_url", "poc_curl", "browser_evidence", "screenshot_base64")
+        )
 
     verified = [e for e in exploits if e.get("status") == "verified"]
     # When the pipeline threads exploitation evidence, keep post-exploitation
@@ -3251,6 +3492,7 @@ async def run_post_exploitation(
     if verified and target:
         try:
             from urllib.parse import urlparse
+
             parsed = urlparse(target)
             host = parsed.hostname
 
@@ -3263,26 +3505,31 @@ async def run_post_exploitation(
             ]
 
             import httpx
+
             async with httpx.AsyncClient(timeout=3.0, follow_redirects=False) as client:
                 for service_name, service_url in internal_checks:
                     try:
                         resp = await client.get(service_url)
                         if 200 <= resp.status_code < 500:
-                            post_lateral.append({
-                                "technique": f"Internal {service_name} reachable",
-                                "description": f"Discovered {service_name} at {service_url} (HTTP {resp.status_code})",
-                                "from_exploit": verified[0].get("finding_id", ""),
-                            })
+                            post_lateral.append(
+                                {
+                                    "technique": f"Internal {service_name} reachable",
+                                    "description": f"Discovered {service_name} at {service_url} (HTTP {resp.status_code})",
+                                    "from_exploit": verified[0].get("finding_id", ""),
+                                }
+                            )
                     except Exception:  # noqa: BLE001, S110
                         pass
 
             # Check common persistence paths
             if post_lateral:
-                post_persistence.append({
-                    "type": "internal_service_access",
-                    "description": "Access to internal services enables potential lateral movement. Review network segmentation.",
-                    "risk_level": "medium",
-                })
+                post_persistence.append(
+                    {
+                        "type": "internal_service_access",
+                        "description": "Access to internal services enables potential lateral movement. Review network segmentation.",
+                        "risk_level": "medium",
+                    }
+                )
 
             # AD/SMB enumeration if targets appear to be Windows/AD
             if any(svc.get("technique", "").startswith("Internal") for svc in post_lateral):
@@ -3299,12 +3546,14 @@ async def run_post_exploitation(
                             use_sandbox=True,
                         )
                         if enum_result["success"] and enum_result["stdout"]:
-                            post_lateral.append({
-                                "technique": "SMB Enumeration via enum4linux",
-                                "description": enum_result["stdout"][:500],
-                                "from_exploit": verified[0].get("finding_id", ""),
-                                "tool": "enum4linux_ng",
-                            })
+                            post_lateral.append(
+                                {
+                                    "technique": "SMB Enumeration via enum4linux",
+                                    "description": enum_result["stdout"][:500],
+                                    "from_exploit": verified[0].get("finding_id", ""),
+                                    "tool": "enum4linux_ng",
+                                }
+                            )
                 except Exception as e:  # noqa: BLE001
                     logger.debug("ad_enum_skipped", extra={"error": str(e)})
         except Exception as exc:  # noqa: BLE001
@@ -3313,7 +3562,10 @@ async def run_post_exploitation(
     # Combine with LLM analysis
     inp = PostExploitationInput(exploits=exploits)
     ai_result = await ai_post_exploitation(
-        inp, raw_sink=raw_sink, scan_id=scan_id, scan_options=scan_opts,
+        inp,
+        raw_sink=raw_sink,
+        scan_id=scan_id,
+        scan_options=scan_opts,
     )
 
     # Block 1.5 anti-hallucination: post-exploitation may claim lateral movement
@@ -3398,18 +3650,28 @@ async def run_reporting(
 
             async def _critic_executor(sys_prompt: str, user_prompt: str):
                 return await llm_facade.call_llm_unified(
-                    sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
-                    scan_id=scan_id, phase="adversarial_critic",
+                    sys_prompt,
+                    user_prompt,
+                    task=LLMTask.REPORT_SECTION,
+                    scan_id=scan_id,
+                    phase="adversarial_critic",
                     execution_mode=_report_mode,
                 )
 
             _critic_result = await run_adversarial_critic(
-                vuln_analysis.findings[:30], llm_executor=_critic_executor,
+                vuln_analysis.findings[:30],
+                llm_executor=_critic_executor,
             )
             for _bs in (_critic_result.blind_spots or [])[:5]:
                 _critic_insights.append({"type": "blind_spot", "detail": _bs})
             for _c in (_critic_result.critiques or [])[:5]:
-                _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
+                _critic_insights.append(
+                    {
+                        "type": "critique",
+                        "finding_id": _c.finding_id,
+                        "detail": _c.description,
+                    }
+                )
         except Exception:  # noqa: BLE001, S110
             pass
 
@@ -3436,7 +3698,9 @@ async def run_reporting(
         post_exploitation=post_exploitation,
         report_context=report_context,
         scope_config=scope_config,
-        source_analysis=source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else source_analysis,
+        source_analysis=source_analysis.model_dump()
+        if hasattr(source_analysis, "model_dump")
+        else source_analysis,
     )
     report_out = await ai_reporting(inp, scan_id=scan_id, scan_options=scan_options)
     report_out.coverage_results = snapshot_coverage_dicts(scan_id)
@@ -3449,9 +3713,7 @@ async def run_reporting(
     # so a silently-passing control is counted as covered rather than skipped.
     try:
         _bl_findings = list(vuln_analysis.findings) if vuln_analysis else []
-        _bl_recon = (
-            {"ports": recon.ports, "subdomains": recon.subdomains} if recon else {}
-        )
+        _bl_recon = {"ports": recon.ports, "subdomains": recon.subdomains} if recon else {}
         _bl_overrides: set[str] = set()
         if recon is not None:
             _bl_overrides.add("open_ports")
@@ -3529,18 +3791,28 @@ async def run_reporting(
 
             async def _de_executor(sys_prompt: str, user_prompt: str):
                 return await llm_facade.call_llm_unified(
-                    sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
-                    scan_id=scan_id, phase="detection_engineering",
+                    sys_prompt,
+                    user_prompt,
+                    task=LLMTask.REPORT_SECTION,
+                    scan_id=scan_id,
+                    phase="detection_engineering",
                     execution_mode=_llm_execution_mode(scan_options),
                 )
 
             _de_result = await run_detection_engineering(
-                vuln_analysis.findings[:20], llm_executor=_de_executor,
+                vuln_analysis.findings[:20],
+                llm_executor=_de_executor,
             )
             if _de_result.rules:
                 _existing = report_out.report.get("detection_rules", [])
                 for _r in _de_result.rules:
-                    _existing.append({"rule_type": _r.rule_type, "title": _r.title, "content": _r.rule_content})
+                    _existing.append(
+                        {
+                            "rule_type": _r.rule_type,
+                            "title": _r.title,
+                            "content": _r.rule_content,
+                        }
+                    )
                 report_out.report["detection_rules"] = _existing
         except Exception:  # noqa: BLE001, S110
             pass
@@ -3552,6 +3824,7 @@ async def run_reporting(
                     create_patch_pr,
                     parse_patch_response,
                 )
+
                 _patches = []
                 _pr_urls = []
                 _patch_mode = _llm_execution_mode(scan_options)
@@ -3566,14 +3839,31 @@ async def run_reporting(
                             vulnerable_code=str(_hf.get("vulnerable_code", "")),
                         )
                         _presp = await llm_facade.call_llm_unified(
-                            _ps, _pu, task=LLMTask.EXPLOIT_GENERATION,
-                            scan_id=scan_id, phase="auto_patch",
+                            _ps,
+                            _pu,
+                            task=LLMTask.EXPLOIT_GENERATION,
+                            scan_id=scan_id,
+                            phase="auto_patch",
                             execution_mode=_patch_mode,
                         )
                         if _presp:
-                            _pc = parse_patch_response(str(_hf.get("finding_id", "")), str(_hf.get("code_location", "")), _presp)
-                            _patches.append({"finding_id": _pc.finding_id, "file": _pc.file_path, "diff": _pc.patch_diff[:2000]})
-                            if scan_options.get("auto_patch_create_pr") and scan_options.get("repo_provider") and scan_options.get("repo_token"):
+                            _pc = parse_patch_response(
+                                str(_hf.get("finding_id", "")),
+                                str(_hf.get("code_location", "")),
+                                _presp,
+                            )
+                            _patches.append(
+                                {
+                                    "finding_id": _pc.finding_id,
+                                    "file": _pc.file_path,
+                                    "diff": _pc.patch_diff[:2000],
+                                }
+                            )
+                            if (
+                                scan_options.get("auto_patch_create_pr")
+                                and scan_options.get("repo_provider")
+                                and scan_options.get("repo_token")
+                            ):
                                 _pr_result = await create_patch_pr(
                                     _pc,
                                     owner=str(scan_options.get("repo_owner", "")),
@@ -3585,7 +3875,12 @@ async def run_reporting(
                                     tenant_id=str(scan_options.get("tenant_id", "")),
                                 )
                                 if _pr_result.pr_url:
-                                    _pr_urls.append({"finding_id": _pc.finding_id, "pr_url": _pr_result.pr_url})
+                                    _pr_urls.append(
+                                        {
+                                            "finding_id": _pc.finding_id,
+                                            "pr_url": _pr_result.pr_url,
+                                        }
+                                    )
                                     _patches[-1]["pr_url"] = _pr_result.pr_url
                 if _patches:
                     report_out.report.setdefault("auto_patches", []).extend(_patches)

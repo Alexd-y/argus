@@ -65,9 +65,7 @@ _MAX_HEADER_NAME_LEN: Final[int] = 64
 _MAX_RESPONSE_TEXT_BYTES: Final[int] = 8 * 1024 * 1024  # 8 MiB scan cap
 
 _MARKER_VALUE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-]{8,128}$")
-_HEADER_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z0-9!#$%&'*+\-.^_`|~]{1,64}$"
-)
+_HEADER_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9!#$%&'*+\-.^_`|~]{1,64}$")
 _TIME_DELAY_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9]{3,5}$")
 
 
@@ -155,9 +153,7 @@ class Canary(BaseModel):
     def _validate(self) -> Self:
         if self.kind is CanaryKind.TIME_DELAY:
             if not _TIME_DELAY_RE.fullmatch(self.secret_value):
-                raise ValueError(
-                    "time_delay canary secret_value must be a 3-5 digit ms value"
-                )
+                raise ValueError("time_delay canary secret_value must be a 3-5 digit ms value")
             ms = int(self.secret_value)
             if ms < _MIN_TIME_DELAY_MS or ms > _MAX_TIME_DELAY_MS:
                 raise ValueError(
@@ -165,14 +161,10 @@ class Canary(BaseModel):
                     f"[{_MIN_TIME_DELAY_MS}, {_MAX_TIME_DELAY_MS}]"
                 )
             if self.header_name is not None or self.cookie_name is not None:
-                raise ValueError(
-                    "time_delay canary must not carry header_name or cookie_name"
-                )
+                raise ValueError("time_delay canary must not carry header_name or cookie_name")
         else:
             if not _MARKER_VALUE_RE.fullmatch(self.secret_value):
-                raise ValueError(
-                    "marker canary secret_value must be 8-128 URL-safe characters"
-                )
+                raise ValueError("marker canary secret_value must be 8-128 URL-safe characters")
             if self.kind is CanaryKind.HEADER_MARKER and self.header_name is None:
                 raise ValueError("header_marker canary requires header_name")
             if self.kind is CanaryKind.COOKIE_MARKER and self.cookie_name is None:
@@ -215,9 +207,7 @@ class CanaryVerificationResult(BaseModel):
             # We map "medium" to ``LIKELY`` (the closest finding-DTO level)
             # and reject CONFIRMED / EXPLOITABLE outright.
         }:
-            raise ValueError(
-                "canary confidence must be SUSPECTED or LIKELY (canary <= medium)"
-            )
+            raise ValueError("canary confidence must be SUSPECTED or LIKELY (canary <= medium)")
         return self
 
 
@@ -374,9 +364,7 @@ class CanaryVerifier:
                 evidence={"expected_ms": str(expected)},
             )
         if response_time_ms < 0:
-            raise CanaryVerificationInputError(
-                "response_time_ms must be >= 0 (got negative)"
-            )
+            raise CanaryVerificationInputError("response_time_ms must be >= 0 (got negative)")
 
         tolerance = max(
             int(expected * self._tolerance_ratio),
@@ -531,9 +519,7 @@ class _ClockFn(Protocol):
 
 def _default_token_hex(nbytes: int) -> str:
     if nbytes <= 0 or nbytes > 32:
-        raise CanaryGenerationError(
-            "marker byte size must be in (0, 32] for safe encoding"
-        )
+        raise CanaryGenerationError("marker byte size must be in (0, 32] for safe encoding")
     return secrets.token_hex(nbytes)
 
 

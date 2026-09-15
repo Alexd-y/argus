@@ -28,14 +28,11 @@ def register(mcp: FastMCP) -> None:
         title="ARGUS report metadata + presigned URL",
         mime_type="application/json",
         description=(
-            "Tenant-scoped report metadata and short-lived presigned URL. "
-            "Defaults to JSON format."
+            "Tenant-scoped report metadata and short-lived presigned URL. Defaults to JSON format."
         ),
     )
     async def reports_resource(report_id: str, ctx: MCPContext | None = None) -> str:
-        if not report_id or not (
-            _VALID_REPORT_ID[0] <= len(report_id) <= _VALID_REPORT_ID[1]
-        ):
+        if not report_id or not (_VALID_REPORT_ID[0] <= len(report_id) <= _VALID_REPORT_ID[1]):
             raise ValidationError("report_id must be 8..64 characters long.")
         call = build_call_context(ctx)
         download = await get_report_download(
@@ -43,9 +40,7 @@ def register(mcp: FastMCP) -> None:
             report_id=report_id,
             format=ReportFormat.JSON,
         )
-        return json.dumps(
-            download.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-        )
+        return json.dumps(download.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 __all__ = ["register"]

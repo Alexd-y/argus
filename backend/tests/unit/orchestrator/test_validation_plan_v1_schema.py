@@ -8,7 +8,6 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
-
 from src.llm_orchestrator.schemas import (
     SCHEMA_ID,
     ValidationPlanError,
@@ -153,13 +152,13 @@ class TestNegativeValidation:
     @pytest.mark.parametrize(
         "bad_family",
         [
-            "SQLI.boolean.v3",       # uppercase
-            "sqli.boolean",          # missing version
-            "sqli.boolean.v",        # malformed version
-            "sqli..v1",              # empty subfamily
-            "sqli.boolean.v0a",      # version not pure digits
-            "sqli.boolean-blind.v1", # hyphen not allowed
-            ".sqli.boolean.v1",      # leading dot
+            "SQLI.boolean.v3",  # uppercase
+            "sqli.boolean",  # missing version
+            "sqli.boolean.v",  # malformed version
+            "sqli..v1",  # empty subfamily
+            "sqli.boolean.v0a",  # version not pure digits
+            "sqli.boolean-blind.v1",  # hyphen not allowed
+            ".sqli.boolean.v1",  # leading dot
         ],
     )
     def test_registry_family_regex_rejects_bad_names(self, bad_family: str) -> None:
@@ -242,9 +241,7 @@ class TestPydanticGuards:
             )
         assert "raw_payloads_allowed" in str(exc.value)
 
-    def test_validate_falls_back_to_pydantic_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_validate_falls_back_to_pydantic_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Force the JSON Schema layer to be permissive so a malformed payload makes
         # it to the Pydantic layer; verify that the loader translates the
         # ValidationError into a domain ``ValidationPlanError`` with a non-empty
@@ -291,7 +288,7 @@ class TestPydanticErrorSanitization:
             ValidationPlanV1.model_validate(
                 {
                     "hypothesis": self._MARKER,  # short, will fail min_length=8 only if <8 chars
-                    "risk": self._MARKER,        # invalid enum -> input_value leaks here
+                    "risk": self._MARKER,  # invalid enum -> input_value leaks here
                     "payload_strategy": {
                         "registry_family": self._MARKER,
                         "mutation_classes": [],

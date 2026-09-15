@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from src.capabilities.coverage import COVERAGE_REASON_CODES, is_allowed_coverage_reason
 from src.capabilities.schemas import COVERED_STATUSES, CoverageStatus
-from src.orchestration.coverage_phase_sink import CoveragePhaseSink, InMemoryCoverageStore
+from src.orchestration.coverage_phase_sink import (
+    CoveragePhaseSink,
+    InMemoryCoverageStore,
+)
 from src.quick.circuit_breaker import CIRCUIT_OPEN_REASON
 from src.quick.coverage import (
     REASON_BUDGET_PARTIAL,
@@ -105,7 +108,10 @@ def test_map_quick_state_tested_partial_not_scheduled_timed_out_failed() -> None
     assert map_quick_state_to_status(QuickCoverageState.NOT_SCHEDULED) is CoverageStatus.NOT_TESTED
     assert map_quick_state_to_status(QuickCoverageState.TIMED_OUT) is CoverageStatus.BLOCKED
     assert map_quick_state_to_status(QuickCoverageState.FAILED) is CoverageStatus.BLOCKED
-    assert map_quick_state_to_status(QuickCoverageState.NOT_APPLICABLE) is CoverageStatus.NOT_APPLICABLE
+    assert (
+        map_quick_state_to_status(QuickCoverageState.NOT_APPLICABLE)
+        is CoverageStatus.NOT_APPLICABLE
+    )
 
 
 def test_absence_of_finding_is_not_covered() -> None:

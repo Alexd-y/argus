@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
-
 from src.mcp.schemas.scan import ScanCreateInput, ScanProfile
 from src.quick.create import (
     RAW_COMMAND_NOT_ALLOWED,
@@ -20,12 +19,7 @@ def _assert_raw_command_rejected(payload: dict) -> None:
     with pytest.raises((PydanticValidationError, RawCommandNotAllowedError)) as exc_info:
         ScanCreateInput.model_validate(payload)
     text = str(exc_info.value).lower()
-    assert (
-        "argv" in text
-        or "command" in text
-        or RAW_COMMAND_NOT_ALLOWED in text
-        or "raw" in text
-    )
+    assert "argv" in text or "command" in text or RAW_COMMAND_NOT_ALLOWED in text or "raw" in text
 
 
 def test_scan_create_rejects_top_level_argv() -> None:
@@ -49,7 +43,15 @@ def test_scan_create_rejects_top_level_command() -> None:
 
 @pytest.mark.parametrize(
     "forbidden_key",
-    ["argv", "command", "cmdline", "cmd", "shell", "command_string", "command_template"],
+    [
+        "argv",
+        "command",
+        "cmdline",
+        "cmd",
+        "shell",
+        "command_string",
+        "command_template",
+    ],
 )
 def test_scan_create_rejects_forbidden_key_in_scan_options(forbidden_key: str) -> None:
     _assert_raw_command_rejected(
@@ -74,7 +76,10 @@ def test_scan_create_rejects_command_nested_in_quick() -> None:
         {
             "target": "https://example.com",
             "execution_mode": "quick",
-            "quick": {"profile": "balanced", "command": "nuclei -u https://example.com"},
+            "quick": {
+                "profile": "balanced",
+                "command": "nuclei -u https://example.com",
+            },
         }
     )
 

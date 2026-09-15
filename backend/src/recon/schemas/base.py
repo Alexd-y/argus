@@ -5,6 +5,7 @@ from enum import IntEnum, StrEnum
 
 class ReconStage(IntEnum):
     """Recon workflow stages mapped from methodology docs."""
+
     SCOPE_PREP = 0
     DOMAIN_DNS = 1
     SUBDOMAIN_ENUM = 2
@@ -28,6 +29,7 @@ class ReconStage(IntEnum):
 
 class FindingType(StrEnum):
     """Canonical finding types for normalized recon data."""
+
     SUBDOMAIN = "subdomain"
     DNS_RECORD = "dns_record"
     IP_ADDRESS = "ip_address"
@@ -48,6 +50,7 @@ class FindingType(StrEnum):
 
 class ArtifactType(StrEnum):
     """Artifact classification."""
+
     RAW = "raw"
     NORMALIZED = "normalized"
     DERIVED = "derived"
@@ -56,6 +59,7 @@ class ArtifactType(StrEnum):
 
 class JobStatus(StrEnum):
     """Scan job lifecycle states."""
+
     PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
@@ -66,6 +70,7 @@ class JobStatus(StrEnum):
 
 class EngagementStatus(StrEnum):
     """Engagement lifecycle states."""
+
     DRAFT = "draft"
     ACTIVE = "active"
     PAUSED = "paused"
@@ -75,6 +80,7 @@ class EngagementStatus(StrEnum):
 
 class HypothesisPriority(StrEnum):
     """Hypothesis priority levels."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -84,6 +90,7 @@ class HypothesisPriority(StrEnum):
 
 class HypothesisStatus(StrEnum):
     """Hypothesis investigation states."""
+
     PENDING = "pending"
     INVESTIGATING = "investigating"
     CONFIRMED = "confirmed"
@@ -92,6 +99,7 @@ class HypothesisStatus(StrEnum):
 
 class TargetType(StrEnum):
     """Target classification."""
+
     DOMAIN = "domain"
     IP = "ip"
     CIDR = "cidr"
@@ -100,6 +108,7 @@ class TargetType(StrEnum):
 
 class Environment(StrEnum):
     """Target environment classification."""
+
     PRODUCTION = "production"
     STAGING = "staging"
     DEVELOPMENT = "development"

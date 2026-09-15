@@ -10,7 +10,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.sandbox.signing import (
     KeyNotFoundError,
     SignatureRecord,

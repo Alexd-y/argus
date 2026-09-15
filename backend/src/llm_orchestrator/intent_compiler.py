@@ -294,9 +294,7 @@ def validate_finding_claim(claim: dict[str, Any]) -> None:
             code="hallucinated_finding",
         )
 
-    blob = " ".join(
-        str(claim.get(k, "")) for k in ("title", "description", "cve", "hypothesis")
-    )
+    blob = " ".join(str(claim.get(k, "")) for k in ("title", "description", "cve", "hypothesis"))
     if _CVE_RE.search(blob) and not evidence_ids:
         raise IntentCompileError("CVE asserted without evidence_ids", code="cve_without_evidence")
 

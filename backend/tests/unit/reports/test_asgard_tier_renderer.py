@@ -38,7 +38,6 @@ from src.reports.replay_command_sanitizer import (
     SanitizeContext,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -115,7 +114,7 @@ def test_section_order_constant_is_complete_and_immutable() -> None:
         "evidence",
         "screenshots",
     )
-    assert ASGARD_SECTION_ORDER == expected
+    assert expected == ASGARD_SECTION_ORDER
     assert isinstance(ASGARD_SECTION_ORDER, tuple)
 
 
@@ -223,9 +222,7 @@ def test_reproducer_falls_back_to_string_form() -> None:
 
 
 def test_reproducer_falls_back_to_repro_steps() -> None:
-    data = _make_data(
-        findings=[_finding(poc=None, repro_steps="nikto -h https://victim.tld")]
-    )
+    data = _make_data(findings=[_finding(poc=None, repro_steps="nikto -h https://victim.tld")])
     out = assemble_asgard_sections(
         data,
         sanitize_context=SanitizeContext(target="https://victim.tld"),
@@ -274,12 +271,8 @@ def test_remediation_present_for_every_finding() -> None:
 def test_evidence_invokes_presigner_and_returns_url() -> None:
     data = _make_data(
         evidence=[
-            EvidenceEntry(
-                finding_id="f1", object_key="obj/key/a.png", description="screenshot"
-            ),
-            EvidenceEntry(
-                finding_id="f2", object_key="obj/key/b.txt", description=None
-            ),
+            EvidenceEntry(finding_id="f1", object_key="obj/key/a.png", description="screenshot"),
+            EvidenceEntry(finding_id="f2", object_key="obj/key/b.txt", description=None),
         ]
     )
     seen: list[str] = []
@@ -298,9 +291,7 @@ def test_evidence_invokes_presigner_and_returns_url() -> None:
 
 def test_evidence_handles_presigner_exception_gracefully() -> None:
     data = _make_data(
-        evidence=[
-            EvidenceEntry(finding_id="f1", object_key="obj/key/a.png", description=None)
-        ]
+        evidence=[EvidenceEntry(finding_id="f1", object_key="obj/key/a.png", description=None)]
     )
 
     def boom(_: str) -> str | None:
@@ -313,9 +304,7 @@ def test_evidence_handles_presigner_exception_gracefully() -> None:
 def test_screenshots_invoke_presigner() -> None:
     data = _make_data(
         screenshots=[
-            ScreenshotEntry(
-                object_key="ss/login.png", url_or_email="https://target/login"
-            ),
+            ScreenshotEntry(object_key="ss/login.png", url_or_email="https://target/login"),
         ]
     )
 
@@ -328,9 +317,7 @@ def test_screenshots_invoke_presigner() -> None:
 
 def test_evidence_no_presigner_returns_none_url() -> None:
     data = _make_data(
-        evidence=[
-            EvidenceEntry(finding_id="f1", object_key="obj.png", description=None)
-        ]
+        evidence=[EvidenceEntry(finding_id="f1", object_key="obj.png", description=None)]
     )
     out = assemble_asgard_sections(data)
     assert out.evidence[0].presigned_url is None

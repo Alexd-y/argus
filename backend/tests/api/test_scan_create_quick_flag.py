@@ -16,14 +16,17 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-but-required-by-settings")
 os.environ.setdefault("ARGUS_TEST_MODE", "1")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
-
-from src.api.routers import scans as scans_router  # noqa: E402
-from src.core.auth import AuthContext, get_optional_auth, get_required_auth  # noqa: E402
-from src.core.config import settings  # noqa: E402
-from src.db.models import Scan  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from src.api.routers import scans as scans_router
+from src.core.auth import (
+    AuthContext,
+    get_optional_auth,
+    get_required_auth,
+)
+from src.core.config import settings
+from src.db.models import Scan
+from starlette.testclient import TestClient
 
 _TENANT_ID = "00000000-0000-0000-0000-000000000001"
 _TARGET = "https://example.com"

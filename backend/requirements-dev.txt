@@ -3,7 +3,11 @@
 
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
-ruff>=0.4.0
+# Pinned exactly: ruff's lint ruleset AND `ruff format` style change between
+# releases. CI runs `ruff check` + `ruff format --check`, so an unpinned floor
+# (previously `ruff>=0.4.0`) made the lint gate non-reproducible — the resolved
+# version drifted with every ruff release. Bump this pin deliberately.
+ruff==0.16.0
 black>=24.0.0
 bandit>=1.7.0
 safety>=3.0.0

@@ -59,10 +59,16 @@ class TestSelectEffective:
 
     def test_recency_breaks_equal_trust(self) -> None:
         older = _rec(
-            "a", AssessmentMethod.TOOL_NATIVE, "high", ts=datetime(2020, 1, 1, tzinfo=UTC)
+            "a",
+            AssessmentMethod.TOOL_NATIVE,
+            "high",
+            ts=datetime(2020, 1, 1, tzinfo=UTC),
         )
         newer = _rec(
-            "b", AssessmentMethod.TOOL_NATIVE, "medium", ts=datetime(2024, 1, 1, tzinfo=UTC)
+            "b",
+            AssessmentMethod.TOOL_NATIVE,
+            "medium",
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
         )
         winner = select_effective_assessment([older, newer])
         assert winner is not None and winner.assessment_id == "b"
@@ -129,15 +135,11 @@ class TestConflicts:
 class TestManualOverrideBuilder:
     def test_requires_author(self) -> None:
         with pytest.raises(ValueError, match="author"):
-            build_manual_override(
-                assessment_id="x", severity="high", author="  ", reason="r"
-            )
+            build_manual_override(assessment_id="x", severity="high", author="  ", reason="r")
 
     def test_requires_reason(self) -> None:
         with pytest.raises(ValueError, match="reason"):
-            build_manual_override(
-                assessment_id="x", severity="high", author="analyst", reason=""
-            )
+            build_manual_override(assessment_id="x", severity="high", author="analyst", reason="")
 
     def test_builds_override_record(self) -> None:
         rec = build_manual_override(

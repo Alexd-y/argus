@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-
 from src.capabilities.schemas import CoverageStatus
-from src.findings.diff import DiffStatus, diff_findings, diff_occurrence, occurrence_from_scan
+from src.findings.diff import (
+    DiffStatus,
+    diff_findings,
+    diff_occurrence,
+    occurrence_from_scan,
+)
 from src.findings.fingerprint import compute_finding_key, compute_occurrence_key
 from src.findings.lifecycle import (
     FindingAssessment,
@@ -34,7 +38,7 @@ def _finding_key() -> str:
 
 def _occurrence(*, scan_id: str, request_signature: str) -> FindingOccurrence:
     finding_key = _finding_key()
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return occurrence_from_scan(
         finding_key=finding_key,
         tenant_id="018f4a2e-7c8b-7b4d-8e0e-6b6579317431",

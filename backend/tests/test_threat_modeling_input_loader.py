@@ -3,11 +3,11 @@
 from pathlib import Path
 
 import pytest
-from src.schemas.threat_modeling.schemas import ThreatModelInputBundle
 from src.recon.threat_modeling.input_loader import (
     load_threat_model_input_bundle,
     load_threat_model_input_bundle_from_artifacts,
 )
+from src.schemas.threat_modeling.schemas import ThreatModelInputBundle
 
 
 class TestLoadThreatModelInputBundle:
@@ -40,22 +40,28 @@ class TestLoadThreatModelInputBundle:
         assert bundle.target_id == "t1"
         assert bundle.critical_assets == []
 
-    def test_stage2_structured_maps_to_assets_boundaries_entry_points(
-        self, tmp_path: Path
-    ) -> None:
+    def test_stage2_structured_maps_to_assets_boundaries_entry_points(self, tmp_path: Path) -> None:
         """stage2_structured.json maps to CriticalAsset, TrustBoundary, EntryPoint."""
         stage2 = {
             "priority_hypotheses": [
                 {"type": "hypothesis", "source": "x", "text": "H1", "priority": "high"},
             ],
             "critical_assets": [
-                {"type": "observation", "source": "tech", "text": "https://api.example.com"},
+                {
+                    "type": "observation",
+                    "source": "tech",
+                    "text": "https://api.example.com",
+                },
             ],
             "trust_boundaries": [
                 {"type": "inference", "source": "live", "text": "Public web tier"},
             ],
             "entry_points": [
-                {"type": "hypothesis", "source": "ep", "text": "https://app.example.com/login"},
+                {
+                    "type": "hypothesis",
+                    "source": "ep",
+                    "text": "https://app.example.com/login",
+                },
             ],
         }
         (tmp_path / "stage2_structured.json").write_text(
@@ -137,9 +143,7 @@ async def test_load_threat_model_input_bundle_from_artifacts_empty() -> None:
         new_callable=AsyncMock,
         return_value=[],
     ):
-        bundle = await load_threat_model_input_bundle_from_artifacts(
-            mock_db, "e1", "t1"
-        )
+        bundle = await load_threat_model_input_bundle_from_artifacts(mock_db, "e1", "t1")
     assert bundle.engagement_id == "e1"
     assert bundle.target_id == "t1"
     assert bundle.critical_assets == []

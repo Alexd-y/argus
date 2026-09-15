@@ -59,7 +59,10 @@ class ParsedTemplate:
 
 
 def parse_template(
-    raw: bytes, *, open_marker: bytes = DEFAULT_OPEN, close_marker: bytes = DEFAULT_CLOSE
+    raw: bytes,
+    *,
+    open_marker: bytes = DEFAULT_OPEN,
+    close_marker: bytes = DEFAULT_CLOSE,
 ) -> ParsedTemplate:
     """Parse ``raw`` into literal segments + base values at each insertion point.
 

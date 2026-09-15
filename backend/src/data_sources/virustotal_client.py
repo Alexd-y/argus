@@ -51,7 +51,11 @@ class VirusTotalClient(DataSourceClient):
                 if query_type == "ip":
                     ip = (kwargs.get("ip") or "").strip()
                     if not ip:
-                        return {"source": _SOURCE, "available": True, "error": "missing_ip"}
+                        return {
+                            "source": _SOURCE,
+                            "available": True,
+                            "error": "missing_ip",
+                        }
                     url = f"{self._base_url}/ip_addresses/{ip}"
                     resp = await client.get(url, headers=headers)
                     return _finish_response(resp)
@@ -59,7 +63,11 @@ class VirusTotalClient(DataSourceClient):
                 if query_type == "url":
                     raw_url = (kwargs.get("url") or "").strip()
                     if not raw_url:
-                        return {"source": _SOURCE, "available": True, "error": "missing_url"}
+                        return {
+                            "source": _SOURCE,
+                            "available": True,
+                            "error": "missing_url",
+                        }
                     uid = kwargs.get("url_id") or _vt_url_id(raw_url)
                     url = f"{self._base_url}/urls/{uid}"
                     resp = await client.get(url, headers=headers)
@@ -67,7 +75,11 @@ class VirusTotalClient(DataSourceClient):
 
                 domain = (kwargs.get("domain") or "").strip().lower()
                 if not domain:
-                    return {"source": _SOURCE, "available": True, "error": "missing_domain"}
+                    return {
+                        "source": _SOURCE,
+                        "available": True,
+                        "error": "missing_domain",
+                    }
                 url = f"{self._base_url}/domains/{domain}"
                 resp = await client.get(url, headers=headers)
                 return _finish_response(resp)

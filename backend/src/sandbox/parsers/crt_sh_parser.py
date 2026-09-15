@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -52,7 +52,7 @@ EVIDENCE_SIDECAR_NAME: Final[str] = "crtsh_findings.jsonl"
 _CANONICAL_NAME: Final[str] = "crtsh.json"
 _MAX_FINDINGS: Final[int] = 10_000
 
-_DedupKey: TypeAlias = tuple[str]
+type _DedupKey = tuple[str]
 
 
 def parse_crt_sh(
@@ -81,9 +81,7 @@ def parse_crt_sh(
         name_value = entry.get("name_value")
         if not isinstance(name_value, str) or not name_value.strip():
             continue
-        common_name = (
-            entry.get("common_name") if isinstance(entry.get("common_name"), str) else ""
-        )
+        common_name = entry.get("common_name") if isinstance(entry.get("common_name"), str) else ""
         for raw_name in name_value.split("\n"):
             host = raw_name.strip().lstrip("*.").rstrip(".").lower()
             if not host or not is_valid_hostname(host):

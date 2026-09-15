@@ -23,7 +23,6 @@ from typing import Final
 
 import pytest
 from prometheus_client import CollectorRegistry
-
 from src.core import observability as obs
 from src.core.observability import (
     LABEL_VALUE_WHITELIST,
@@ -40,7 +39,6 @@ from src.core.observability import (
     tenant_hash,
     user_id_hash,
 )
-
 
 _HEX16: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{16}$")
 
@@ -88,7 +86,10 @@ def test_catalogue_names_are_prefixed_and_unique() -> None:
 @pytest.mark.parametrize(
     "metric_name, required_labels",
     [
-        ("argus_http_requests_total", {"method", "route", "status_class", "tenant_hash"}),
+        (
+            "argus_http_requests_total",
+            {"method", "route", "status_class", "tenant_hash"},
+        ),
         ("argus_http_request_duration_seconds", {"method", "route", "tenant_hash"}),
         ("argus_celery_task_duration_seconds", {"task_name", "status"}),
         ("argus_celery_task_failures_total", {"task_name", "error_class"}),
@@ -99,9 +100,7 @@ def test_catalogue_names_are_prefixed_and_unique() -> None:
         ("argus_mcp_calls_total", {"tool", "status", "client_class"}),
     ],
 )
-def test_each_metric_has_required_labels(
-    metric_name: str, required_labels: set[str]
-) -> None:
+def test_each_metric_has_required_labels(metric_name: str, required_labels: set[str]) -> None:
     spec = next((s for s in METRIC_CATALOGUE if s.name == metric_name), None)
     assert spec is not None, f"missing metric in catalogue: {metric_name}"
     assert set(spec.labels) == required_labels
@@ -208,9 +207,7 @@ def test_mcp_client_class_unknown_replaced(
 ) -> None:
     record_mcp_call(tool="scan.start", status="success", client_class="evil-bot")
     samples = _samples(_isolated_registry, "argus_mcp_calls_total")
-    assert any(
-        lbls["client_class"] == OTHER_LABEL_VALUE for lbls, _ in samples
-    )
+    assert any(lbls["client_class"] == OTHER_LABEL_VALUE for lbls, _ in samples)
 
 
 # ---------------------------------------------------------------------------
@@ -253,9 +250,7 @@ def test_cardinality_warning_emitted_only_once_per_metric(
             duration_seconds=0.0,
         )
     cap_msgs = [r for r in caplog.records if "cardinality_cap_reached" in r.message]
-    metrics_warned = {
-        getattr(r, "metric", None) for r in cap_msgs if hasattr(r, "metric")
-    }
+    metrics_warned = {getattr(r, "metric", None) for r in cap_msgs if hasattr(r, "metric")}
     # 2000 calls produced AT MOST one warning per affected metric.
     assert len(cap_msgs) == len(metrics_warned)
     assert len(cap_msgs) <= 2
@@ -301,9 +296,7 @@ def test_record_llm_tokens_zero_is_noop(
 def test_record_llm_tokens_positive_emits(
     _isolated_registry: CollectorRegistry,
 ) -> None:
-    record_llm_tokens(
-        provider="anthropic", model="claude-3.5-sonnet", direction="in", tokens=120
-    )
+    record_llm_tokens(provider="anthropic", model="claude-3.5-sonnet", direction="in", tokens=120)
     samples = _samples(_isolated_registry, "argus_llm_tokens_total")
     assert samples
     _, value = samples[0]
@@ -331,16 +324,13 @@ def test_record_finding_emitted_severity_lowered(
 ) -> None:
     record_finding_emitted(tier="MIDGARD", severity="HIGH", kev_listed=False)
     samples = _samples(_isolated_registry, "argus_findings_emitted_total")
-    assert any(lbls["severity"] == "high" and lbls["tier"] == "midgard"
-               for lbls, _ in samples)
+    assert any(lbls["severity"] == "high" and lbls["tier"] == "midgard" for lbls, _ in samples)
 
 
 def test_record_mcp_call_status_validation_error_admitted(
     _isolated_registry: CollectorRegistry,
 ) -> None:
-    record_mcp_call(
-        tool="scan.start", status="validation_error", client_class="anthropic"
-    )
+    record_mcp_call(tool="scan.start", status="validation_error", client_class="anthropic")
     samples = _samples(_isolated_registry, "argus_mcp_calls_total")
     assert samples
 

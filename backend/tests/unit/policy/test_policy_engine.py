@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.core.observability import tenant_hash
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
@@ -28,7 +27,6 @@ from src.policy.policy_engine import (
     RateLimit,
     TenantPolicy,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,12 +129,8 @@ class TestPolicyEngineModels:
 
 
 class TestPolicyEngineHappyPath:
-    def test_low_risk_recon_allowed(
-        self, tenant_id: UUID, policy_engine: PolicyEngine
-    ) -> None:
-        decision = policy_engine.evaluate(
-            _ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW)
-        )
+    def test_low_risk_recon_allowed(self, tenant_id: UUID, policy_engine: PolicyEngine) -> None:
+        decision = policy_engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
         assert decision.allowed is True
         assert decision.failure_summary is None
         assert decision.requires_approval is False
@@ -241,9 +235,7 @@ class TestPlanTierCeiling:
 
 
 class TestPhaseRiskCap:
-    def test_recon_blocks_medium(
-        self, tenant_id: UUID, policy_engine: PolicyEngine
-    ) -> None:
+    def test_recon_blocks_medium(self, tenant_id: UUID, policy_engine: PolicyEngine) -> None:
         decision = policy_engine.evaluate(
             _ctx(
                 tenant_id=tenant_id,
@@ -438,14 +430,10 @@ class TestApprovalFlag:
     def test_low_risk_does_not_flag_approval(
         self, tenant_id: UUID, policy_engine: PolicyEngine
     ) -> None:
-        decision = policy_engine.evaluate(
-            _ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW)
-        )
+        decision = policy_engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
         assert decision.requires_approval is False
 
-    def test_high_risk_flags_approval(
-        self, tenant_id: UUID, policy_engine: PolicyEngine
-    ) -> None:
+    def test_high_risk_flags_approval(self, tenant_id: UUID, policy_engine: PolicyEngine) -> None:
         decision = policy_engine.evaluate(
             _ctx(
                 tenant_id=tenant_id,

@@ -123,8 +123,7 @@ def tls_probe_succeeded(tool_results: dict[str, Any]) -> bool:
         if not isinstance(res, dict):
             continue
         if any(hint in lname for hint in _TLS_TOOL_HINTS) and (
-            res.get("success")
-            or (isinstance(res.get("stdout"), str) and res["stdout"].strip())
+            res.get("success") or (isinstance(res.get("stdout"), str) and res["stdout"].strip())
         ):
             return True
     # Textual TLS_PROBE marker anywhere in tool output.
@@ -199,7 +198,11 @@ def reconcile_ports(
         if tls_live or (target or "").lower().startswith(("http://", "https://")):
             logger.warning(
                 "recon_port_scan_empty_fallback",
-                extra={"scan_id": scan_id, "fallback_ports": sorted(defaults), "target": target},
+                extra={
+                    "scan_id": scan_id,
+                    "fallback_ports": sorted(defaults),
+                    "target": target,
+                },
             )
             ports |= defaults
 

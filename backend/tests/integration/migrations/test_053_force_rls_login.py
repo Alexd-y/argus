@@ -133,7 +133,9 @@ async def _seed_user(session: AsyncSession, tenant_id: str, email: str) -> str:
 
 @pytestmark_pg
 @pytest.mark.requires_postgres
-async def test_force_rls_and_bootstrap_policy_present(async_engine: AsyncEngine) -> None:
+async def test_force_rls_and_bootstrap_policy_present(
+    async_engine: AsyncEngine,
+) -> None:
     """052 forced ``users`` and 053 installed the bootstrap SELECT policy."""
     async with async_engine.connect() as conn:
         forced = await conn.execute(
@@ -156,7 +158,9 @@ async def test_force_rls_and_bootstrap_policy_present(async_engine: AsyncEngine)
 
 @pytestmark_pg
 @pytest.mark.requires_postgres
-async def test_login_lookup_succeeds_without_tenant_context(async_engine: AsyncEngine) -> None:
+async def test_login_lookup_succeeds_without_tenant_context(
+    async_engine: AsyncEngine,
+) -> None:
     """The pre-auth login query (no GUC) still finds the user under FORCE RLS."""
     sm = async_sessionmaker(async_engine, expire_on_commit=False)
 
@@ -170,10 +174,7 @@ async def test_login_lookup_succeeds_without_tenant_context(async_engine: AsyncE
     async with sm() as s, s.begin():
         row = (
             await s.execute(
-                text(
-                    "SELECT tenant_id FROM users "
-                    "WHERE email = :e AND is_active = true"
-                ),
+                text("SELECT tenant_id FROM users WHERE email = :e AND is_active = true"),
                 {"e": "a@example.com"},
             )
         ).first()

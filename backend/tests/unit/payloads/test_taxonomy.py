@@ -27,7 +27,13 @@ FAMILIES = [
     FakeFamily("sqli_destructive", [89], risk_level="destructive", requires_approval=True),
     FakeFamily("xss_safe", [79], risk_level="low"),
     FakeFamily("xss_active", [79], risk_level="medium", requires_approval=True),
-    FakeFamily("ssrf_oast", [918], risk_level="high", oast_required=True, requires_approval=True),
+    FakeFamily(
+        "ssrf_oast",
+        [918],
+        risk_level="high",
+        oast_required=True,
+        requires_approval=True,
+    ),
     FakeFamily("unrelated", [200], risk_level="low"),
 ]
 
@@ -52,7 +58,10 @@ def test_quick_excludes_destructive_and_high_and_approval():
     assert "sqli_destructive" not in sel.family_ids  # destructive denied
     assert "sqli_safe" in sel.family_ids
     assert "sqli_error" in sel.family_ids  # medium allowed for quick
-    assert sel.denied.get("sqli_destructive") in {"risk_destructive_denied", "risk_ceiling_exceeded"}
+    assert sel.denied.get("sqli_destructive") in {
+        "risk_destructive_denied",
+        "risk_ceiling_exceeded",
+    }
 
 
 def test_light_allows_approval_gated_but_not_destructive():
@@ -94,8 +103,12 @@ def test_manifest_hash_is_stable_and_replayable():
 
 
 def test_manifest_hash_changes_with_profile():
-    a = map_taxonomy_to_families(PayloadTaxonomyQuery(vuln_category="sqli", scan_profile="quick"), FAMILIES)
-    b = map_taxonomy_to_families(PayloadTaxonomyQuery(vuln_category="sqli", scan_profile="deep"), FAMILIES)
+    a = map_taxonomy_to_families(
+        PayloadTaxonomyQuery(vuln_category="sqli", scan_profile="quick"), FAMILIES
+    )
+    b = map_taxonomy_to_families(
+        PayloadTaxonomyQuery(vuln_category="sqli", scan_profile="deep"), FAMILIES
+    )
     assert a.manifest_hash != b.manifest_hash
 
 

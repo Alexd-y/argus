@@ -66,16 +66,12 @@ class KevEntry(Base):
     cve_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     vendor_project: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     product: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    vulnerability_name: Mapped[str] = mapped_column(
-        String(500), nullable=False, default=""
-    )
+    vulnerability_name: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     date_added: Mapped[date] = mapped_column(Date, nullable=False)
     short_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     required_action: Mapped[str] = mapped_column(Text, nullable=False, default="")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
-    known_ransomware_use: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    known_ransomware_use: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -148,11 +144,7 @@ class KevCatalogRepository:
         """Convenience predicate (avoids materialising the full row)."""
         if not _CVE_RE.fullmatch(cve_id.upper()):
             return False
-        stmt = (
-            select(func.count())
-            .select_from(KevEntry)
-            .where(KevEntry.cve_id == cve_id.upper())
-        )
+        stmt = select(func.count()).select_from(KevEntry).where(KevEntry.cve_id == cve_id.upper())
         result = await self._session.execute(stmt)
         return int(result.scalar_one()) > 0
 
@@ -171,9 +163,7 @@ class KevCatalogRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
-    async def _upsert_chunk(
-        self, chunk: Sequence[KevRecord], *, dialect: str
-    ) -> int:
+    async def _upsert_chunk(self, chunk: Sequence[KevRecord], *, dialect: str) -> int:
         if dialect == "postgresql":
             return await self._upsert_chunk_postgres(chunk)
         return await self._upsert_chunk_generic(chunk)

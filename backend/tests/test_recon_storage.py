@@ -1,7 +1,6 @@
 """Tests for recon storage — key building and path traversal protection."""
 
 import pytest
-
 from src.recon.storage import build_recon_object_key, get_stage_name
 
 

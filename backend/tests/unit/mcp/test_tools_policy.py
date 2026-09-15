@@ -17,7 +17,7 @@ from uuid import UUID
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
+from pydantic import ValidationError
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -119,9 +119,7 @@ class TestScopeVerify:
         assert result.allowed is False
         assert result.failure_summary
 
-    def test_cross_tenant_id_in_payload_rejected(
-        self, app: FastMCP, other_tenant_id: str
-    ) -> None:
+    def test_cross_tenant_id_in_payload_rejected(self, app: FastMCP, other_tenant_id: str) -> None:
         with pytest.raises(TenantMismatchError):
             _call(
                 app,
@@ -134,7 +132,7 @@ class TestScopeVerify:
 
     def test_invalid_target_rejected(self) -> None:
         # Empty target is rejected at schema time by Pydantic.
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ScopeVerifyInput(target="")
 
 

@@ -63,7 +63,14 @@ class TestSeverityFromCvss:
 
     def test_low_finding_not_inflated(self):
         out = _postprocess_findings_cvss(
-            [{"title": "Verbose banner", "severity": "low", "cvss": 2.0, "description": "info leak"}]
+            [
+                {
+                    "title": "Verbose banner",
+                    "severity": "low",
+                    "cvss": 2.0,
+                    "description": "info leak",
+                }
+            ]
         )
         low = _by_title(out, "Verbose banner")
         assert low["severity"] == "low"  # upgrade-only: 2.0 stays low

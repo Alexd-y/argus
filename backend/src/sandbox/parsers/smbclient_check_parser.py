@@ -39,7 +39,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -97,7 +97,7 @@ _SHARE_ROW_RE: Final[re.Pattern[str]] = re.compile(
 _SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"^\s*---+\s+---+(?:\s+---+)?\s*$")
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------

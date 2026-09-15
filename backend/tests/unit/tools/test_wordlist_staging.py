@@ -40,9 +40,7 @@ def test_pair_list_stages_credentials_file(tmp_path):
 def test_materialize_writes_and_copies(tmp_path):
     pass_src = tmp_path / "src_pass.txt"
     pass_src.write_text("password\n123456\n", encoding="utf-8")
-    plan = CredentialTestPlan(
-        enabled=True, inline_usernames=("admin",), password_path=pass_src
-    )
+    plan = CredentialTestPlan(enabled=True, inline_usernames=("admin",), password_path=pass_src)
     in_dir = tmp_path / "in"
     written = materialize_staging(plan_wordlist_staging(plan), in_dir)
     names = {p.name for p in written}

@@ -133,10 +133,10 @@ class QuickScheduler:
     ) -> None:
         self._workflow = workflow
         self._budget = budget_manager if budget_manager is not None else get_quick_budget_manager()
-        self._breaker = circuit_breaker if circuit_breaker is not None else default_circuit_breaker()
-        self._idempotency = (
-            idempotency if idempotency is not None else default_idempotency_store()
+        self._breaker = (
+            circuit_breaker if circuit_breaker is not None else default_circuit_breaker()
         )
+        self._idempotency = idempotency if idempotency is not None else default_idempotency_store()
         self._clock: Clock = clock if clock is not None else SystemClock()
         self._per_host_limit = max(1, per_host_running_limit)
         self._plan_version = max(1, plan_version)
@@ -272,7 +272,11 @@ class QuickScheduler:
             emit_quick_audit_event(
                 "quick.tool",
                 scan_id=scan_id,
-                payload={"tool_id": task.tool_id, "task_id": task.task_id, "stage": task.stage.value},
+                payload={
+                    "tool_id": task.tool_id,
+                    "task_id": task.task_id,
+                    "stage": task.stage.value,
+                },
             )
             return SchedulePick(task, skipped_task_ids=tuple(skipped))
 

@@ -131,7 +131,9 @@ def _effective_tenant_for_scan_create(body_tenant_id: str | None, tenant_id_head
 ScanCreateMode = Literal["quick", "standard", "deep", "lab"]
 
 
-def _map_max_phases_to_scan_mode(max_phases: int) -> Literal["quick", "standard", "deep"]:
+def _map_max_phases_to_scan_mode(
+    max_phases: int,
+) -> Literal["quick", "standard", "deep"]:
     if max_phases <= 2:
         return "quick"
     if max_phases <= 5:
@@ -167,7 +169,29 @@ def _sync_scan_depth_options(
         flags = options_dict.get("scan_approval_flags")
         if not isinstance(flags, dict):
             flags = {}
-        for tool in ("sqlmap", "commix", "hydra", "medusa", "dalfox", "xsstrike", "ffuf", "nuclei", "wfuzz", "gobuster", "feroxbuster", "testssl", "sslscan", "whatweb", "nikto", "theharvester", "gospider", "parsero", "wpscan", "joomscan", "droopescan"):
+        for tool in (
+            "sqlmap",
+            "commix",
+            "hydra",
+            "medusa",
+            "dalfox",
+            "xsstrike",
+            "ffuf",
+            "nuclei",
+            "wfuzz",
+            "gobuster",
+            "feroxbuster",
+            "testssl",
+            "sslscan",
+            "whatweb",
+            "nikto",
+            "theharvester",
+            "gospider",
+            "parsero",
+            "wpscan",
+            "joomscan",
+            "droopescan",
+        ):
             flags.setdefault(tool, True)
         options_dict["scan_approval_flags"] = flags
         allowlist = _merge_lab_allowed_targets(
@@ -221,7 +245,9 @@ def _normalize_lab_allowed_target(value: str) -> str:
     return parsed.netloc
 
 
-def _quick_http_error(exc: QuickCreateError | UnknownQuickProfileError) -> HTTPException:
+def _quick_http_error(
+    exc: QuickCreateError | UnknownQuickProfileError,
+) -> HTTPException:
     code = getattr(exc, "code", "quick_create_error")
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -297,9 +323,7 @@ async def _persist_scan_start(
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
 
-        result = await session.execute(
-            select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-        )
+        result = await session.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
         if not result.scalar_one_or_none():
             session.add(Tenant(id=tenant_id, name="default"))
             await session.flush()
@@ -457,7 +481,10 @@ async def create_scan(
         if conflicts:
             raise ConflictingProfileFieldsError(
                 "scan_profile conflicts with legacy scan_mode/execution_mode fields",
-                details={"conflicting_fields": conflicts, "scan_profile": req.scan_profile},
+                details={
+                    "conflicting_fields": conflicts,
+                    "scan_profile": req.scan_profile,
+                },
             )
         quick_hint = req.quick.profile if req.quick is not None else None
         resolved_profile = resolve_scan_profile(req.scan_profile, quick_profile=quick_hint)
@@ -533,9 +560,7 @@ async def create_scan(
         try:
             TargetConfig.from_json(req.auth_config)
         except Exception as exc:  # invalid engagement config → 422 (re-raised)
-            raise HTTPException(
-                status_code=422, detail=f"invalid auth_config: {exc}"
-            ) from exc
+            raise HTTPException(status_code=422, detail=f"invalid auth_config: {exc}") from exc
         options_dict["auth_config"] = req.auth_config
 
     # Full-Surface credential-testing authorization: brute-force is authorized
@@ -543,9 +568,7 @@ async def create_scan(
     # disabled otherwise. When Full Surface and no explicit config is supplied,
     # ARGUS attaches its own bounded default set (from its wordlist base).
     _existing_auth = (
-        options_dict.get("auth_config")
-        if isinstance(options_dict.get("auth_config"), dict)
-        else {}
+        options_dict.get("auth_config") if isinstance(options_dict.get("auth_config"), dict) else {}
     )
     _ct_in: CredentialTestConfig | None = None
     _raw_ct = (_existing_auth or {}).get("credential_testing")
@@ -596,9 +619,7 @@ async def create_scan(
             if manifest_opt is not None:
                 options_dict["lab_scope_manifest"] = manifest_opt
 
-        result = await session.execute(
-            select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-        )
+        result = await session.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
         if not result.scalar_one_or_none():
             tenant = Tenant(id=tenant_id, name="default")
             session.add(tenant)
@@ -700,7 +721,8 @@ async def get_scan(
                 else None
             ),
             resolved_scan_mode=getattr(scan, "resolved_scan_mode", None)
-            or str(getattr(scan, "scan_mode", None) or "") or None,
+            or str(getattr(scan, "scan_mode", None) or "")
+            or None,
             nuclei_profile=getattr(scan, "nuclei_profile", None),
             engagement_id=getattr(scan, "engagement_id", None),
             lab_lease_id=getattr(scan, "lab_lease_id", None),
@@ -790,7 +812,14 @@ async def get_scan_plan(
                 plan_version=0,
                 deadline_at=format_created_at_iso_z(deadline),
                 budget=budget,
-                stages=["discovery", "fingerprint", "test", "verify", "triage", "report"],
+                stages=[
+                    "discovery",
+                    "fingerprint",
+                    "test",
+                    "verify",
+                    "triage",
+                    "report",
+                ],
                 tasks=[],
                 fallbacks=["deterministic_planner"],
                 coverage_intent=[],
@@ -824,7 +853,10 @@ async def cancel_scan(
             )
         await session.execute(
             update(Scan)
-            .where(cast(Scan.id, String) == scan_id, cast(Scan.tenant_id, String) == tenant_id)
+            .where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
             .values(status="cancelled", phase="cancelled")
         )
         await session.commit()
@@ -922,9 +954,7 @@ def _finding_row_to_gate_dict(
     }
 
 
-def _gate_finding_rows(
-    rows: list[FindingModel], *, default_target: str = ""
-) -> list[FindingModel]:
+def _gate_finding_rows(rows: list[FindingModel], *, default_target: str = "") -> list[FindingModel]:
     """Return the gated + deduped subset of DB finding rows (order preserved).
 
     Uses the shared :func:`gate_and_dedupe_findings` so the UI list matches the
@@ -934,8 +964,7 @@ def _gate_finding_rows(
     if not rows:
         return rows
     dicts = [
-        _finding_row_to_gate_dict(f, i, default_target=default_target)
-        for i, f in enumerate(rows)
+        _finding_row_to_gate_dict(f, i, default_target=default_target) for i, f in enumerate(rows)
     ]
     kept = gate_and_dedupe_findings(
         dicts,
@@ -966,7 +995,10 @@ async def get_scan_findings_top(
         result = await session.execute(
             select(FindingModel)
             .where(cast(FindingModel.scan_id, String) == scan_id)
-            .order_by(desc(FindingModel.adversarial_score).nulls_last(), desc(FindingModel.created_at))
+            .order_by(
+                desc(FindingModel.adversarial_score).nulls_last(),
+                desc(FindingModel.created_at),
+            )
             .limit(limit)
         )
         findings = list(result.scalars().all())
@@ -999,9 +1031,7 @@ async def get_scan_findings_statistics(
         ).all()
         # Canonical 6-band counts (matches MCP / reports / frontend). Blank /
         # unrecognised labels fold into ``unknown`` rather than being dropped.
-        by_severity = aggregate_counts(
-            (row[0], int(row[1])) for row in sev_rows
-        ).as_dict()
+        by_severity = aggregate_counts((row[0], int(row[1])) for row in sev_rows).as_dict()
 
         owasp_rows = (
             await session.execute(
@@ -1212,9 +1242,7 @@ async def export_scan_findings_sarif(
     validated_only: bool = Query(False),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StreamingResponse:
-    return await _stream_scan_findings_export(
-        scan_id, "sarif", tenant_id, severity, validated_only
-    )
+    return await _stream_scan_findings_export(scan_id, "sarif", tenant_id, severity, validated_only)
 
 
 @router.get(
@@ -1229,9 +1257,7 @@ async def export_scan_findings_junit(
     validated_only: bool = Query(False),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StreamingResponse:
-    return await _stream_scan_findings_export(
-        scan_id, "junit", tenant_id, severity, validated_only
-    )
+    return await _stream_scan_findings_export(scan_id, "junit", tenant_id, severity, validated_only)
 
 
 @router.get("/{scan_id}/artifacts", response_model=list[ScanArtifactItem])
@@ -1315,7 +1341,9 @@ async def get_scan_report(
     """Scan-first report download (v4); reuses reports download pipeline."""
     tier_norm = tier.lower().strip()
     if tier_norm not in _REPORT_TIERS:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid tier")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid tier"
+        )
 
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
@@ -1352,7 +1380,9 @@ async def get_scan_report(
             )
             return (await session.execute(stmt)).scalar_one_or_none()
 
-        async def _newest_report_with_artifact(prefer_requested_tier: bool) -> ReportModel | None:
+        async def _newest_report_with_artifact(
+            prefer_requested_tier: bool,
+        ) -> ReportModel | None:
             conds = [*base_where, ReportObject.format == fmt]
             if prefer_requested_tier:
                 conds.append(ReportModel.tier == tier_norm)
@@ -1532,7 +1562,7 @@ async def export_burp_config(
         raise HTTPException(
             status_code=500,
             detail=f"Burp config generation failed: {exc}",
-        )
+        ) from exc
 
 
 @router.get("/{scan_id}/memory-summary")
@@ -1562,9 +1592,7 @@ async def get_scan_memory_summary(
         ).all()
         # Canonical 6-band counts (matches MCP / reports / frontend). Blank /
         # unrecognised labels fold into ``unknown`` rather than being dropped.
-        by_severity = aggregate_counts(
-            (row[0], int(row[1])) for row in sev_rows
-        ).as_dict()
+        by_severity = aggregate_counts((row[0], int(row[1])) for row in sev_rows).as_dict()
 
         owasp_rows = (
             await session.execute(
@@ -1782,8 +1810,17 @@ async def generate_all_scan_reports(
 
 # SSE event types per api-contracts/sse-polling.md
 SSE_EVENT_TYPES = frozenset(
-    {"phase_start", "phase_complete", "tool_run", "finding", "progress", "complete", "error"}
+    {
+        "phase_start",
+        "phase_complete",
+        "tool_run",
+        "finding",
+        "progress",
+        "complete",
+        "error",
+    }
 )
+
 
 def _filter_sse_output_data(event_type: str, data: dict | None) -> dict | None:
     """
@@ -1833,7 +1870,9 @@ def _build_sse_payload(ev: ScanEvent) -> dict:
     if ev.message:
         payload["message"] = ev.message
     if ev.event == "error":
-        payload["error"] = ev.message or (ev.data.get("error") if ev.data else None) or "Unknown error"
+        payload["error"] = (
+            ev.message or (ev.data.get("error") if ev.data else None) or "Unknown error"
+        )
     filtered_data = _filter_sse_output_data(ev.event, ev.data)
     if filtered_data:
         payload["data"] = filtered_data
@@ -1861,6 +1900,7 @@ async def get_scan_events(
     """SSE stream for scan events from DB. Content-Type: text/event-stream.
     Emits: phase_start, progress, complete, error, keepalive (every 15s).
     Polls scan_events until complete/failed. Keepalive comments prevent nginx/proxy timeouts."""
+
     async def event_generator():
         try:
             seen_event_ids: set[str] = set()
@@ -1899,7 +1939,12 @@ async def get_scan_events(
                 if not events and not seen_event_ids:
                     yield _format_sse_event(
                         "init",
-                        {"event": "init", "phase": "init", "progress": 0, "message": "Scan started"},
+                        {
+                            "event": "init",
+                            "phase": "init",
+                            "progress": 0,
+                            "message": "Scan started",
+                        },
                     )
                     seen_event_ids.add("__init__")
 

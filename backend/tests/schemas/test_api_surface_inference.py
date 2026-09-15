@@ -2,18 +2,19 @@ import json
 from pathlib import Path
 
 import pytest
-from src.schemas.ai.api_surface_inference import ApiSurfaceInferenceInput, ApiSurfaceInferenceOutput
-from src.schemas.ai.common import ReconAiTask, build_task_metadata
 from pydantic import ValidationError
+from src.schemas.ai.api_surface_inference import (
+    ApiSurfaceInferenceInput,
+    ApiSurfaceInferenceOutput,
+)
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 
 
 def test_api_surface_example_validates() -> None:
     payload = json.loads(
-        (EXAMPLES_AI_OUTPUTS_DIR / "api_surface_inference.example.json").read_text(
-            encoding="utf-8"
-        )
+        (EXAMPLES_AI_OUTPUTS_DIR / "api_surface_inference.example.json").read_text(encoding="utf-8")
     )
     parsed = ApiSurfaceInferenceOutput.model_validate(payload)
     assert parsed.api_surface

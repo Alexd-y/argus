@@ -138,7 +138,9 @@ def _normalize_domain_host(raw: str) -> str:
     return s.strip(".") or s
 
 
-_DOMAIN_LABEL = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_DOMAIN_LABEL = re.compile(
+    r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 
 
 def _is_plausible_domain(host: str) -> bool:
@@ -334,7 +336,9 @@ async def osint_domain(body: IntelligenceOsintDomainRequest) -> JSONResponse:
 
 
 @router.get("/shodan")
-async def intelligence_shodan(ip: str = Query(..., min_length=2, max_length=64)) -> JSONResponse:
+async def intelligence_shodan(
+    ip: str = Query(..., min_length=2, max_length=64),
+) -> JSONResponse:
     ip = ip.strip()
     try:
         ipaddress.ip_address(ip)

@@ -37,7 +37,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -47,7 +46,6 @@ from src.sandbox.parsers import dispatch_parse
 from src.sandbox.parsers.ffuf_parser import EVIDENCE_SIDECAR_NAME
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # Shell metacharacters audited on the rendered argv. Mirrors the static
@@ -203,9 +201,7 @@ def test_dispatch_parse_with_three_records_yields_three_findings(
         tool_id="ffuf_dir",
     )
 
-    assert len(findings) == 3, (
-        f"expected 3 findings (one per record), got {len(findings)}"
-    )
+    assert len(findings) == 3, f"expected 3 findings (one per record), got {len(findings)}"
     for finding in findings:
         # Content discovery is INFO category in the parser layer.
         assert finding.category is FindingCategory.INFO

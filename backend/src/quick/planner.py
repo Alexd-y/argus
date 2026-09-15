@@ -474,7 +474,10 @@ def _emit_plan_observability(
         emit_quick_audit_event(
             "quick.revision",
             scan_id=request.scan_id,
-            payload={"plan_version": request.plan_version, "task_count": len(plan.tasks)},
+            payload={
+                "plan_version": request.plan_version,
+                "task_count": len(plan.tasks),
+            },
         )
     emit_quick_audit_event(
         "quick.plan",

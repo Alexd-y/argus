@@ -198,7 +198,9 @@ async def cache_keys(
     pat = _require_argus_pattern(pattern)
     r = get_redis()
     if not r:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable"
+        )
 
     def _scan() -> dict[str, Any]:
         try:
@@ -221,7 +223,9 @@ async def cache_get_key(
     k = _require_argus_key(key)
     r = get_redis()
     if not r:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable"
+        )
 
     def _get() -> dict[str, Any]:
         t = r.type(k)
@@ -254,7 +258,9 @@ async def cache_delete_key(
     k = _require_argus_key(key)
     r = get_redis()
     if not r:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable"
+        )
 
     def _del() -> bool:
         return bool(r.delete(k))
@@ -342,12 +348,12 @@ async def cache_scan_scope(
 ) -> dict[str, Any]:
     r = get_redis()
     if not r:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable"
+        )
 
     async with async_session_factory() as session:
-        tr = await session.execute(
-            select(ToolRun).where(cast(ToolRun.scan_id, String) == scan_id)
-        )
+        tr = await session.execute(select(ToolRun).where(cast(ToolRun.scan_id, String) == scan_id))
         rows = list(tr.scalars().all())
 
     cached_results: list[dict[str, Any]] = []
@@ -397,4 +403,3 @@ async def cache_scan_scope(
         cached_results.append(await asyncio.to_thread(_lookup_row, row))
 
     return {"scan_id": scan_id, "cached_results": cached_results}
-

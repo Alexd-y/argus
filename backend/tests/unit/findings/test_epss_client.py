@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from src.findings.epss_client import EpssClient
-from tests.unit.findings.conftest import FakeHttpClient, FakeHttpResponse, FakeRedis
 
+from tests.unit.findings.conftest import FakeHttpClient, FakeHttpResponse, FakeRedis
 
 # ---------------------------------------------------------------------------
 # Construction
@@ -74,9 +73,7 @@ async def test_lowercase_cve_normalised_to_upper_for_cache(
 # ---------------------------------------------------------------------------
 
 
-async def test_cache_hit_skips_http(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_cache_hit_skips_http(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_redis.store["argus:epss:CVE-2024-12345"] = "0.42"
     client = EpssClient(fake_http, fake_redis)
     assert await client.get("CVE-2024-12345") == 0.42
@@ -99,9 +96,7 @@ async def test_cache_miss_fetches_and_caches(
     assert "cve=CVE-2024-12345" in fake_http.calls[0][0]
 
 
-async def test_cache_returns_bytes(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_cache_returns_bytes(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_redis.store["argus:epss:CVE-2024-12345"] = "0.7"
 
     class BytesRedis(FakeRedis):
@@ -139,9 +134,7 @@ async def test_cache_out_of_range_value_falls_through(
 
 
 async def test_no_redis_works_without_caching(fake_http: FakeHttpClient) -> None:
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"data": [{"epss": "0.5"}]}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"data": [{"epss": "0.5"}]})
     client = EpssClient(fake_http, redis_client=None)
     assert await client.get("CVE-2024-12345") == 0.5
 
@@ -157,9 +150,7 @@ async def test_http_timeout_returns_none(fake_redis: FakeRedis) -> None:
     assert await client.get("CVE-2024-12345") is None
 
 
-async def test_http_non_200_returns_none(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_http_non_200_returns_none(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_http.response = FakeHttpResponse(status_code=503)
     client = EpssClient(fake_http, fake_redis)
     assert await client.get("CVE-2024-12345") is None
@@ -201,9 +192,7 @@ async def test_redis_get_failure_falls_through(
     fake_http: FakeHttpClient,
 ) -> None:
     redis = FakeRedis(raise_on_get=True)
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"data": [{"epss": "0.3"}]}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"data": [{"epss": "0.3"}]})
     client = EpssClient(fake_http, redis)
     assert await client.get("CVE-2024-12345") == 0.3
 
@@ -212,9 +201,7 @@ async def test_redis_set_failure_does_not_raise(
     fake_http: FakeHttpClient, caplog: pytest.LogCaptureFixture
 ) -> None:
     redis = FakeRedis(raise_on_set=True)
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"data": [{"epss": "0.6"}]}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"data": [{"epss": "0.6"}]})
     client = EpssClient(fake_http, redis)
     with caplog.at_level(logging.WARNING, logger="src.findings.epss_client"):
         assert await client.get("CVE-2024-12345") == 0.6
@@ -231,8 +218,7 @@ async def test_invalid_cve_logs_warning(
     with caplog.at_level(logging.WARNING, logger="src.findings.epss_client"):
         assert await client.get("not-a-cve") is None
     assert any(
-        "epss_invalid_cve" in r.message or "epss.invalid_cve" in r.message
-        for r in caplog.records
+        "epss_invalid_cve" in r.message or "epss.invalid_cve" in r.message for r in caplog.records
     )
 
 
@@ -351,13 +337,9 @@ async def test_fetch_epss_batch_chunks_requests(
 async def test_fetch_epss_batch_filters_invalid_cves(
     fake_http: FakeHttpClient, fake_redis: FakeRedis
 ) -> None:
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"data": []}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"data": []})
     client = EpssClient(fake_http, fake_redis)
-    rows = await client.fetch_epss_batch(
-        ["", "not-a-cve", "CVE-99999", "CVE-2024-12345"]
-    )
+    rows = await client.fetch_epss_batch(["", "not-a-cve", "CVE-99999", "CVE-2024-12345"])
     # Only the one valid CVE survives the validator + reaches the batch fetch.
     assert rows == {}
     assert len(fake_http.calls) == 1
@@ -367,13 +349,9 @@ async def test_fetch_epss_batch_filters_invalid_cves(
 async def test_fetch_epss_batch_dedupes_inputs(
     fake_http: FakeHttpClient, fake_redis: FakeRedis
 ) -> None:
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"data": []}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"data": []})
     client = EpssClient(fake_http, fake_redis)
-    await client.fetch_epss_batch(
-        ["CVE-2024-12345", "cve-2024-12345", "CVE-2024-12345"]
-    )
+    await client.fetch_epss_batch(["CVE-2024-12345", "cve-2024-12345", "CVE-2024-12345"])
     # Single chunk, single CVE.
     assert len(fake_http.calls) == 1
     url = fake_http.calls[0][0]

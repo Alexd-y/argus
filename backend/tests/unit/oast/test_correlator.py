@@ -22,13 +22,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.oast.correlator import (
     InteractionKind,
     OASTCorrelator,
@@ -37,7 +36,6 @@ from src.oast.correlator import (
 from src.oast.provisioner import (
     InternalOASTProvisioner,
 )
-
 
 _TENANT = UUID("11111111-1111-1111-1111-111111111111")
 _SCAN = UUID("22222222-2222-2222-2222-222222222222")
@@ -71,9 +69,7 @@ def _build_interaction(
 class TestOASTInteraction:
     def test_build_hashes_raw_bytes(self) -> None:
         interaction = _build_interaction(token_id=uuid4(), raw=b"hello world")
-        assert (
-            interaction.raw_request_hash == hashlib.sha256(b"hello world").hexdigest()
-        )
+        assert interaction.raw_request_hash == hashlib.sha256(b"hello world").hexdigest()
 
     def test_metadata_strips_control_characters(self) -> None:
         interaction = _build_interaction(
@@ -194,12 +190,8 @@ class TestOASTCorrelator:
         internal_provisioner: InternalOASTProvisioner,
     ) -> None:
         token = internal_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN)
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.DNS_A)
-        )
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST)
-        )
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.DNS_A))
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST))
         dns_only = correlator.list_interactions(token.id, kinds=[InteractionKind.DNS_A])
         assert len(dns_only) == 1
         assert dns_only[0].kind is InteractionKind.DNS_A
@@ -305,9 +297,7 @@ class TestWaitForInteraction:
     ) -> None:
         token = internal_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN)
         # Dispatch a DNS interaction; the wait filters for HTTP only.
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.DNS_A)
-        )
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.DNS_A))
         result = await correlator.wait_for_interaction(
             token.id,
             timeout_s=1,
@@ -316,9 +306,7 @@ class TestWaitForInteraction:
         assert result == []
 
         # Now ingest matching kind and re-wait.
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST)
-        )
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST))
         result = await correlator.wait_for_interaction(
             token.id,
             timeout_s=1,
@@ -407,12 +395,8 @@ class TestWaitForInteractionRegressions:
         # Late match must surface within the 200 ms budget called out in
         # the ARG-007 review.
         assert matching_ingest_time, "matching ingest never ran"
-        elapsed_after_match = (
-            asyncio.get_running_loop().time() - matching_ingest_time[0]
-        )
-        assert elapsed_after_match < 0.2, (
-            f"slow resolution: {elapsed_after_match * 1000:.1f} ms"
-        )
+        elapsed_after_match = asyncio.get_running_loop().time() - matching_ingest_time[0]
+        assert elapsed_after_match < 0.2, f"slow resolution: {elapsed_after_match * 1000:.1f} ms"
 
     @pytest.mark.asyncio()
     async def test_wait_for_interaction_multiple_waiters_one_wakes_all_filter_correctly(
@@ -442,12 +426,8 @@ class TestWaitForInteractionRegressions:
         # before the waiters even register their event.
         await asyncio.sleep(0.01)
 
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.DNS_A)
-        )
-        correlator.ingest(
-            _build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST)
-        )
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.DNS_A))
+        correlator.ingest(_build_interaction(token_id=token.id, kind=InteractionKind.HTTP_REQUEST))
 
         dns_result, http_result = await asyncio.gather(waiter_dns, waiter_http)
 
@@ -484,12 +464,10 @@ class TestCorrelatorPurgeExpired:
         self,
         internal_provisioner: InternalOASTProvisioner,
     ) -> None:
-        correlator = self._correlator_with_short_retention(
-            internal_provisioner, timedelta(hours=1)
-        )
+        correlator = self._correlator_with_short_retention(internal_provisioner, timedelta(hours=1))
         token = internal_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN)
 
-        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         old = now - timedelta(hours=2)
         recent = now - timedelta(minutes=10)
 
@@ -515,7 +493,7 @@ class TestCorrelatorPurgeExpired:
         def clock() -> datetime:
             return moments[-1]
 
-        moments.append(datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc))
+        moments.append(datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC))
         provisioner = InternalOASTProvisioner(
             base_domain="oast.argus.local",
             clock=clock,
@@ -552,7 +530,7 @@ class TestCorrelatorPurgeExpired:
         deterministic_uuid_factory: Callable[[], UUID],
         deterministic_token_factory: Callable[[int], str],
     ) -> None:
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]
@@ -606,7 +584,7 @@ class TestCorrelatorPurgeExpired:
         """A waiter parked on an event whose token gets purged must be
         unblocked promptly so it returns its (empty) snapshot rather than
         hanging until its own deadline."""
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]

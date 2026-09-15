@@ -30,16 +30,13 @@ from src.sandbox.parsers.commix_parser import (
 )
 
 _GET_ADDR_RESULTS = (
-    "[+] The (GET) 'addr' parameter is vulnerable to (results-based) "
-    "command injection technique."
+    "[+] The (GET) 'addr' parameter is vulnerable to (results-based) command injection technique."
 )
 _GET_ADDR_TIME = (
-    "[+] The (GET) 'addr' parameter is vulnerable to (time-based) "
-    "command injection technique."
+    "[+] The (GET) 'addr' parameter is vulnerable to (time-based) command injection technique."
 )
 _POST_NAME = (
-    "[+] The (POST) 'name' parameter is vulnerable to (time-based) "
-    "command injection technique."
+    "[+] The (POST) 'name' parameter is vulnerable to (time-based) command injection technique."
 )
 _URL_LEVEL = "[+] The target URL appears to be vulnerable to command injection attacks."
 
@@ -73,16 +70,12 @@ def test_evidence_records_param_and_method(tmp_path: Path) -> None:
 
 
 def test_multiple_techniques_same_param_collapse(tmp_path: Path) -> None:
-    findings = parse_commix(
-        _stdout(_GET_ADDR_RESULTS, _GET_ADDR_TIME), b"", tmp_path, "commix"
-    )
+    findings = parse_commix(_stdout(_GET_ADDR_RESULTS, _GET_ADDR_TIME), b"", tmp_path, "commix")
     assert len(findings) == 1
 
 
 def test_distinct_parameters_kept_separate(tmp_path: Path) -> None:
-    findings = parse_commix(
-        _stdout(_GET_ADDR_RESULTS, _POST_NAME), b"", tmp_path, "commix"
-    )
+    findings = parse_commix(_stdout(_GET_ADDR_RESULTS, _POST_NAME), b"", tmp_path, "commix")
     assert len(findings) == 2
 
 
@@ -94,9 +87,7 @@ def test_url_level_only_emits_one_finding(tmp_path: Path) -> None:
 
 
 def test_url_level_suppressed_when_param_level_present(tmp_path: Path) -> None:
-    findings = parse_commix(
-        _stdout(_GET_ADDR_RESULTS, _URL_LEVEL), b"", tmp_path, "commix"
-    )
+    findings = parse_commix(_stdout(_GET_ADDR_RESULTS, _URL_LEVEL), b"", tmp_path, "commix")
     assert len(findings) == 1
     rows = [
         json.loads(line)

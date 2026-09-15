@@ -61,9 +61,7 @@ def test_get_scan_strategy_merges_owasp_and_cwe_dedupes_skills(
     assert strat["tools"] == ["sqlmap", "dalfox", "nuclei", "semgrep", "ffuf"]
 
 
-def test_warm_cache_no_crash_with_mock_redis(
-    kb: ScanKnowledgeBase, mock_redis: MagicMock
-) -> None:
+def test_warm_cache_no_crash_with_mock_redis(kb: ScanKnowledgeBase, mock_redis: MagicMock) -> None:
     kb.warm_cache()
     mock_redis.pipeline.assert_called_once()
     pipe = mock_redis.pipeline.return_value
@@ -95,7 +93,9 @@ def test_stats_structure_redis_backend(kb: ScanKnowledgeBase, mock_redis: MagicM
     assert isinstance(st["memory_usage_estimate_bytes"], int)
 
 
-def test_enrich_from_recon_va_orchestrator_sample_findings(mock_redis: MagicMock) -> None:
+def test_enrich_from_recon_va_orchestrator_sample_findings(
+    mock_redis: MagicMock,
+) -> None:
     skb_module._kb_instance = None
     findings: list[dict] = [
         {

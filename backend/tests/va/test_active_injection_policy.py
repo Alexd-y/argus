@@ -6,7 +6,6 @@ import logging
 from types import SimpleNamespace
 
 import pytest
-
 from src.core import config as core_config
 from src.recon.mcp.policy import evaluate_tool_approval_policy
 from src.reports.report_quality_gate import (
@@ -22,37 +21,29 @@ def test_destructive_tools_fail_closed_without_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     caplog.set_level(logging.INFO, logger="src.recon.mcp.policy")
-    assert evaluate_tool_approval_policy("sqlmap", scan_approval_flags=None).reason == "requires_lab_mode"
-    assert any(
-        getattr(r, "event", None) == "destructive_requires_approval" for r in caplog.records
+    assert (
+        evaluate_tool_approval_policy("sqlmap", scan_approval_flags=None).reason
+        == "requires_lab_mode"
     )
+    assert any(getattr(r, "event", None) == "destructive_requires_approval" for r in caplog.records)
 
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True, raising=False)
-    monkeypatch.setattr(
-        core_config.settings, "argus_destructive_lab_mode", True, raising=False
+    monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True, raising=False)
+    monkeypatch.setattr(core_config.settings, "argus_kill_switch_required", False, raising=False)
+    assert (
+        evaluate_tool_approval_policy("sqlmap", scan_approval_flags={"sqlmap": True}).allowed
+        is True
     )
-    monkeypatch.setattr(
-        core_config.settings, "argus_kill_switch_required", False, raising=False
-    )
-    assert evaluate_tool_approval_policy("sqlmap", scan_approval_flags={"sqlmap": True}).allowed is True
 
 
 def test_quick_active_injection_mode_blocks_destructive_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        core_config.settings, "argus_active_injection_mode", "quick", raising=False
-    )
+    monkeypatch.setattr(core_config.settings, "argus_active_injection_mode", "quick", raising=False)
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True, raising=False)
-    monkeypatch.setattr(
-        core_config.settings, "argus_destructive_lab_mode", True, raising=False
-    )
-    monkeypatch.setattr(
-        core_config.settings, "argus_kill_switch_required", False, raising=False
-    )
-    d = evaluate_tool_approval_policy(
-        "sqlmap", scan_approval_flags={"sqlmap": True}
-    )
+    monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True, raising=False)
+    monkeypatch.setattr(core_config.settings, "argus_kill_switch_required", False, raising=False)
+    d = evaluate_tool_approval_policy("sqlmap", scan_approval_flags={"sqlmap": True})
     assert d.allowed is False
     assert d.reason == "active_injection_quick_blocks_destructive"
 
@@ -61,15 +52,9 @@ def test_destructive_blocked_when_kill_switch_preflight_not_cleared(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True, raising=False)
-    monkeypatch.setattr(
-        core_config.settings, "argus_destructive_lab_mode", True, raising=False
-    )
-    monkeypatch.setattr(
-        core_config.settings, "argus_kill_switch_required", True, raising=False
-    )
-    decision = evaluate_tool_approval_policy(
-        "sqlmap", scan_approval_flags={"sqlmap": True}
-    )
+    monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True, raising=False)
+    monkeypatch.setattr(core_config.settings, "argus_kill_switch_required", True, raising=False)
+    decision = evaluate_tool_approval_policy("sqlmap", scan_approval_flags={"sqlmap": True})
     assert decision.allowed is False
     assert decision.reason == "requires_kill_switch_clearance"
 
@@ -81,9 +66,14 @@ def test_injection_confirmed_downgraded_without_oast_or_xss_browser() -> None:
         "confidence": "confirmed",
         "injection_family": "xss",
         "evidence_refs": ["a1", "a2"],
-        "proof_of_concept": {"payload": "<script>1</script>", "raw_response": "<html>x</html>"},
+        "proof_of_concept": {
+            "payload": "<script>1</script>",
+            "raw_response": "<html>x</html>",
+        },
     }
-    assert any("xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(xss))
+    assert any(
+        "xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(xss)
+    )
     out = normalize_findings_for_report([xss])
     assert str(out[0].get("confidence")) == "likely"
 

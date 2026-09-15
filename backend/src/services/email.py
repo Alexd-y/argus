@@ -7,6 +7,7 @@ disabled) and the caller should return 503.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -106,7 +107,5 @@ async def send_reset_email(
         logger.exception("Failed to send password-reset email to %s", to_address)
         raise
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await smtp.quit()
-        except Exception:
-            pass

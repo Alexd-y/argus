@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-import pytest
-
+from src.recon.vulnerability_analysis.confirmation_policy import (
+    evaluate_confirmation_policy,
+    get_blocking_reasons_for_next_phase,
+)
+from src.recon.vulnerability_analysis.contradiction_analysis import (
+    analyze_contradictions,
+)
+from src.recon.vulnerability_analysis.evidence_sufficiency import (
+    evaluate_evidence_sufficiency,
+)
 from src.schemas.vulnerability_analysis.scenario_mapping import (
     FindingAssetLink,
     FindingScenarioLink,
     FindingToScenarioMap,
 )
 from src.schemas.vulnerability_analysis.schemas import FindingStatus
-from src.recon.vulnerability_analysis.confirmation_policy import (
-    evaluate_confirmation_policy,
-    get_blocking_reasons_for_next_phase,
-)
-from src.recon.vulnerability_analysis.contradiction_analysis import analyze_contradictions
-from src.recon.vulnerability_analysis.evidence_sufficiency import evaluate_evidence_sufficiency
 
 
 def _make_sufficient_finding(finding_id: str = "f1") -> dict:
@@ -84,9 +86,7 @@ def test_evaluate_confirmed_with_linkage_valid_for_gate() -> None:
             )
         ],
     )
-    result = evaluate_confirmation_policy(
-        suff, cont, "r1", "j1", scenario_map=scenario_map
-    )
+    result = evaluate_confirmation_policy(suff, cont, "r1", "j1", scenario_map=scenario_map)
     d = result.decisions[0]
     assert d.recommended_status == FindingStatus.CONFIRMED
     assert d.is_valid_for_gate is True
@@ -142,9 +142,7 @@ def test_get_blocking_reasons_ready_when_valid_confirmed() -> None:
         boundary_links=[],
         asset_links=[],
     )
-    result = evaluate_confirmation_policy(
-        suff, cont, "r1", "j1", scenario_map=scenario_map
-    )
+    result = evaluate_confirmation_policy(suff, cont, "r1", "j1", scenario_map=scenario_map)
     reasons = get_blocking_reasons_for_next_phase(result)
     assert "blocked_no_confirmed_findings" not in reasons
     assert "blocked_confirmed_findings_invalid_for_gate" not in reasons

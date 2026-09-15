@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from src.mcp.schemas.approval import (
     ApprovalDecideInput,
     ApprovalDecisionAction,
@@ -53,7 +52,6 @@ from src.mcp.schemas.tool_run import (
     ToolRunStatusInput,
     ToolRunTriggerInput,
 )
-
 
 # ---------------------------------------------------------------------------
 # Common primitives
@@ -386,9 +384,7 @@ class TestPolicyEvaluateInput:
 
     def test_high_cost_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            PolicyEvaluateInput(
-                tool_id="nuclei", target="example.com", estimated_cost_cents=20_000
-            )
+            PolicyEvaluateInput(tool_id="nuclei", target="example.com", estimated_cost_cents=20_000)
 
 
 class TestScopeVerifyInput:

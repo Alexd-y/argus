@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.web_workbench.intruder.positions import IntruderError
 from src.web_workbench.intruder.strategies import (
     Strategy,

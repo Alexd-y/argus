@@ -28,7 +28,7 @@ def _coverage_from_findings(findings, *, evidence_validated: bool):
         wid for f in findings if f.get("_has_evidence") for wid in wstg_ids_for_finding(f)
     )
     decisions = decide_applicability(finding_test_ids=finding_test_ids)
-    ev = {tid: evidence_validated for tid in aggregated}
+    ev = dict.fromkeys(aggregated, evidence_validated)
     states = build_wstg_states(
         decisions=decisions, aggregated=aggregated, evidence_validated_by_test=ev
     )
@@ -71,7 +71,14 @@ class TestCoverageFromFindings:
         assert report.coverage_pct is not None and report.coverage_pct > 0.0
 
     def test_finding_without_evidence_does_not_count(self) -> None:
-        findings = [{"id": "tls-1", "title": "TLS weak", "cwe": "CWE-319", "_has_evidence": False}]
+        findings = [
+            {
+                "id": "tls-1",
+                "title": "TLS weak",
+                "cwe": "CWE-319",
+                "_has_evidence": False,
+            }
+        ]
         report = _coverage_from_findings(findings, evidence_validated=False)
         # Producer emits a partial (evidence_present=False) → never counts (§3.5).
         assert report.counted == 0

@@ -1,17 +1,17 @@
 from pydantic import BaseModel
 
 __all__ = [
+    "AuthTestingContextV2",
+    "AuthorizationTesting",
+    "MfaTesting",
     "SessionTesting",
     "TokenTesting",
-    "MfaTesting",
-    "AuthorizationTesting",
-    "AuthTestingContextV2",
     "build_auth_testing_context",
     "build_idor_tests",
+    "detect_authorization_testing",
+    "detect_mfa_testing",
     "detect_session_testing",
     "detect_token_testing",
-    "detect_mfa_testing",
-    "detect_authorization_testing",
 ]
 
 
@@ -54,7 +54,7 @@ class AuthTestingContextV2(BaseModel):
     tools_used: list[str] = []
 
 
-def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTestingContextV2:
+def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTestingContextV2:  # noqa: ARG001 - retained for signature/API compatibility
     context = AuthTestingContextV2(
         testing_methodology="OWASP WSTG + PTES",
         tools_used=["nuclei", "sqlmap", "dalfox"],
@@ -85,7 +85,7 @@ def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTesti
     return context
 
 
-def build_idor_tests(endpoint: str, target_field: str) -> dict:
+def build_idor_tests(endpoint: str, target_field: str) -> dict:  # noqa: ARG001 - retained for signature/API compatibility
     return {
         "endpoint": endpoint,
         "original_value": "user-001",

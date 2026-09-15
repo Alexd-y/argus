@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.recon.exploitation.custom_xss_poc import (
     collect_xss_payloads,
     resolve_xss_payload_file_path,
@@ -76,12 +75,7 @@ async def test_run_custom_xss_script_context_alert1_high_cvss() -> None:
     """Payload alert(1) reflected inside <script>: CWE-79, CVSS >= 7, high."""
     params = [{"url": "https://ex.test/page?world=1", "param": "world", "method": "GET"}]
     mock_resp = MagicMock()
-    mock_resp.text = (
-        "<!doctype html><script>\n"
-        "// reflected probe\n"
-        "alert(1)\n"
-        "</script>"
-    )
+    mock_resp.text = "<!doctype html><script>\n// reflected probe\nalert(1)\n</script>"
 
     with patch("httpx.AsyncClient") as client_cls:
         inst = MagicMock()

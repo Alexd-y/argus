@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
-
 from src.reports.data_collector import (
     FindingRow,
     ReportRowSlice,
@@ -25,7 +24,9 @@ from src.reports.generators import (
     generate_json,
     generate_pdf,
 )
-from src.reports.jinja_minimal_context import offline_minimal_jinja_context_from_report_data
+from src.reports.jinja_minimal_context import (
+    offline_minimal_jinja_context_from_report_data,
+)
 from src.services.reporting import (
     ReportContextBuildResult,
     ReportGenerator,
@@ -152,9 +153,7 @@ async def test_build_report_export_payload_finds_scan_only_finding_and_full_jinj
     sa = jctx.get("scan_artifacts")
     assert isinstance(sa, dict) and "phase_blocks" in sa and "status" in sa
 
-    minimal = offline_minimal_jinja_context_from_report_data(
-        report_data, "midgard"
-    )
+    minimal = offline_minimal_jinja_context_from_report_data(report_data, "midgard")
     assert "report_language" not in minimal
 
 
@@ -191,7 +190,9 @@ def test_rpt006_shared_finding_in_machine_and_html_outputs(
 
 @pytest.mark.weasyprint_pdf
 @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
-def test_rpt006_pdf_contains_finding_marker(rpt006_built: ReportContextBuildResult) -> None:
+def test_rpt006_pdf_contains_finding_marker(
+    rpt006_built: ReportContextBuildResult,
+) -> None:
     """PDF (WeasyPrint when available) includes the same CVE / title bytes as other formats."""
     gen = ReportGenerator()
     texts = gen.ai_results_to_text_map(rpt006_built.ai_section_results)
@@ -200,9 +201,7 @@ def test_rpt006_pdf_contains_finding_marker(rpt006_built: ReportContextBuildResu
         texts,
         report_id=_REPORT_ID,
     )
-    pdf = generate_pdf(
-        report_data, jinja_context=rpt006_built.template_context, tier="midgard"
-    )
+    pdf = generate_pdf(report_data, jinja_context=rpt006_built.template_context, tier="midgard")
     assert isinstance(pdf, bytes) and pdf.startswith(b"%PDF")
     # Text extraction: CVE id or title substring should appear in content stream
     assert _RPT006_CVE.encode() in pdf or b"Log4j" in pdf

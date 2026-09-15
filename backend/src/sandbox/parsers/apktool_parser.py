@@ -27,7 +27,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -53,24 +53,18 @@ _CANONICAL_NAMES: Final[tuple[str, ...]] = ("apktool.log", "apktool.txt")
 _MAX_INFO_FINDINGS: Final[int] = 200
 
 
-_DEBUG_RE: Final[re.Pattern[str]] = re.compile(
-    r'android:debuggable\s*=\s*"true"', re.IGNORECASE
-)
-_BACKUP_RE: Final[re.Pattern[str]] = re.compile(
-    r'android:allowBackup\s*=\s*"true"', re.IGNORECASE
-)
+_DEBUG_RE: Final[re.Pattern[str]] = re.compile(r'android:debuggable\s*=\s*"true"', re.IGNORECASE)
+_BACKUP_RE: Final[re.Pattern[str]] = re.compile(r'android:allowBackup\s*=\s*"true"', re.IGNORECASE)
 _CLEARTEXT_RE: Final[re.Pattern[str]] = re.compile(
     r"cleartextTraffic(?:Permitted)?\s*=\s*\"?true\"?", re.IGNORECASE
 )
 _TARGET_SDK_RE: Final[re.Pattern[str]] = re.compile(
     r"targetSdkVersion\s*[=:]\s*\"?(?P<sdk>\d+)\"?", re.IGNORECASE
 )
-_LOG_LEVEL_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?P<level>I|W|E):\s+(?P<message>.+)$"
-)
+_LOG_LEVEL_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<level>I|W|E):\s+(?P<message>.+)$")
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_apktool(

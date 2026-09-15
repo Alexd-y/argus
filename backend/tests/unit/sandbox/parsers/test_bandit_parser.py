@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -69,9 +68,7 @@ def _result(
     return record
 
 
-def _envelope(
-    *results: dict[str, Any], errors: list[Any] | None = None
-) -> dict[str, Any]:
+def _envelope(*results: dict[str, Any], errors: list[Any] | None = None) -> dict[str, Any]:
     return {
         "errors": errors or [],
         "generated_at": "2026-04-19T12:00:00Z",
@@ -166,15 +163,9 @@ def test_dedup_collapses_identical_test_id_filename_line(tmp_path: Path) -> None
 def test_results_sorted_severity_desc_then_id_then_path(tmp_path: Path) -> None:
     payload = _payload(
         _envelope(
-            _result(
-                test_id="B101", filename="z.py", line=1, severity="LOW", cwe_id=200
-            ),
-            _result(
-                test_id="B602", filename="a.py", line=1, severity="HIGH", cwe_id=78
-            ),
-            _result(
-                test_id="B608", filename="b.py", line=1, severity="MEDIUM", cwe_id=89
-            ),
+            _result(test_id="B101", filename="z.py", line=1, severity="LOW", cwe_id=200),
+            _result(test_id="B602", filename="a.py", line=1, severity="HIGH", cwe_id=78),
+            _result(test_id="B608", filename="b.py", line=1, severity="MEDIUM", cwe_id=89),
         )
     )
     parse_bandit_json(payload, b"", tmp_path, "bandit")
@@ -198,17 +189,13 @@ def test_missing_test_id_is_dropped_with_warning(
     )
 
 
-def test_malformed_json_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_malformed_json_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_bandit_json(b"{not-json", b"", tmp_path, "bandit")
     assert findings == []
 
 
-def test_envelope_not_dict_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_bandit_json(b"[]", b"", tmp_path, "bandit")
     assert findings == []

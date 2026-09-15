@@ -62,7 +62,9 @@ def current_audit_context() -> dict[str, Any]:
     return dict(context) if context is not None else {}
 
 
-def write_mcp_audit_meta(recon_dir: str | Path, *, stage: str, run_id: str, job_id: str, trace_id: str) -> Path:
+def write_mcp_audit_meta(
+    recon_dir: str | Path, *, stage: str, run_id: str, job_id: str, trace_id: str
+) -> Path:
     """Write trace linkage metadata artifact for report evidence."""
     base = Path(recon_dir)
     base.mkdir(parents=True, exist_ok=True)
@@ -176,7 +178,10 @@ def build_mcp_trace_from_audit(recon_dir: str | Path) -> Path | None:
             except json.JSONDecodeError:
                 logger.warning(
                     "mcp_audit_parse_failed",
-                    extra={"event_type": "mcp_audit_parse_failed", "line_preview": line[:100]},
+                    extra={
+                        "event_type": "mcp_audit_parse_failed",
+                        "line_preview": line[:100],
+                    },
                 )
                 continue
 
@@ -193,7 +198,12 @@ def build_mcp_trace_from_audit(recon_dir: str | Path) -> Path | None:
             out_summary = raw.get("output_summary")
             if out_summary is None:
                 out_summary = (
-                    json.dumps({"status": "denied", "reason": str(raw.get("decision_reason", ""))})
+                    json.dumps(
+                        {
+                            "status": "denied",
+                            "reason": str(raw.get("decision_reason", "")),
+                        }
+                    )
                     if not allowed
                     else None
                 )

@@ -27,8 +27,7 @@ _NAABU_STDOUT = "alleksy.com:80\nalleksy.com:443\n"
 _HTTPX_STDOUT = "https://alleksy.com:8443 [200]\nhttps://alleksy.com [200]\n"
 
 _WHATWEB_STDOUT = (
-    "https://alleksy.com/ [200 OK] nginx, HTTPServer[nginx], "
-    "Cloudflare, jQuery, Bootstrap, HSTS"
+    "https://alleksy.com/ [200 OK] nginx, HTTPServer[nginx], Cloudflare, jQuery, Bootstrap, HSTS"
 )
 
 _TESTSSL_STDOUT = "Testing protocols on alleksy.com:443\nTLSv1.2 offered\n"

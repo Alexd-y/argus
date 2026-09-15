@@ -21,7 +21,6 @@ from collections.abc import Iterator
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers.providers_health import router
 from src.api.schemas import ProviderHealth
 from src.core.provider_health_registry import (
@@ -41,7 +40,7 @@ def isolated_registry() -> Iterator[ProviderHealthRegistry]:
 
 
 @pytest.fixture
-def app(isolated_registry: ProviderHealthRegistry) -> FastAPI:  # noqa: ARG001
+def app(isolated_registry: ProviderHealthRegistry) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     return app
@@ -53,7 +52,8 @@ def client(app: FastAPI) -> TestClient:
 
 
 def test_cold_start_returns_ok_with_all_known_providers(
-    client: TestClient, isolated_registry: ProviderHealthRegistry  # noqa: ARG001
+    client: TestClient,
+    isolated_registry: ProviderHealthRegistry,
 ) -> None:
     resp = client.get("/providers/health")
     assert resp.status_code == 200
@@ -65,7 +65,8 @@ def test_cold_start_returns_ok_with_all_known_providers(
 
 
 def test_response_state_values_are_closed_taxonomy(
-    client: TestClient, isolated_registry: ProviderHealthRegistry  # noqa: ARG001
+    client: TestClient,
+    isolated_registry: ProviderHealthRegistry,
 ) -> None:
     allowed = {"closed", "open", "half_open", "unknown"}
     body = client.get("/providers/health").json()
@@ -136,7 +137,8 @@ def test_unknown_provider_does_not_appear_in_response(
 
 
 def test_response_validates_against_pydantic_schema(
-    client: TestClient, isolated_registry: ProviderHealthRegistry  # noqa: ARG001
+    client: TestClient,
+    isolated_registry: ProviderHealthRegistry,
 ) -> None:
     body = client.get("/providers/health").json()
     for p in body["providers"]:
@@ -155,7 +157,8 @@ def test_endpoint_never_returns_503(
 
 
 def test_response_shape_has_no_extra_fields(
-    client: TestClient, isolated_registry: ProviderHealthRegistry  # noqa: ARG001
+    client: TestClient,
+    isolated_registry: ProviderHealthRegistry,
 ) -> None:
     body = client.get("/providers/health").json()
     expected_keys = {"status", "providers"}
@@ -173,7 +176,8 @@ def test_response_shape_has_no_extra_fields(
 
 
 def test_repeated_calls_are_idempotent(
-    client: TestClient, isolated_registry: ProviderHealthRegistry  # noqa: ARG001
+    client: TestClient,
+    isolated_registry: ProviderHealthRegistry,
 ) -> None:
     first = client.get("/providers/health").json()
     second = client.get("/providers/health").json()

@@ -38,7 +38,6 @@ import logging
 from pathlib import Path
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -47,7 +46,6 @@ from src.sandbox.parsers.nmap_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_nmap_xml,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixture builders — synthesise the canonical Nmap ``-oX`` envelope.
@@ -351,10 +349,7 @@ def test_vulners_emits_one_finding_per_cve(tmp_path: Path) -> None:
     cve_records = [row for row in sidecar if row.get("kind") == "vuln"]
     cve_ids = {row["cve_id"] for row in cve_records}
     assert cve_ids == {"CVE-2021-41773", "CVE-2021-42013"}
-    assert all(
-        f.category in (FindingCategory.INFO, FindingCategory.SUPPLY_CHAIN)
-        for f in findings
-    )
+    assert all(f.category in (FindingCategory.INFO, FindingCategory.SUPPLY_CHAIN) for f in findings)
     vuln_findings = [f for f in findings if f.category is FindingCategory.SUPPLY_CHAIN]
     assert len(vuln_findings) == 2
 
@@ -590,9 +585,7 @@ def test_sidecar_written_with_tool_id(tmp_path: Path) -> None:
     """Each sidecar row carries the source ``tool_id``."""
     xml = _envelope(
         [
-            _host_block(
-                ports=_port_block(portid=22, service=_service_block(name="ssh"))
-            ),
+            _host_block(ports=_port_block(portid=22, service=_service_block(name="ssh"))),
         ]
     )
     parse_nmap_xml(xml.encode("utf-8"), b"", tmp_path, "nmap_version")
@@ -700,9 +693,7 @@ def test_billion_laughs_payload_returns_empty(
         "</host></nmaprun>"
     )
     with caplog.at_level(logging.WARNING):
-        findings = parse_nmap_xml(
-            payload.encode("utf-8"), b"", tmp_path, "nmap_tcp_top"
-        )
+        findings = parse_nmap_xml(payload.encode("utf-8"), b"", tmp_path, "nmap_tcp_top")
     assert findings == []
 
 
@@ -715,9 +706,7 @@ def test_malformed_xml_returns_empty(
     with caplog.at_level(logging.WARNING):
         findings = parse_nmap_xml(payload, b"", tmp_path, "nmap_tcp_top")
     assert findings == []
-    assert any(
-        record.message == "nmap_parser.xml_malformed" for record in caplog.records
-    )
+    assert any(record.message == "nmap_parser.xml_malformed" for record in caplog.records)
 
 
 def test_oversized_stdout_dropped(
@@ -729,9 +718,7 @@ def test_oversized_stdout_dropped(
     with caplog.at_level(logging.WARNING):
         findings = parse_nmap_xml(big, b"", tmp_path, "nmap_tcp_top")
     assert findings == []
-    assert any(
-        record.message == "nmap_parser.stdout_oversize" for record in caplog.records
-    )
+    assert any(record.message == "nmap_parser.stdout_oversize" for record in caplog.records)
 
 
 def test_host_with_no_addr_skipped(tmp_path: Path) -> None:
@@ -754,11 +741,7 @@ def test_host_without_ports_block_skipped(tmp_path: Path) -> None:
     """Missing ``<ports>`` element → no findings, no crash."""
     xml = (
         _HEADER
-        + (
-            '<host><status state="up"/>'
-            '<address addr="10.0.0.1" addrtype="ipv4"/>'
-            "</host>"
-        )
+        + ('<host><status state="up"/><address addr="10.0.0.1" addrtype="ipv4"/></host>')
         + _FOOTER
     )
     findings = parse_nmap_xml(xml.encode("utf-8"), b"", tmp_path, "nmap_tcp_top")
@@ -879,9 +862,7 @@ def test_unknown_tool_id_uses_legacy_filename(tmp_path: Path) -> None:
     """Unknown tool IDs only probe the legacy ``nmap.xml`` filename."""
     legacy_xml = _envelope(
         [
-            _host_block(
-                ports=_port_block(portid=22, service=_service_block(name="ssh"))
-            ),
+            _host_block(ports=_port_block(portid=22, service=_service_block(name="ssh"))),
         ]
     )
     (tmp_path / "nmap.xml").write_text(legacy_xml, encoding="utf-8")

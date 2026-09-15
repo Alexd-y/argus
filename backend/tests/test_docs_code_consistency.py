@@ -31,7 +31,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from src.celery_app import app as celery_app
 from src.llm.facade import _CLOUD_FALLBACK_TASKS, _CLOUD_PREFERRED_TASKS
 from src.llm.task_router import LLMTask
@@ -125,21 +124,22 @@ def test_phase_tables_are_internally_consistent() -> None:
 
 def test_cloud_fallback_set_is_exactly_report_and_osint() -> None:
     """Only report-supplement + OSINT tasks may fall back to a cloud provider."""
-    assert _CLOUD_FALLBACK_TASKS == frozenset(
-        {
-            LLMTask.REPORT_SECTION,
-            LLMTask.EXECUTIVE_SUMMARY,
-            LLMTask.COST_SUMMARY,
-            LLMTask.PERPLEXITY_OSINT,
-        }
+    assert (
+        frozenset(
+            {
+                LLMTask.REPORT_SECTION,
+                LLMTask.EXECUTIVE_SUMMARY,
+                LLMTask.COST_SUMMARY,
+                LLMTask.PERPLEXITY_OSINT,
+            }
+        )
+        == _CLOUD_FALLBACK_TASKS
     )
 
 
 def test_cloud_preferred_set_is_exactly_exploit_and_poc() -> None:
     """Cloud-preferred routing is the documented exploit/PoC-JSON exception only."""
-    assert _CLOUD_PREFERRED_TASKS == frozenset(
-        {LLMTask.EXPLOIT_GENERATION, LLMTask.POC_GENERATION}
-    )
+    assert frozenset({LLMTask.EXPLOIT_GENERATION, LLMTask.POC_GENERATION}) == _CLOUD_PREFERRED_TASKS
 
 
 def test_core_analysis_tasks_never_route_to_cloud() -> None:
@@ -182,9 +182,7 @@ def test_docs_contain_canonical_phase_chain(doc_path: Path) -> None:
     """Docs must show the exact ordered phase chain from ``PHASE_ORDER``."""
     chain = " → ".join(p.value for p in PHASE_ORDER)
     doc = _collapse_ws(_read_doc(doc_path))
-    assert chain in doc, (
-        f"{doc_path.name} is missing the canonical phase chain:\n  {chain}"
-    )
+    assert chain in doc, f"{doc_path.name} is missing the canonical phase chain:\n  {chain}"
 
 
 # --------------------------------------------------------------------------- #

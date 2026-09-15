@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.schemas.threat_modeling.schemas import EntryPoint, ThreatModelInputBundle
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.mcp.audit import MCP_AUDIT_LOG_FILENAME
 from src.recon.mcp.policy import (
     THREAT_MODELING_POLICY_ID,
@@ -16,6 +14,8 @@ from src.recon.mcp.policy import (
 )
 from src.recon.threat_modeling.mcp_enrichment import enrich_with_mcp
 from src.recon.vulnerability_analysis.mcp_enrichment import enrich_va_bundle_with_mcp
+from src.schemas.threat_modeling.schemas import EntryPoint, ThreatModelInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 class TestEvaluateThreatModelingPolicy:
@@ -207,7 +207,9 @@ class TestEnrichWithMCP:
 
         audit_log = tmp_path / MCP_AUDIT_LOG_FILENAME
         if audit_log.exists():
-            lines = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
+            lines = [
+                line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()
+            ]
             assert any("fetch" in json.loads(line).get("tool", "") for line in lines)
 
 

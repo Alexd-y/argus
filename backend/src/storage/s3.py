@@ -109,14 +109,12 @@ def _get_client():
             # custom endpoints. Real AWS S3 keeps virtual-hosted style.
             ep_lower = endpoint.lower()
             custom_s3 = "amazonaws.com" not in ep_lower
-            s3_opts: dict[str, str] | None = (
-                {"addressing_style": "path"} if custom_s3 else None
-            )
-            base_cfg = dict(
-                signature_version="s3v4",
-                retries={"max_attempts": 3, "mode": "standard"},
-                s3=s3_opts,
-            )
+            s3_opts: dict[str, str] | None = {"addressing_style": "path"} if custom_s3 else None
+            base_cfg = {
+                "signature_version": "s3v4",
+                "retries": {"max_attempts": 3, "mode": "standard"},
+                "s3": s3_opts,
+            }
             try:
                 client_cfg = Config(
                     **base_cfg,
@@ -207,7 +205,9 @@ def build_raw_phase_object_key(
     ph = _sanitize_path_component(phase, "phase")
     raw_seg = _sanitize_path_component(OBJECT_TYPE_RAW, "object_type")
     ts = _sanitize_path_component(timestamp, "timestamp")
-    if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(artifact_type.strip()):
+    if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(
+        artifact_type.strip()
+    ):
         raise ValueError(
             "Invalid artifact_type: use snake_case (lowercase letters, digits, underscores; "
             "start with a letter)"
@@ -273,7 +273,10 @@ def upload_recon_summary_json(tenant_id: str, scan_id: str, obj: Any) -> str | N
         )
         return key
     except Exception:
-        logger.warning("recon_summary_upload_failed", extra={"event": "recon_summary_upload_failed"})
+        logger.warning(
+            "recon_summary_upload_failed",
+            extra={"event": "recon_summary_upload_failed"},
+        )
         return None
 
 
@@ -296,9 +299,7 @@ def upload_raw_artifact(
     if not client:
         return None
     try:
-        key = build_raw_phase_object_key(
-            tenant_id, scan_id, phase, timestamp, artifact_type, ext
-        )
+        key = build_raw_phase_object_key(tenant_id, scan_id, phase, timestamp, artifact_type, ext)
     except ValueError:
         logger.warning(
             "Invalid raw artifact key parameters",
@@ -538,7 +539,10 @@ def upload_report_artifact(
     try:
         key = build_report_object_key(tenant_id, scan_id, tier, report_id, fmt)
     except ValueError:
-        logger.warning("Invalid report artifact key parameters", extra={"tenant_id": tenant_id, "scan_id": scan_id})
+        logger.warning(
+            "Invalid report artifact key parameters",
+            extra={"tenant_id": tenant_id, "scan_id": scan_id},
+        )
         return None
     bucket = _bucket_for_object_key(key)
     try:
@@ -782,9 +786,7 @@ def _key_is_scan_raw_path(key: str, tenant_id: str, scan_id: str) -> bool:
     rest = key[len(prefix) :]
     if rest.startswith(f"{OBJECT_TYPE_RAW}/"):
         return True
-    return any(
-        rest.startswith(f"{ph}/{OBJECT_TYPE_RAW}/") for ph in RAW_ARTIFACT_PHASES
-    )
+    return any(rest.startswith(f"{ph}/{OBJECT_TYPE_RAW}/") for ph in RAW_ARTIFACT_PHASES)
 
 
 def _list_objects_all_pages(client: Any, bucket: str, prefix: str) -> list[dict[str, Any]]:
@@ -867,7 +869,11 @@ def list_scan_artifacts(
                 key = obj.get("Key")
                 if not key or key in seen:
                     continue
-                if phase is None and raw_only and not _key_is_scan_raw_path(key, tenant_id, scan_id):
+                if (
+                    phase is None
+                    and raw_only
+                    and not _key_is_scan_raw_path(key, tenant_id, scan_id)
+                ):
                     continue
                 seen.add(key)
                 lm = obj.get("LastModified")

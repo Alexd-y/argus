@@ -9,7 +9,7 @@ the port validator refuses out-of-range values.
 from __future__ import annotations
 
 import pytest
-
+from pydantic import ValidationError
 from src.core.config import Settings
 
 
@@ -52,7 +52,7 @@ class TestDefaults:
 class TestPortValidation:
     @pytest.mark.parametrize("port", [0, -1, 65_536, 100_000])
     def test_invalid_port_rejected(self, port: int) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Settings(_env_file=None, mcp_http_port=port)  # type: ignore[call-arg]
 
     @pytest.mark.parametrize("port", [1, 80, 8080, 65_535])

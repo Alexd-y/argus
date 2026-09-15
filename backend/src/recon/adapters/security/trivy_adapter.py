@@ -52,9 +52,7 @@ class TrivyAdapter(SecurityToolAdapter):
             pass
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize to VULNERABILITY findings."""
         findings: list[dict[str, Any]] = []
         for item in raw_results:
@@ -64,19 +62,21 @@ class TrivyAdapter(SecurityToolAdapter):
             severity = item.get("Severity", "UNKNOWN")
             target_name = item.get("_target", "")
             value = f"{target_name}:{pkg}:{vuln_id}"
-            findings.append({
-                "finding_type": FindingType.VULNERABILITY,
-                "value": value,
-                "data": {
-                    "vulnerability_id": vuln_id,
-                    "package": pkg,
-                    "installed_version": installed,
-                    "fixed_version": item.get("FixedVersion"),
-                    "severity": severity,
-                    "title": item.get("Title"),
-                    "target": target_name,
-                },
-                "source_tool": "trivy",
-                "confidence": 0.95,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.VULNERABILITY,
+                    "value": value,
+                    "data": {
+                        "vulnerability_id": vuln_id,
+                        "package": pkg,
+                        "installed_version": installed,
+                        "fixed_version": item.get("FixedVersion"),
+                        "severity": severity,
+                        "title": item.get("Title"),
+                        "target": target_name,
+                    },
+                    "source_tool": "trivy",
+                    "confidence": 0.95,
+                }
+            )
         return findings

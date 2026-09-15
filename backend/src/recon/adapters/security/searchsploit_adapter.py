@@ -134,10 +134,12 @@ class SearchsploitAdapter(SecurityToolAdapter):
         for line in raw.splitlines():
             m = _TEXT_ROW_RE.match(line)
             if m:
-                rows.append({
-                    "Title": m.group("title").strip(),
-                    "Path": m.group("path").strip(),
-                })
+                rows.append(
+                    {
+                        "Title": m.group("title").strip(),
+                        "Path": m.group("path").strip(),
+                    }
+                )
         return rows
 
     def _extract_cves(self, item: dict[str, Any]) -> list[str]:
@@ -146,18 +148,13 @@ class SearchsploitAdapter(SecurityToolAdapter):
         found = sorted({c.upper() for c in _CVE_RE.findall(blob)})
         return found[:16]
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Map exploit rows to vulnerability-shaped findings (CVE in ``data`` when present)."""
         cap = 24
         findings: list[dict[str, Any]] = []
         for item in raw_results[:cap]:
             title = str(
-                item.get("Title")
-                or item.get("title")
-                or item.get("Name")
-                or "Exploit-DB entry",
+                item.get("Title") or item.get("title") or item.get("Name") or "Exploit-DB entry",
             ).strip()
             edb = str(item.get("EDB-ID") or item.get("edb-id") or item.get("id") or "").strip()
             path = str(item.get("Path") or item.get("path") or "").strip()
@@ -168,20 +165,22 @@ class SearchsploitAdapter(SecurityToolAdapter):
             if cves:
                 value_parts.append(cves[0])
             value = ":".join(value_parts)[:512]
-            findings.append({
-                "finding_type": FindingType.VULNERABILITY,
-                "value": value,
-                "data": {
-                    "type": "exploit_db",
-                    "name": title[:400],
-                    "severity": "info",
-                    "edb_id": edb or None,
-                    "exploit_path": path or None,
-                    "cves": cves,
-                    "platform": item.get("Platform") or item.get("platform"),
-                    "verified": item.get("Verified") or item.get("verified"),
-                },
-                "source_tool": "searchsploit",
-                "confidence": 0.55,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.VULNERABILITY,
+                    "value": value,
+                    "data": {
+                        "type": "exploit_db",
+                        "name": title[:400],
+                        "severity": "info",
+                        "edb_id": edb or None,
+                        "exploit_path": path or None,
+                        "cves": cves,
+                        "platform": item.get("Platform") or item.get("platform"),
+                        "verified": item.get("Verified") or item.get("verified"),
+                    },
+                    "source_tool": "searchsploit",
+                    "confidence": 0.55,
+                }
+            )
         return findings

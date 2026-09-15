@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import ast
 import inspect
 from pathlib import Path
-
-import pytest
 
 BACKEND_SRC = Path(__file__).resolve().parent.parent / "src"
 
@@ -18,17 +15,13 @@ class TestAiPromptsPassesTask:
         from src.orchestration import ai_prompts
 
         source = inspect.getsource(ai_prompts._call_llm_with_json_retry)
-        assert "task=" in source, (
-            "_call_llm_with_json_retry must pass task= to call_llm_unified"
-        )
+        assert "task=" in source, "_call_llm_with_json_retry must pass task= to call_llm_unified"
 
     def test_call_llm_unified_imported(self) -> None:
         from src.orchestration import ai_prompts
 
         source = inspect.getsource(ai_prompts)
-        assert "call_llm_unified" in source, (
-            "ai_prompts must import and use call_llm_unified"
-        )
+        assert "call_llm_unified" in source, "ai_prompts must import and use call_llm_unified"
 
 
 class TestVaOrchestratorUsesCallLlmUnified:

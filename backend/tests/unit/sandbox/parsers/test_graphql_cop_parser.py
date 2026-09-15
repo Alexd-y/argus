@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -149,9 +148,7 @@ def test_authorization_header_in_curl_redacted(tmp_path: Path) -> None:
         '-d \'{"query":"{__schema{types{name}}}"}\' '
         "https://api.example.com/graphql"
     )
-    parse_graphql_cop_json(
-        _payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop"
-    )
+    parse_graphql_cop_json(_payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "Bearer abc.def.ghi" not in sidecar
     assert "REDACTED-AUTH" in sidecar
@@ -159,9 +156,7 @@ def test_authorization_header_in_curl_redacted(tmp_path: Path) -> None:
 
 def test_cookie_header_in_curl_redacted(tmp_path: Path) -> None:
     curl = "curl -H 'Cookie: session=abcdef.session.token' http://x"
-    parse_graphql_cop_json(
-        _payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop"
-    )
+    parse_graphql_cop_json(_payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "abcdef.session.token" not in sidecar
     assert "REDACTED-AUTH" in sidecar
@@ -169,9 +164,7 @@ def test_cookie_header_in_curl_redacted(tmp_path: Path) -> None:
 
 def test_x_api_key_header_in_curl_redacted(tmp_path: Path) -> None:
     curl = "curl -H 'X-API-Key: hunter2-rotated' http://x"
-    parse_graphql_cop_json(
-        _payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop"
-    )
+    parse_graphql_cop_json(_payload(_entry(curl_verify=curl)), b"", tmp_path, "graphql_cop")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "hunter2-rotated" not in sidecar
     assert "REDACTED-AUTH" in sidecar
@@ -189,9 +182,7 @@ def test_severity_to_cvss_mapping(tmp_path: Path) -> None:
     assert scores == pytest.approx([3.0, 5.0, 7.5, 9.0])
 
 
-def test_payload_not_array_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_payload_not_array_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     canonical = tmp_path / "graphqlcop.json"
     canonical.write_bytes(b'{"unexpected": true}')
     with caplog.at_level("WARNING"):
@@ -236,13 +227,9 @@ def test_payload_with_only_negative_results_returns_empty(tmp_path: Path) -> Non
     assert parse_graphql_cop_json(payload, b"", tmp_path, "graphql_cop") == []
 
 
-def test_non_object_entries_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_non_object_entries_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Top-level array containing non-objects must be skipped (debug log)."""
-    payload = json.dumps(["not-an-object", 42, _entry(title="Real Check")]).encode(
-        "utf-8"
-    )
+    payload = json.dumps(["not-an-object", 42, _entry(title="Real Check")]).encode("utf-8")
     with caplog.at_level("DEBUG", logger=graphql_module._logger.name):
         findings = parse_graphql_cop_json(payload, b"", tmp_path, "graphql_cop")
     assert len(findings) == 1
@@ -252,9 +239,7 @@ def test_non_object_entries_skipped(
     )
 
 
-def test_missing_title_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_title_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Entries without a title must be dropped with a debug log."""
     raw = _entry(title="To be removed")
     raw.pop("title")
@@ -279,13 +264,8 @@ def test_string_result_field_coerced(tmp_path: Path) -> None:
     payload = json.dumps([raw_true, raw_false, raw_int]).encode("utf-8")
     findings = parse_graphql_cop_json(payload, b"", tmp_path, "graphql_cop")
     titles = {
-        f
-        for f in (
-            json.loads(line)["title"]
-            for line in (
-                (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").splitlines()
-            )
-        )
+        json.loads(line)["title"]
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").splitlines()
     }
     assert "Stringy True" in titles
     assert "Truthy Int" in titles

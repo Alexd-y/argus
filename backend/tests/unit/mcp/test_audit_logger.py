@@ -18,11 +18,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-
 from src.mcp.audit_logger import (
     MCPAuditLogger,
     MCPCallOutcome,
@@ -58,7 +57,7 @@ class TestToJsonable:
         assert _to_jsonable(identifier) == str(identifier)
 
     def test_datetime_normalised_to_utc_iso(self) -> None:
-        moment = datetime(2026, 4, 19, 12, 0, 0, tzinfo=timezone.utc)
+        moment = datetime(2026, 4, 19, 12, 0, 0, tzinfo=UTC)
         result = _to_jsonable(moment)
         assert isinstance(result, str)
         assert result.endswith("+00:00")
@@ -138,9 +137,7 @@ class TestMCPAuditLogger:
         assert event.payload["actor"] == "mcp_client"
         assert event.payload["tool_name"] == "scan.create"
         assert event.payload["outcome"] == "allowed"
-        assert event.payload["arguments_hash"] == _hash_arguments(
-            {"target": "example.com"}
-        )
+        assert event.payload["arguments_hash"] == _hash_arguments({"target": "example.com"})
 
     def test_record_tool_call_emits_denied_event(
         self, audit_logger: MCPAuditLogger, tenant_id: str
@@ -166,9 +163,7 @@ class TestMCPAuditLogger:
         assert event.event_type == AuditEventType.PREFLIGHT_DENY
         assert event.failure_summary == "mcp_internal_error"
 
-    def test_empty_tool_name_rejected(
-        self, audit_logger: MCPAuditLogger, tenant_id: str
-    ) -> None:
+    def test_empty_tool_name_rejected(self, audit_logger: MCPAuditLogger, tenant_id: str) -> None:
         with pytest.raises(ValueError, match="non-empty"):
             audit_logger.record_tool_call(
                 tool_name="",
@@ -198,9 +193,7 @@ class TestMCPAuditLogger:
         assert event.payload["arguments_hash"] != "EVIL"
         assert event.payload["scan_id"] == "abc"
 
-    def test_uuid_strings_accepted_for_tenant(
-        self, audit_logger: MCPAuditLogger
-    ) -> None:
+    def test_uuid_strings_accepted_for_tenant(self, audit_logger: MCPAuditLogger) -> None:
         tenant_uuid = uuid4()
         event = audit_logger.record_tool_call(
             tool_name="scan.status",

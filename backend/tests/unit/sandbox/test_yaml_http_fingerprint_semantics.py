@@ -37,12 +37,10 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ParseStrategy, ToolCategory, ToolDescriptor
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # §4.4 tools added by ARG-011. Hard-coded so a silent shrink of the
 # fingerprinting batch breaks CI immediately.
@@ -126,9 +124,7 @@ def images_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -203,9 +199,7 @@ def test_argus_kali_web_dockerfile_stub_exists(images_dir: Path) -> None:
 
 
 @pytest.mark.parametrize("tool_id", HTTP_FINGERPRINT_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -235,9 +229,7 @@ def test_evidence_artifacts_non_empty(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.evidence_artifacts, f"{tool_id} must declare evidence_artifacts"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id} evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id} evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", HTTP_FINGERPRINT_TOOL_IDS)
@@ -261,9 +253,7 @@ def test_cwe_hints_field_present_even_if_empty(catalog_dir: Path, tool_id: str) 
 
 
 @pytest.mark.parametrize("tool_id", HTTP_FINGERPRINT_TOOL_IDS)
-def test_parse_strategy_split_httpx_jsonl_others_object(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_parse_strategy_split_httpx_jsonl_others_object(catalog_dir: Path, tool_id: str) -> None:
     """ARG-011 ships a single JSONL parser (httpx); the others declare
     ``json_object`` until their parsers land in cycle 3.
     """
@@ -298,8 +288,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id} has empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id} has empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id} must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id} must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -309,9 +298,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", HTTP_FINGERPRINT_TOOL_IDS)
-def test_command_template_has_no_shell_metacharacters(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_has_no_shell_metacharacters(catalog_dir: Path, tool_id: str) -> None:
     """No argv token may contain shell metacharacters.
 
     Defence-in-depth on top of the templating allow-list: an author who
@@ -326,6 +313,4 @@ def test_command_template_has_no_shell_metacharacters(
         for meta in SHELL_METACHARS:
             if meta in token:
                 offenders.append((token, meta))
-    assert not offenders, (
-        f"{tool_id} command_template contains shell metacharacters: {offenders}"
-    )
+    assert not offenders, f"{tool_id} command_template contains shell metacharacters: {offenders}"

@@ -41,7 +41,9 @@ class GraphQLImportError(ValueError):
     """Raised when a GraphQL introspection document cannot be imported (fail-closed)."""
 
 
-def _load_schema(raw: bytes | str) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+def _load_schema(
+    raw: bytes | str,
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
     """Return ``(schema, type_map)`` from an introspection document."""
     try:
         document = yaml.safe_load(raw)  # JSON is a subset of YAML

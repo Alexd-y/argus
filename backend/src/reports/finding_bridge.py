@@ -72,14 +72,16 @@ def _redacted_json(part: object) -> str:
     so cookies / Authorization / token / password / otp values never reach the
     DTO (SI-3), then serialised deterministically.
     """
-    if hasattr(part, "model_dump"):
+    if hasattr(part, "model_dump"):  # noqa: SIM108 - keep branch for its no-cover pragma
         data = part.model_dump(mode="json")
     else:  # pragma: no cover - defensive; callers pass pydantic models
         data = part
     return json.dumps(redact(data), sort_keys=True, separators=(",", ":"))
 
 
-def _exchange_pair(bundle: EvidenceBundle | None) -> tuple[HttpExchange, HttpExchange] | None:
+def _exchange_pair(
+    bundle: EvidenceBundle | None,
+) -> tuple[HttpExchange, HttpExchange] | None:
     if bundle is None:
         return None
     return bundle.baseline, bundle.mutated

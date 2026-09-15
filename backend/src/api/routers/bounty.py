@@ -26,7 +26,9 @@ router = APIRouter(prefix="/bounty", tags=["bounty"])
 
 class BountyProgramCreate(BaseModel):
     name: str = Field(..., description="Program name")
-    platform: str = Field(default="private", description="hackerone | bugcrowd | intigriti | private")
+    platform: str = Field(
+        default="private", description="hackerone | bugcrowd | intigriti | private"
+    )
     scope_config: dict[str, Any] = Field(default_factory=dict)
     reward_range: str | None = None
 
@@ -69,7 +71,7 @@ async def _get_session():
 @router.post("/ingest", response_model=BountyScope)
 async def ingest_bounty_scope(
     request: ScopeIngestRequest,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001 - FastAPI route signature; param bound by the framework
 ) -> BountyScope:
     """Parse bug bounty scope from JSON, raw text, or platform slug."""
     return ingest_scope(request)
@@ -78,7 +80,7 @@ async def ingest_bounty_scope(
 @router.post("/plan", response_model=BountyPlanResponse)
 async def generate_bounty_plan(
     request: ScopeIngestRequest,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001 - FastAPI route signature; param bound by the framework
 ) -> BountyPlanResponse:
     """Generate a phased test plan from bug bounty scope."""
     scope = ingest_scope(request)
@@ -88,6 +90,7 @@ async def generate_bounty_plan(
 
     try:
         from src.bounty.bounty_insights import generate_bounty_insights
+
         plan.llm_insights = await generate_bounty_insights(scope, surfaces, prioritized)
     except Exception as exc:
         logger.warning("bounty_insights_generation_failed: %s", exc)
@@ -106,6 +109,7 @@ async def list_bounty_programs(
 
     try:
         from src.db.models import BountyProgram
+
         result = await session.execute(
             select(BountyProgram).where(
                 cast(BountyProgram.tenant_id, String) == tenant_id,
@@ -129,7 +133,11 @@ async def list_bounty_programs(
     ]
 
 
-@router.post("/programs", response_model=BountyProgramResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/programs",
+    response_model=BountyProgramResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_bounty_program(
     request: BountyProgramCreate,
     tenant_id: str = Depends(get_current_tenant_id),
@@ -169,7 +177,7 @@ async def create_bounty_program(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create bounty program: {exc}",
-        )
+        ) from exc
 
 
 @router.post("/programs/{program_id}/launch", response_model=BountyLaunchResponse)
@@ -184,6 +192,7 @@ async def launch_bounty_scan(
 
     try:
         from src.db.models import BountyProgram
+
         result = await session.execute(
             select(BountyProgram).where(
                 cast(BountyProgram.id, String) == str(program_id),

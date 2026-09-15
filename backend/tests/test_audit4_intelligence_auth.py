@@ -21,19 +21,15 @@ class TestIntelligenceRouterAuth:
             else:
                 dep_names.append(str(dep))
 
-        assert any(
-            "get_required_auth" in n for n in dep_names
-        ), f"Expected get_required_auth in dependencies, got: {dep_names}"
+        assert any("get_required_auth" in n for n in dep_names), (
+            f"Expected get_required_auth in dependencies, got: {dep_names}"
+        )
 
     def test_intelligence_imports_auth_module(self) -> None:
         from pathlib import Path
 
         intel_src = (
-            Path(__file__).resolve().parent.parent
-            / "src"
-            / "api"
-            / "routers"
-            / "intelligence.py"
+            Path(__file__).resolve().parent.parent / "src" / "api" / "routers" / "intelligence.py"
         )
         text = intel_src.read_text(encoding="utf-8")
         assert "from src.core.auth import" in text

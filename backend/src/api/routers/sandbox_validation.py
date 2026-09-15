@@ -55,7 +55,7 @@ async def validate_finding(req: ValidateRequest) -> ValidationResponse:
     try:
         profile = ValidationProfile(req.profile)
     except ValueError:
-        raise HTTPException(400, f"Unknown profile: {req.profile}")
+        raise HTTPException(400, f"Unknown profile: {req.profile}") from None
 
     config = ValidationConfig(
         profile=profile,
@@ -91,7 +91,7 @@ async def validate_batch(req: ValidateBatchRequest) -> list[ValidationResponse]:
     try:
         profile = ValidationProfile(req.profile)
     except ValueError:
-        raise HTTPException(400, f"Unknown profile: {req.profile}")
+        raise HTTPException(400, f"Unknown profile: {req.profile}") from None
 
     config = ValidationConfig(profile=profile)
     orch = ValidationOrchestrator(
@@ -99,13 +99,20 @@ async def validate_batch(req: ValidateBatchRequest) -> list[ValidationResponse]:
         scan_id=req.scan_id,
     )
     results = await orch.validate_batch(
-        req.findings, config, max_concurrent=req.max_concurrent,
+        req.findings,
+        config,
+        max_concurrent=req.max_concurrent,
     )
     return [
         ValidationResponse(
-            id=r.id, finding_id=r.finding_id, status=r.status.value,
-            exploitable=r.exploitable, confidence=r.confidence,
-            exit_code=r.exit_code, duration_ms=r.duration_ms, error=r.error,
+            id=r.id,
+            finding_id=r.finding_id,
+            status=r.status.value,
+            exploitable=r.exploitable,
+            confidence=r.confidence,
+            exit_code=r.exit_code,
+            duration_ms=r.duration_ms,
+            error=r.error,
         )
         for r in results
     ]

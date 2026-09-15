@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
 from src.core.config import settings
 from src.db.models import Scan
 from src.mcp.auth import MCPAuthContext

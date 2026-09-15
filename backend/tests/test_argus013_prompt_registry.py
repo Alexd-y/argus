@@ -24,7 +24,14 @@ class TestPromptRegistry:
     """Prompt registry structure and get_prompt."""
 
     def test_phase_prompts_has_all_phases(self) -> None:
-        phases = {RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION, REPORTING}
+        phases = {
+            RECON,
+            THREAT_MODELING,
+            VULN_ANALYSIS,
+            EXPLOITATION,
+            POST_EXPLOITATION,
+            REPORTING,
+        }
         assert set(PHASE_PROMPTS.keys()) == phases
 
     def test_each_phase_has_system_and_template(self) -> None:
@@ -61,7 +68,14 @@ class TestPhaseSchemas:
     """JSON schemas per phase."""
 
     def test_phase_schemas_has_all_phases(self) -> None:
-        phases = {RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION, REPORTING}
+        phases = {
+            RECON,
+            THREAT_MODELING,
+            VULN_ANALYSIS,
+            EXPLOITATION,
+            POST_EXPLOITATION,
+            REPORTING,
+        }
         assert set(PHASE_SCHEMAS.keys()) == phases
 
     def test_recon_schema_structure(self) -> None:
@@ -82,7 +96,14 @@ class TestPhaseSchemas:
 
     @pytest.mark.parametrize(
         "phase",
-        [RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION, REPORTING],
+        [
+            RECON,
+            THREAT_MODELING,
+            VULN_ANALYSIS,
+            EXPLOITATION,
+            POST_EXPLOITATION,
+            REPORTING,
+        ],
     )
     def test_get_schema_and_fixer_prompt_for_each_phase(self, phase: str) -> None:
         """Each phase in registry has valid schema and get_fixer_prompt works with it."""
@@ -137,34 +158,42 @@ class TestAiPromptsRetryWithFixer:
         invalid_response = "not valid json at all"
         valid_response = '{"assets": ["a1","a2"], "subdomains": ["s1.com"], "ports": [80,443]}'
 
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
-                mock_call.side_effect = [invalid_response, valid_response]
-                from src.orchestration.ai_prompts import ai_recon
-                from src.orchestration.phases import ReconInput
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+            patch(
+                "src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock
+            ) as mock_call,
+        ):
+            mock_call.side_effect = [invalid_response, valid_response]
+            from src.orchestration.ai_prompts import ai_recon
+            from src.orchestration.phases import ReconInput
 
-                out = await ai_recon(ReconInput(target="https://x.com", options={}))
+            out = await ai_recon(ReconInput(target="https://x.com", options={}))
 
-                assert mock_call.call_count == 2
-                assert out.assets == ["a1", "a2"]
-                assert out.subdomains == ["s1.com"]
-                assert out.ports == [80, 443]
+            assert mock_call.call_count == 2
+            assert out.assets == ["a1", "a2"]
+            assert out.subdomains == ["s1.com"]
+            assert out.ports == [80, 443]
 
     @pytest.mark.asyncio
     async def test_no_retry_when_first_response_valid(self) -> None:
         """When first call returns valid JSON, fixer is not called."""
         valid_response = '{"assets": ["x1"], "subdomains": ["y.com"], "ports": [443]}'
 
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
-                mock_call.return_value = valid_response
-                from src.orchestration.ai_prompts import ai_recon
-                from src.orchestration.phases import ReconInput
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+            patch(
+                "src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock
+            ) as mock_call,
+        ):
+            mock_call.return_value = valid_response
+            from src.orchestration.ai_prompts import ai_recon
+            from src.orchestration.phases import ReconInput
 
-                out = await ai_recon(ReconInput(target="x.com", options={}))
+            out = await ai_recon(ReconInput(target="x.com", options={}))
 
-                assert mock_call.call_count == 1
-                assert out.assets == ["x1"]
+            assert mock_call.call_count == 1
+            assert out.assets == ["x1"]
 
     @pytest.mark.asyncio
     async def test_fixer_still_invalid_json_raises(self) -> None:
@@ -180,13 +209,17 @@ class TestAiPromptsRetryWithFixer:
 
         expected_calls = 1 + MAX_JSON_RETRIES  # initial + each fixer retry
 
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
-                mock_call.side_effect = invalid_responses
-                from src.orchestration.ai_prompts import ai_recon
-                from src.orchestration.phases import ReconInput
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+            patch(
+                "src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock
+            ) as mock_call,
+        ):
+            mock_call.side_effect = invalid_responses
+            from src.orchestration.ai_prompts import ai_recon
+            from src.orchestration.phases import ReconInput
 
-                with pytest.raises(RuntimeError, match="LLM returned invalid response"):
-                    await ai_recon(ReconInput(target="x.com", options={}))
+            with pytest.raises(RuntimeError, match="LLM returned invalid response"):
+                await ai_recon(ReconInput(target="x.com", options={}))
 
-                assert mock_call.call_count == expected_calls
+            assert mock_call.call_count == expected_calls

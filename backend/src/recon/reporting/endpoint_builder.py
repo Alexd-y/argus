@@ -114,6 +114,7 @@ def build_endpoint_inventory(
         if mcp_fetch:
             fetch = mcp_fetch
         else:
+
             def _fetch_mcp_unavailable(_u: str) -> dict:
                 return {
                     "status": 0,
@@ -139,12 +140,14 @@ def build_endpoint_inventory(
         for path in ENDPOINT_PATHS:
             url = f"{base}{path}"
             result = fetch(url)
-            writer.writerow([
-                url,
-                result.get("status", ""),
-                result.get("content_type", ""),
-                "yes" if result.get("exists") else "no",
-                result.get("notes", ""),
-            ])
+            writer.writerow(
+                [
+                    url,
+                    result.get("status", ""),
+                    result.get("content_type", ""),
+                    "yes" if result.get("exists") else "no",
+                    result.get("notes", ""),
+                ]
+            )
 
     return output.getvalue()

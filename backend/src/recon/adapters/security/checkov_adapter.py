@@ -56,35 +56,33 @@ class CheckovAdapter(SecurityToolAdapter):
             return []
         return [x for x in failed if isinstance(x, dict)]
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for item in raw_results:
             cid = item.get("check_id") or item.get("checkId") or "unknown"
             name = item.get("check_name") or item.get("checkName") or cid
             title = f"{cid}: {name}" if name != cid else str(cid)
             sev = _map_checkov_severity(
-                item.get("severity")
-                or item.get("check_severity")
-                or item.get("evaluation_status")
+                item.get("severity") or item.get("check_severity") or item.get("evaluation_status")
             )
             fpath = item.get("file_path") or item.get("filePath") or ""
             start = item.get("file_line_range") or item.get("fileLineRange") or []
             line = start[0] if isinstance(start, list) and start else 0
             value = f"{fpath}:{line}:{cid}"
-            findings.append({
-                "finding_type": FindingType.MISCONFIGURATION,
-                "value": value,
-                "data": {
-                    "title": title,
-                    "severity": sev,
-                    "check_id": cid,
-                    "file_path": fpath,
-                    "line": line,
-                    "cwe": "CWE-1032",
-                },
-                "source_tool": "checkov",
-                "confidence": 0.85,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.MISCONFIGURATION,
+                    "value": value,
+                    "data": {
+                        "title": title,
+                        "severity": sev,
+                        "check_id": cid,
+                        "file_path": fpath,
+                        "line": line,
+                        "cwe": "CWE-1032",
+                    },
+                    "source_tool": "checkov",
+                    "confidence": 0.85,
+                }
+            )
         return findings

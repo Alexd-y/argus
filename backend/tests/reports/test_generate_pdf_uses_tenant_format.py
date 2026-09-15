@@ -33,12 +33,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 import src.reports.generators as gen_mod
 import src.reports.pdf_backend as pdf_backend_mod
 from src.api.schemas import ReportSummary
 from src.reports.generators import ReportData
-
 
 # ---------------------------------------------------------------------------
 # Fixtures — sample ReportData + clean env per test.
@@ -143,8 +141,7 @@ def test_resolve_pdfa_mode_env_ignored_logs_warning_when_tenant_opts_out(
     assert result is False
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert any(
-        "pdfa_mode_env_ignored_per_tenant_override" in (r.message or "")
-        for r in warnings
+        "pdfa_mode_env_ignored_per_tenant_override" in (r.message or "") for r in warnings
     ), (
         "expected warning 'pdfa_mode_env_ignored_per_tenant_override' to be "
         f"logged, got: {[r.message for r in warnings]}"
@@ -166,10 +163,7 @@ def test_resolve_pdfa_mode_unknown_tenant_format_logs_warning_and_falls_back(
     )
     assert result is False, "unknown format must fall back to env (which is 0 here)"
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert any(
-        "pdfa_mode_unknown_tenant_format" in (r.message or "")
-        for r in warnings
-    ), (
+    assert any("pdfa_mode_unknown_tenant_format" in (r.message or "") for r in warnings), (
         "expected warning 'pdfa_mode_unknown_tenant_format' to be logged, "
         f"got: {[r.message for r in warnings]}"
     )
@@ -241,25 +235,17 @@ def stubbed_latex_pipeline(
     def _fake_render_pdfa_xmpdata(_tier: str, _ctx: dict[str, Any]) -> str:
         return "<x:xmpmeta/>"
 
-    monkeypatch.setattr(
-        pdf_backend_mod, "get_active_backend", _fake_get_active_backend
-    )
+    monkeypatch.setattr(pdf_backend_mod, "get_active_backend", _fake_get_active_backend)
     monkeypatch.setattr(
         pdf_backend_mod,
         "resolve_latex_template_path",
         _fake_resolve_latex_template_path,
     )
-    monkeypatch.setattr(
-        pdf_backend_mod, "render_latex_template", _fake_render_latex_template
-    )
-    monkeypatch.setattr(
-        pdf_backend_mod, "render_pdfa_xmpdata", _fake_render_pdfa_xmpdata
-    )
+    monkeypatch.setattr(pdf_backend_mod, "render_latex_template", _fake_render_latex_template)
+    monkeypatch.setattr(pdf_backend_mod, "render_pdfa_xmpdata", _fake_render_pdfa_xmpdata)
     # Force the legacy HTML fallback so we don't depend on per-tier branded
     # templates being on disk in the test environment.
-    monkeypatch.setattr(
-        gen_mod, "_resolve_branded_pdf_template_path", lambda _tier: None
-    )
+    monkeypatch.setattr(gen_mod, "_resolve_branded_pdf_template_path", lambda _tier: None)
 
     # ``_build_branded_pdf_context`` pulls ``minimal_jinja_context_from_report_data``
     # (LLM-aware, depends on AI text slots) — short-circuit it with a deterministic
@@ -279,9 +265,7 @@ def stubbed_latex_pipeline(
             "pdf_watermark": "stub-watermark",
         }
 
-    monkeypatch.setattr(
-        gen_mod, "_build_branded_pdf_context", _fake_build_branded_pdf_context
-    )
+    monkeypatch.setattr(gen_mod, "_build_branded_pdf_context", _fake_build_branded_pdf_context)
 
     def _fake_generate_html(
         _data: ReportData,
@@ -310,9 +294,7 @@ def test_generate_pdf_with_pdfa_2u_tenant_engages_pdfa_mode(
     assert out.startswith(b"%PDF"), "generate_pdf must return a PDF blob"
     assert len(stubbed_latex_pipeline.calls) == 1
     call = stubbed_latex_pipeline.calls[0]
-    assert call.pdfa_mode is True, (
-        "pdfa-2u tenant must trigger pdfa_mode=True at the LatexBackend"
-    )
+    assert call.pdfa_mode is True, "pdfa-2u tenant must trigger pdfa_mode=True at the LatexBackend"
     assert call.has_xmpdata is True, (
         "pdfa-2u tenant must also forward XMP metadata to the LatexBackend"
     )
@@ -335,12 +317,8 @@ def test_generate_pdf_with_standard_tenant_disables_pdfa_mode(
     assert out.startswith(b"%PDF")
     assert len(stubbed_latex_pipeline.calls) == 1
     call = stubbed_latex_pipeline.calls[0]
-    assert call.pdfa_mode is False, (
-        "standard tenant must keep pdfa_mode=False at the LatexBackend"
-    )
-    assert call.has_xmpdata is False, (
-        "standard tenant must NOT forward XMP metadata"
-    )
+    assert call.pdfa_mode is False, "standard tenant must keep pdfa_mode=False at the LatexBackend"
+    assert call.has_xmpdata is False, "standard tenant must NOT forward XMP metadata"
 
 
 def test_generate_pdf_standard_tenant_ignores_env_override(

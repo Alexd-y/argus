@@ -7,6 +7,11 @@ from app.prompts.threat_modeling_prompts import (
     PROMPT_VERSION,
     get_threat_modeling_prompt,
 )
+from src.recon.threat_modeling.ai_task_registry import (
+    THREAT_MODELING_AI_TASKS,
+    get_threat_modeling_ai_task_definitions,
+    validate_threat_modeling_ai_payload,
+)
 from src.schemas.ai.common import (
     StatementType,
     ThreatModelingAiTask,
@@ -25,11 +30,6 @@ from src.schemas.threat_modeling.schemas import (
     CriticalAsset,
     ThreatModelInputBundle,
     TrustBoundary,
-)
-from src.recon.threat_modeling.ai_task_registry import (
-    THREAT_MODELING_AI_TASKS,
-    get_threat_modeling_ai_task_definitions,
-    validate_threat_modeling_ai_payload,
 )
 
 
@@ -98,7 +98,9 @@ class TestCriticalAssetsSchemas:
 
     def test_input_validates(self) -> None:
         meta = build_tm_task_metadata(
-            ThreatModelingAiTask.CRITICAL_ASSETS, "r1", "j1",
+            ThreatModelingAiTask.CRITICAL_ASSETS,
+            "r1",
+            "j1",
         )
         bundle = ThreatModelInputBundle(engagement_id="e1")
         inp = CriticalAssetsInput(meta=meta, bundle=bundle)
@@ -164,7 +166,9 @@ class TestThreatScenariosInput:
 
     def test_input_with_context(self) -> None:
         meta = build_tm_task_metadata(
-            ThreatModelingAiTask.THREAT_SCENARIOS, "r1", "j1",
+            ThreatModelingAiTask.THREAT_SCENARIOS,
+            "r1",
+            "j1",
         )
         bundle = ThreatModelInputBundle(engagement_id="e1")
         assets = [CriticalAsset(id="ca1", name="DB", asset_type="database")]

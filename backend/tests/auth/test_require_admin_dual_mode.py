@@ -28,12 +28,11 @@ Mode matrix
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi import Depends, FastAPI, Request
-
 from src.api.routers.admin import require_admin
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
 from src.auth.admin_sessions import (
@@ -43,16 +42,13 @@ from src.auth.admin_sessions import (
     revoke_session,
 )
 
-
 # ---------------------------------------------------------------------------
 # Local app fixture — single endpoint guarded by ``require_admin``.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-async def gated_app(
-    session_factory, monkeypatch: pytest.MonkeyPatch
-) -> AsyncIterator[FastAPI]:
+async def gated_app(session_factory, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[FastAPI]:
     """Tiny FastAPI app exposing one route protected by ``require_admin``.
 
     The route returns the request-state ``admin_session`` snapshot so each
@@ -68,16 +64,12 @@ async def gated_app(
     ``from src.api.routers.admin import require_admin`` import keeps
     working unchanged.
     """
-    monkeypatch.setattr(
-        "src.auth.admin_dependencies.async_session_factory", session_factory
-    )
+    monkeypatch.setattr("src.auth.admin_dependencies.async_session_factory", session_factory)
 
     app = FastAPI()
 
     @app.get("/_t/protected")
-    async def protected(
-        request: Request, _: None = Depends(require_admin)
-    ) -> dict[str, Any]:
+    async def protected(request: Request, _: None = Depends(require_admin)) -> dict[str, Any]:
         principal = getattr(request.state, "admin_session", None)
         if isinstance(principal, SessionPrincipal):
             return {
@@ -97,9 +89,7 @@ async def gated_client(gated_app):
     from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=gated_app)
-    async with AsyncClient(
-        transport=transport, base_url="https://testserver"
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="https://testserver") as ac:
         yield ac
 
 
@@ -141,9 +131,7 @@ async def test_mode_cookie_accepts_valid_admin_key(
     settings_admin_mode_cookie,
     admin_api_key: str,
 ) -> None:
-    response = await gated_client.get(
-        "/_t/protected", headers={"X-Admin-Key": admin_api_key}
-    )
+    response = await gated_client.get("/_t/protected", headers={"X-Admin-Key": admin_api_key})
     assert response.status_code == 200
     assert response.json() == {"ok": True, "principal": None}
 
@@ -198,9 +186,7 @@ async def test_mode_session_accepts_bearer_authorization_header(
     settings_admin_mode_session,
 ) -> None:
     sid = await _provision_session(session_factory)
-    response = await gated_client.get(
-        "/_t/protected", headers={"Authorization": f"Bearer {sid}"}
-    )
+    response = await gated_client.get("/_t/protected", headers={"Authorization": f"Bearer {sid}"})
     assert response.status_code == 200
     assert response.json()["principal"]["subject"] == "test-operator@example.com"
 
@@ -211,9 +197,7 @@ async def test_mode_session_rejects_legacy_admin_key(
     admin_api_key: str,
 ) -> None:
     """Pure session mode MUST refuse the legacy header even when valid."""
-    response = await gated_client.get(
-        "/_t/protected", headers={"X-Admin-Key": admin_api_key}
-    )
+    response = await gated_client.get("/_t/protected", headers={"X-Admin-Key": admin_api_key})
     assert response.status_code == 401
     assert response.json() == {"detail": "Authentication required"}
 
@@ -254,14 +238,10 @@ async def test_mode_both_session_cookie_wins_over_admin_key(
     sid = await _provision_session(session_factory, role="admin")
     gated_client.cookies.set(ADMIN_SESSION_COOKIE, sid)
 
-    response = await gated_client.get(
-        "/_t/protected", headers={"X-Admin-Key": admin_api_key}
-    )
+    response = await gated_client.get("/_t/protected", headers={"X-Admin-Key": admin_api_key})
     assert response.status_code == 200
     body = response.json()
-    assert body["principal"] is not None, (
-        "session resolve populated request.state.admin_session"
-    )
+    assert body["principal"] is not None, "session resolve populated request.state.admin_session"
     assert body["principal"]["subject"] == "test-operator@example.com"
 
 
@@ -270,9 +250,7 @@ async def test_mode_both_falls_back_to_admin_key_when_no_session(
     settings_admin_mode_both,
     admin_api_key: str,
 ) -> None:
-    response = await gated_client.get(
-        "/_t/protected", headers={"X-Admin-Key": admin_api_key}
-    )
+    response = await gated_client.get("/_t/protected", headers={"X-Admin-Key": admin_api_key})
     assert response.status_code == 200
     assert response.json() == {"ok": True, "principal": None}
 
@@ -297,9 +275,7 @@ async def test_mode_both_rejects_revoked_session_then_legacy_fallback(
     sid = await _provision_session(session_factory, revoked=True)
     gated_client.cookies.set(ADMIN_SESSION_COOKIE, sid)
 
-    response = await gated_client.get(
-        "/_t/protected", headers={"X-Admin-Key": admin_api_key}
-    )
+    response = await gated_client.get("/_t/protected", headers={"X-Admin-Key": admin_api_key})
     assert response.status_code == 200
     assert response.json()["principal"] is None, (
         "fallback path MUST NOT populate request.state.admin_session"
@@ -357,4 +333,4 @@ async def test_mode_session_parses_authorization_case_insensitively(
 
 def _aware(dt: datetime) -> datetime:
     """Promote naive datetimes (SQLite quirk) to UTC for safe comparisons."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)

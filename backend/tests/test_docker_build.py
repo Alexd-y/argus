@@ -49,15 +49,11 @@ class TestBackendDockerfile:
 
     def test_copy_main_py(self, backend_dockerfile_content: str) -> None:
         """Dockerfile copies main.py."""
-        assert "COPY main.py" in backend_dockerfile_content, (
-            "Backend Dockerfile must COPY main.py"
-        )
+        assert "COPY main.py" in backend_dockerfile_content, "Backend Dockerfile must COPY main.py"
 
     def test_copy_src(self, backend_dockerfile_content: str) -> None:
         """Dockerfile copies src/ directory."""
-        assert "COPY src/" in backend_dockerfile_content, (
-            "Backend Dockerfile must COPY src/"
-        )
+        assert "COPY src/" in backend_dockerfile_content, "Backend Dockerfile must COPY src/"
 
     def test_copy_app(self, backend_dockerfile_content: str) -> None:
         """Dockerfile copies app/ (schemas, prompts)."""
@@ -67,9 +63,7 @@ class TestBackendDockerfile:
 
     def test_copy_alembic(self, backend_dockerfile_content: str) -> None:
         """Dockerfile copies alembic for migrations."""
-        assert "COPY alembic" in backend_dockerfile_content, (
-            "Backend Dockerfile must COPY alembic"
-        )
+        assert "COPY alembic" in backend_dockerfile_content, "Backend Dockerfile must COPY alembic"
 
     def test_copy_dependency_manifest(self, backend_dockerfile_content: str) -> None:
         """Builder copies the dependency manifest (pyproject.toml as PEP 621 source of truth)."""
@@ -114,19 +108,16 @@ class TestWorkerDockerfile:
         assert WORKER_DOCKERFILE.exists(), f"Not found: {WORKER_DOCKERFILE}"
         assert WORKER_DOCKERFILE.is_file()
 
-    def test_worker_from_backend_image(
-        self, worker_dockerfile_content: str
-    ) -> None:
+    def test_worker_from_backend_image(self, worker_dockerfile_content: str) -> None:
         """Worker uses backend image as base."""
-        assert "argus-backend" in worker_dockerfile_content or "BACKEND_IMAGE" in worker_dockerfile_content, (
-            "Worker Dockerfile must FROM argus-backend (or ARG BACKEND_IMAGE)"
-        )
+        assert (
+            "argus-backend" in worker_dockerfile_content
+            or "BACKEND_IMAGE" in worker_dockerfile_content
+        ), "Worker Dockerfile must FROM argus-backend (or ARG BACKEND_IMAGE)"
 
     def test_worker_celery_cmd(self, worker_dockerfile_content: str) -> None:
         """Worker runs celery."""
-        assert "celery" in worker_dockerfile_content.lower(), (
-            "Worker Dockerfile must run celery"
-        )
+        assert "celery" in worker_dockerfile_content.lower(), "Worker Dockerfile must run celery"
 
 
 class TestDockerComposeBuild:
@@ -149,21 +140,15 @@ class TestDockerComposeBuild:
         assert "backend" in services, "backend service must be defined"
         build = services["backend"].get("build")
         assert build is not None, "backend must have build section"
-        assert "context" in build or isinstance(build, dict), (
-            "backend.build must specify context"
-        )
+        assert "context" in build or isinstance(build, dict), "backend.build must specify context"
 
-    def test_backend_build_context_points_to_backend(
-        self, compose_config: dict
-    ) -> None:
+    def test_backend_build_context_points_to_backend(self, compose_config: dict) -> None:
         """Backend build context is ../backend (from infra)."""
         services = compose_config.get("services", {})
         build = services.get("backend", {}).get("build", {})
         if isinstance(build, dict):
             ctx = build.get("context", "")
-            assert "backend" in ctx, (
-                f"backend build context must point to backend dir, got: {ctx}"
-            )
+            assert "backend" in ctx, f"backend build context must point to backend dir, got: {ctx}"
 
     def test_worker_has_build_section(self, compose_config: dict) -> None:
         """Worker service has build section."""
@@ -172,9 +157,7 @@ class TestDockerComposeBuild:
         build = services["worker"].get("build")
         assert build is not None, "worker must have build section"
 
-    def test_backend_and_worker_images_defined(
-        self, compose_config: dict
-    ) -> None:
+    def test_backend_and_worker_images_defined(self, compose_config: dict) -> None:
         """Backend and worker have image names for tagging."""
         services = compose_config.get("services", {})
         backend_img = services.get("backend", {}).get("image")

@@ -122,7 +122,11 @@ def _idorw_vuln(spec: HttpRequestSpec, principal: str | None) -> HttpResponse:
         return HttpResponse(
             status=200,
             body=json.dumps(
-                {"id": 2001, "email": "victim@example.test", "display_name": "pwned-by-attacker"}
+                {
+                    "id": 2001,
+                    "email": "victim@example.test",
+                    "display_name": "pwned-by-attacker",
+                }
             ),
         )
     return HttpResponse(
@@ -145,12 +149,12 @@ def test_idor_write_planning_routes_by_approval(
     plan_pb: Callable[..., object],
 ) -> None:
     pb = get_playbook("idor.cross-user-write")
-    kwargs = dict(
-        method=HttpMethod.GET,
-        path="/api/v1/users/2001/profile",
-        input_kinds=frozenset({InputKind.PATH_PARAM, InputKind.BODY_JSON}),
-        principals=frozenset({"owner", "attacker"}),
-    )
+    kwargs = {
+        "method": HttpMethod.GET,
+        "path": "/api/v1/users/2001/profile",
+        "input_kinds": frozenset({InputKind.PATH_PARAM, InputKind.BODY_JSON}),
+        "principals": frozenset({"owner", "attacker"}),
+    }
     assert plan_pb(pb, **kwargs).status is ScenarioStatus.WAITING_APPROVAL
     assert plan_pb(pb, is_preauthorized=lambda _pb: True, **kwargs).status is ScenarioStatus.PLANNED
 
@@ -177,7 +181,8 @@ def test_idor_write_confirmed_with_eap(
 ) -> None:
     pb = get_playbook("idor.cross-user-write")
     gate = eap_gate_factory(
-        frozenset({ActionClass.ACCOUNT_MUTATION}), action_class=ActionClass.ACCOUNT_MUTATION
+        frozenset({ActionClass.ACCOUNT_MUTATION}),
+        action_class=ActionClass.ACCOUNT_MUTATION,
     )
     result = run_scenario(
         pb, transport_factory(_idorw_vuln), {"owner": True, "attacker": True}, gate=gate
@@ -214,10 +219,14 @@ def test_idor_write_rejected_when_denied(
 ) -> None:
     pb = get_playbook("idor.cross-user-write")
     gate = eap_gate_factory(
-        frozenset({ActionClass.ACCOUNT_MUTATION}), action_class=ActionClass.ACCOUNT_MUTATION
+        frozenset({ActionClass.ACCOUNT_MUTATION}),
+        action_class=ActionClass.ACCOUNT_MUTATION,
     )
     result = run_scenario(
-        pb, transport_factory(_idorw_secure), {"owner": True, "attacker": True}, gate=gate
+        pb,
+        transport_factory(_idorw_secure),
+        {"owner": True, "attacker": True},
+        gate=gate,
     )
     checks.rejected(result)
 
@@ -280,7 +289,7 @@ def test_method_variant_rejected_when_denied(
 # ---------------------------------------------------------------------------
 
 
-def _make_ma_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_ma_vuln() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"role": "user"}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
@@ -296,7 +305,7 @@ def _make_ma_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
     return _r
 
 
-def _make_ma_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_ma_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
         if spec.method.value == "PATCH":
             # Secure: the server ignores the unexpected privileged attribute.
@@ -311,12 +320,12 @@ def test_mass_assignment_planning_routes_by_approval(
     plan_pb: Callable[..., object],
 ) -> None:
     pb = get_playbook("massassignment.role-injection")
-    kwargs = dict(
-        method=HttpMethod.GET,
-        path="/api/v1/users/me",
-        input_kinds=frozenset({InputKind.BODY_JSON}),
-        principals=frozenset({"user"}),
-    )
+    kwargs = {
+        "method": HttpMethod.GET,
+        "path": "/api/v1/users/me",
+        "input_kinds": frozenset({InputKind.BODY_JSON}),
+        "principals": frozenset({"user"}),
+    }
     assert plan_pb(pb, **kwargs).status is ScenarioStatus.WAITING_APPROVAL
     assert plan_pb(pb, is_preauthorized=lambda _pb: True, **kwargs).status is ScenarioStatus.PLANNED
 
@@ -343,7 +352,8 @@ def test_mass_assignment_confirmed_with_eap(
 ) -> None:
     pb = get_playbook("massassignment.role-injection")
     gate = eap_gate_factory(
-        frozenset({ActionClass.ACCOUNT_MUTATION}), action_class=ActionClass.ACCOUNT_MUTATION
+        frozenset({ActionClass.ACCOUNT_MUTATION}),
+        action_class=ActionClass.ACCOUNT_MUTATION,
     )
     result = run_scenario(pb, transport_factory(_make_ma_vuln()), {"user": True}, gate=gate)
     checks.confirmed(result)
@@ -360,7 +370,8 @@ def test_mass_assignment_rejected_when_enforced(
 ) -> None:
     pb = get_playbook("massassignment.role-injection")
     gate = eap_gate_factory(
-        frozenset({ActionClass.ACCOUNT_MUTATION}), action_class=ActionClass.ACCOUNT_MUTATION
+        frozenset({ActionClass.ACCOUNT_MUTATION}),
+        action_class=ActionClass.ACCOUNT_MUTATION,
     )
     result = run_scenario(pb, transport_factory(_make_ma_secure()), {"user": True}, gate=gate)
     checks.rejected(result)

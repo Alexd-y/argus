@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
-
 from src.quick.schemas import (
     QuickBudget,
     QuickCoverageRecord,
@@ -28,90 +27,90 @@ _DEADLINE = datetime(2026, 8, 16, 12, 0, tzinfo=UTC)
 
 
 def _budget(**overrides) -> QuickBudget:
-    base = dict(
-        wall_clock_budget_seconds=900,
-        discovery_budget_seconds=180,
-        fingerprint_budget_seconds=120,
-        verification_budget_seconds=240,
-        ai_budget_seconds=90,
-        report_budget_seconds=60,
-        request_budget=500,
-        per_host_budget=50,
-        concurrency_budget=4,
-        reserve_for_validation_percent=20,
-    )
+    base = {
+        "wall_clock_budget_seconds": 900,
+        "discovery_budget_seconds": 180,
+        "fingerprint_budget_seconds": 120,
+        "verification_budget_seconds": 240,
+        "ai_budget_seconds": 90,
+        "report_budget_seconds": 60,
+        "request_budget": 500,
+        "per_host_budget": 50,
+        "concurrency_budget": 4,
+        "reserve_for_validation_percent": 20,
+    }
     base.update(overrides)
     return QuickBudget(**base)
 
 
 def _config(**overrides) -> QuickScanConfig:
-    base = dict(
-        profile=QuickProfileName.BALANCED,
-        wall_clock_budget_seconds=900,
-        ai_budget_seconds=90,
-        reserve_for_validation_percent=20,
-        max_targets=10,
-        max_urls_per_host=50,
-        crawl_depth=2,
-        severity_floor=SeverityFloor.MEDIUM,
-    )
+    base = {
+        "profile": QuickProfileName.BALANCED,
+        "wall_clock_budget_seconds": 900,
+        "ai_budget_seconds": 90,
+        "reserve_for_validation_percent": 20,
+        "max_targets": 10,
+        "max_urls_per_host": 50,
+        "crawl_depth": 2,
+        "severity_floor": SeverityFloor.MEDIUM,
+    }
     base.update(overrides)
     return QuickScanConfig(**base)
 
 
 def _task(**overrides) -> QuickTask:
-    base = dict(
-        task_id=_TASK_ID,
-        stage=QuickTaskStage.FINGERPRINT,
-        target_ref="https://app.example/",
-        tool_id="nuclei",
-        capability_id="http.fingerprint",
-        estimated_seconds=30,
-        estimated_requests=20,
-        priority_score=0.7,
-        idempotency_key="scan:task:nuclei:fingerprint",
-    )
+    base = {
+        "task_id": _TASK_ID,
+        "stage": QuickTaskStage.FINGERPRINT,
+        "target_ref": "https://app.example/",
+        "tool_id": "nuclei",
+        "capability_id": "http.fingerprint",
+        "estimated_seconds": 30,
+        "estimated_requests": 20,
+        "priority_score": 0.7,
+        "idempotency_key": "scan:task:nuclei:fingerprint",
+    }
     base.update(overrides)
     return QuickTask(**base)
 
 
 def _coverage(**overrides) -> QuickCoverageRecord:
-    base = dict(
-        asset_id=_ASSET_ID,
-        capability_id="http.fingerprint",
-        state=QuickCoverageState.TESTED,
-        reason_code="completed",
-    )
+    base = {
+        "asset_id": _ASSET_ID,
+        "capability_id": "http.fingerprint",
+        "state": QuickCoverageState.TESTED,
+        "reason_code": "completed",
+    }
     base.update(overrides)
     return QuickCoverageRecord(**base)
 
 
 def _plan(**overrides) -> QuickScanPlan:
-    base = dict(
-        scan_id=_SCAN_ID,
-        profile=QuickProfileName.BALANCED,
-        deadline_at=_DEADLINE,
-        budget=_budget(),
-        tasks=(_task(),),
-        coverage_intent=(_coverage(),),
-        plan_version=1,
-        prompt_version="quick-planner-v1",
-        model_route="wrb",
-    )
+    base = {
+        "scan_id": _SCAN_ID,
+        "profile": QuickProfileName.BALANCED,
+        "deadline_at": _DEADLINE,
+        "budget": _budget(),
+        "tasks": (_task(),),
+        "coverage_intent": (_coverage(),),
+        "plan_version": 1,
+        "prompt_version": "quick-planner-v1",
+        "model_route": "wrb",
+    }
     base.update(overrides)
     return QuickScanPlan(**base)
 
 
 def _revision(**overrides) -> QuickPlanRevision:
-    base = dict(
-        scan_id=_SCAN_ID,
-        from_version=1,
-        to_version=2,
-        revision_reason="new_host_discovered",
-        cost_estimate_seconds=45,
-        remaining_budget_seconds=600,
-        created_at=_DEADLINE,
-    )
+    base = {
+        "scan_id": _SCAN_ID,
+        "from_version": 1,
+        "to_version": 2,
+        "revision_reason": "new_host_discovered",
+        "cost_estimate_seconds": 45,
+        "remaining_budget_seconds": 600,
+        "created_at": _DEADLINE,
+    }
     base.update(overrides)
     return QuickPlanRevision(**base)
 

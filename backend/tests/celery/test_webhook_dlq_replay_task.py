@@ -59,7 +59,6 @@ from __future__ import annotations
 # without a sqlite DSN ``settings.database_url`` would point at Postgres
 # (per ``backend/.env``) and any lazy connection would fail.
 # ---------------------------------------------------------------------------
-
 import os
 
 os.environ.setdefault("DEBUG", "true")
@@ -75,36 +74,35 @@ os.environ.setdefault("ARGUS_TEST_MODE", "1")
 # Layer 2 — heavy imports (alembic, sqlalchemy, src.*).
 # ---------------------------------------------------------------------------
 
-import importlib.util  # noqa: E402
-import uuid  # noqa: E402
-from collections.abc import AsyncIterator  # noqa: E402
-from datetime import UTC, datetime, timedelta  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any  # noqa: E402
-from unittest.mock import AsyncMock, MagicMock  # noqa: E402
+import importlib.util
+import uuid
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest  # noqa: E402
-from alembic.migration import MigrationContext  # noqa: E402
-from alembic.operations import Operations  # noqa: E402
-from celery.schedules import crontab  # noqa: E402
-from sqlalchemy import event, select, text  # noqa: E402
-from sqlalchemy.ext.asyncio import (  # noqa: E402
+import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from celery.schedules import crontab
+from sqlalchemy import event, select, text
+from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-from src.celery import beat_schedule  # noqa: E402
-from src.celery.tasks import webhook_dlq_replay as task_module  # noqa: E402
-from src.celery_app import app as celery_app  # noqa: E402
-from src.db.models import WebhookDlqEntry  # noqa: E402
-from src.mcp.services.notifications import (  # noqa: E402
+from sqlalchemy.pool import StaticPool
+from src.celery import beat_schedule
+from src.celery.tasks import webhook_dlq_replay as task_module
+from src.celery_app import app as celery_app
+from src.db.models import WebhookDlqEntry
+from src.mcp.services.notifications import (
     webhook_dlq_persistence as dlq_dao,
 )
-from src.mcp.services.notifications.schemas import AdapterResult  # noqa: E402
-from src.mcp.services.notifications.slack import SlackNotifier  # noqa: E402
+from src.mcp.services.notifications.schemas import AdapterResult
+from src.mcp.services.notifications.slack import SlackNotifier
 
 # ---------------------------------------------------------------------------
 # Constants — every magic value lives here so a future schema bump is a
@@ -142,12 +140,8 @@ def _load_revision_module() -> Any:
     functions on the migration script and have no public type stubs.
     """
     matches = list(_VERSIONS_DIR.glob(f"{_REVISION}_*.py"))
-    assert matches, (
-        f"revision {_REVISION} not found under {_VERSIONS_DIR}"
-    )
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{_REVISION}", matches[0]
-    )
+    assert matches, f"revision {_REVISION} not found under {_VERSIONS_DIR}"
+    spec = importlib.util.spec_from_file_location(f"_alembic_{_REVISION}", matches[0])
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -157,12 +151,7 @@ def _load_revision_module() -> Any:
 def _bootstrap_schema_sync(conn: Any) -> None:
     """Create minimal ``tenants`` table + apply revision 027."""
     conn.execute(
-        text(
-            "CREATE TABLE tenants ("
-            "id VARCHAR(36) PRIMARY KEY, "
-            "name VARCHAR(255) NOT NULL"
-            ")"
-        )
+        text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL)")
     )
     module = _load_revision_module()
     ctx = MigrationContext.configure(conn)
@@ -236,7 +225,7 @@ class _NoDisposeEngine:
 
     async def dispose(self) -> None:
         """No-op so the test-owned engine stays alive past ``_run``."""
-        return None
+        return
 
 
 @pytest.fixture
@@ -254,9 +243,7 @@ def patch_task_engine(
     def _factory() -> tuple[Any, async_sessionmaker[AsyncSession]]:
         return fake_engine, session_factory
 
-    monkeypatch.setattr(
-        f"{_TASK_MODULE}.create_task_engine_and_session", _factory
-    )
+    monkeypatch.setattr(f"{_TASK_MODULE}.create_task_engine_and_session", _factory)
     return session_factory
 
 
@@ -324,17 +311,13 @@ def _adapter_stub(
     return stub
 
 
-def _patch_adapter(
-    monkeypatch: pytest.MonkeyPatch, adapter: MagicMock
-) -> None:
+def _patch_adapter(monkeypatch: pytest.MonkeyPatch, adapter: MagicMock) -> None:
     """Replace ``_build_adapter`` so every replay returns the supplied stub.
 
     The patch is at the *task module* level so ``_replay_entry``'s call
     resolves to the stub regardless of ``adapter_name``.
     """
-    monkeypatch.setattr(
-        f"{_TASK_MODULE}._build_adapter", lambda adapter_name: adapter
-    )
+    monkeypatch.setattr(f"{_TASK_MODULE}._build_adapter", lambda adapter_name: adapter)
 
 
 # ---------------------------------------------------------------------------
@@ -441,10 +424,7 @@ async def _force_columns(
         params[col] = _naive(val)
     async with factory() as s:
         await s.execute(
-            text(
-                f"UPDATE webhook_dlq_entries SET {set_clause} "
-                f"WHERE id = :id"
-            ),
+            text(f"UPDATE webhook_dlq_entries SET {set_clause} WHERE id = :id"),
             params,
         )
         await s.commit()
@@ -455,9 +435,7 @@ async def _fetch_row(
 ) -> WebhookDlqEntry:
     """Load a single ``WebhookDlqEntry`` by id (post-``_run`` assertions)."""
     async with factory() as s:
-        row = await s.scalar(
-            select(WebhookDlqEntry).where(WebhookDlqEntry.id == entry_id)
-        )
+        row = await s.scalar(select(WebhookDlqEntry).where(WebhookDlqEntry.id == entry_id))
         assert row is not None, f"entry {entry_id!r} vanished"
         return row
 
@@ -480,29 +458,20 @@ class TestBeatScheduleRegistration:
         to the dedicated worker pool (T40 acceptance criterion (a)).
         """
         entry = beat_schedule.BEAT_SCHEDULE.get(_BEAT_ENTRY_NAME)
-        assert entry is not None, (
-            f"{_BEAT_ENTRY_NAME!r} missing from BEAT_SCHEDULE"
-        )
+        assert entry is not None, f"{_BEAT_ENTRY_NAME!r} missing from BEAT_SCHEDULE"
         assert entry["task"] == _BEAT_ENTRY_NAME
 
         sched = entry["schedule"]
-        assert isinstance(sched, crontab), (
-            f"schedule must be a crontab; got {type(sched).__name__}"
-        )
+        assert isinstance(sched, crontab), f"schedule must be a crontab; got {type(sched).__name__}"
         assert sched.hour == {6}, f"hour must be 06:00 UTC, got {sched.hour}"
-        assert sched.minute == {0}, (
-            f"minute must be 0 (top of hour), got {sched.minute}"
-        )
+        assert sched.minute == {0}, f"minute must be 0 (top of hour), got {sched.minute}"
         assert entry["options"] == {"queue": _NOTIFICATIONS_QUEUE}
 
         routes = celery_app.conf.task_routes
         assert "argus.notifications.*" in routes, (
-            "wildcard route argus.notifications.* missing from "
-            "celery_app.conf.task_routes"
+            "wildcard route argus.notifications.* missing from celery_app.conf.task_routes"
         )
-        assert routes["argus.notifications.*"] == {
-            "queue": _NOTIFICATIONS_QUEUE
-        }
+        assert routes["argus.notifications.*"] == {"queue": _NOTIFICATIONS_QUEUE}
 
 
 class TestBuildAdapter:
@@ -564,9 +533,7 @@ class TestRunReturnShape:
             "abandoned_max_age",
         }
         for key, value in result.items():
-            assert isinstance(value, int), (
-                f"{key!r} must be int, got {type(value).__name__}"
-            )
+            assert isinstance(value, int), f"{key!r} must be int, got {type(value).__name__}"
 
 
 # ===========================================================================
@@ -592,17 +559,13 @@ class TestReplaySuccess:
         """
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
-        entry = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-replay-success-01"
-        )
+        entry = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-replay-success-01")
         await _force_columns(
             factory,
             entry_id=entry.id,
             next_retry_at=_FIXED_NOW - timedelta(hours=1),
         )
-        adapter = _adapter_stub(
-            result=_adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _adapter_stub(result=_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         result = await task_module._run(now=_FIXED_NOW)
@@ -620,9 +583,7 @@ class TestReplaySuccess:
             "delivered=True must populate replayed_at via mark_replayed"
         )
         assert row.abandoned_at is None
-        assert row.attempt_count == 0, (
-            "mark_replayed must NOT bump attempt_count"
-        )
+        assert row.attempt_count == 0, "mark_replayed must NOT bump attempt_count"
 
 
 class TestReplayFailure:
@@ -641,9 +602,7 @@ class TestReplayFailure:
         """
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
-        entry = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-replay-fail-01"
-        )
+        entry = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-replay-fail-01")
         await _force_columns(
             factory,
             entry_id=entry.id,
@@ -678,9 +637,7 @@ class TestReplayFailure:
         assert row.replayed_at is None
         assert row.abandoned_at is None
         # ``compute_next_retry_at(attempt_count=1)`` -> +120s from _FIXED_NOW.
-        assert row.next_retry_at == _naive(
-            _FIXED_NOW + timedelta(seconds=120)
-        )
+        assert row.next_retry_at == _naive(_FIXED_NOW + timedelta(seconds=120))
 
 
 class TestReplayException:
@@ -700,9 +657,7 @@ class TestReplayException:
         """
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
-        entry = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-replay-exc-01"
-        )
+        entry = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-replay-exc-01")
         await _force_columns(
             factory,
             entry_id=entry.id,
@@ -719,15 +674,15 @@ class TestReplayException:
             "abandoned_max_age": 0,
         }
         adapter.send_with_retry.assert_awaited_once()
-        adapter.aclose.assert_awaited_once(), (
-            "aclose must run via the finally even when send_with_retry raises"
+        (
+            adapter.aclose.assert_awaited_once(),
+            ("aclose must run via the finally even when send_with_retry raises"),
         )
 
         row = await _fetch_row(factory, entry_id=entry.id)
         assert row.attempt_count == 1
         assert row.last_error_code == "dispatch_exception", (
-            "task-body exception path must use the dispatch_exception "
-            "closed-taxonomy short-id"
+            "task-body exception path must use the dispatch_exception closed-taxonomy short-id"
         )
         assert row.last_status_code is None
         assert row.replayed_at is None
@@ -750,17 +705,13 @@ class TestPendingNotDueSkip:
         """
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
-        entry = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-pending-future-01"
-        )
+        entry = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-pending-future-01")
         await _force_columns(
             factory,
             entry_id=entry.id,
             next_retry_at=_FIXED_NOW + timedelta(hours=1),
         )
-        adapter = _adapter_stub(
-            result=_adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _adapter_stub(result=_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         result = await task_module._run(now=_FIXED_NOW)
@@ -802,9 +753,7 @@ class TestReplayedSkip:
             next_retry_at=_FIXED_NOW - timedelta(hours=1),
             replayed_at=_FIXED_NOW - timedelta(hours=1),
         )
-        adapter = _adapter_stub(
-            result=_adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _adapter_stub(result=_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         result = await task_module._run(now=_FIXED_NOW)
@@ -841,9 +790,7 @@ class TestAbandonedSkip:
             next_retry_at=_FIXED_NOW - timedelta(hours=1),
             abandoned_at=_FIXED_NOW - timedelta(hours=1),
         )
-        adapter = _adapter_stub(
-            result=_adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _adapter_stub(result=_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         result = await task_module._run(now=_FIXED_NOW)
@@ -872,18 +819,14 @@ class TestAbandonAged:
         """
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
-        entry = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-aged-01"
-        )
+        entry = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-aged-01")
         await _force_columns(
             factory,
             entry_id=entry.id,
             created_at=_FIXED_NOW - timedelta(days=15),
             next_retry_at=_FIXED_NOW + timedelta(hours=1),
         )
-        adapter = _adapter_stub(
-            result=_adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _adapter_stub(result=_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         result = await task_module._run(now=_FIXED_NOW)
@@ -924,34 +867,26 @@ class TestMixedBatch:
         factory = patch_task_engine
         tenant_id = await _seed_tenant(factory)
 
-        success = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-mixed-success"
-        )
+        success = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-mixed-success")
         await _force_columns(
             factory,
             entry_id=success.id,
             next_retry_at=_FIXED_NOW - timedelta(hours=1),
         )
-        fail = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-mixed-fail-row"
-        )
+        fail = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-mixed-fail-row")
         await _force_columns(
             factory,
             entry_id=fail.id,
             next_retry_at=_FIXED_NOW - timedelta(hours=1),
         )
-        aged = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-mixed-aged-row"
-        )
+        aged = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-mixed-aged-row")
         await _force_columns(
             factory,
             entry_id=aged.id,
             created_at=_FIXED_NOW - timedelta(days=15),
             next_retry_at=_FIXED_NOW + timedelta(hours=1),
         )
-        future = await _seed_dlq_row(
-            factory, tenant_id=tenant_id, event_id="evt-mixed-future"
-        )
+        future = await _seed_dlq_row(factory, tenant_id=tenant_id, event_id="evt-mixed-future")
         await _force_columns(
             factory,
             entry_id=future.id,
@@ -962,9 +897,7 @@ class TestMixedBatch:
         # fail row -> delivered=False with http_5xx.
         success_event_id = success.event_id
         fail_event_id = fail.event_id
-        success_result = _adapter_result(
-            delivered=True, event_id=success_event_id
-        )
+        success_result = _adapter_result(delivered=True, event_id=success_event_id)
         fail_result = _adapter_result(
             delivered=False,
             event_id=fail_event_id,
@@ -972,16 +905,12 @@ class TestMixedBatch:
             status_code=503,
         )
 
-        async def _route(
-            event: Any, *, tenant_id: str
-        ) -> AdapterResult:  # noqa: ARG001 — match NotifierBase.send_with_retry signature
+        async def _route(event: Any, *, tenant_id: str) -> AdapterResult:
             if event.event_id == success_event_id:
                 return success_result
             if event.event_id == fail_event_id:
                 return fail_result
-            raise AssertionError(
-                f"unexpected event_id reached the adapter: {event.event_id!r}"
-            )
+            raise AssertionError(f"unexpected event_id reached the adapter: {event.event_id!r}")
 
         adapter = MagicMock()
         adapter.send_with_retry = AsyncMock(side_effect=_route)

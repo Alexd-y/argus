@@ -45,7 +45,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -62,7 +61,6 @@ from src.sandbox.parsers.nuclei_parser import (
     parse_nuclei_jsonl,
     parse_wapiti_json,
 )
-
 
 # ---------------------------------------------------------------------------
 # Builders for canonical fixture shapes
@@ -136,9 +134,7 @@ def _nuclei_record(
 
 def _serialise(records: list[dict[str, Any]]) -> bytes:
     """Serialise a sequence of nuclei records as JSONL bytes."""
-    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode("utf-8")
 
 
 def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
@@ -204,9 +200,7 @@ def test_malformed_jsonl_line_is_skipped_other_lines_pass(
             tool_id="nuclei",
         )
     assert len(findings) == 1
-    assert any(
-        getattr(rec, "event", "") == "parsers_jsonl_malformed" for rec in caplog.records
-    )
+    assert any(getattr(rec, "event", "") == "parsers_jsonl_malformed" for rec in caplog.records)
 
 
 def test_record_missing_template_id_is_skipped(tmp_path: Path) -> None:
@@ -712,8 +706,7 @@ def test_output_ordering_is_deterministic(tmp_path: Path) -> None:
 def test_sidecar_carries_one_record_per_finding(tmp_path: Path) -> None:
     """Sidecar JSONL has exactly N records for N findings."""
     payload = [
-        _nuclei_record(template_id=f"tpl-{i}", matched_at=f"https://x/{i}")
-        for i in range(5)
+        _nuclei_record(template_id=f"tpl-{i}", matched_at=f"https://x/{i}") for i in range(5)
     ]
     findings = parse_nuclei_jsonl(
         stdout=_serialise(payload),
@@ -1048,9 +1041,7 @@ def test_references_dedup_and_sort_in_sidecar(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_hard_cap_at_10000_findings(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_hard_cap_at_10000_findings(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """The 10 000-finding cap fires + emits a structured WARNING."""
     payload = [
         _nuclei_record(template_id=f"tpl-{i:05d}", matched_at=f"https://x/{i}")
@@ -1064,10 +1055,7 @@ def test_hard_cap_at_10000_findings(
             tool_id="nuclei",
         )
     assert len(findings) == 10_000
-    assert any(
-        getattr(rec, "event", "") == "nuclei_parser_cap_reached"
-        for rec in caplog.records
-    )
+    assert any(getattr(rec, "event", "") == "nuclei_parser_cap_reached" for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -1414,8 +1402,7 @@ def test_canonical_jsonl_read_failure_falls_back_to_stdout(
         )
     assert len(findings) == 1
     assert any(
-        getattr(rec, "event", "") == "nuclei_parser_canonical_read_failed"
-        for rec in caplog.records
+        getattr(rec, "event", "") == "nuclei_parser_canonical_read_failed" for rec in caplog.records
     )
 
 
@@ -1466,9 +1453,7 @@ def test_nikto_canonical_file_takes_precedence(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     findings = parse_nikto_json(
-        stdout=json.dumps(
-            {"vulnerabilities": [{"id": "2", "msg": "from stdout"}]}
-        ).encode("utf-8"),
+        stdout=json.dumps({"vulnerabilities": [{"id": "2", "msg": "from stdout"}]}).encode("utf-8"),
         stderr=b"",
         artifacts_dir=tmp_path,
         tool_id="nikto",
@@ -1596,8 +1581,7 @@ def test_nikto_top_level_array_is_rejected(
         )
     assert findings == []
     assert any(
-        getattr(rec, "event", "") == "nuclei_parser_stdout_not_object"
-        for rec in caplog.records
+        getattr(rec, "event", "") == "nuclei_parser_stdout_not_object" for rec in caplog.records
     )
 
 
@@ -1616,8 +1600,7 @@ def test_nikto_canonical_array_is_rejected(
         )
     assert findings == []
     assert any(
-        getattr(rec, "event", "") == "nuclei_parser_canonical_not_object"
-        for rec in caplog.records
+        getattr(rec, "event", "") == "nuclei_parser_canonical_not_object" for rec in caplog.records
     )
 
 
@@ -1640,17 +1623,16 @@ def test_nikto_canonical_read_error_falls_back_to_stdout(
     monkeypatch.setattr(Path, "read_bytes", _exploding_read)
     with caplog.at_level(logging.WARNING, logger="src.sandbox.parsers.nuclei_parser"):
         findings = parse_nikto_json(
-            stdout=json.dumps(
-                {"vulnerabilities": [{"id": "y", "msg": "y", "url": "/"}]}
-            ).encode("utf-8"),
+            stdout=json.dumps({"vulnerabilities": [{"id": "y", "msg": "y", "url": "/"}]}).encode(
+                "utf-8"
+            ),
             stderr=b"",
             artifacts_dir=tmp_path,
             tool_id="nikto",
         )
     assert len(findings) == 1
     assert any(
-        getattr(rec, "event", "") == "nuclei_parser_canonical_read_failed"
-        for rec in caplog.records
+        getattr(rec, "event", "") == "nuclei_parser_canonical_read_failed" for rec in caplog.records
     )
 
 
@@ -1708,9 +1690,7 @@ def test_wapiti_unknown_category_falls_back_to_other(tmp_path: Path) -> None:
     payload = json.dumps(
         {
             "vulnerabilities": {
-                "Some Brand-New Category": [
-                    {"method": "GET", "path": "/", "info": "weird issue"}
-                ]
+                "Some Brand-New Category": [{"method": "GET", "path": "/", "info": "weird issue"}]
             }
         }
     ).encode("utf-8")
@@ -1728,11 +1708,7 @@ def test_wapiti_unknown_category_falls_back_to_other(tmp_path: Path) -> None:
 def test_wapiti_known_category_carries_likely_confidence(tmp_path: Path) -> None:
     """Concrete vulnerability categories (SQLi, XSS, …) → LIKELY."""
     payload = json.dumps(
-        {
-            "vulnerabilities": {
-                "SQL Injection": [{"method": "GET", "path": "/", "info": "x"}]
-            }
-        }
+        {"vulnerabilities": {"SQL Injection": [{"method": "GET", "path": "/", "info": "x"}]}}
     ).encode("utf-8")
     findings = parse_wapiti_json(
         stdout=payload,
@@ -1884,16 +1860,13 @@ def test_wapiti_top_level_array_is_rejected(
         )
     assert findings == []
     assert any(
-        getattr(rec, "event", "") == "nuclei_parser_stdout_not_object"
-        for rec in caplog.records
+        getattr(rec, "event", "") == "nuclei_parser_stdout_not_object" for rec in caplog.records
     )
 
 
 def test_cwe_inline_list_is_accepted(tmp_path: Path) -> None:
     """An inline ``info.cwe`` shipped as a list of ints / strings round-trips."""
-    record = _nuclei_record(
-        template_id="cwe-inline-list", severity="high", tags=["rce"]
-    )
+    record = _nuclei_record(template_id="cwe-inline-list", severity="high", tags=["rce"])
     record["info"]["classification"] = {}
     record["info"]["cwe"] = [79, "CWE-200"]
     parse_nuclei_jsonl(
@@ -2059,12 +2032,8 @@ def test_nikto_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
     canonical_payload = {
         "vulnerabilities": [{"id": "C", "msg": "from canonical artifact", "url": "/c"}]
     }
-    stdout_payload = {
-        "vulnerabilities": [{"id": "S", "msg": "from stdout", "url": "/s"}]
-    }
-    (tmp_path / "nikto.json").write_text(
-        json.dumps(canonical_payload), encoding="utf-8"
-    )
+    stdout_payload = {"vulnerabilities": [{"id": "S", "msg": "from stdout", "url": "/s"}]}
+    (tmp_path / "nikto.json").write_text(json.dumps(canonical_payload), encoding="utf-8")
     findings = parse_nikto_json(
         stdout=json.dumps(stdout_payload).encode("utf-8"),
         stderr=b"",
@@ -2078,9 +2047,7 @@ def test_nikto_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 def test_nikto_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
     """Empty stdout + missing canonical artifact = clean empty result."""
-    findings = parse_nikto_json(
-        stdout=b"", stderr=b"", artifacts_dir=tmp_path, tool_id="nikto"
-    )
+    findings = parse_nikto_json(stdout=b"", stderr=b"", artifacts_dir=tmp_path, tool_id="nikto")
     assert findings == []
 
 
@@ -2172,9 +2139,7 @@ def test_wapiti_unknown_category_falls_back_to_other_with_suspected_confidence(
     """Unmapped Wapiti label → :class:`FindingCategory.OTHER` + SUSPECTED."""
     payload = {
         "vulnerabilities": {
-            "Some Brand New Category": [
-                {"method": "GET", "path": "/foo", "info": "exotic"}
-            ]
+            "Some Brand New Category": [{"method": "GET", "path": "/foo", "info": "exotic"}]
         }
     }
     findings = parse_wapiti_json(
@@ -2274,16 +2239,12 @@ def test_wapiti_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
     """``artifacts_dir/wapiti.json`` is consulted before stdout."""
     canonical = {
         "vulnerabilities": {
-            "Cross Site Scripting": [
-                {"method": "GET", "path": "/canon", "info": "from disk"}
-            ]
+            "Cross Site Scripting": [{"method": "GET", "path": "/canon", "info": "from disk"}]
         }
     }
     stdout_payload = {
         "vulnerabilities": {
-            "SQL Injection": [
-                {"method": "GET", "path": "/stdout", "info": "from stdout"}
-            ]
+            "SQL Injection": [{"method": "GET", "path": "/stdout", "info": "from stdout"}]
         }
     }
     (tmp_path / "wapiti.json").write_text(json.dumps(canonical), encoding="utf-8")
@@ -2300,9 +2261,7 @@ def test_wapiti_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 def test_wapiti_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
     """Empty stdout + no canonical artifact = clean empty result."""
-    findings = parse_wapiti_json(
-        stdout=b"", stderr=b"", artifacts_dir=tmp_path, tool_id="wapiti"
-    )
+    findings = parse_wapiti_json(stdout=b"", stderr=b"", artifacts_dir=tmp_path, tool_id="wapiti")
     assert findings == []
 
 
@@ -2389,8 +2348,7 @@ def test_wapiti_severity_per_category_matches_pinned_map(
     )
     [sidecar] = _read_sidecar(tmp_path)
     assert sidecar["severity"] == expected_severity, (
-        f"{category_name}: expected severity {expected_severity!r}, "
-        f"got {sidecar['severity']!r}"
+        f"{category_name}: expected severity {expected_severity!r}, got {sidecar['severity']!r}"
     )
 
 
@@ -2476,12 +2434,10 @@ def test_nikto_synthesised_template_id_matches_sha256_prefix(
     (e.g. blake2b) lights up here in CI.
     """
     msg = "Server header leaks framework version"
-    payload = json.dumps(
-        {"vulnerabilities": [{"msg": msg, "url": "/v", "method": "GET"}]}
-    ).encode("utf-8")
-    parse_nikto_json(
-        stdout=payload, stderr=b"", artifacts_dir=tmp_path, tool_id="nikto"
+    payload = json.dumps({"vulnerabilities": [{"msg": msg, "url": "/v", "method": "GET"}]}).encode(
+        "utf-8"
     )
+    parse_nikto_json(stdout=payload, stderr=b"", artifacts_dir=tmp_path, tool_id="nikto")
     [sidecar] = _read_sidecar(tmp_path)
 
     import hashlib

@@ -105,8 +105,7 @@ class TargetSpec(BaseModel):
             )
         if populated[0] is not self.kind:
             raise ValueError(
-                f"TargetSpec.kind={self.kind.value} but populated field is "
-                f"{populated[0].value}"
+                f"TargetSpec.kind={self.kind.value} but populated field is {populated[0].value}"
             )
         return self
 
@@ -171,18 +170,14 @@ class ToolJob(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> Self:
         if not _TOOL_ID_RE.fullmatch(self.tool_id):
-            raise ValueError(
-                "tool_id must match ^[a-z][a-z0-9_]{1,63}$ (lowercase, snake_case)"
-            )
+            raise ValueError("tool_id must match ^[a-z][a-z0-9_]{1,63}$ (lowercase, snake_case)")
         if not _CORRELATION_ID_RE.fullmatch(self.correlation_id):
             raise ValueError("correlation_id contains illegal characters")
         # ``parameters`` is typed ``dict[str, str]`` and validated by Pydantic
         # before this hook runs, so we only need key-shape and allow-list checks.
         for key in self.parameters:
             if not _PARAM_KEY_RE.fullmatch(key):
-                raise ValueError(
-                    f"parameter key {key!r} is not snake_case / too long"
-                )
+                raise ValueError(f"parameter key {key!r} is not snake_case / too long")
             if key not in _ALLOWED_PARAM_KEYS:
                 raise ValueError(
                     f"parameter key {key!r} is not in the sandbox allow-list "
@@ -191,13 +186,12 @@ class ToolJob(BaseModel):
         if self.requires_approval and self.approval_id is None:
             raise ValueError("approval_id is required when requires_approval is True")
         if not self.requires_approval and self.approval_id is not None:
-            raise ValueError(
-                "approval_id must be empty when requires_approval is False"
-            )
-        if self.risk_level in {RiskLevel.HIGH, RiskLevel.DESTRUCTIVE} and not self.requires_approval:
-            raise ValueError(
-                f"risk_level={self.risk_level.value} requires requires_approval=True"
-            )
+            raise ValueError("approval_id must be empty when requires_approval is False")
+        if (
+            self.risk_level in {RiskLevel.HIGH, RiskLevel.DESTRUCTIVE}
+            and not self.requires_approval
+        ):
+            raise ValueError(f"risk_level={self.risk_level.value} requires requires_approval=True")
         if self.inputs_dir is not None and self.inputs_dir == self.outputs_dir:
             raise ValueError("inputs_dir and outputs_dir must differ")
         return self

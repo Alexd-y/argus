@@ -28,7 +28,6 @@ from typing import Any, Final
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers.mcp_slack_callbacks import (
     MAX_BODY_BYTES,
     REPLAY_WINDOW_SECONDS,
@@ -187,23 +186,15 @@ class TestSignature:
     def test_signature_is_deterministic(self) -> None:
         ts = "1700000000"
         body = b"payload=test"
-        sig1 = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body
-        )
-        sig2 = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body
-        )
+        sig1 = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body)
+        sig2 = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body)
         assert sig1 == sig2
         assert sig1.startswith("v0=")
 
     def test_signature_changes_with_body(self) -> None:
         ts = "1700000000"
-        sig_a = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=b"a"
-        )
-        sig_b = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=b"b"
-        )
+        sig_a = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=b"a")
+        sig_b = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=b"b")
         assert sig_a != sig_b
 
     def test_signature_changes_with_timestamp(self) -> None:
@@ -219,9 +210,7 @@ class TestSignature:
     def test_verify_accepts_correct_signature(self) -> None:
         ts = "1700000000"
         body = b"payload=test"
-        sig = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body
-        )
+        sig = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body)
         assert _verify_signature(
             signing_secret=SIGNING_SECRET,
             timestamp=ts,
@@ -232,9 +221,7 @@ class TestSignature:
     def test_verify_rejects_tampered_signature(self) -> None:
         ts = "1700000000"
         body = b"payload=test"
-        sig = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body
-        )
+        sig = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body)
         tampered = sig[:-1] + ("0" if sig[-1] != "0" else "1")
         assert not _verify_signature(
             signing_secret=SIGNING_SECRET,
@@ -246,9 +233,7 @@ class TestSignature:
     def test_verify_rejects_wrong_secret(self) -> None:
         ts = "1700000000"
         body = b"payload=test"
-        sig = _expected_signature(
-            signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body
-        )
+        sig = _expected_signature(signing_secret=SIGNING_SECRET, timestamp=ts, raw_body=body)
         assert not _verify_signature(
             signing_secret="other-secret",
             timestamp=ts,
@@ -282,9 +267,7 @@ class TestParsePayload:
     def test_rejects_non_object_payload(self) -> None:
         from fastapi import HTTPException
 
-        body = urllib.parse.urlencode({"payload": json.dumps([1, 2, 3])}).encode(
-            "utf-8"
-        )
+        body = urllib.parse.urlencode({"payload": json.dumps([1, 2, 3])}).encode("utf-8")
         with pytest.raises(HTTPException) as exc:
             _parse_payload(body)
         assert exc.value.status_code == 400
@@ -316,9 +299,7 @@ class TestExtractAction:
         assert user_id == "U123"
 
     def test_extracts_deny_action(self) -> None:
-        payload = _decode_payload_dict(
-            _make_payload(action_id="deny::approval-1")
-        )
+        payload = _decode_payload_dict(_make_payload(action_id="deny::approval-1"))
         action, approval_id, _ = _extract_action(payload)
         assert action == "deny"
         assert approval_id == "approval-1"
@@ -326,9 +307,7 @@ class TestExtractAction:
     def test_rejects_unknown_action(self) -> None:
         from fastapi import HTTPException
 
-        payload = _decode_payload_dict(
-            _make_payload(action_id="forge::approval-1")
-        )
+        payload = _decode_payload_dict(_make_payload(action_id="forge::approval-1"))
         with pytest.raises(HTTPException) as exc:
             _extract_action(payload)
         assert exc.value.status_code == 422
@@ -336,9 +315,7 @@ class TestExtractAction:
     def test_rejects_missing_separator(self) -> None:
         from fastapi import HTTPException
 
-        payload = _decode_payload_dict(
-            _make_payload(action_id="approve_approval_1")
-        )
+        payload = _decode_payload_dict(_make_payload(action_id="approve_approval_1"))
         with pytest.raises(HTTPException) as exc:
             _extract_action(payload)
         assert exc.value.status_code == 422
@@ -346,9 +323,7 @@ class TestExtractAction:
     def test_rejects_unsupported_payload_type(self) -> None:
         from fastapi import HTTPException
 
-        payload = _decode_payload_dict(
-            _make_payload(payload_type="view_submission")
-        )
+        payload = _decode_payload_dict(_make_payload(payload_type="view_submission"))
         with pytest.raises(HTTPException) as exc:
             _extract_action(payload)
         assert exc.value.status_code == 422
@@ -367,9 +342,7 @@ class TestCallbackEndpoint:
         audit_sink: InMemoryAuditSink,
     ) -> None:
         body, headers = _signed_request(_make_payload())
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 503
         assert resp.json()["detail"] == "slack_signing_secret_not_configured"
 
@@ -381,9 +354,7 @@ class TestCallbackEndpoint:
     ) -> None:
         body, headers = _signed_request(_make_payload())
         del headers["X-Slack-Signature"]
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "missing_slack_headers"
 
@@ -395,9 +366,7 @@ class TestCallbackEndpoint:
     ) -> None:
         body, headers = _signed_request(_make_payload())
         del headers["X-Slack-Request-Timestamp"]
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
 
     def test_returns_401_on_stale_timestamp(
@@ -408,9 +377,7 @@ class TestCallbackEndpoint:
     ) -> None:
         stale = int(time.time()) - REPLAY_WINDOW_SECONDS - 30
         body, headers = _signed_request(_make_payload(), timestamp=stale)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "stale_timestamp"
 
@@ -422,9 +389,7 @@ class TestCallbackEndpoint:
     ) -> None:
         future = int(time.time()) + REPLAY_WINDOW_SECONDS + 30
         body, headers = _signed_request(_make_payload(), timestamp=future)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
 
     def test_returns_401_on_invalid_signature(
@@ -435,9 +400,7 @@ class TestCallbackEndpoint:
     ) -> None:
         body, headers = _signed_request(_make_payload())
         headers["X-Slack-Signature"] = "v0=" + ("0" * 64)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "invalid_signature"
 
@@ -449,9 +412,7 @@ class TestCallbackEndpoint:
     ) -> None:
         body, headers = _signed_request(_make_payload())
         headers["X-Slack-Request-Timestamp"] = "not-a-number"
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
 
     def test_returns_413_on_oversized_body(
@@ -462,9 +423,7 @@ class TestCallbackEndpoint:
     ) -> None:
         oversized = b"payload=" + b"A" * (MAX_BODY_BYTES + 100)
         body, headers = _signed_request(oversized)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 413
         assert resp.json()["detail"] == "body_too_large"
 
@@ -475,9 +434,7 @@ class TestCallbackEndpoint:
         audit_sink: InMemoryAuditSink,
     ) -> None:
         body, headers = _signed_request(b"foo=bar")
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 400
 
     def test_returns_400_on_invalid_json(
@@ -489,9 +446,7 @@ class TestCallbackEndpoint:
         body, headers = _signed_request(
             urllib.parse.urlencode({"payload": "{notjson"}).encode("utf-8")
         )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 400
 
     def test_returns_422_on_unknown_action(
@@ -500,12 +455,8 @@ class TestCallbackEndpoint:
         configured_secret: None,
         audit_sink: InMemoryAuditSink,
     ) -> None:
-        body, headers = _signed_request(
-            _make_payload(action_id="forge::approval-x")
-        )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        body, headers = _signed_request(_make_payload(action_id="forge::approval-x"))
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 422
 
     def test_returns_200_on_valid_approve(
@@ -517,9 +468,7 @@ class TestCallbackEndpoint:
         body, headers = _signed_request(
             _make_payload(action_id="approve::approval-arg048-1", user_id="UABC")
         )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
@@ -535,9 +484,7 @@ class TestCallbackEndpoint:
         body, headers = _signed_request(
             _make_payload(action_id="deny::approval-arg048-2", user_id="UDEF")
         )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["action"] == "deny"
@@ -549,13 +496,9 @@ class TestCallbackEndpoint:
         audit_sink: InMemoryAuditSink,
     ) -> None:
         body, headers = _signed_request(
-            _make_payload(
-                action_id="approve::approval-arg048-3", user_id="UXYZ"
-            )
+            _make_payload(action_id="approve::approval-arg048-3", user_id="UXYZ")
         )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 200
         events = list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))
         assert len(events) == 1
@@ -576,9 +519,7 @@ class TestCallbackEndpoint:
         body, headers = _signed_request(
             _make_payload(action_id="deny::approval-arg048-4", user_id="UDENY")
         )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 200
         events = list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))
         assert len(events) == 1

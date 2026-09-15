@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.capabilities.coverage import (
     CoverageAccountingError,
     absence_of_finding_is_not_coverage,
@@ -86,9 +85,7 @@ def test_absence_of_finding_is_not_automatic_coverage():
 
 def test_infer_status_from_execution_honest_blocked_states():
     assert (
-        infer_status_from_execution(
-            tool_executed=False, tool_error=False, target_unreachable=False
-        )
+        infer_status_from_execution(tool_executed=False, tool_error=False, target_unreachable=False)
         is CoverageStatus.NOT_TESTED
     )
     assert (

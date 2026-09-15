@@ -129,11 +129,11 @@ class GoogleAuthIamAdapter:
 
         def _call() -> JwtClaims:
             try:
-                from google.auth import default as google_default  # noqa: PLC0415
+                from google.auth import default as google_default
                 from google.auth.transport import (
-                    requests as google_requests,  # noqa: PLC0415
+                    requests as google_requests,
                 )
-                from google.oauth2 import id_token as google_id_token  # noqa: PLC0415
+                from google.oauth2 import id_token as google_id_token
             except ImportError as exc:  # pragma: no cover — declared dep
                 raise OwnershipVerificationError(
                     REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
@@ -145,9 +145,7 @@ class GoogleAuthIamAdapter:
             _requests: Any = google_requests
             _id_token: Any = google_id_token
 
-            credentials, _ = _default(
-                scopes=["https://www.googleapis.com/auth/iam"]
-            )
+            credentials, _ = _default(scopes=["https://www.googleapis.com/auth/iam"])
             request = _requests.Request()
             credentials.refresh(request)
 
@@ -356,7 +354,7 @@ class GcpServiceAccountJwtVerifier:
                 allowed=False,
                 summary=REASON_GCP_SA_JWT_TIMEOUT,
             )
-            raise OwnershipVerificationError(REASON_GCP_SA_JWT_TIMEOUT)
+            raise OwnershipVerificationError(REASON_GCP_SA_JWT_TIMEOUT) from None
         except OwnershipVerificationError as exc:
             self._emit(challenge, descriptor, allowed=False, summary=exc.summary)
             raise
@@ -369,9 +367,7 @@ class GcpServiceAccountJwtVerifier:
         challenge: OwnershipChallenge,
     ) -> None:
         aud = claims.get("aud", "")
-        if not isinstance(aud, str) or not constant_time_str_equal(
-            aud, parsed_target.audience
-        ):
+        if not isinstance(aud, str) or not constant_time_str_equal(aud, parsed_target.audience):
             raise OwnershipVerificationError(REASON_GCP_SA_JWT_INVALID_AUDIENCE)
 
         sub = claims.get("sub", "")
@@ -380,14 +376,14 @@ class GcpServiceAccountJwtVerifier:
             sub, parsed_target.service_account_email
         ):
             raise OwnershipVerificationError(REASON_GCP_SA_JWT_INVALID_AUDIENCE)
-        if iss and iss != sub and not constant_time_str_equal(
-            iss, parsed_target.service_account_email
+        if (
+            iss
+            and iss != sub
+            and not constant_time_str_equal(iss, parsed_target.service_account_email)
         ):
             raise OwnershipVerificationError(REASON_GCP_SA_JWT_INVALID_AUDIENCE)
 
-        if not (
-            iss.endswith(_VALID_ISSUER_SUFFIXES) or sub.endswith(_VALID_ISSUER_SUFFIXES)
-        ):
+        if not (iss.endswith(_VALID_ISSUER_SUFFIXES) or sub.endswith(_VALID_ISSUER_SUFFIXES)):
             raise OwnershipVerificationError(REASON_GCP_SA_JWT_INVALID_AUDIENCE)
 
         argus_token = claims.get("argus_token", "")
@@ -402,21 +398,13 @@ class GcpServiceAccountJwtVerifier:
         nbf = _coerce_int(claims.get("nbf"))
 
         if exp is None:
-            raise OwnershipVerificationError(
-                REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
-            )
+            raise OwnershipVerificationError(REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID)
         if exp + self._leeway_s < now:
-            raise OwnershipVerificationError(
-                REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
-            )
+            raise OwnershipVerificationError(REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID)
         if iat is not None and iat - self._leeway_s > now:
-            raise OwnershipVerificationError(
-                REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
-            )
+            raise OwnershipVerificationError(REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID)
         if nbf is not None and nbf - self._leeway_s > now:
-            raise OwnershipVerificationError(
-                REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
-            )
+            raise OwnershipVerificationError(REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID)
 
     def _emit(
         self,

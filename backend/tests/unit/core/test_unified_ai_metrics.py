@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.core import unified_ai_metrics as m
 
 
@@ -79,10 +78,12 @@ def test_increment_helpers_and_reset():
 def test_emit_fail_open_on_prometheus_error():
     broken = MagicMock()
     broken.labels.return_value.inc.side_effect = RuntimeError("boom")
-    with patch.object(m, "_PROM_COUNTERS", {"argus_lab_boundary_denials_total": broken}):
-        with patch.object(m, "_PROM_INITIALIZED", True):
-            with patch.object(m, "_PROMETHEUS_AVAILABLE", True):
-                assert m.record_lab_boundary_denial() == 1
+    with (
+        patch.object(m, "_PROM_COUNTERS", {"argus_lab_boundary_denials_total": broken}),
+        patch.object(m, "_PROM_INITIALIZED", True),
+        patch.object(m, "_PROMETHEUS_AVAILABLE", True),
+    ):
+        assert m.record_lab_boundary_denial() == 1
 
 
 def test_rag_retrieval_latency_does_not_raise():
@@ -90,10 +91,11 @@ def test_rag_retrieval_latency_does_not_raise():
 
 
 def test_policy_bridge_smoke_increments_lab_execution():
+    from datetime import UTC, datetime, timedelta
+
     from src.execution_mode import evaluate_with_execution_mode
     from src.execution_mode.lab_lease import LabLeaseService
     from src.execution_mode.lab_scope import LabScopeManifest
-    from datetime import UTC, datetime, timedelta
 
     manifest = LabScopeManifest(
         tenant_id="t-1",
@@ -120,15 +122,17 @@ def test_policy_bridge_smoke_increments_lab_execution():
 
 def test_prometheus_init_guarded_against_duplicate_registration():
     fake_counter = MagicMock()
-    with patch.object(m, "_PROM_COUNTERS", {"argus_llm_requests_total": fake_counter}):
-        with patch.object(m, "_PROM_INITIALIZED", True):
-            m.record_llm_request(
-                alias="a",
-                provider="p",
-                model="m",
-                task="t",
-                status="ok",
-                mode="production",
-                latency_ms=1.0,
-            )
+    with (
+        patch.object(m, "_PROM_COUNTERS", {"argus_llm_requests_total": fake_counter}),
+        patch.object(m, "_PROM_INITIALIZED", True),
+    ):
+        m.record_llm_request(
+            alias="a",
+            provider="p",
+            model="m",
+            task="t",
+            status="ok",
+            mode="production",
+            latency_ms=1.0,
+        )
     fake_counter.labels.assert_called_once()

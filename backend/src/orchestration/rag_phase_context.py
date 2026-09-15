@@ -174,7 +174,9 @@ def format_rag_pack_for_prompt(pack: RagEvidencePack) -> str:
         )
         return "\n".join(lines)
 
-    lines.append("Cite facts with [cite:<chunk_hash>] and citation id. Do not invent CVE identifiers.")
+    lines.append(
+        "Cite facts with [cite:<chunk_hash>] and citation id. Do not invent CVE identifiers."
+    )
     for citation in pack.citations:
         snippet = citation.snippet[:_SNIPPET_MAX]
         lines.append(
@@ -332,11 +334,7 @@ def _strip_lab_artifacts_for_production(
         return pack
     kept_ids = {chunk.id for chunk in kept_chunks}
     kept_citations = tuple(item for item in pack.citations if item.chunk_id in kept_ids)
-    status = (
-        LlmResponseStatus.OK.value
-        if kept_chunks
-        else LlmResponseStatus.NEEDS_EVIDENCE.value
-    )
+    status = LlmResponseStatus.OK.value if kept_chunks else LlmResponseStatus.NEEDS_EVIDENCE.value
     metadata = dict(pack.metadata)
     metadata["status"] = status
     metadata["lab_artifacts_stripped"] = True

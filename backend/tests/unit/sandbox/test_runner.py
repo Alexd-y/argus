@@ -10,12 +10,12 @@ TemplateRenderError, ``asyncio.TimeoutError``).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -34,7 +34,6 @@ from src.sandbox.k8s_adapter import (
 )
 from src.sandbox.runner import SandboxRunner, dispatch_jobs
 from src.sandbox.templating import TemplateRenderError
-
 
 # ---------------------------------------------------------------------------
 # Fakes — keep dependencies minimal so the runner is the unit under test.
@@ -71,9 +70,7 @@ class _FakeAdapter:
         self.concurrent: int = 0
         self.peak_concurrent: int = 0
 
-    async def run(
-        self, tool_job: ToolJob, descriptor: ToolDescriptor
-    ) -> SandboxRunResult:
+    async def run(self, tool_job: ToolJob, descriptor: ToolDescriptor) -> SandboxRunResult:
         self.calls.append((tool_job, descriptor))
         self.concurrent += 1
         self.peak_concurrent = max(self.peak_concurrent, self.concurrent)
@@ -238,9 +235,7 @@ def test_unknown_tool_id_returns_failure_without_calling_adapter(
 
 
 def test_approval_required_error_is_translated(registry: _FakeRegistry) -> None:
-    adapter = _FakeAdapter(
-        raises=ApprovalRequiredError, raise_kwargs={"message": "needs approval"}
-    )
+    adapter = _FakeAdapter(raises=ApprovalRequiredError, raise_kwargs={"message": "needs approval"})
     runner = SandboxRunner(adapter, registry=registry)  # type: ignore[arg-type]
 
     results = asyncio.run(runner.dispatch_jobs([_make_job()]))
@@ -250,9 +245,7 @@ def test_approval_required_error_is_translated(registry: _FakeRegistry) -> None:
 
 
 def test_sandbox_config_error_is_translated(registry: _FakeRegistry) -> None:
-    adapter = _FakeAdapter(
-        raises=SandboxConfigError, raise_kwargs={"message": "bad cfg"}
-    )
+    adapter = _FakeAdapter(raises=SandboxConfigError, raise_kwargs={"message": "bad cfg"})
     runner = SandboxRunner(adapter, registry=registry)  # type: ignore[arg-type]
 
     results = asyncio.run(runner.dispatch_jobs([_make_job()]))
@@ -262,9 +255,7 @@ def test_sandbox_config_error_is_translated(registry: _FakeRegistry) -> None:
 
 
 def test_sandbox_cluster_error_is_translated(registry: _FakeRegistry) -> None:
-    adapter = _FakeAdapter(
-        raises=SandboxClusterError, raise_kwargs={"message": "kube down"}
-    )
+    adapter = _FakeAdapter(raises=SandboxClusterError, raise_kwargs={"message": "kube down"})
     runner = SandboxRunner(adapter, registry=registry)  # type: ignore[arg-type]
 
     results = asyncio.run(runner.dispatch_jobs([_make_job()]))
@@ -289,9 +280,7 @@ def test_template_render_error_is_translated(registry: _FakeRegistry) -> None:
 
 def test_failure_reason_is_truncated_to_128_chars(registry: _FakeRegistry) -> None:
     long_msg = "x" * 500
-    adapter = _FakeAdapter(
-        raises=SandboxConfigError, raise_kwargs={"message": long_msg}
-    )
+    adapter = _FakeAdapter(raises=SandboxConfigError, raise_kwargs={"message": long_msg})
     runner = SandboxRunner(adapter, registry=registry)  # type: ignore[arg-type]
 
     results = asyncio.run(runner.dispatch_jobs([_make_job()]))
@@ -319,11 +308,9 @@ def test_per_job_timeout_aborts_long_running_job(registry: _FakeRegistry) -> Non
         original = asyncio.wait_for
 
         async def _instant_timeout(coro: Any, *_args: Any, **_kwargs: Any) -> Any:
-            try:
+            with contextlib.suppress(Exception):  # best-effort cleanup
                 coro.close()
-            except Exception:  # noqa: BLE001 — best-effort cleanup
-                pass
-            raise asyncio.TimeoutError
+            raise TimeoutError
 
         asyncio.wait_for = _instant_timeout  # type: ignore[assignment]
         try:
@@ -458,9 +445,7 @@ def test_unexpected_exception_in_one_job_does_not_block_siblings(
         def __init__(self) -> None:
             self.calls: int = 0
 
-        async def run(
-            self, tool_job: ToolJob, descriptor: ToolDescriptor
-        ) -> SandboxRunResult:
+        async def run(self, tool_job: ToolJob, descriptor: ToolDescriptor) -> SandboxRunResult:
             self.calls += 1
             if self.calls == 1:
                 raise ValueError("simulated SDK bug: list index out of range")
@@ -507,9 +492,7 @@ def test_runner_logs_unexpected_failure_with_class_only(
         asyncio.run(runner.dispatch_jobs([_make_job()]))
 
     matching = [
-        rec
-        for rec in caplog.records
-        if rec.getMessage() == "sandbox.runner.unexpected_failure"
+        rec for rec in caplog.records if rec.getMessage() == "sandbox.runner.unexpected_failure"
     ]
     assert matching, "MED-3 unexpected-failure log record must be emitted"
     rec = matching[0]

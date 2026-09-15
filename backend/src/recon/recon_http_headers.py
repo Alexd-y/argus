@@ -55,7 +55,7 @@ _DISCLOSURE_PENALTY = 5
 
 
 class _HeaderSpec:
-    __slots__ = ("name", "severity", "penalty", "recommended_value", "check")
+    __slots__ = ("check", "name", "penalty", "recommended_value", "severity")
 
     def __init__(
         self,
@@ -247,7 +247,9 @@ def _reveals_version(value: str) -> bool:
 # ── analysis helpers ──────────────────────────────────────────────────────────
 
 
-def _analyze_headers(response_headers: dict[str, str]) -> tuple[list[HeaderFinding], int]:
+def _analyze_headers(
+    response_headers: dict[str, str],
+) -> tuple[list[HeaderFinding], int]:
     """Analyze response headers against spec registry. Returns (findings, score)."""
     lower_map: dict[str, str] = {k.lower(): v for k, v in response_headers.items()}
     findings: list[HeaderFinding] = []
@@ -309,7 +311,9 @@ def _ensure_https_url(target: str) -> str:
 # ── public API ────────────────────────────────────────────────────────────────
 
 
-async def collect_security_headers(target: str, endpoints: list[str] | None = None) -> SecurityHeadersResult:
+async def collect_security_headers(
+    target: str, endpoints: list[str] | None = None
+) -> SecurityHeadersResult:
     """Fetch target URL and analyze security-relevant headers.
 
     When *endpoints* is provided, also scans each additional path and
@@ -374,7 +378,10 @@ async def collect_security_headers(target: str, endpoints: list[str] | None = No
             last_error = f"connect_error:{type(exc).__name__}"
             logger.info(
                 "security_headers_connect_error",
-                extra={"event": "security_headers_connect_error", "url": attempt_url[:256]},
+                extra={
+                    "event": "security_headers_connect_error",
+                    "url": attempt_url[:256],
+                },
             )
         except httpx.HTTPError as exc:
             last_error = f"http_error:{type(exc).__name__}"
@@ -433,7 +440,9 @@ async def _scan_extra_endpoints(
     if per_endpoint:
         all_headers: dict[str, dict[str, list[str]]] = {}
         base_hdrs = {k.lower(): v for k, v in (base_result.all_response_headers or {}).items()}
-        for hdr_name in sorted(set(list(base_hdrs.keys()) + [h for ep_hdrs in per_endpoint.values() for h in ep_hdrs])):
+        for hdr_name in sorted(
+            set(list(base_hdrs.keys()) + [h for ep_hdrs in per_endpoint.values() for h in ep_hdrs])
+        ):
             endpoints_with: list[str] = []
             endpoints_without: list[str] = []
             base_has = hdr_name in base_hdrs

@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import AsyncIterator, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 from urllib.parse import parse_qs, urlparse
 
@@ -52,7 +52,6 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
-
 from src.api.admin import mfa as admin_mfa_router
 from src.api.routers import admin_auth as admin_auth_router_module
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
@@ -122,7 +121,7 @@ def _enforce_super_admin(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 async def mfa_app(
     session_factory: Any,
-    mfa_keyring: Any,  # noqa: ARG001 — pulls Fernet keyring side-effect
+    mfa_keyring: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[FastAPI]:
     """FastAPI app wired to the per-test SQLite engine for MFA tests.
@@ -136,12 +135,8 @@ async def mfa_app(
         unrelated admin endpoints (whose ORM tables aren't in the
         032 schema).
     """
-    monkeypatch.setattr(
-        "src.auth.admin_users.async_session_factory", session_factory
-    )
-    monkeypatch.setattr(
-        "src.auth.admin_dependencies.async_session_factory", session_factory
-    )
+    monkeypatch.setattr("src.auth.admin_users.async_session_factory", session_factory)
+    monkeypatch.setattr("src.auth.admin_dependencies.async_session_factory", session_factory)
 
     app = FastAPI()
     app.include_router(admin_auth_router_module.router, prefix="/api/v1")
@@ -183,9 +178,7 @@ async def mfa_app(
 async def mfa_client(mfa_app: FastAPI) -> AsyncIterator[AsyncClient]:
     """Async HTTPS client wired directly to the MFA-enabled app."""
     transport = ASGITransport(app=mfa_app)
-    async with AsyncClient(
-        transport=transport, base_url="https://testserver"
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="https://testserver") as ac:
         yield ac
 
 
@@ -209,7 +202,7 @@ async def _seed_admin(
                 password_hash=hash_password(password),
                 role=role,
                 tenant_id=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 disabled_at=None,
             )
         )
@@ -403,10 +396,10 @@ async def test_confirm_with_valid_totp_enables_mfa_and_stamps_session(
 
     async with session_factory() as s:
         rows = (
-            await s.execute(
-                select(AdminSession).where(AdminSession.subject == _SUBJECT_ADMIN)
-            )
-        ).scalars().all()
+            (await s.execute(select(AdminSession).where(AdminSession.subject == _SUBJECT_ADMIN)))
+            .scalars()
+            .all()
+        )
         assert rows, "expected at least one session row"
         assert any(r.mfa_passed_at is not None for r in rows), (
             "confirm MUST stamp mfa_passed_at on the calling session"
@@ -420,9 +413,7 @@ async def test_confirm_with_invalid_totp_returns_400_invalid_totp(
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     await mfa_client.post(_MFA_PREFIX + "/enroll", json={})
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": "000000"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "000000"})
 
     assert response.status_code == 400
     assert response.json()["detail"] == "invalid_totp"
@@ -434,9 +425,7 @@ async def test_confirm_without_prior_enrollment_returns_400_no_pending(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": "123456"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "123456"})
 
     assert response.status_code == 400
     assert response.json()["detail"] == "no_pending_enrollment"
@@ -448,9 +437,7 @@ async def test_confirm_rejects_short_totp_code_with_422(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": "12345"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "12345"})
     assert response.status_code == 422
 
 
@@ -460,16 +447,12 @@ async def test_confirm_rejects_alphabetic_totp_code_with_422(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": "abcdef"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "abcdef"})
     assert response.status_code == 422
 
 
 async def test_confirm_without_session_returns_401(mfa_client: AsyncClient) -> None:
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": "123456"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "123456"})
     assert response.status_code == 401
 
 
@@ -486,9 +469,7 @@ async def test_verify_totp_happy_path_sets_mfa_passed_at(
     enrolled = await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
     # Wipe the freshness stamp so /verify has work to do.
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
 
     response = await mfa_client.post(
         _MFA_PREFIX + "/verify",
@@ -507,9 +488,7 @@ async def test_verify_backup_code_happy_path_decrements_count(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     enrolled = await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
 
     response = await mfa_client.post(
         _MFA_PREFIX + "/verify",
@@ -529,17 +508,11 @@ async def test_verify_backup_code_second_use_returns_401_consumed(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     enrolled = await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
 
     code = enrolled["backup_codes"][0]
-    first = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": code}
-    )
-    second = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": code}
-    )
+    first = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
+    second = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
 
     assert first.status_code == 200
     assert second.status_code == 401
@@ -586,9 +559,7 @@ async def test_verify_with_wrong_totp_returns_401_mfa_verify_failed(
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"totp_code": "000000"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
 
     assert response.status_code == 401
     assert response.json()["detail"] == "mfa_verify_failed"
@@ -637,9 +608,7 @@ async def test_verify_rate_limit_trips_at_sixth_wrong_attempt_with_retry_after(
 
     sixth = await mfa_client.post(_MFA_PREFIX + "/verify", json=body)
     assert sixth.status_code == 429
-    assert sixth.headers.get("Retry-After"), (
-        "rate-limit response MUST include a Retry-After header"
-    )
+    assert sixth.headers.get("Retry-After"), "rate-limit response MUST include a Retry-After header"
     assert "again later" in sixth.json()["detail"].lower()
 
 
@@ -678,9 +647,7 @@ async def test_disable_with_valid_totp_returns_200_and_wipes_columns(
 
     async with session_factory() as s:
         row = (
-            await s.execute(
-                select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN)
-            )
+            await s.execute(select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN))
         ).scalar_one()
         assert row.mfa_enabled is False
         assert row.mfa_secret_encrypted is None
@@ -713,9 +680,7 @@ async def test_disable_with_wrong_totp_returns_401_mfa_verify_failed(
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/disable", json={"totp_code": "000000"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/disable", json={"totp_code": "000000"})
 
     assert response.status_code == 401
     assert response.json()["detail"] == "mfa_verify_failed"
@@ -727,9 +692,7 @@ async def test_disable_when_mfa_not_enabled_returns_409(
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-    response = await mfa_client.post(
-        _MFA_PREFIX + "/disable", json={"totp_code": "123456"}
-    )
+    response = await mfa_client.post(_MFA_PREFIX + "/disable", json={"totp_code": "123456"})
     assert response.status_code == 409
     assert response.json()["detail"] == "mfa_not_enabled"
 
@@ -786,7 +749,7 @@ async def test_status_when_enrolled_but_stale_reports_passed_false(
     await _force_mfa_passed_at(
         session_factory,
         subject=_SUBJECT_ADMIN,
-        when=datetime.now(timezone.utc) - timedelta(hours=1),
+        when=datetime.now(UTC) - timedelta(hours=1),
     )
 
     response = await mfa_client.get(_MFA_PREFIX + "/status")
@@ -820,18 +783,12 @@ async def test_regenerate_returns_new_codes_and_invalidates_old(
     assert set(new_codes).isdisjoint(set(old_codes))
 
     # Old codes no longer verify.
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
-    old_attempt = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": old_codes[0]}
-    )
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
+    old_attempt = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": old_codes[0]})
     assert old_attempt.status_code == 401
 
     # New codes do verify (rate-limit budget still allows 4 more attempts).
-    new_attempt = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": new_codes[0]}
-    )
+    new_attempt = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": new_codes[0]})
     assert new_attempt.status_code == 200
 
 
@@ -848,16 +805,10 @@ async def test_regenerate_each_new_code_is_single_use(
     )
     new_codes = response.json()["backup_codes"]
 
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
     code = new_codes[0]
-    first = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": code}
-    )
-    second = await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": code}
-    )
+    first = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
+    second = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
     assert first.status_code == 200
     assert second.status_code == 401
 
@@ -920,19 +871,11 @@ async def test_no_secret_or_code_material_in_logs_across_full_flow(
     backup_codes: list[str] = body["backup_codes"]
 
     confirm_code = pyotp.TOTP(secret).now()
-    await mfa_client.post(
-        _MFA_PREFIX + "/confirm", json={"totp_code": confirm_code}
-    )
-    await _force_mfa_passed_at(
-        session_factory, subject=_SUBJECT_ADMIN, when=None
-    )
+    await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": confirm_code})
+    await _force_mfa_passed_at(session_factory, subject=_SUBJECT_ADMIN, when=None)
     verify_code = pyotp.TOTP(secret).now()
-    await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"totp_code": verify_code}
-    )
-    await mfa_client.post(
-        _MFA_PREFIX + "/verify", json={"backup_code": backup_codes[0]}
-    )
+    await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": verify_code})
+    await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": backup_codes[0]})
     regen = await mfa_client.post(
         _MFA_PREFIX + "/backup-codes/regenerate",
         json={"totp_code": pyotp.TOTP(secret).now()},
@@ -946,9 +889,7 @@ async def test_no_secret_or_code_material_in_logs_across_full_flow(
     for record in caplog.records:
         rendered = record.getMessage()
         for token in forbidden:
-            assert token not in rendered, (
-                f"forbidden token {token!r} leaked into log: {rendered!r}"
-            )
+            assert token not in rendered, f"forbidden token {token!r} leaked into log: {rendered!r}"
         # Also walk the ``extra`` dict on each record — structured logs
         # land there, not in the message.
         for key, value in record.__dict__.items():
@@ -956,8 +897,7 @@ async def test_no_secret_or_code_material_in_logs_across_full_flow(
                 continue
             for token in forbidden:
                 assert token not in value, (
-                    f"forbidden token {token!r} leaked into "
-                    f"record.{key}: {value!r}"
+                    f"forbidden token {token!r} leaked into record.{key}: {value!r}"
                 )
 
 
@@ -970,9 +910,7 @@ async def test_gate_blocks_super_admin_without_mfa_with_403_x_mfa_enrollment_req
     mfa_client: AsyncClient, session_factory: Any
 ) -> None:
     """A super-admin who never enrolled MUST be bounced before the handler."""
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
 
     response = await mfa_client.get(_GATED_PATH)
@@ -987,9 +925,7 @@ async def test_gate_blocks_super_admin_with_stale_mfa_passed_at_with_401_x_mfa_r
     session_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_SUPER)
 
@@ -998,7 +934,7 @@ async def test_gate_blocks_super_admin_with_stale_mfa_passed_at_with_401_x_mfa_r
     await _force_mfa_passed_at(
         session_factory,
         subject=_SUBJECT_SUPER,
-        when=datetime.now(timezone.utc) - timedelta(hours=1),
+        when=datetime.now(UTC) - timedelta(hours=1),
     )
 
     response = await mfa_client.get(_GATED_PATH)
@@ -1011,9 +947,7 @@ async def test_gate_blocks_super_admin_with_stale_mfa_passed_at_with_401_x_mfa_r
 async def test_gate_passes_super_admin_with_fresh_mfa(
     mfa_client: AsyncClient, session_factory: Any
 ) -> None:
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_SUPER)
 
@@ -1048,9 +982,7 @@ async def test_gate_no_op_when_enforcement_set_is_empty(
     """Empty enforcement set degrades the gate to a pass-through."""
     monkeypatch.setattr(settings, "admin_mfa_enforce_roles", [])
 
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
 
     response = await mfa_client.get(_GATED_PATH)
@@ -1059,7 +991,7 @@ async def test_gate_no_op_when_enforcement_set_is_empty(
 
 async def test_gate_passes_legacy_x_admin_key_when_session_mode_allows_both(
     mfa_client: AsyncClient,
-    session_factory: Any,  # noqa: ARG001 — fixture pulled for engine wiring
+    session_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Legacy ``X-Admin-Key`` shim has no SessionPrincipal, so the gate degrades.
@@ -1071,9 +1003,7 @@ async def test_gate_passes_legacy_x_admin_key_when_session_mode_allows_both(
     monkeypatch.setattr(settings, "admin_auth_mode", "both")
     monkeypatch.setattr(settings, "admin_api_key", "test-legacy-key-c7-t03")
 
-    response = await mfa_client.get(
-        _GATED_PATH, headers={"X-Admin-Key": "test-legacy-key-c7-t03"}
-    )
+    response = await mfa_client.get(_GATED_PATH, headers={"X-Admin-Key": "test-legacy-key-c7-t03"})
 
     assert response.status_code == 200, response.text
 
@@ -1100,9 +1030,7 @@ async def test_gate_emits_structured_log_on_enrollment_block(
     """The gate's 403 path MUST emit ``argus.auth.admin_mfa.gate_blocked``."""
     caplog.set_level(logging.INFO)
 
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
 
     response = await mfa_client.get(_GATED_PATH)
@@ -1114,9 +1042,7 @@ async def test_gate_emits_structured_log_on_enrollment_block(
         if getattr(r, "event", None) == "argus.auth.admin_mfa.gate_blocked"
         and getattr(r, "reason", None) == "role_requires_mfa_but_not_enrolled"
     ]
-    assert matched, (
-        "expected one structured gate-blocked log line on enrolment block"
-    )
+    assert matched, "expected one structured gate-blocked log line on enrolment block"
 
 
 async def test_gate_emits_structured_log_on_stale_session_block(
@@ -1127,9 +1053,7 @@ async def test_gate_emits_structured_log_on_stale_session_block(
 ) -> None:
     caplog.set_level(logging.INFO)
 
-    await _seed_admin(
-        session_factory, subject=_SUBJECT_SUPER, role="super-admin"
-    )
+    await _seed_admin(session_factory, subject=_SUBJECT_SUPER, role="super-admin")
     await _login(mfa_client, subject=_SUBJECT_SUPER)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_SUPER)
 
@@ -1137,7 +1061,7 @@ async def test_gate_emits_structured_log_on_stale_session_block(
     await _force_mfa_passed_at(
         session_factory,
         subject=_SUBJECT_SUPER,
-        when=datetime.now(timezone.utc) - timedelta(hours=1),
+        when=datetime.now(UTC) - timedelta(hours=1),
     )
 
     response = await mfa_client.get(_GATED_PATH)
@@ -1149,6 +1073,4 @@ async def test_gate_emits_structured_log_on_stale_session_block(
         if getattr(r, "event", None) == "argus.auth.admin_mfa.gate_blocked"
         and getattr(r, "reason", None) == "stale_or_missing_mfa_passed_at"
     ]
-    assert matched, (
-        "expected one structured gate-blocked log line on stale-session block"
-    )
+    assert matched, "expected one structured gate-blocked log line on stale-session block"

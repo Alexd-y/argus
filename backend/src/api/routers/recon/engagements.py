@@ -34,9 +34,7 @@ def _get_tenant_id() -> str:
 
 
 @router.post("", response_model=EngagementResponse, status_code=201)
-async def create(
-    data: EngagementCreate, db: AsyncSession = Depends(get_db)
-) -> EngagementResponse:
+async def create(data: EngagementCreate, db: AsyncSession = Depends(get_db)) -> EngagementResponse:
     """Create a new recon engagement."""
     tenant_id = _get_tenant_id()
     eng = await create_engagement(db, tenant_id, data)
@@ -62,9 +60,7 @@ async def list_all(
 
 
 @router.get("/{engagement_id}", response_model=EngagementResponse)
-async def get_one(
-    engagement_id: str, db: AsyncSession = Depends(get_db)
-) -> EngagementResponse:
+async def get_one(engagement_id: str, db: AsyncSession = Depends(get_db)) -> EngagementResponse:
     """Get engagement with stats."""
     tenant_id = _get_tenant_id()
     eng = await get_engagement(db, tenant_id, engagement_id)
@@ -90,34 +86,30 @@ async def update(
         eng = await update_engagement(db, tenant_id, engagement_id, data)
         return EngagementResponse.model_validate(eng)
     except EngagementNotFoundError:
-        raise HTTPException(status_code=404, detail="Engagement not found")
+        raise HTTPException(status_code=404, detail="Engagement not found") from None
 
 
 @router.post("/{engagement_id}/activate", response_model=EngagementResponse)
-async def activate(
-    engagement_id: str, db: AsyncSession = Depends(get_db)
-) -> EngagementResponse:
+async def activate(engagement_id: str, db: AsyncSession = Depends(get_db)) -> EngagementResponse:
     """Activate engagement (requires scope rules)."""
     tenant_id = _get_tenant_id()
     try:
         eng = await activate_engagement(db, tenant_id, engagement_id)
         return EngagementResponse.model_validate(eng)
     except EngagementNotFoundError:
-        raise HTTPException(status_code=404, detail="Engagement not found")
+        raise HTTPException(status_code=404, detail="Engagement not found") from None
     except EngagementStateError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/{engagement_id}/complete", response_model=EngagementResponse)
-async def complete(
-    engagement_id: str, db: AsyncSession = Depends(get_db)
-) -> EngagementResponse:
+async def complete(engagement_id: str, db: AsyncSession = Depends(get_db)) -> EngagementResponse:
     """Mark engagement as completed."""
     tenant_id = _get_tenant_id()
     try:
         eng = await complete_engagement(db, tenant_id, engagement_id)
         return EngagementResponse.model_validate(eng)
     except EngagementNotFoundError:
-        raise HTTPException(status_code=404, detail="Engagement not found")
+        raise HTTPException(status_code=404, detail="Engagement not found") from None
     except EngagementStateError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

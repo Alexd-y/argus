@@ -9,7 +9,7 @@ touches a real network or DNS resolver.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
@@ -17,7 +17,6 @@ from uuid import UUID
 import httpx
 import pytest
 from pydantic import ValidationError
-
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
 from src.policy.ownership import (
     OWNERSHIP_FAILURE_REASONS,
@@ -32,7 +31,6 @@ from src.policy.ownership import (
     _extract_dns_host,
 )
 
-
 # ---------------------------------------------------------------------------
 # OwnershipChallenge / OwnershipProof model contracts
 # ---------------------------------------------------------------------------
@@ -40,7 +38,7 @@ from src.policy.ownership import (
 
 class TestOwnershipModels:
     def test_challenge_token_must_be_43_chars(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         with pytest.raises(ValidationError):
             OwnershipChallenge(
                 tenant_id=tenant_id,
@@ -62,7 +60,7 @@ class TestOwnershipModels:
             )
 
     def test_proof_extra_fields_forbidden(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         with pytest.raises(ValidationError):
             OwnershipProof.model_validate(
                 {
@@ -158,9 +156,7 @@ class TestIssueChallenge:
         kwargs: dict[str, Any],
     ) -> None:
         with pytest.raises(ValueError):
-            OwnershipVerifier(
-                store=ownership_store, audit_logger=audit_logger, **kwargs
-            )
+            OwnershipVerifier(store=ownership_store, audit_logger=audit_logger, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -176,9 +172,7 @@ class TestDryRun:
         audit_logger: AuditLogger,
         tenant_id: UUID,
     ) -> None:
-        verifier = OwnershipVerifier(
-            store=ownership_store, audit_logger=audit_logger, dry_run=True
-        )
+        verifier = OwnershipVerifier(store=ownership_store, audit_logger=audit_logger, dry_run=True)
         challenge = verifier.issue_challenge(
             tenant_id=tenant_id,
             target="example.com",
@@ -208,7 +202,7 @@ class TestExpiry:
         verifier = OwnershipVerifier(store=ownership_store, audit_logger=audit_logger)
         # Build an *already-expired* challenge directly without going
         # through ``issue_challenge`` so the test is deterministic.
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         challenge = OwnershipChallenge(
             tenant_id=tenant_id,
             target="example.com",
@@ -527,9 +521,7 @@ class TestDnsTxt:
             target="example.com",
             method=OwnershipMethod.DNS_TXT,
         )
-        with patch.object(
-            verifier, "_resolve_dns", new=AsyncMock(return_value=[challenge.token])
-        ):
+        with patch.object(verifier, "_resolve_dns", new=AsyncMock(return_value=[challenge.token])):
             proof = asyncio.run(verifier.verify(challenge))
         assert proof.method is OwnershipMethod.DNS_TXT
 
@@ -545,11 +537,11 @@ class TestDnsTxt:
             target="example.com",
             method=OwnershipMethod.DNS_TXT,
         )
-        with patch.object(
-            verifier, "_resolve_dns", new=AsyncMock(return_value=["unrelated"])
+        with (
+            patch.object(verifier, "_resolve_dns", new=AsyncMock(return_value=["unrelated"])),
+            pytest.raises(OwnershipVerificationError) as exc_info,
         ):
-            with pytest.raises(OwnershipVerificationError) as exc_info:
-                asyncio.run(verifier.verify(challenge))
+            asyncio.run(verifier.verify(challenge))
         assert exc_info.value.summary == "ownership_token_mismatch"
 
     def test_dns_timeout_maps_to_taxonomy(
@@ -564,15 +556,15 @@ class TestDnsTxt:
             target="example.com",
             method=OwnershipMethod.DNS_TXT,
         )
-        with patch.object(
-            verifier,
-            "_resolve_dns",
-            new=AsyncMock(
-                side_effect=OwnershipVerificationError("ownership_dns_timeout")
+        with (
+            patch.object(
+                verifier,
+                "_resolve_dns",
+                new=AsyncMock(side_effect=OwnershipVerificationError("ownership_dns_timeout")),
             ),
+            pytest.raises(OwnershipVerificationError) as exc_info,
         ):
-            with pytest.raises(OwnershipVerificationError) as exc_info:
-                asyncio.run(verifier.verify(challenge))
+            asyncio.run(verifier.verify(challenge))
         assert exc_info.value.summary == "ownership_dns_timeout"
 
     def test_dns_nxdomain_maps_to_taxonomy(
@@ -587,15 +579,15 @@ class TestDnsTxt:
             target="example.com",
             method=OwnershipMethod.DNS_TXT,
         )
-        with patch.object(
-            verifier,
-            "_resolve_dns",
-            new=AsyncMock(
-                side_effect=OwnershipVerificationError("ownership_dns_nxdomain")
+        with (
+            patch.object(
+                verifier,
+                "_resolve_dns",
+                new=AsyncMock(side_effect=OwnershipVerificationError("ownership_dns_nxdomain")),
             ),
+            pytest.raises(OwnershipVerificationError) as exc_info,
         ):
-            with pytest.raises(OwnershipVerificationError) as exc_info:
-                asyncio.run(verifier.verify(challenge))
+            asyncio.run(verifier.verify(challenge))
         assert exc_info.value.summary == "ownership_dns_nxdomain"
 
     def test_dns_generic_error_maps_to_taxonomy(
@@ -610,15 +602,15 @@ class TestDnsTxt:
             target="example.com",
             method=OwnershipMethod.DNS_TXT,
         )
-        with patch.object(
-            verifier,
-            "_resolve_dns",
-            new=AsyncMock(
-                side_effect=OwnershipVerificationError("ownership_dns_error")
+        with (
+            patch.object(
+                verifier,
+                "_resolve_dns",
+                new=AsyncMock(side_effect=OwnershipVerificationError("ownership_dns_error")),
             ),
+            pytest.raises(OwnershipVerificationError) as exc_info,
         ):
-            with pytest.raises(OwnershipVerificationError) as exc_info:
-                asyncio.run(verifier.verify(challenge))
+            asyncio.run(verifier.verify(challenge))
         assert exc_info.value.summary == "ownership_dns_error"
 
 
@@ -630,7 +622,7 @@ class TestDnsTxt:
 class TestInMemoryStore:
     def test_save_and_get_round_trip(self, tenant_id: UUID) -> None:
         store = InMemoryOwnershipProofStore()
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         proof = OwnershipProof(
             challenge_id=UUID("00000000-0000-0000-0000-000000000001"),
             tenant_id=tenant_id,
@@ -678,9 +670,7 @@ class TestHelpers:
         assert url.startswith("http://example.com/")
 
     def test_build_http_url_path_override(self) -> None:
-        url = _build_http_url(
-            "https://example.com/old", path="/.well-known/argus-ownership.txt"
-        )
+        url = _build_http_url("https://example.com/old", path="/.well-known/argus-ownership.txt")
         assert url.endswith("/.well-known/argus-ownership.txt")
 
     def test_constant_time_equals_equal(self) -> None:

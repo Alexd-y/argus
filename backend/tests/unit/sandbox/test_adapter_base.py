@@ -15,7 +15,6 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.pipeline.contracts.finding_dto import FindingCategory
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec, ToolJob
@@ -31,7 +30,6 @@ from src.sandbox.adapter_base import (
 )
 from src.sandbox.parsers import HEARTBEAT_TAG_PREFIX
 from src.sandbox.templating import TemplateRenderError
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,9 +84,7 @@ def test_network_policy_ref_is_frozen() -> None:
 
 
 def test_resource_limits_happy() -> None:
-    limits = ResourceLimits(
-        cpu_limit="500m", memory_limit="256Mi", default_timeout_s=300
-    )
+    limits = ResourceLimits(cpu_limit="500m", memory_limit="256Mi", default_timeout_s=300)
     assert limits.pids_limit == 256
 
 
@@ -242,9 +238,7 @@ def test_shell_adapter_parse_output_default_emits_heartbeat_and_warns(
     with caplog.at_level(logging.WARNING, logger="src.sandbox.parsers"):
         result = adapter.parse_output(b"col1,col2\nvalue,42\n", b"", Path("/out/job-1"))
 
-    assert len(result) == 1, (
-        "no-handler fail-soft must emit exactly one heartbeat FindingDTO"
-    )
+    assert len(result) == 1, "no-handler fail-soft must emit exactly one heartbeat FindingDTO"
     heartbeat = result[0]
     assert heartbeat.category is FindingCategory.INFO
     assert heartbeat.cvss_v3_score == 0.0
@@ -255,9 +249,9 @@ def test_shell_adapter_parse_output_default_emits_heartbeat_and_warns(
     assert any("parsers.dispatch.no_handler" in r.message for r in caplog.records), [
         r.message for r in caplog.records
     ]
-    assert not any(
-        "parse_output_not_implemented" in r.message for r in caplog.records
-    ), "legacy warning must be retired once dispatch_parse is wired in"
+    assert not any("parse_output_not_implemented" in r.message for r in caplog.records), (
+        "legacy warning must be retired once dispatch_parse is wired in"
+    )
 
 
 def test_shell_adapter_parse_output_binary_blob_does_not_warn(

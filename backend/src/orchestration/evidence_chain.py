@@ -86,11 +86,15 @@ class EvidenceChain:
         argv: list[str],
         stdout_hash: str = "",
     ) -> EvidenceLink:
-        content = json.dumps({
-            "tool": tool_name,
-            "argv": argv,
-            "stdout_hash": stdout_hash,
-        }, sort_keys=True, default=str)
+        content = json.dumps(
+            {
+                "tool": tool_name,
+                "argv": argv,
+                "stdout_hash": stdout_hash,
+            },
+            sort_keys=True,
+            default=str,
+        )
         link = EvidenceLink(
             link_type="tool_invocation",
             identifier=f"{tool_name}:{self._links[-1].identifier if self._links else self.scan_id}",
@@ -109,12 +113,15 @@ class EvidenceChain:
         severity: str,
         evidence_tier: int = 0,
     ) -> EvidenceLink:
-        content = json.dumps({
-            "finding_id": finding_id,
-            "title": title,
-            "severity": severity,
-            "evidence_tier": evidence_tier,
-        }, sort_keys=True)
+        content = json.dumps(
+            {
+                "finding_id": finding_id,
+                "title": title,
+                "severity": severity,
+                "evidence_tier": evidence_tier,
+            },
+            sort_keys=True,
+        )
         link = EvidenceLink(
             link_type="finding",
             identifier=finding_id,

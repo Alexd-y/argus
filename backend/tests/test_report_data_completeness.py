@@ -14,11 +14,7 @@ from src.reports.valhalla_report_context import (
 
 
 def test_testssl_text_parser() -> None:
-    stdout = (
-        "TLS 1.2   offered (OK)\n"
-        "TLS 1.3   offered (OK)\n"
-        "SSLv3     not offered (OK)\n"
-    )
+    stdout = "TLS 1.2   offered (OK)\nTLS 1.3   offered (OK)\nSSLv3     not offered (OK)\n"
     result = _parse_testssl_text_output(stdout)
     assert len(result.protocols) >= 2
     assert "TLS 1.2" in result.protocols

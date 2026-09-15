@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.llm_orchestrator.cost_tracker import CostRecord, CostSummary, CostTracker
 from src.llm_orchestrator.prompt_registry import AgentRole
 
@@ -189,7 +188,7 @@ class TestCostTrackerAggregations:
         tenant, scan = uuid4(), uuid4()
         # Pin two records with explicit timestamps that bracket the cutoff
         # so the test is deterministic regardless of wall-clock skew.
-        cutoff = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        cutoff = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         old = CostRecord(
             correlation_id=uuid4(),
             tenant_id=tenant,
@@ -221,8 +220,8 @@ class TestCostTrackerAggregations:
         # Tracker is a thin in-memory aggregator: directly seeding the
         # internal lists is the only way to assert ``since`` semantics
         # without sleeping the test process.
-        tracker._records_by_tenant[tenant].extend([old, new])  # noqa: SLF001
-        tracker._records_by_scan[scan].extend([old, new])  # noqa: SLF001
+        tracker._records_by_tenant[tenant].extend([old, new])
+        tracker._records_by_scan[scan].extend([old, new])
 
         summary_all = tracker.total_for_tenant(tenant)
         summary_since = tracker.total_for_tenant(tenant, since=cutoff)

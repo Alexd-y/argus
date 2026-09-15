@@ -8,12 +8,11 @@ contract enforced by :meth:`AuditLogger.verify_chain`.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.policy.audit import (
     GENESIS_HASH,
     AuditChainError,
@@ -24,7 +23,6 @@ from src.policy.audit import (
     AuditSink,
     InMemoryAuditSink,
 )
-
 
 # ---------------------------------------------------------------------------
 # AuditEvent — payload coercion
@@ -139,10 +137,8 @@ class TestPayloadCoercion:
 
 
 class TestHashChain:
-    def test_event_hash_is_deterministic_under_same_inputs(
-        self, tenant_id: UUID
-    ) -> None:
-        ts = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    def test_event_hash_is_deterministic_under_same_inputs(self, tenant_id: UUID) -> None:
+        ts = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         eid = uuid4()
         e1 = AuditEvent(
             event_id=eid,
@@ -177,9 +173,7 @@ class TestHashChain:
         )
         assert e1.event_hash != e2.event_hash
 
-    def test_explicit_event_hash_must_match_recomputation(
-        self, tenant_id: UUID
-    ) -> None:
+    def test_explicit_event_hash_must_match_recomputation(self, tenant_id: UUID) -> None:
         with pytest.raises(AuditChainError) as exc_info:
             AuditEvent(
                 event_type=AuditEventType.SCOPE_CHECK,
@@ -254,9 +248,7 @@ class _MutableSink:
 
 
 class TestTamperDetection:
-    def test_swapped_middle_event_breaks_chain_at_successor(
-        self, tenant_id: UUID
-    ) -> None:
+    def test_swapped_middle_event_breaks_chain_at_successor(self, tenant_id: UUID) -> None:
         sink = _MutableSink()
         assert isinstance(sink, AuditSink)
         logger = AuditLogger(sink)
@@ -296,9 +288,7 @@ class TestTamperDetection:
             logger.verify_chain(tenant_id=tenant_id)
         assert "chain break" in str(exc_info.value)
 
-    def test_chain_break_when_prev_hash_doesnt_match_predecessor(
-        self, tenant_id: UUID
-    ) -> None:
+    def test_chain_break_when_prev_hash_doesnt_match_predecessor(self, tenant_id: UUID) -> None:
         sink = _MutableSink()
         logger = AuditLogger(sink)
         logger.emit(

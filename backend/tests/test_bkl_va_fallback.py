@@ -11,7 +11,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from src.recon.vulnerability_analysis.pipeline import (
     _build_va_fallback_output,
     _build_va_task_input,
@@ -146,18 +145,33 @@ class TestBuildVaTaskInputIncludesBundle:
 
     def test_web_scan_planning_input_has_bundle(self, bundle: MagicMock) -> None:
         result = _build_va_task_input(
-            "web_scan_planning", bundle, {}, "run_1", "job_1", "eng_1",
+            "web_scan_planning",
+            bundle,
+            {},
+            "run_1",
+            "job_1",
+            "eng_1",
         )
         assert "bundle" in result
 
     def test_generic_web_finding_input_has_bundle(self, bundle: MagicMock) -> None:
         result = _build_va_task_input(
-            "generic_web_finding", bundle, {}, "run_1", "job_1", "eng_1",
+            "generic_web_finding",
+            bundle,
+            {},
+            "run_1",
+            "job_1",
+            "eng_1",
         )
         assert "bundle" in result
 
     def test_task_input_has_meta(self, bundle: MagicMock) -> None:
         result = _build_va_task_input(
-            "web_scan_planning", bundle, {}, "run_1", "job_1", "eng_1",
+            "web_scan_planning",
+            bundle,
+            {},
+            "run_1",
+            "job_1",
+            "eng_1",
         )
         assert "meta" in result

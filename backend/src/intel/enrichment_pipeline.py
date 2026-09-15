@@ -67,7 +67,10 @@ async def run_enrichment_pipeline(
         except Exception as exc:
             logger.warning(
                 "Shodan enrichment failed",
-                extra={"event": "argus.enrichment.shodan_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.shodan_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Step 2: Adversarial scoring
@@ -80,7 +83,10 @@ async def run_enrichment_pipeline(
         except Exception as exc:
             logger.warning(
                 "Adversarial scoring failed",
-                extra={"event": "argus.enrichment.scoring_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.scoring_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Step 2.5: LLM-based deduplication (Strix-style)
@@ -105,7 +111,10 @@ async def run_enrichment_pipeline(
         except Exception as exc:
             logger.warning(
                 "LLM dedup failed",
-                extra={"event": "argus.enrichment.dedup_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.dedup_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Step 3: Perplexity CVE/OSINT enrichment
@@ -118,7 +127,10 @@ async def run_enrichment_pipeline(
         except Exception as exc:
             logger.warning(
                 "Perplexity enrichment failed",
-                extra={"event": "argus.enrichment.perplexity_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.perplexity_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Step 4: Exploitability validation
@@ -127,11 +139,13 @@ async def run_enrichment_pipeline(
             from src.validation.exploitability import validate_findings_batch
 
             results = await validate_findings_batch(findings)
-            for finding, result in zip(findings, results):
+            for finding, result in zip(findings, results, strict=False):
                 finding["validation_status"] = result.status
                 finding["validation_confidence"] = result.confidence
                 if result.poc_command:
-                    finding.setdefault("proof_of_concept", {})["validation_poc"] = result.poc_command
+                    finding.setdefault("proof_of_concept", {})["validation_poc"] = (
+                        result.poc_command
+                    )
                 if result.exploit_public:
                     finding["exploit_public"] = True
                     finding["exploit_sources"] = result.exploit_sources
@@ -141,7 +155,10 @@ async def run_enrichment_pipeline(
         except Exception as exc:
             logger.warning(
                 "Validation pipeline failed",
-                extra={"event": "argus.enrichment.validation_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.validation_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Step 5: PoC generation (only for confirmed findings)
@@ -156,19 +173,30 @@ async def run_enrichment_pipeline(
                 fid = str(finding.get("finding_id") or finding.get("id") or "")
                 if fid in poc_map:
                     poc_result = poc_map[fid]
-                    finding.setdefault("proof_of_concept", {})["generated_poc"] = poc_result.poc_code
+                    finding.setdefault("proof_of_concept", {})["generated_poc"] = (
+                        poc_result.poc_code
+                    )
                     if poc_result.playwright_script:
-                        finding["proof_of_concept"]["playwright_script"] = poc_result.playwright_script
+                        finding["proof_of_concept"]["playwright_script"] = (
+                            poc_result.playwright_script
+                        )
             stats["pocs_generated"] = len(pocs)
         except Exception as exc:
             logger.warning(
                 "PoC generation failed",
-                extra={"event": "argus.enrichment.poc_error", "error_type": type(exc).__name__},
+                extra={
+                    "event": "argus.enrichment.poc_error",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     logger.info(
         "Enrichment pipeline complete",
-        extra={"event": "argus.enrichment.pipeline_done", "scan_id": scan_id, "stats": stats},
+        extra={
+            "event": "argus.enrichment.pipeline_done",
+            "scan_id": scan_id,
+            "stats": stats,
+        },
     )
 
     return {

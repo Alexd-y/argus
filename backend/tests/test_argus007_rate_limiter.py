@@ -8,7 +8,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from src.tools.guardrails.rate_limiter import RateLimiter
+from src.tools.guardrails.rate_limiter import RateLimiter  # noqa: E402 — after sys.path insert
 
 
 class TestRateLimiterMemoryMode:

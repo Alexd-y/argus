@@ -6,7 +6,6 @@ import json
 
 import pytest
 from pydantic import ValidationError
-
 from src.schemas.ai.common import PriorityLevel
 from src.schemas.threat_modeling.schemas import ApplicationFlow
 from src.schemas.threat_modeling.stage2_artifacts import (

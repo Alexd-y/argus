@@ -156,13 +156,9 @@ class ToolRegistry:
         ``tool_id``s) on success.
         """
         if not self._tools_dir.exists():
-            raise RegistryLoadError(
-                f"tools directory {self._tools_dir!s} does not exist"
-            )
+            raise RegistryLoadError(f"tools directory {self._tools_dir!s} does not exist")
         if not self._tools_dir.is_dir():
-            raise RegistryLoadError(
-                f"tools path {self._tools_dir!s} is not a directory"
-            )
+            raise RegistryLoadError(f"tools path {self._tools_dir!s} is not a directory")
 
         try:
             self._key_manager.load()
@@ -177,8 +173,7 @@ class ToolRegistry:
             descriptor = self._load_and_verify(yaml_path, signatures)
             if descriptor.tool_id in registered:
                 raise RegistryLoadError(
-                    f"duplicate tool_id {descriptor.tool_id!r} "
-                    f"(already loaded from another YAML)"
+                    f"duplicate tool_id {descriptor.tool_id!r} (already loaded from another YAML)"
                 )
             try:
                 adapter = self._adapter_factory(descriptor)
@@ -187,9 +182,7 @@ class ToolRegistry:
                     f"failed to build adapter for tool_id={descriptor.tool_id!r}: {exc}"
                 ) from exc
             self._validate_adapter_conformance(adapter, descriptor)
-            registered[descriptor.tool_id] = _RegisteredTool(
-                descriptor=descriptor, adapter=adapter
-            )
+            registered[descriptor.tool_id] = _RegisteredTool(descriptor=descriptor, adapter=adapter)
 
         self._registered = registered
         summary = self._build_summary()
@@ -230,18 +223,12 @@ class ToolRegistry:
 
     def list_by_phase(self, phase: ScanPhase) -> list[ToolDescriptor]:
         """Return descriptors for all tools registered in ``phase``."""
-        return [
-            r.descriptor
-            for r in self._registered.values()
-            if r.descriptor.phase is phase
-        ]
+        return [r.descriptor for r in self._registered.values() if r.descriptor.phase is phase]
 
     def list_by_category(self, category: ToolCategory) -> list[ToolDescriptor]:
         """Return descriptors for all tools in ``category``."""
         return [
-            r.descriptor
-            for r in self._registered.values()
-            if r.descriptor.category is category
+            r.descriptor for r in self._registered.values() if r.descriptor.category is category
         ]
 
     def all_descriptors(self) -> list[ToolDescriptor]:
@@ -271,23 +258,17 @@ class ToolRegistry:
 
     def _load_signatures(self) -> SignaturesFile:
         if not self._signatures_path.exists():
-            raise RegistryLoadError(
-                f"SIGNATURES file {self._signatures_path!s} does not exist"
-            )
+            raise RegistryLoadError(f"SIGNATURES file {self._signatures_path!s} does not exist")
         try:
             return SignaturesFile.from_file(self._signatures_path)
         except SignatureError as exc:
             raise RegistryLoadError(f"failed to parse SIGNATURES: {exc}") from exc
 
-    def _load_and_verify(
-        self, yaml_path: Path, signatures: SignaturesFile
-    ) -> ToolDescriptor:
+    def _load_and_verify(self, yaml_path: Path, signatures: SignaturesFile) -> ToolDescriptor:
         try:
             yaml_bytes = yaml_path.read_bytes()
         except OSError as exc:
-            raise RegistryLoadError(
-                f"failed to read tool descriptor {yaml_path!s}: {exc}"
-            ) from exc
+            raise RegistryLoadError(f"failed to read tool descriptor {yaml_path!s}: {exc}") from exc
 
         relative_path = yaml_path.relative_to(self._tools_dir).as_posix()
         try:
@@ -304,14 +285,10 @@ class ToolRegistry:
         try:
             payload = yaml.safe_load(yaml_bytes)
         except yaml.YAMLError as exc:
-            raise RegistryLoadError(
-                f"YAML parse error in {relative_path!r}: {exc}"
-            ) from exc
+            raise RegistryLoadError(f"YAML parse error in {relative_path!r}: {exc}") from exc
 
         if not isinstance(payload, dict):
-            raise RegistryLoadError(
-                f"{relative_path!r} must be a YAML mapping at the top level"
-            )
+            raise RegistryLoadError(f"{relative_path!r} must be a YAML mapping at the top level")
 
         try:
             descriptor = ToolDescriptor(**payload)
@@ -331,9 +308,7 @@ class ToolRegistry:
         return descriptor
 
     @staticmethod
-    def _validate_adapter_conformance(
-        adapter: ToolAdapter, descriptor: ToolDescriptor
-    ) -> None:
+    def _validate_adapter_conformance(adapter: ToolAdapter, descriptor: ToolDescriptor) -> None:
         """Defence-in-depth: ensure the adapter mirrors the descriptor.
 
         Catches custom factories that return an adapter for the wrong

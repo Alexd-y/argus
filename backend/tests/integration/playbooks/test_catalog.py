@@ -37,7 +37,9 @@ _EXPECTED_APPROVAL_GATED = frozenset(
 )
 
 
-def test_catalog_loads_twelve_signed_playbooks(playbook_registry: PlaybookRegistry) -> None:
+def test_catalog_loads_twelve_signed_playbooks(
+    playbook_registry: PlaybookRegistry,
+) -> None:
     summary = playbook_registry.load()
     assert summary.total == 12
     assert frozenset(summary.playbook_ids) == _EXPECTED_IDS
@@ -48,21 +50,25 @@ def test_catalog_approval_gated_set(playbook_registry: PlaybookRegistry) -> None
     assert gated == _EXPECTED_APPROVAL_GATED
 
 
-def test_every_playbook_is_executable_on_stub(playbook_registry: PlaybookRegistry) -> None:
+def test_every_playbook_is_executable_on_stub(
+    playbook_registry: PlaybookRegistry,
+) -> None:
     """Every step action has an interpreter and every oracle is implemented,
     so none of the 12 scenarios needs external infrastructure to execute."""
     for pb in playbook_registry.all():
         for step in (*pb.steps, *pb.cleanup):
-            assert (
-                step.action in _EXECUTABLE_ACTIONS_DEFAULT
-            ), f"{pb.playbook_id}: step {step.id} uses non-executable action {step.action}"
+            assert step.action in _EXECUTABLE_ACTIONS_DEFAULT, (
+                f"{pb.playbook_id}: step {step.id} uses non-executable action {step.action}"
+            )
         for assertion in pb.assertions:
-            assert (
-                assertion.type in _IMPLEMENTED_ORACLES
-            ), f"{pb.playbook_id}: oracle {assertion.type} not implemented"
+            assert assertion.type in _IMPLEMENTED_ORACLES, (
+                f"{pb.playbook_id}: oracle {assertion.type} not implemented"
+            )
 
 
-def test_every_playbook_declares_az0x7_provenance(playbook_registry: PlaybookRegistry) -> None:
+def test_every_playbook_declares_az0x7_provenance(
+    playbook_registry: PlaybookRegistry,
+) -> None:
     for pb in playbook_registry.all():
         assert pb.provenance.source_url == "https://github.com/Az0x7/vulnerability-Checklist"
         assert str(pb.provenance.adapted_at) == "2026-07-22"

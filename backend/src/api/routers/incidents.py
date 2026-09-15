@@ -37,18 +37,30 @@ async def enrich_alert(req: EnrichRequest) -> EnrichResponse:
     kg = None
     if req.knowledge_graph_nodes:
         from src.analysis.cpg import CodePropertyGraph, GraphNode, NodeType
-        kg = CodePropertyGraph(nodes=[
-            GraphNode(id=n.get("id", ""), node_type=NodeType(n.get("node_type", "sensitive_sink")),
-                     name=n.get("name", ""), file_path=n.get("file_path", ""))
-            for n in req.knowledge_graph_nodes
-        ])
+
+        kg = CodePropertyGraph(
+            nodes=[
+                GraphNode(
+                    id=n.get("id", ""),
+                    node_type=NodeType(n.get("node_type", "sensitive_sink")),
+                    name=n.get("name", ""),
+                    file_path=n.get("file_path", ""),
+                )
+                for n in req.knowledge_graph_nodes
+            ]
+        )
 
     result = await enrich_incident(req.alert, kg, tenant_id=req.tenant_id)
     return EnrichResponse(
-        id=result.id, incident_id=result.incident_id, alert_id=result.alert_id,
-        code_root_cause=result.code_root_cause, file_path=result.file_path,
-        mitre_enrichment=result.mitre_enrichment, cwe_mapping=result.cwe_mapping,
-        remediation_tasks=result.remediation_tasks, confidence=result.confidence,
+        id=result.id,
+        incident_id=result.incident_id,
+        alert_id=result.alert_id,
+        code_root_cause=result.code_root_cause,
+        file_path=result.file_path,
+        mitre_enrichment=result.mitre_enrichment,
+        cwe_mapping=result.cwe_mapping,
+        remediation_tasks=result.remediation_tasks,
+        confidence=result.confidence,
     )
 
 
@@ -60,7 +72,8 @@ async def generate_playbook(enriched: EnrichResponse) -> list[dict[str, Any]]:
     )
 
     ea = EnrichedAlert(
-        id=enriched.id, incident_id=enriched.incident_id,
+        id=enriched.id,
+        incident_id=enriched.incident_id,
         code_root_cause=enriched.code_root_cause,
         remediation_tasks=enriched.remediation_tasks,
     )

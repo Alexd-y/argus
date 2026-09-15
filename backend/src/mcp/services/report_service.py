@@ -144,9 +144,7 @@ async def get_report_download(
                 raise ResourceNotFoundError(
                     f"Report {report_id!r} was not found in this tenant scope."
                 )
-            metadata = (
-                row.report_metadata if isinstance(row.report_metadata, dict) else {}
-            )
+            metadata = row.report_metadata if isinstance(row.report_metadata, dict) else {}
             sha256 = _extract_sha256(metadata, format)
             presigned = _extract_presigned_url(metadata, format)
             expires_at = _extract_expiry(metadata, format)
@@ -164,9 +162,7 @@ async def get_report_download(
             "mcp.report.download_failed",
             extra={"report_id": report_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read report metadata; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read report metadata; please retry later.") from exc
 
 
 def _extract_sha256(metadata: dict[str, Any], format: ReportFormat) -> str | None:
@@ -182,9 +178,7 @@ def _extract_sha256(metadata: dict[str, Any], format: ReportFormat) -> str | Non
     return None
 
 
-def _extract_presigned_url(
-    metadata: dict[str, Any], format: ReportFormat
-) -> str | None:
+def _extract_presigned_url(metadata: dict[str, Any], format: ReportFormat) -> str | None:
     artifacts = metadata.get("artifacts")
     if not isinstance(artifacts, dict):
         return None

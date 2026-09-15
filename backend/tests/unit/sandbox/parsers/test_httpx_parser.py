@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -39,7 +38,6 @@ from src.sandbox.parsers.httpx_parser import (
     parse_httpx_for_dispatch,
     parse_httpx_jsonl,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,9 +68,7 @@ def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
 
 def test_single_record_produces_one_finding(tmp_path: Path) -> None:
     """A minimal httpx record with a URL emits one well-formed FindingDTO."""
-    stdout = _jsonl(
-        {"url": "https://example.com", "status_code": 200, "title": "Example"}
-    )
+    stdout = _jsonl({"url": "https://example.com", "status_code": 200, "title": "Example"})
 
     findings = parse_httpx_jsonl(stdout, b"", tmp_path)
 
@@ -276,13 +272,9 @@ def test_dispatch_adapter_matches_public_parser(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("raw_status", [200, 301, 401, 404, 500, 503])
-def test_status_codes_are_propagated_to_evidence(
-    tmp_path: Path, raw_status: int
-) -> None:
+def test_status_codes_are_propagated_to_evidence(tmp_path: Path, raw_status: int) -> None:
     """Every standard HTTP status round-trips into the evidence record."""
-    stdout = _jsonl(
-        {"url": f"https://s.example/{raw_status}", "status_code": raw_status}
-    )
+    stdout = _jsonl({"url": f"https://s.example/{raw_status}", "status_code": raw_status})
 
     parse_httpx_jsonl(stdout, b"", tmp_path)
     sidecar = _read_sidecar(tmp_path)
@@ -407,8 +399,7 @@ def test_large_input_is_deduplicated_and_completes_quickly(
     import time
 
     records: list[dict[str, object]] = [
-        {"url": f"https://h{i % 100}.example", "tech": [f"Tech{i % 100}"]}
-        for i in range(10_000)
+        {"url": f"https://h{i % 100}.example", "tech": [f"Tech{i % 100}"]} for i in range(10_000)
     ]
     stdout = _jsonl(*records)
 
@@ -464,9 +455,7 @@ def test_status_code_as_string_is_dropped_gracefully(tmp_path: Path) -> None:
     propagating a typo into downstream metrics. The finding itself still
     emits because the URL is present.
     """
-    stdout = _jsonl(
-        {"url": "https://typo.example", "status_code": "200", "title": "Typo"}
-    )
+    stdout = _jsonl({"url": "https://typo.example", "status_code": "200", "title": "Typo"})
 
     findings = parse_httpx_jsonl(stdout, b"", tmp_path)
     sidecar = _read_sidecar(tmp_path)

@@ -101,6 +101,7 @@ def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
             )
     return system, user
 
+
 _PHASE_TO_TASK: dict[str, LLMTask] = {
     RECON: LLMTask.ORCHESTRATION,
     THREAT_MODELING: LLMTask.THREAT_MODELING,
@@ -110,7 +111,13 @@ _PHASE_TO_TASK: dict[str, LLMTask] = {
     REPORTING: LLMTask.REPORT_SECTION,
 }
 
-_PHASE_ORDER: list[str] = [RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION]
+_PHASE_ORDER: list[str] = [
+    RECON,
+    THREAT_MODELING,
+    VULN_ANALYSIS,
+    EXPLOITATION,
+    POST_EXPLOITATION,
+]
 
 
 def _execution_mode_from_options(options: dict[str, Any] | None) -> str | None:
@@ -312,8 +319,7 @@ async def _call_llm_with_json_retry(
 
 
 _LLM_REQUIRED_MSG = (
-    "LLM provider required. "
-    "Configure OPENAI_API_KEY, OPENROUTER_API_KEY or another provider."
+    "LLM provider required. Configure OPENAI_API_KEY, OPENROUTER_API_KEY or another provider."
 )
 
 
@@ -349,8 +355,12 @@ async def ai_recon(
         )
         data = _require_json(
             await _call_llm_with_json_retry(
-                RECON, user, system, raw_sink=raw_sink,
-                raw_label_prefix="recon_llm", scan_id=scan_id,
+                RECON,
+                user,
+                system,
+                raw_sink=raw_sink,
+                raw_label_prefix="recon_llm",
+                scan_id=scan_id,
                 execution_mode=_execution_mode_from_options(inp.options),
             ),
             RECON,
@@ -422,6 +432,7 @@ async def ai_vuln_analysis(
         if use_react:
             try:
                 from src.orchestration.react_agent import ReActAgent
+
                 _agent = ReActAgent(
                     task_description=f"Analyze vulnerabilities for threat model: {json.dumps(inp.threat_model, default=str)[:2000]}",
                     max_iterations=5,
@@ -443,17 +454,25 @@ async def ai_vuln_analysis(
                 pass
         threat_blob = json.dumps(inp.threat_model, default=str)[:1500]
         asset_blob = " ".join(str(item) for item in inp.assets[:20])
-        rag_query = f"vulnerability analysis {asset_blob} {threat_blob} {active_scan_context[:800]}".strip()
+        rag_query = (
+            f"vulnerability analysis {asset_blob} {threat_blob} {active_scan_context[:800]}".strip()
+        )
         rag_context = _phase_rag_context(VULN_ANALYSIS, rag_query, scan_options)
         system, user = _get_phase_prompt(
-            VULN_ANALYSIS, threat_model=inp.threat_model,
-            assets=inp.assets, active_scan_context=active_scan_context,
-            code_aware_section=code_aware_section, memory_context=memory_context,
+            VULN_ANALYSIS,
+            threat_model=inp.threat_model,
+            assets=inp.assets,
+            active_scan_context=active_scan_context,
+            code_aware_section=code_aware_section,
+            memory_context=memory_context,
             rag_context=rag_context,
         )
         data = _require_json(
             await _call_llm_with_json_retry(
-                VULN_ANALYSIS, user, system, scan_id=scan_id,
+                VULN_ANALYSIS,
+                user,
+                system,
+                scan_id=scan_id,
                 execution_mode=execution_mode,
             ),
             VULN_ANALYSIS,
@@ -463,14 +482,21 @@ async def ai_vuln_analysis(
         _findings = data["findings"]
         try:
             from src.orchestration.cost_aware_reasoning import ConfidenceEscalator
-            _confidence_values = [float(f.get("confidence", 0.5)) for f in _findings if isinstance(f, dict)]
+
+            _confidence_values = [
+                float(f.get("confidence", 0.5)) for f in _findings if isinstance(f, dict)
+            ]
             if _confidence_values:
                 _avg_confidence = sum(_confidence_values) / len(_confidence_values)
                 _escalator = ConfidenceEscalator(confidence_threshold=0.7)
                 if _escalator.should_escalate(_avg_confidence, "medium"):
                     logger.info(
                         "confidence_escalation_suggested",
-                        extra={"scan_id": scan_id, "avg_confidence": round(_avg_confidence, 3), "phase": "vuln_analysis"},
+                        extra={
+                            "scan_id": scan_id,
+                            "avg_confidence": round(_avg_confidence, 3),
+                            "phase": "vuln_analysis",
+                        },
                     )
         except Exception:
             pass
@@ -534,6 +560,7 @@ async def ai_exploitation(
         if use_react:
             try:
                 from src.orchestration.react_agent import ReActAgent
+
                 _agent = ReActAgent(
                     task_description=f"Plan exploitation for findings: {json.dumps(inp.findings, default=str)[:2000]}",
                     max_iterations=5,
@@ -572,7 +599,10 @@ async def ai_exploitation(
         system, user = _get_phase_prompt(EXPLOITATION, findings=_prompt_findings)
         data = _require_json(
             await _call_llm_with_json_retry(
-                EXPLOITATION, user, system, scan_id=scan_id,
+                EXPLOITATION,
+                user,
+                system,
+                scan_id=scan_id,
                 execution_mode=resolved_mode,
             ),
             EXPLOITATION,
@@ -602,8 +632,11 @@ async def ai_post_exploitation(
         system, user = _get_phase_prompt(POST_EXPLOITATION, exploits=inp.exploits)
         data = _require_json(
             await _call_llm_with_json_retry(
-                POST_EXPLOITATION, user, system,
-                raw_sink=raw_sink, raw_label_prefix="post_exploitation_llm",
+                POST_EXPLOITATION,
+                user,
+                system,
+                raw_sink=raw_sink,
+                raw_label_prefix="post_exploitation_llm",
                 scan_id=scan_id,
                 execution_mode=execution_mode,
             ),
@@ -611,7 +644,9 @@ async def ai_post_exploitation(
         )
         return PostExploitationOutput(
             lateral=data.get("lateral", []) if isinstance(data.get("lateral"), list) else [],
-            persistence=data.get("persistence", []) if isinstance(data.get("persistence"), list) else [],
+            persistence=data.get("persistence", [])
+            if isinstance(data.get("persistence"), list)
+            else [],
         )
     except Exception:
         logger.exception("post_exploitation_llm_failed")
@@ -645,8 +680,11 @@ async def _call_wrb_report_section(
         if total_bytes > 24000:
             user = user[:16000]
         response = await call_llm_unified(
-            system, user, task=LLMTask.REPORT_SECTION,
-            scan_id=scan_id, phase=f"{phase}_report_section",
+            system,
+            user,
+            task=LLMTask.REPORT_SECTION,
+            scan_id=scan_id,
+            phase=f"{phase}_report_section",
             execution_mode=execution_mode,
         )
         if response:
@@ -654,8 +692,11 @@ async def _call_wrb_report_section(
             if data is not None and isinstance(data.get("section"), dict):
                 section = data["section"]
                 summary_keys = [
-                    "recon_summary", "threat_model_summary", "vuln_analysis_summary",
-                    "exploitation_summary", "post_exploitation_summary",
+                    "recon_summary",
+                    "threat_model_summary",
+                    "vuln_analysis_summary",
+                    "exploitation_summary",
+                    "post_exploitation_summary",
                 ]
                 for key in summary_keys:
                     val = section.get(key)
@@ -693,13 +734,23 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
         raw_findings = va.get("findings") or va.get("vulnerabilities") or []
         for f in raw_findings:
             if isinstance(f, dict):
-                findings.append({
-                    "severity": str(f.get("severity", "info")).lower(),
-                    "description": str(f.get("description") or f.get("name", "Unknown finding")),
-                    "impact": str(f.get("impact", "Not assessed")),
-                    "remediation": str(f.get("remediation", "Manual review required")),
-                })
-    sev_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+                findings.append(
+                    {
+                        "severity": str(f.get("severity", "info")).lower(),
+                        "description": str(
+                            f.get("description") or f.get("name", "Unknown finding")
+                        ),
+                        "impact": str(f.get("impact", "Not assessed")),
+                        "remediation": str(f.get("remediation", "Manual review required")),
+                    }
+                )
+    sev_counts: dict[str, int] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
     for f in findings:
         s = f.get("severity", "info")
         if s in sev_counts:
@@ -733,7 +784,9 @@ async def _compress_summary_for_assembly(
         )
         resp = await call_llm_unified(
             "Compress text to key facts. Return only the compressed text.",
-            prompt, task=LLMTask.REPORT_SECTION, phase="summary_compression",
+            prompt,
+            task=LLMTask.REPORT_SECTION,
+            phase="summary_compression",
             execution_mode=execution_mode,
         )
         return resp[:max_chars] if resp else summary[:max_chars]
@@ -742,7 +795,10 @@ async def _compress_summary_for_assembly(
 
 
 async def ai_reporting(
-    inp: ReportingInput, *, scan_id: str | None = None, scan_options: dict[str, Any] | None = None
+    inp: ReportingInput,
+    *,
+    scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ReportingOutput:
     """Generate report via 6 separate WRB calls — one per phase (FULL data) + assembly.
 
@@ -760,7 +816,10 @@ async def ai_reporting(
             continue
         try:
             summary = await _call_wrb_report_section(
-                phase, phase_data, scan_id=scan_id, execution_mode=execution_mode,
+                phase,
+                phase_data,
+                scan_id=scan_id,
+                execution_mode=execution_mode,
             )
             if summary:
                 section_summaries[phase] = summary
@@ -810,16 +869,16 @@ async def ai_reporting(
                     for phase_name, summary in section_summaries.items():
                         if len(summary) > 8000:
                             compressed[phase_name] = await _compress_summary_for_assembly(
-                                summary, max_chars=8000, execution_mode=execution_mode,
+                                summary,
+                                max_chars=8000,
+                                execution_mode=execution_mode,
                             )
                         else:
                             compressed[phase_name] = summary
                     total = sum(len(v) for v in compressed.values())
                     if total > 24000:
                         factor = 24000 / total
-                        compressed = {
-                            k: v[: int(len(v) * factor)] for k, v in compressed.items()
-                        }
+                        compressed = {k: v[: int(len(v) * factor)] for k, v in compressed.items()}
                     sys2, usr2 = get_report_assembly_prompt(
                         target=inp.target,
                         recon_summary=compressed.get(RECON, ""),
@@ -829,8 +888,11 @@ async def ai_reporting(
                         post_exploit_summary=compressed.get(POST_EXPLOITATION, ""),
                     )
                     resp2 = await call_llm_unified(
-                        sys2, usr2, task=LLMTask.REPORT_SECTION,
-                        scan_id=scan_id, phase=f"report_assembly_retry_{retry + 1}",
+                        sys2,
+                        usr2,
+                        task=LLMTask.REPORT_SECTION,
+                        scan_id=scan_id,
+                        phase=f"report_assembly_retry_{retry + 1}",
                         execution_mode=execution_mode,
                     )
                     data2 = _parse_llm_json(resp2)
@@ -849,7 +911,14 @@ async def ai_reporting(
 
     if section_summaries:
         report = {
-            "summary": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "risk_rating": "medium"},
+            "summary": {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+                "risk_rating": "medium",
+            },
             "executive_summary": f"Security assessment completed for {inp.target}.",
             "sections": list(section_summaries.keys()),
             "findings_detail": [],

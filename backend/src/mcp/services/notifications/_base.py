@@ -128,7 +128,7 @@ class _BoundedRecentSet:
     writes inside the asyncio runtime are serialised per-adapter.
     """
 
-    __slots__ = ("_items", "_capacity")
+    __slots__ = ("_capacity", "_items")
 
     def __init__(self, capacity: int = DEFAULT_DEDUP_CAPACITY) -> None:
         if capacity < 1:
@@ -332,22 +332,14 @@ class NotifierBase:
         rng: Callable[[], float] | None = None,
     ) -> None:
         self._timeout_seconds = (
-            timeout_seconds
-            if timeout_seconds is not None
-            else _resolve_timeout_seconds()
+            timeout_seconds if timeout_seconds is not None else _resolve_timeout_seconds()
         )
-        resolved_attempts = (
-            max_attempts if max_attempts is not None else _resolve_max_attempts()
-        )
+        resolved_attempts = max_attempts if max_attempts is not None else _resolve_max_attempts()
         self._owned_client = client is None
         self._client = (
-            client
-            if client is not None
-            else httpx.AsyncClient(timeout=self._timeout_seconds)
+            client if client is not None else httpx.AsyncClient(timeout=self._timeout_seconds)
         )
-        self._circuit = (
-            circuit_breaker if circuit_breaker is not None else CircuitBreaker()
-        )
+        self._circuit = circuit_breaker if circuit_breaker is not None else CircuitBreaker()
         self._retryer = _Retryer(
             max_attempts=resolved_attempts,
             base_seconds=backoff_base_seconds,
@@ -461,9 +453,7 @@ class NotifierBase:
         for attempt in range(self._retryer.max_attempts):
             attempts = attempt + 1
             try:
-                response = await self._attempt_send(
-                    event=event, tenant_id=tenant_id, target=target
-                )
+                response = await self._attempt_send(event=event, tenant_id=tenant_id, target=target)
             except httpx.TimeoutException:
                 last_error_code = "timeout"
                 last_status = None
@@ -472,12 +462,8 @@ class NotifierBase:
                 last_status = None
             else:
                 if 200 <= response.status_code < 300:
-                    await self._circuit.record_success(
-                        adapter_name=self.name, tenant_id=tenant_id
-                    )
-                    await self._record_idempotent(
-                        tenant_id=tenant_id, event_id=event.event_id
-                    )
+                    await self._circuit.record_success(adapter_name=self.name, tenant_id=tenant_id)
+                    await self._record_idempotent(tenant_id=tenant_id, event_id=event.event_id)
                     return AdapterResult(
                         adapter_name=self.name,
                         event_id=event.event_id,
@@ -494,9 +480,7 @@ class NotifierBase:
                 }:
                     last_error_code = "http_4xx"
                     break
-                last_error_code = (
-                    "http_4xx" if response.status_code < 500 else "http_5xx"
-                )
+                last_error_code = "http_4xx" if response.status_code < 500 else "http_5xx"
             if attempt + 1 < self._retryer.max_attempts:
                 await self._retryer.sleep_between(attempt)
 

@@ -61,7 +61,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -121,7 +121,7 @@ _SECRET_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -224,14 +224,10 @@ def _sort_key(record: dict[str, Any]) -> tuple[int, str, str, int]:
 def _build_finding(record: dict[str, Any]) -> FindingDTO:
     category: FindingCategory = record["category"]
     cwe_list = list(
-        _CWE_SECRET_LEAK
-        if category is FindingCategory.SECRET_LEAK
-        else _CWE_MISCONFIG_DEFAULT
+        _CWE_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _CWE_MISCONFIG_DEFAULT
     )
     owasp = list(
-        _OWASP_SECRET_LEAK
-        if category is FindingCategory.SECRET_LEAK
-        else _OWASP_MISCONFIG
+        _OWASP_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _OWASP_MISCONFIG
     )
     return make_finding_dto(
         category=category,
@@ -337,9 +333,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    raw_violations: list[Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(raw_violations: list[Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for raw in raw_violations:
         if not isinstance(raw, dict):
             continue
@@ -359,9 +353,7 @@ def _iter_normalised(
         severity = _map_severity(terrascan_severity)
         terrascan_category = _string_field(raw, "category") or ""
         category = _classify_category(terrascan_category=terrascan_category)
-        confidence = (
-            ConfidenceLevel.LIKELY if severity == "high" else ConfidenceLevel.SUSPECTED
-        )
+        confidence = ConfidenceLevel.LIKELY if severity == "high" else ConfidenceLevel.SUSPECTED
         yield {
             "rule_id": rule_id,
             "rule_name": _string_field(raw, "rule_name"),

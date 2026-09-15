@@ -7,14 +7,15 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 ALF_NU_TARGET = "https://alf.nu/alert1?world=alert&level=alert0"
 
 
 @pytest.mark.asyncio
-async def test_va_active_scan_phase_xss_finding_triggers_raw_sink_for_dalfox(tmp_path: Path) -> None:
+async def test_va_active_scan_phase_xss_finding_triggers_raw_sink_for_dalfox(
+    tmp_path: Path,
+) -> None:
     """Dalfox job sinks stdout via sink_raw_text; normalized finding has alert(1) and CVSS >= 7."""
     from src.orchestration.handlers import _normalize_intel_finding
     from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
@@ -112,16 +113,16 @@ async def test_va_active_scan_phase_xss_finding_triggers_raw_sink_for_dalfox(tmp
         )
 
     dalfox_sink_calls = [
-        c
-        for c in sink_mock.call_args_list
-        if "dalfox" in str(c.kwargs.get("artifact_type", ""))
+        c for c in sink_mock.call_args_list if "dalfox" in str(c.kwargs.get("artifact_type", ""))
     ]
     assert dalfox_sink_calls, "expected sink_raw_text for dalfox artifact types"
 
     intel = out.intel_findings or []
     assert intel, "expected intel findings from dalfox stdout"
     normalized = [_normalize_intel_finding(x) for x in intel if isinstance(x, dict)]
-    xss_rows = [f for f in normalized if "xss" in (f.get("title") or "").lower() or f.get("cwe") == "CWE-79"]
+    xss_rows = [
+        f for f in normalized if "xss" in (f.get("title") or "").lower() or f.get("cwe") == "CWE-79"
+    ]
     assert xss_rows
     assert xss_rows[0].get("cvss", 0) >= 7.0
     desc = (xss_rows[0].get("description") or "").lower()
@@ -134,7 +135,9 @@ async def test_run_vuln_analysis_xss_pipeline_minio_sink_dalfox(tmp_path: Path) 
     """Handler calls real active-scan phase with mocked runner + sink_raw_text (dalfox path)."""
     from src.orchestration.handlers import run_vuln_analysis
     from src.orchestration.phases import VulnAnalysisOutput
-    from src.recon.vulnerability_analysis.active_scan import va_active_scan_phase as vmod
+    from src.recon.vulnerability_analysis.active_scan import (
+        va_active_scan_phase as vmod,
+    )
 
     wl = tmp_path / "ffuf.txt"
     wl.write_text("p\n", encoding="utf-8")
@@ -174,7 +177,12 @@ async def test_run_vuln_analysis_xss_pipeline_minio_sink_dalfox(tmp_path: Path) 
         with (
             patch.object(vmod, "sink_raw_text", sink_text),
             patch.object(vmod, "sink_raw_json", MagicMock()),
-            patch.object(vmod, "run_va_active_scan", new_callable=AsyncMock, side_effect=_fake_run_va_active_scan),
+            patch.object(
+                vmod,
+                "run_va_active_scan",
+                new_callable=AsyncMock,
+                side_effect=_fake_run_va_active_scan,
+            ),
         ):
             return await vmod.run_va_active_scan_phase(*args, **kwargs)
 
@@ -212,7 +220,11 @@ async def test_run_vuln_analysis_xss_pipeline_minio_sink_dalfox(tmp_path: Path) 
                 [],
             ),
         ),
-        patch("src.orchestration.handlers.run_web_vuln_heuristics", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "src.orchestration.handlers.run_web_vuln_heuristics",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
         patch("src.orchestration.handlers.RawPhaseSink"),
     ):
         mock_handlers_settings.sandbox_enabled = True

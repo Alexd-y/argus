@@ -120,7 +120,9 @@ class WordlistRegistry:
         self._config_dir = self._catalog_path.parent
         self._entries = {e.id: e for e in load_catalog(self._catalog_path)}
         env_cache = os.environ.get("WORDLIST_CACHE_DIR")
-        self._cache_dir = cache_dir or (Path(env_cache) if env_cache else self._config_dir / ".cache")
+        self._cache_dir = cache_dir or (
+            Path(env_cache) if env_cache else self._config_dir / ".cache"
+        )
 
     def ids(self) -> list[str]:
         return list(self._entries)

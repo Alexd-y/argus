@@ -42,7 +42,7 @@ class DefensiveRunbook:
 class TabletopScenario:
     id: str = ""
     title: str = ""
-    scenario_type: str = ""   # ransomware | data_breach | apt | insider | supply_chain
+    scenario_type: str = ""  # ransomware | data_breach | apt | insider | supply_chain
     description: str = ""
     objectives: list[str] = field(default_factory=list)
     injects: list[dict[str, str]] = field(default_factory=list)
@@ -67,11 +67,14 @@ Respond with JSON: {{"summary": "...", "severity": "critical|high|medium|low", "
     try:
         resp = await call_llm_unified(
             "You summarise CVEs for security teams. Output JSON.",
-            prompt, task=LLMTask.REPORT_SECTION, phase="advisory_summary",
+            prompt,
+            task=LLMTask.REPORT_SECTION,
+            phase="advisory_summary",
         )
         data = json.loads(resp)
         return AdvisorySummary(
-            id=str(uuid.uuid4()), cve_id=cve_id,
+            id=str(uuid.uuid4()),
+            cve_id=cve_id,
             title=data.get("summary", cve_id)[:200],
             severity=data.get("severity", "medium"),
             summary=data.get("summary", "")[:1000],
@@ -81,11 +84,14 @@ Respond with JSON: {{"summary": "...", "severity": "critical|high|medium|low", "
             recommendations=data.get("recommendations", []),
         )
     except Exception:
-        return AdvisorySummary(id=str(uuid.uuid4()), cve_id=cve_id, title=cve_id, severity="unknown")
+        return AdvisorySummary(
+            id=str(uuid.uuid4()), cve_id=cve_id, title=cve_id, severity="unknown"
+        )
 
 
 async def generate_defensive_runbook(
-    finding_type: str, environment: str = "kubernetes",
+    finding_type: str,
+    environment: str = "kubernetes",
 ) -> DefensiveRunbook:
     from src.llm.facade import call_llm_unified
     from src.llm.task_router import LLMTask
@@ -98,12 +104,16 @@ Respond with JSON:
     try:
         resp = await call_llm_unified(
             "You create security runbooks. Output JSON.",
-            prompt, task=LLMTask.REMEDIATION_PLAN, phase="runbook_generation",
+            prompt,
+            task=LLMTask.REMEDIATION_PLAN,
+            phase="runbook_generation",
         )
         data = json.loads(resp)
         return DefensiveRunbook(
-            id=str(uuid.uuid4()), title=data.get("title", finding_type),
-            severity="high", steps=data.get("steps", []),
+            id=str(uuid.uuid4()),
+            title=data.get("title", finding_type),
+            severity="high",
+            steps=data.get("steps", []),
             rollback_plan=data.get("rollback_plan", []),
             verification=data.get("verification", []),
         )
@@ -112,7 +122,8 @@ Respond with JSON:
 
 
 async def generate_tabletop_scenario(
-    scenario_type: str = "ransomware", organisation_size: str = "medium",
+    scenario_type: str = "ransomware",
+    organisation_size: str = "medium",
 ) -> TabletopScenario:
     from src.llm.facade import call_llm_unified
     from src.llm.task_router import LLMTask
@@ -125,11 +136,14 @@ Respond with JSON:
     try:
         resp = await call_llm_unified(
             "You design cybersecurity tabletop exercises. Output JSON.",
-            prompt, task=LLMTask.REMEDIATION_PLAN, phase="tabletop_design",
+            prompt,
+            task=LLMTask.REMEDIATION_PLAN,
+            phase="tabletop_design",
         )
         data = json.loads(resp)
         return TabletopScenario(
-            id=str(uuid.uuid4()), title=data.get("title", scenario_type.title()),
+            id=str(uuid.uuid4()),
+            title=data.get("title", scenario_type.title()),
             scenario_type=scenario_type,
             description=data.get("description", "")[:2000],
             objectives=data.get("objectives", []),
@@ -138,7 +152,11 @@ Respond with JSON:
             participants=data.get("participants", ["CISO", "SOC Lead", "IR Team", "Legal", "PR"]),
         )
     except Exception:
-        return TabletopScenario(id=str(uuid.uuid4()), title=scenario_type.title(), scenario_type=scenario_type)
+        return TabletopScenario(
+            id=str(uuid.uuid4()),
+            title=scenario_type.title(),
+            scenario_type=scenario_type,
+        )
 
 
 async def explain_exploit_class(vuln_type: str) -> str:
@@ -151,14 +169,19 @@ Keep under 500 words."""
 
     try:
         return await call_llm_unified(
-            "You explain security concepts clearly. Be concise.", prompt,
-            task=LLMTask.REMEDIATION_PLAN, phase="exploit_explanation",
+            "You explain security concepts clearly. Be concise.",
+            prompt,
+            task=LLMTask.REMEDIATION_PLAN,
+            phase="exploit_explanation",
         )
     except Exception:
         return f"Unable to explain {vuln_type} at this time."
 
 
-def compare_models(models: list[str], benchmark_results: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def compare_models(
+    models: list[str],  # noqa: ARG001 - retained for signature/API compatibility
+    benchmark_results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     comparison = {}
     for model, results in benchmark_results.items():
         comparison[model] = {

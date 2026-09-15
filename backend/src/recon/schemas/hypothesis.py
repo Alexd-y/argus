@@ -9,6 +9,7 @@ from src.recon.schemas.base import HypothesisPriority, HypothesisStatus
 
 class HypothesisCreate(BaseModel):
     """Create hypothesis request."""
+
     title: str = Field(..., min_length=1, max_length=500)
     description: str | None = None
     category: str = Field(..., min_length=1, max_length=100)
@@ -19,6 +20,7 @@ class HypothesisCreate(BaseModel):
 
 class HypothesisUpdate(BaseModel):
     """Update hypothesis request."""
+
     title: str | None = Field(None, max_length=500)
     description: str | None = None
     priority: HypothesisPriority | None = None
@@ -27,6 +29,7 @@ class HypothesisUpdate(BaseModel):
 
 class HypothesisResponse(BaseModel):
     """Hypothesis response."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str

@@ -31,7 +31,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -57,7 +57,7 @@ _MAX_FINDINGS: Final[int] = 5_000
 _HIGH_CONFIDENCE_THRESHOLD: Final[float] = 0.95
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 def parse_hash_analyzer_json(
@@ -177,16 +177,12 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "matches": record.get("matches"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
 
-def _iter_records(
-    entries: list[dict[str, Any]], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_records(entries: list[dict[str, Any]], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for index, entry in enumerate(entries):
         hash_value = _string_field(entry, "input") or _string_field(entry, "hash")
         matches_raw = entry.get("matches")
@@ -209,8 +205,7 @@ def _iter_records(
         entropy_raw = entry.get("entropy")
         entropy = (
             float(entropy_raw)
-            if isinstance(entropy_raw, int | float)
-            and not isinstance(entropy_raw, bool)
+            if isinstance(entropy_raw, int | float) and not isinstance(entropy_raw, bool)
             else None
         )
         yield {
@@ -234,9 +229,7 @@ def _iter_matches(matches_raw: list[Any]) -> Iterator[dict[str, Any]]:
             continue
         confidence_raw = raw.get("confidence")
         confidence: float | None
-        if isinstance(confidence_raw, int | float) and not isinstance(
-            confidence_raw, bool
-        ):
+        if isinstance(confidence_raw, int | float) and not isinstance(confidence_raw, bool):
             confidence = float(confidence_raw)
         else:
             confidence = None
@@ -260,9 +253,7 @@ def _select_preferred(matches: list[dict[str, Any]]) -> dict[str, Any]:
         score = float(confidence) if isinstance(confidence, int | float) else 0.0
         hashcat = match.get("hashcat")
         hashcat_priority = (
-            hashcat
-            if isinstance(hashcat, int) and not isinstance(hashcat, bool)
-            else 99_999
+            hashcat if isinstance(hashcat, int) and not isinstance(hashcat, bool) else 99_999
         )
         return (-score, hashcat_priority)
 

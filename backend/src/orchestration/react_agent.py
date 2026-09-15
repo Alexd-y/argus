@@ -231,7 +231,9 @@ class ReActAgent:
                 continue
 
             thought_m = re.search(r"Thought:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
-            action_m = re.search(r"Action:\s*(\w+)\((.*?)\)", response_text, re.IGNORECASE | re.DOTALL)
+            action_m = re.search(
+                r"Action:\s*(\w+)\((.*?)\)", response_text, re.IGNORECASE | re.DOTALL
+            )
             final_m = re.search(r"Final Answer:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
             conf_m = re.search(r"confidence[:\s]+([0-9.]+)", response_text, re.IGNORECASE)
 
@@ -362,11 +364,11 @@ def format_react_prompt(
         f"3. Observation: Process the tool result\n"
         f"4. Repeat until confident (max {max_iterations} iterations)\n\n"
         f"Format each step as:\n"
-        f'Thought: [your reasoning]\n'
-        f'Action: [tool_name(args)]\n'
-        f'Observation: [tool output summary]\n\n'
+        f"Thought: [your reasoning]\n"
+        f"Action: [tool_name(args)]\n"
+        f"Observation: [tool output summary]\n\n"
         f"When you have enough evidence, output:\n"
-        f'Final Answer: [your conclusion with confidence 0.0-1.0]\n'
+        f"Final Answer: [your conclusion with confidence 0.0-1.0]\n"
         f"{context}"
     )
 

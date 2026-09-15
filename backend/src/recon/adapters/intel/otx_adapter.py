@@ -69,7 +69,11 @@ class OtxIntelAdapter(IntelAdapter):
                         _finding(
                             FindingType.OSINT_ENTRY,
                             f"otx_pulses:{domain}",
-                            {"domain": domain, "pulse_count": pulse_count, "source": self.name},
+                            {
+                                "domain": domain,
+                                "pulse_count": pulse_count,
+                                "source": self.name,
+                            },
                             self.name,
                             0.8,
                         )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
+from pydantic import ValidationError
 from src.findings.cvss import CVSSScore, parse_cvss_vector, severity_label
 
 
@@ -32,11 +32,11 @@ class TestParseCvssVector:
 
     def test_dto_is_frozen(self) -> None:
         result = parse_cvss_vector("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N")
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             result.base = 10.0  # type: ignore[misc]
 
     def test_dto_extra_fields_forbidden(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CVSSScore(
                 version="3.1",
                 base=5.0,

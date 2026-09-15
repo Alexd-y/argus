@@ -12,13 +12,12 @@ real Redis state machine.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-
 from src.core.observability import user_id_hash
 from src.policy.kill_switch import (
     EMERGENCY_GLOBAL_KEY,
@@ -30,7 +29,6 @@ from src.policy.kill_switch import (
     KillSwitchService,
     KillSwitchUnavailableError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake Redis — minimal redis-py-compatible surface used by KillSwitchService.
@@ -141,9 +139,7 @@ class TestGlobalStop:
         assert raw is not None
         payload = json.loads(raw)
         assert payload["operator_subject_hash"] == user_id_hash(operator_subject)
-        assert operator_subject not in raw, (
-            "raw operator subject must never be persisted to Redis"
-        )
+        assert operator_subject not in raw, "raw operator subject must never be persisted to Redis"
         assert state.reason == payload["reason"]
         assert state.activated_at.tzinfo is not None
         assert payload["operator_subject_hash"] == state.operator_subject_hash
@@ -161,9 +157,7 @@ class TestGlobalStop:
                 operator_subject=operator_subject,
             )
 
-    def test_set_global_setnx_blocks_concurrent_writer(
-        self, operator_subject: str
-    ) -> None:
+    def test_set_global_setnx_blocks_concurrent_writer(self, operator_subject: str) -> None:
         """Two concurrent super-admins MUST NOT both observe an empty key,
         both write, and both emit a stale audit row (TOCTOU). With ``SET NX``
         the second writer's redis-py call returns falsy, the service raises
@@ -200,9 +194,7 @@ class TestGlobalStop:
         self, service: KillSwitchService, operator_subject: str
     ) -> None:
         long_reason = "  " + ("x" * 5_000) + "  "
-        state = service.set_global(
-            reason=long_reason, operator_subject=operator_subject
-        )
+        state = service.set_global(reason=long_reason, operator_subject=operator_subject)
         assert state.reason == "x" * 1000
         assert len(state.reason) == 1000
 
@@ -218,9 +210,7 @@ class TestGlobalStop:
         fake_redis: _FakeRedis,
         operator_subject: str,
     ) -> None:
-        service.set_global(
-            reason="initial halt for incident", operator_subject=operator_subject
-        )
+        service.set_global(reason="initial halt for incident", operator_subject=operator_subject)
         assert service.clear_global() is True
         assert fake_redis.get(EMERGENCY_GLOBAL_KEY) is None
 
@@ -231,9 +221,7 @@ class TestGlobalStop:
     def test_get_global_returns_state_when_present(
         self, service: KillSwitchService, operator_subject: str
     ) -> None:
-        service.set_global(
-            reason="incident response halt", operator_subject=operator_subject
-        )
+        service.set_global(reason="incident response halt", operator_subject=operator_subject)
         state = service.get_global()
         assert state is not None
         assert state.reason == "incident response halt"
@@ -318,7 +306,7 @@ class TestTenantThrottle:
         tenant_a: UUID,
         operator_subject: str,
     ) -> None:
-        past = datetime.now(tz=timezone.utc) - timedelta(seconds=10)
+        past = datetime.now(tz=UTC) - timedelta(seconds=10)
         service.set_tenant_throttle(
             tenant_a,
             duration_seconds=5,
@@ -376,9 +364,7 @@ class TestIsBlocked:
         assert v_a.scope == KillSwitchScope.TENANT
         assert v_b.blocked is False
 
-    def test_no_flags_returns_unblocked(
-        self, service: KillSwitchService, tenant_a: UUID
-    ) -> None:
+    def test_no_flags_returns_unblocked(self, service: KillSwitchService, tenant_a: UUID) -> None:
         verdict = service.is_blocked(tenant_a)
         assert verdict.blocked is False
         assert verdict.scope is None

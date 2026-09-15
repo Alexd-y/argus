@@ -6,20 +6,25 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import build_dalfox_argv
+from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import (
+    build_dalfox_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.ffuf_adapter import (
     build_ffuf_argv,
     inject_ffuf_marker_url,
     resolve_ffuf_wordlist_path,
 )
-from src.recon.vulnerability_analysis.active_scan.heuristics import build_va_active_scan_heuristics
-from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import build_sqlmap_va_argv
+from src.recon.vulnerability_analysis.active_scan.heuristics import (
+    build_va_active_scan_heuristics,
+)
+from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import (
+    build_sqlmap_va_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
     run_va_active_scan_phase,
 )
 from src.recon.vulnerability_analysis.xsstrike_targets import XsStrikeScanJob
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def test_build_dalfox_argv_valid() -> None:
@@ -120,7 +125,7 @@ async def test_va_active_scan_phase_skips_no_jobs() -> None:
             "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
             return_value=[],
         ):
-            out = await run_va_active_scan_phase(
+            await run_va_active_scan_phase(
                 bundle,
                 tenant_id_raw="t1",
                 scan_id_raw="job1",
@@ -154,27 +159,29 @@ async def test_va_active_scan_phase_runs_tools_mocked() -> None:
         s.va_active_scan_tool_timeout_sec = 30.0
         s.ffuf_va_wordlist_path = ""
         s.sqlmap_va_enabled = True
-        with patch(
-            "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
-            return_value=jobs,
-        ):
-            with patch(
+        with (
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
+                return_value=jobs,
+            ),
+            patch(
                 "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.run_va_active_scan",
                 new_callable=AsyncMock,
                 return_value=mock_result,
-            ) as m_run:
-                with patch(
-                    "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
-                ) as m_text:
-                    with patch(
-                        "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
-                    ) as m_json:
-                        out = await run_va_active_scan_phase(
-                            bundle,
-                            tenant_id_raw="tenant-1",
-                            scan_id_raw="job1",
-                            va_raw_log=log.append,
-                        )
+            ) as m_run,
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
+            ) as m_text,
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
+            ) as m_json,
+        ):
+            out = await run_va_active_scan_phase(
+                bundle,
+                tenant_id_raw="tenant-1",
+                scan_id_raw="job1",
+                va_raw_log=log.append,
+            )
     assert len(out.intel_findings) >= 4
     # One job × core + OWASP2 tail + KAL-004 hooks (whatweb, nikto, testssl)
     assert m_run.await_count >= 11
@@ -222,27 +229,29 @@ async def test_va_active_scan_phase_merges_nuclei_intel_mocked() -> None:
         s.va_active_scan_tool_timeout_sec = 30.0
         s.ffuf_va_wordlist_path = ""
         s.sqlmap_va_enabled = True
-        with patch(
-            "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
-            return_value=jobs,
-        ):
-            with patch(
+        with (
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
+                return_value=jobs,
+            ),
+            patch(
                 "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.run_va_active_scan",
                 new_callable=AsyncMock,
                 side_effect=fake_run,
-            ):
-                with patch(
-                    "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
-                ):
-                    with patch(
-                        "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
-                    ):
-                        out = await run_va_active_scan_phase(
-                            bundle,
-                            tenant_id_raw="tenant-1",
-                            scan_id_raw="job1",
-                            va_raw_log=log.append,
-                        )
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
+            ),
+        ):
+            out = await run_va_active_scan_phase(
+                bundle,
+                tenant_id_raw="tenant-1",
+                scan_id_raw="job1",
+                va_raw_log=log.append,
+            )
     nuclei_rows = [x for x in out.intel_findings if x.get("source_tool") == "nuclei"]
     assert len(nuclei_rows) >= 1
     assert nuclei_rows[0].get("data", {}).get("template_id") == "probe-x"
@@ -296,28 +305,30 @@ async def test_va_active_scan_phase_exec_os_error_keeps_stderr_artifact() -> Non
         s.va_active_scan_tool_timeout_sec = 30.0
         s.ffuf_va_wordlist_path = ""
         s.sqlmap_va_enabled = True
-        with patch(
-            "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
-            return_value=jobs,
-        ):
-            with patch(
+        with (
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.planner.collect_xsstrike_scan_jobs",
+                return_value=jobs,
+            ),
+            patch(
                 "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.run_va_active_scan",
                 new_callable=AsyncMock,
                 side_effect=fake_run,
-            ):
-                with patch(
-                    "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
-                    side_effect=capture_text,
-                ):
-                    with patch(
-                        "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
-                    ):
-                        await run_va_active_scan_phase(
-                            bundle,
-                            tenant_id_raw="t",
-                            scan_id_raw="job1",
-                            va_raw_log=log.append,
-                        )
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_text",
+                side_effect=capture_text,
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.va_active_scan_phase.sink_raw_json",
+            ),
+        ):
+            await run_va_active_scan_phase(
+                bundle,
+                tenant_id_raw="t",
+                scan_id_raw="job1",
+                va_raw_log=log.append,
+            )
     assert any("process_start_failed" in t for t in stderr_texts)
     assert any("exec_skip" in x and "gobuster" in x for x in log)
 
@@ -328,7 +339,9 @@ async def test_pipeline_calls_active_scan_phase_after_xsstrike(tmp_path: Path) -
         STAGE1_REQUIRED_ARTIFACTS,
         STAGE2_REQUIRED_ARTIFACTS,
     )
-    from src.recon.vulnerability_analysis.pipeline import execute_vulnerability_analysis_run
+    from src.recon.vulnerability_analysis.pipeline import (
+        execute_vulnerability_analysis_run,
+    )
 
     for filename in STAGE1_REQUIRED_ARTIFACTS:
         (tmp_path / filename).write_text("{}" if filename.endswith(".json") else "a,b\n1,2")

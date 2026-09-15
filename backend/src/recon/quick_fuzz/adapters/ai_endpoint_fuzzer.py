@@ -51,9 +51,7 @@ AI_RESPONSE_INDICATORS: tuple[str, ...] = (
     "as an ai assistant",
 )
 
-AI_CONTENT_TYPE: tuple[str, ...] = (
-    "application/json",
-)
+AI_CONTENT_TYPE: tuple[str, ...] = ("application/json",)
 
 
 def detect_ai_endpoints(
@@ -73,15 +71,19 @@ def detect_ai_endpoints(
     if recon_responses:
         for url, resp_data in recon_responses.items():
             body = str(resp_data.get("body", "") or "").lower()
-            if any(ind in body for ind in ("openai", "anthropic", "llm", "gpt", "claude", "gemini")):
-                if url not in candidates:
-                    candidates.append(url)
+            if (
+                any(
+                    ind in body for ind in ("openai", "anthropic", "llm", "gpt", "claude", "gemini")
+                )
+                and url not in candidates
+            ):
+                candidates.append(url)
 
     return candidates
 
 
 async def fuzz_ai_endpoints(
-    target: str,
+    target: str,  # noqa: ARG001 - retained for signature/API compatibility
     ai_urls: list[str] | None = None,
     recon_urls: list[str] | None = None,
     delay: float = 0.5,
@@ -102,7 +104,9 @@ async def fuzz_ai_endpoints(
         return findings
 
     if console:
-        console.print(f"[bold]Testing {len(urls_to_test)} AI endpoint(s) for prompt injection[/bold]")
+        console.print(
+            f"[bold]Testing {len(urls_to_test)} AI endpoint(s) for prompt injection[/bold]"
+        )
 
     async with httpx.AsyncClient(
         headers={"User-Agent": "ARGUS-QuickFuzz/1.0"},
@@ -116,7 +120,9 @@ async def fuzz_ai_endpoints(
                 }
                 try:
                     r = await client.post(
-                        url, json=body_data, timeout=10.0,
+                        url,
+                        json=body_data,
+                        timeout=10.0,
                         headers={"Content-Type": "application/json"},
                     )
                     resp_lower = r.text.lower()
@@ -124,30 +130,34 @@ async def fuzz_ai_endpoints(
                     triggered = any(s.lower() in resp_lower for s in sigs)
 
                     if triggered:
-                        findings.append({
-                            "module": "quick_fuzz",
-                            "category": "prompt_injection",
-                            "owasp_id": "A05",
-                            "owasp_name": "Injection",
-                            "severity": "medium",
-                            "title": f"Prompt Injection — AI endpoint {url[:50]}",
-                            "description": (
-                                "The AI endpoint responded to a prompt injection payload "
-                                "with content that suggests the system prompt or internal "
-                                "instructions were revealed or overridden."
-                            ),
-                            "evidence": (
-                                f"URL: {url}\n"
-                                f"Payload: {payload[:200]}\n"
-                                f"Response snippet: {r.text[:300]}"
-                            ),
-                            "fix": "Implement input sanitization on AI prompts, use guardrails, "
-                                   "and never include system instructions in user-accessible context.",
-                            "url": url,
-                            "payload_attempted": [payload],
-                            "payload_successful": [payload],
-                            "taint_path": ["user_input -> AI_endpoint -> response_includes_system_prompt"],
-                        })
+                        findings.append(
+                            {
+                                "module": "quick_fuzz",
+                                "category": "prompt_injection",
+                                "owasp_id": "A05",
+                                "owasp_name": "Injection",
+                                "severity": "medium",
+                                "title": f"Prompt Injection — AI endpoint {url[:50]}",
+                                "description": (
+                                    "The AI endpoint responded to a prompt injection payload "
+                                    "with content that suggests the system prompt or internal "
+                                    "instructions were revealed or overridden."
+                                ),
+                                "evidence": (
+                                    f"URL: {url}\n"
+                                    f"Payload: {payload[:200]}\n"
+                                    f"Response snippet: {r.text[:300]}"
+                                ),
+                                "fix": "Implement input sanitization on AI prompts, use guardrails, "
+                                "and never include system instructions in user-accessible context.",
+                                "url": url,
+                                "payload_attempted": [payload],
+                                "payload_successful": [payload],
+                                "taint_path": [
+                                    "user_input -> AI_endpoint -> response_includes_system_prompt"
+                                ],
+                            }
+                        )
                         if console:
                             console.print(
                                 f"  [bold red]⚠ PROMPT INJECTION[/bold red] at {url[:60]}"

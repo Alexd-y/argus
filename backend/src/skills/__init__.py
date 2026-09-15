@@ -57,11 +57,7 @@ def load_skill(skill_name: str) -> str | None:
 
 def load_skills(skill_names: list[str]) -> dict[str, str]:
     """Load multiple skills; skip missing ones."""
-    return {
-        name: content
-        for name in skill_names
-        if (content := load_skill(name))
-    }
+    return {name: content for name in skill_names if (content := load_skill(name))}
 
 
 def get_skills_for_category(vuln_category: str) -> list[str]:
@@ -76,6 +72,6 @@ def build_skills_prompt_block(skill_names: list[str]) -> str:
         return ""
     parts = ["<specialized_knowledge>"]
     for name, content in loaded.items():
-        parts.append(f"<skill name=\"{name}\">\n{content}\n</skill>")
+        parts.append(f'<skill name="{name}">\n{content}\n</skill>')
     parts.append("</specialized_knowledge>")
     return "\n".join(parts)

@@ -61,7 +61,9 @@ def _prompt_vuln_discovery(
     functions = [n for n in cpg.nodes if n.node_type in (NodeType.FUNCTION, NodeType.METHOD)]
     files = list({n.file_path for n in cpg.nodes if n.file_path})
 
-    ep_summary = "\n".join(f"  - {n.name} @ {n.file_path}:{n.line_start}" for n in entry_points[:30])
+    ep_summary = "\n".join(
+        f"  - {n.name} @ {n.file_path}:{n.line_start}" for n in entry_points[:30]
+    )
     sink_summary = "\n".join(f"  - {n.name} @ {n.file_path}:{n.line_start}" for n in sinks[:30])
     fn_summary = "\n".join(f"  - {n.name} @ {n.file_path}:{n.line_start}" for n in functions[:50])
 
@@ -71,19 +73,19 @@ def _prompt_vuln_discovery(
 {mode}
 
 === FILES ANALYSED ===
-{', '.join(files[:100]) or 'none'}
+{", ".join(files[:100]) or "none"}
 
 === ENTRY POINTS (user input, uploads, auth flows) ===
-{ep_summary or 'none detected'}
+{ep_summary or "none detected"}
 
 === SENSITIVE SINKS (DB queries, file ops, exec calls, …) ===
-{sink_summary or 'none detected'}
+{sink_summary or "none detected"}
 
 === FUNCTIONS / METHODS ===
-{fn_summary or 'none detected'}
+{fn_summary or "none detected"}
 
 === KNOWN THREAT MODEL ===
-{json.dumps(threat_model, indent=2, default=str)[:4000] if threat_model else 'No threat model available'}
+{json.dumps(threat_model, indent=2, default=str)[:4000] if threat_model else "No threat model available"}
 
 === TASK ===
 Find concrete security vulnerabilities by tracing paths from entry points to sensitive sinks.
@@ -138,9 +140,15 @@ async def run_vuln_discovery(
         cpg = CodePropertyGraph(
             language=cpg.language,
             nodes=[n for n in cpg.nodes if n.file_path in changed_files],
-            edges=[e for e in cpg.edges if any(
-                n.file_path in changed_files for n in cpg.nodes if n.id in (e.source_id, e.target_id)
-            )],
+            edges=[
+                e
+                for e in cpg.edges
+                if any(
+                    n.file_path in changed_files
+                    for n in cpg.nodes
+                    if n.id in (e.source_id, e.target_id)
+                )
+            ],
         )
 
     prompt = _prompt_vuln_discovery(
@@ -171,6 +179,7 @@ async def run_vuln_discovery(
         findings_raw = json.loads(response_text)
     except json.JSONDecodeError:
         import re
+
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response_text)
         if match:
             findings_raw = json.loads(match.group(1))
@@ -185,24 +194,28 @@ async def run_vuln_discovery(
     for f in findings_raw:
         if not isinstance(f, dict):
             continue
-        findings.append(VulnFinding(
-            title=str(f.get("title", "Untitled finding"))[:500],
-            severity=str(f.get("severity", "info")).lower(),
-            cwe=str(f.get("cwe", ""))[:20],
-            cvss=float(f["cvss"]) if f.get("cvss") is not None else None,
-            description=str(f.get("description", ""))[:5000],
-            file_path=str(f.get("file_path", "")),
-            line_start=int(f.get("line_start", 0) or 0),
-            line_end=int(f.get("line_end", 0) or 0),
-            code_snippet=str(f.get("code_snippet", ""))[:2000],
-            confidence=str(f.get("confidence", "advisory")).lower(),
-            exploitability=str(f.get("exploitability", "unknown")).lower(),
-            remediation=str(f.get("remediation", ""))[:3000],
-            owasp_category=str(f.get("owasp_category", "")),
-        ))
+        findings.append(
+            VulnFinding(
+                title=str(f.get("title", "Untitled finding"))[:500],
+                severity=str(f.get("severity", "info")).lower(),
+                cwe=str(f.get("cwe", ""))[:20],
+                cvss=float(f["cvss"]) if f.get("cvss") is not None else None,
+                description=str(f.get("description", ""))[:5000],
+                file_path=str(f.get("file_path", "")),
+                line_start=int(f.get("line_start", 0) or 0),
+                line_end=int(f.get("line_end", 0) or 0),
+                code_snippet=str(f.get("code_snippet", ""))[:2000],
+                confidence=str(f.get("confidence", "advisory")).lower(),
+                exploitability=str(f.get("exploitability", "unknown")).lower(),
+                remediation=str(f.get("remediation", ""))[:3000],
+                owasp_category=str(f.get("owasp_category", "")),
+            )
+        )
 
     elapsed = time.monotonic() - start
-    total_functions = sum(1 for n in cpg.nodes if n.node_type in (NodeType.FUNCTION, NodeType.METHOD))
+    total_functions = sum(
+        1 for n in cpg.nodes if n.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+    )
     total_files = len({n.file_path for n in cpg.nodes})
 
     return VulnDiscoveryResult(
@@ -215,7 +228,7 @@ async def run_vuln_discovery(
 
 async def run_vuln_discovery_on_pr(
     repo_name: str,
-    cpg: CodePropertyGraph,
+    cpg: CodePropertyGraph,  # noqa: ARG001 - retained for signature/API compatibility
     pr_diff: str,
     changed_files: list[str],
     threat_model: dict[str, Any] | None = None,
@@ -240,7 +253,7 @@ async def run_vuln_discovery_on_pr(
 {pr_diff[:8000]}
 
 === THREAT MODEL CONTEXT ===
-{json.dumps(threat_model, indent=2)[:2000] if threat_model else 'None'}
+{json.dumps(threat_model, indent=2)[:2000] if threat_model else "None"}
 
 === TASK ===
 Find security issues introduced by this PR. For each:
@@ -257,7 +270,8 @@ Respond ONLY with JSON array."""
     )
 
     response_text = await call_llm_unified(
-        system_prompt, prompt,
+        system_prompt,
+        prompt,
         task=LLMTask.ZERO_DAY_ANALYSIS,
         phase="pr_review",
         execution_mode=execution_mode,
@@ -272,18 +286,20 @@ Respond ONLY with JSON array."""
         findings_raw = []
 
     findings = []
-    for f in (findings_raw or []):
+    for f in findings_raw or []:
         if not isinstance(f, dict):
             continue
-        findings.append(VulnFinding(
-            title=str(f.get("title", ""))[:500],
-            severity=str(f.get("severity", "info")).lower(),
-            cwe=str(f.get("cwe", ""))[:20],
-            description=str(f.get("description", ""))[:5000],
-            file_path=str(f.get("file_path", "")),
-            line_start=int(f.get("line_start", 0) or 0),
-            code_snippet=str(f.get("code_snippet", ""))[:2000],
-            remediation=str(f.get("remediation", ""))[:3000],
-        ))
+        findings.append(
+            VulnFinding(
+                title=str(f.get("title", ""))[:500],
+                severity=str(f.get("severity", "info")).lower(),
+                cwe=str(f.get("cwe", ""))[:20],
+                description=str(f.get("description", ""))[:5000],
+                file_path=str(f.get("file_path", "")),
+                line_start=int(f.get("line_start", 0) or 0),
+                code_snippet=str(f.get("code_snippet", ""))[:2000],
+                remediation=str(f.get("remediation", ""))[:3000],
+            )
+        )
 
     return VulnDiscoveryResult(findings=findings)

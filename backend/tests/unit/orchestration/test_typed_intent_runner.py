@@ -70,7 +70,12 @@ def test_run_typed_intent_abstains():
 class TestEnforceFindingEvidence:
     def test_drops_confirmed_without_evidence(self):
         findings = [
-            {"finding_id": "F-1", "title": "SQLi", "verification_status": "confirmed", "evidence_ids": ["E-1"]},
+            {
+                "finding_id": "F-1",
+                "title": "SQLi",
+                "verification_status": "confirmed",
+                "evidence_ids": ["E-1"],
+            },
             {"finding_id": "F-2", "title": "RCE", "verification_status": "confirmed"},
         ]
         kept, dropped = enforce_finding_evidence(findings)
@@ -110,8 +115,12 @@ class TestEnforceFindingEvidence:
 
     def test_reproducible_steps_counts_as_evidence(self):
         findings = [
-            {"finding_id": "F-1", "title": "x", "verification_status": "confirmed",
-             "reproducible_steps": ["step 1"]},
+            {
+                "finding_id": "F-1",
+                "title": "x",
+                "verification_status": "confirmed",
+                "reproducible_steps": ["step 1"],
+            },
         ]
         kept, dropped = enforce_finding_evidence(findings)
         assert len(kept) == 1
@@ -141,7 +150,13 @@ class TestExploitEvidenceGate:
         assert dropped == []
 
     def test_exploit_with_symbolic_proof_kept(self):
-        exploits = [{"vuln_type": "rce", "severity": "critical", "symbolic_execution_proven": True}]
+        exploits = [
+            {
+                "vuln_type": "rce",
+                "severity": "critical",
+                "symbolic_execution_proven": True,
+            }
+        ]
         kept, dropped = enforce_finding_evidence(
             exploits,
             treat_as_provable=True,

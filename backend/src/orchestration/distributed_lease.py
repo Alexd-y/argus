@@ -70,7 +70,10 @@ class DistributedLease:
         return f"{self._ns}:{resource}"
 
     def acquire(
-        self, resource: str, ttl_seconds: int = DEFAULT_TTL_SECONDS, token: str | None = None
+        self,
+        resource: str,
+        ttl_seconds: int = DEFAULT_TTL_SECONDS,
+        token: str | None = None,
     ) -> LeaseHandle | None:
         """Try once to acquire a single named lease. Returns None if held."""
         if self._redis is None:

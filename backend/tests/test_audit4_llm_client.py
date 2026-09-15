@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 
 class TestGetLlmClientSignature:
@@ -28,10 +28,17 @@ class TestGetLlmClientSignature:
             assert callable(client)
 
     def test_get_llm_client_raises_without_keys(self) -> None:
-        env_clear = {k: "" for k in [
-            "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY",
-            "GOOGLE_API_KEY", "KIMI_API_KEY", "PERPLEXITY_API_KEY",
-        ]}
+        env_clear = dict.fromkeys(
+            [
+                "OPENAI_API_KEY",
+                "DEEPSEEK_API_KEY",
+                "OPENROUTER_API_KEY",
+                "GOOGLE_API_KEY",
+                "KIMI_API_KEY",
+                "PERPLEXITY_API_KEY",
+            ],
+            "",
+        )
         with patch.dict(os.environ, env_clear, clear=False):
             from src.core.llm_config import get_llm_client
 

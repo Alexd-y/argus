@@ -57,12 +57,10 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ParseStrategy, ToolCategory, ToolDescriptor
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # §4.10 batch — hard-coded so a silent drop / addition breaks CI.
 XSS_TOOL_IDS: Final[tuple[str, ...]] = (
@@ -185,9 +183,7 @@ def catalog_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -227,8 +223,7 @@ def test_category_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = CATEGORY_BY_TOOL[tool_id]
     assert descriptor.category is expected, (
-        f"{tool_id}: category={descriptor.category.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: category={descriptor.category.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -301,9 +296,7 @@ def test_image_matches_per_tool_pin(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -329,13 +322,9 @@ def test_network_policy_is_recon_active_tcp(catalog_dir: Path, tool_id: str) -> 
 def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
     """Whatever evidence path is declared lives under ``/out``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.evidence_artifacts, (
-        f"{tool_id}: must declare at least one evidence artefact"
-    )
+    assert descriptor.evidence_artifacts, f"{tool_id}: must declare at least one evidence artefact"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
@@ -343,8 +332,7 @@ def test_cwe_hints_include_xss(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.10 tool ships CWE-79 (XSS) — the cohort floor."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert REQUIRED_CWE in descriptor.cwe_hints, (
-        f"{tool_id}: must declare CWE-79 (Cross-Site Scripting); "
-        f"got {descriptor.cwe_hints}"
+        f"{tool_id}: must declare CWE-79 (Cross-Site Scripting); got {descriptor.cwe_hints}"
     )
 
 
@@ -356,9 +344,7 @@ def test_owasp_wstg_includes_inpv_family(catalog_dir: Path, tool_id: str) -> Non
     (Stored XSS) / INPV-04 (DOM XSS).
     """
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for §4.10 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for §4.10 tools"
     assert any(tag.startswith("WSTG-INPV") for tag in descriptor.owasp_wstg), (
         f"{tool_id}: owasp_wstg must include at least one WSTG-INPV-* hint; "
         f"got {descriptor.owasp_wstg}"
@@ -387,15 +373,12 @@ def test_parse_strategy_matches_per_tool_split(catalog_dir: Path, tool_id: str) 
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_default_timeout_matches_per_tool_floor(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_default_timeout_matches_per_tool_floor(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.10 tool floors at the per-tool minimum from the cycle plan."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = DEFAULT_TIMEOUT_S_BY_TOOL[tool_id]
     assert descriptor.default_timeout_s >= expected, (
-        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s "
-        f"below floor of {expected}s"
+        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s below floor of {expected}s"
     )
 
 
@@ -406,8 +389,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -417,9 +399,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_command_template_has_no_shell_metachars(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_has_no_shell_metachars(catalog_dir: Path, tool_id: str) -> None:
     """No argv token may contain shell metacharacters — defence in depth.
 
     Note: ``kxss`` is the trickiest entry — it's a stdin-only tool, so
@@ -437,9 +417,7 @@ def test_command_template_has_no_shell_metachars(
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_command_template_first_token_is_real_binary(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_first_token_is_real_binary(catalog_dir: Path, tool_id: str) -> None:
     """The first argv token must be the real binary, never a shell."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.command_template, f"{tool_id}: command_template must be non-empty"
@@ -457,9 +435,7 @@ def test_command_template_first_token_is_real_binary(
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_description_includes_upstream_attribution(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_description_includes_upstream_attribution(catalog_dir: Path, tool_id: str) -> None:
     """Description must include both the upstream author / source URL and
     the §4.10 backlog reference.
 
@@ -496,9 +472,7 @@ def test_description_within_500_char_limit(catalog_dir: Path, tool_id: str) -> N
 
 
 @pytest.mark.parametrize("tool_id", XSS_TOOL_IDS)
-def test_command_template_consumes_url_placeholder(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_consumes_url_placeholder(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.10 tool references the ``{url}`` placeholder."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     rendered = " ".join(descriptor.command_template)
@@ -576,8 +550,7 @@ def test_kxss_wraps_stdin_via_runner_script(catalog_dir: Path) -> None:
     )
     rendered = " ".join(descriptor.command_template)
     assert "{url}" in rendered, (
-        f"kxss: wrapper must consume {{url}} on argv "
-        f"(got {descriptor.command_template!r})"
+        f"kxss: wrapper must consume {{url}} on argv (got {descriptor.command_template!r})"
     )
 
 

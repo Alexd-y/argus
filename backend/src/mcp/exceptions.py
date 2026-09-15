@@ -134,16 +134,16 @@ def is_known_error_code(code: str) -> bool:
 
 
 __all__ = [
-    "MCPError",
+    "ApprovalRequiredError",
     "AuthenticationError",
     "AuthorizationError",
-    "TenantMismatchError",
-    "ScopeViolationError",
-    "ApprovalRequiredError",
+    "MCPError",
     "PolicyDeniedError",
-    "ResourceNotFoundError",
-    "ValidationError",
     "RateLimitedError",
+    "ResourceNotFoundError",
+    "ScopeViolationError",
+    "TenantMismatchError",
     "UpstreamServiceError",
+    "ValidationError",
     "is_known_error_code",
 ]

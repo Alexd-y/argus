@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -90,25 +89,19 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 
 def test_finding_category_and_cwe(tmp_path: Path) -> None:
-    findings = parse_hash_analyzer_json(
-        _payload_array(_entry()), b"", tmp_path, "hash_analyzer"
-    )
+    findings = parse_hash_analyzer_json(_payload_array(_entry()), b"", tmp_path, "hash_analyzer")
     assert findings[0].category is FindingCategory.CRYPTO
     assert set(findings[0].cwe) == {326, 327}
 
 
 def test_results_envelope_supported(tmp_path: Path) -> None:
-    findings = parse_hash_analyzer_json(
-        _payload_results(_entry()), b"", tmp_path, "hash_analyzer"
-    )
+    findings = parse_hash_analyzer_json(_payload_results(_entry()), b"", tmp_path, "hash_analyzer")
     assert len(findings) == 1
 
 
 def test_high_confidence_promotes_to_confirmed(tmp_path: Path) -> None:
     findings = parse_hash_analyzer_json(
-        _payload_array(
-            _entry(matches=[{"name": "bcrypt", "confidence": 0.99, "hashcat": 3200}])
-        ),
+        _payload_array(_entry(matches=[{"name": "bcrypt", "confidence": 0.99, "hashcat": 3200}])),
         b"",
         tmp_path,
         "hash_analyzer",
@@ -118,9 +111,7 @@ def test_high_confidence_promotes_to_confirmed(tmp_path: Path) -> None:
 
 def test_low_confidence_stays_likely(tmp_path: Path) -> None:
     findings = parse_hash_analyzer_json(
-        _payload_array(
-            _entry(matches=[{"name": "MD5", "confidence": 0.7, "hashcat": 0}])
-        ),
+        _payload_array(_entry(matches=[{"name": "MD5", "confidence": 0.7, "hashcat": 0}])),
         b"",
         tmp_path,
         "hash_analyzer",
@@ -151,9 +142,7 @@ def test_raw_hash_never_in_sidecar(tmp_path: Path) -> None:
     parse_hash_analyzer_json(_payload_array(_entry()), b"", tmp_path, "hash_analyzer")
     sidecar_bytes = (tmp_path / EVIDENCE_SIDECAR_NAME).read_bytes()
     assert _RAW_MD5.encode("utf-8") not in sidecar_bytes
-    assert not _HEX32_RE.search(sidecar_bytes), (
-        "raw MD5 hex hash leaked into hash_analyzer sidecar"
-    )
+    assert not _HEX32_RE.search(sidecar_bytes), "raw MD5 hex hash leaked into hash_analyzer sidecar"
 
 
 def test_raw_bcrypt_never_in_sidecar(tmp_path: Path) -> None:
@@ -171,9 +160,7 @@ def test_raw_bcrypt_never_in_sidecar(tmp_path: Path) -> None:
     )
     sidecar_bytes = (tmp_path / EVIDENCE_SIDECAR_NAME).read_bytes()
     assert _RAW_BCRYPT.encode("utf-8") not in sidecar_bytes
-    assert not _BCRYPT_RE.search(sidecar_bytes), (
-        "raw bcrypt hash leaked into hash_analyzer sidecar"
-    )
+    assert not _BCRYPT_RE.search(sidecar_bytes), "raw bcrypt hash leaked into hash_analyzer sidecar"
 
 
 def test_stable_hash_12_used_for_id(tmp_path: Path) -> None:
@@ -203,16 +190,13 @@ def test_unsupported_payload_emits_warning(
         findings = parse_hash_analyzer_json(b"", b"", tmp_path, "hash_analyzer")
     assert findings == []
     assert any(
-        "hash_analyzer_parser_unsupported_payload"
-        in (record.__dict__.get("event") or "")
+        "hash_analyzer_parser_unsupported_payload" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
 
 def test_entropy_persisted(tmp_path: Path) -> None:
-    parse_hash_analyzer_json(
-        _payload_array(_entry(entropy=3.7)), b"", tmp_path, "hash_analyzer"
-    )
+    parse_hash_analyzer_json(_payload_array(_entry(entropy=3.7)), b"", tmp_path, "hash_analyzer")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["entropy"] == pytest.approx(3.7)
 

@@ -70,7 +70,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -207,7 +207,7 @@ _SECTION_KEYS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -412,9 +412,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    payload: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for section_key in _SECTION_KEYS:
         section = payload.get(section_key)
         if section is None:
@@ -487,9 +485,7 @@ def _normalise_entry(
         if isinstance(first_file, str):
             file_path = first_file.strip() or None
         elif isinstance(first_file, dict):
-            file_path = _string_field(first_file, "file_path") or _string_field(
-                first_file, "name"
-            )
+            file_path = _string_field(first_file, "file_path") or _string_field(first_file, "name")
     line = _coerce_int(body.get("line")) or _coerce_int(body.get("line_number")) or 0
     cwe_list = _extract_cwe(body.get("cwe") or body.get("cwe_id") or body.get("cweid"))
     owasp_mobile = _extract_str_list(body.get("owasp-mobile") or body.get("masvs"))
@@ -499,15 +495,12 @@ def _normalise_entry(
         or _string_field(body, "secret")
     )
     needs_redaction = "secret" in section_key.lower() or any(
-        kw in (rule_id.lower() if rule_id else "")
-        for kw in ("secret", "password", "key")
+        kw in (rule_id.lower() if rule_id else "") for kw in ("secret", "password", "key")
     )
     match_preview = redact_secret(raw_match) if needs_redaction else raw_match
     category = _classify_category(section_key=section_key, rule_id=rule_id)
     confidence = (
-        ConfidenceLevel.LIKELY
-        if severity in {"high", "critical"}
-        else ConfidenceLevel.SUSPECTED
+        ConfidenceLevel.LIKELY if severity in {"high", "critical"} else ConfidenceLevel.SUSPECTED
     )
     metadata = body.get("metadata") if isinstance(body.get("metadata"), str) else None
     return {
@@ -573,8 +566,7 @@ def _extract_cwe(raw: Any) -> list[int]:
         return [raw]
     if isinstance(raw, str):
         token = raw.strip().upper()
-        if token.startswith("CWE-"):
-            token = token[4:]
+        token = token.removeprefix("CWE-")
         if token.isdigit():
             value = int(token)
             return [value] if value > 0 else []

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 from src.policy.scope import (
     SCOPE_FAILURE_REASONS,
@@ -20,7 +19,6 @@ from src.policy.scope import (
     ScopeRule,
     ScopeViolation,
 )
-
 
 # ---------------------------------------------------------------------------
 # PortRange
@@ -106,9 +104,7 @@ class TestScopeRuleValidation:
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
-            ScopeRule.model_validate(
-                {"kind": "domain", "pattern": "example.com", "extra": "nope"}
-            )
+            ScopeRule.model_validate({"kind": "domain", "pattern": "example.com", "extra": "nope"})
 
     def test_frozen(self) -> None:
         rule = ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com")
@@ -185,21 +181,15 @@ class TestEngineMatching:
         assert decision.allowed is False
 
     def test_url_prefix_match(self) -> None:
-        engine = ScopeEngine(
-            [ScopeRule(kind=ScopeKind.URL, pattern="https://example.com/api")]
-        )
+        engine = ScopeEngine([ScopeRule(kind=ScopeKind.URL, pattern="https://example.com/api")])
         decision = engine.check(
             TargetSpec(kind=TargetKind.URL, url="https://example.com/api/v1/users")
         )
         assert decision.allowed is True
 
     def test_url_scheme_mismatch_rejected(self) -> None:
-        engine = ScopeEngine(
-            [ScopeRule(kind=ScopeKind.URL, pattern="https://example.com")]
-        )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.URL, url="http://example.com")
-        )
+        engine = ScopeEngine([ScopeRule(kind=ScopeKind.URL, pattern="https://example.com")])
+        decision = engine.check(TargetSpec(kind=TargetKind.URL, url="http://example.com"))
         assert decision.allowed is False
 
     def test_cidr_membership(self) -> None:
@@ -228,12 +218,8 @@ class TestEngineMatching:
         assert decision.allowed is True
 
     def test_host_exact_lowercase(self) -> None:
-        engine = ScopeEngine(
-            [ScopeRule(kind=ScopeKind.HOST, pattern="api.example.com")]
-        )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="API.example.com")
-        )
+        engine = ScopeEngine([ScopeRule(kind=ScopeKind.HOST, pattern="api.example.com")])
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="API.example.com"))
         assert decision.allowed is True
 
 
@@ -242,14 +228,10 @@ class TestDenyOverridesAllow:
         engine = ScopeEngine(
             [
                 ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com"),
-                ScopeRule(
-                    kind=ScopeKind.HOST, pattern="staging.example.com", deny=True
-                ),
+                ScopeRule(kind=ScopeKind.HOST, pattern="staging.example.com", deny=True),
             ]
         )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="staging.example.com")
-        )
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="staging.example.com"))
         assert decision.allowed is False
         assert decision.failure_summary == "target_explicitly_denied"
         assert decision.matched_rule_index == 1
@@ -257,15 +239,11 @@ class TestDenyOverridesAllow:
     def test_deny_in_first_position(self) -> None:
         engine = ScopeEngine(
             [
-                ScopeRule(
-                    kind=ScopeKind.HOST, pattern="staging.example.com", deny=True
-                ),
+                ScopeRule(kind=ScopeKind.HOST, pattern="staging.example.com", deny=True),
                 ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com"),
             ]
         )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="staging.example.com")
-        )
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="staging.example.com"))
         assert decision.allowed is False
 
 
@@ -280,9 +258,7 @@ class TestPortMatching:
                 )
             ]
         )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=443
-        )
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=443)
         assert decision.allowed is True
 
     def test_disallowed_port_rejected_with_port_summary(self) -> None:
@@ -295,17 +271,13 @@ class TestPortMatching:
                 )
             ]
         )
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=80
-        )
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=80)
         assert decision.allowed is False
         assert decision.failure_summary == "target_port_not_allowed"
 
     def test_no_matching_rule_returns_not_in_scope_not_port_miss(self) -> None:
         engine = ScopeEngine([ScopeRule(kind=ScopeKind.DOMAIN, pattern="other.com")])
-        decision = engine.check(
-            TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=80
-        )
+        decision = engine.check(TargetSpec(kind=TargetKind.HOST, host="api.example.com"), port=80)
         assert decision.failure_summary == "target_not_in_scope"
 
 
@@ -315,9 +287,7 @@ class TestFailureSummariesAreClosedTaxonomy:
     ) -> None:
         # Each branch uses an isolated rule set so the first-matching-allow
         # contract does not shadow the more-specific port rule.
-        not_in_scope_engine = ScopeEngine(
-            [ScopeRule(kind=ScopeKind.DOMAIN, pattern="other.com")]
-        )
+        not_in_scope_engine = ScopeEngine([ScopeRule(kind=ScopeKind.DOMAIN, pattern="other.com")])
         denied_engine = ScopeEngine(
             [
                 ScopeRule(
@@ -338,12 +308,8 @@ class TestFailureSummariesAreClosedTaxonomy:
             ]
         )
         decisions: list[ScopeDecision] = [
-            not_in_scope_engine.check(
-                TargetSpec(kind=TargetKind.HOST, host="api.example.com")
-            ),
-            denied_engine.check(
-                TargetSpec(kind=TargetKind.HOST, host="block.example.com")
-            ),
+            not_in_scope_engine.check(TargetSpec(kind=TargetKind.HOST, host="api.example.com")),
+            denied_engine.check(TargetSpec(kind=TargetKind.HOST, host="block.example.com")),
             ports_only_engine.check(
                 TargetSpec(kind=TargetKind.HOST, host="api.example.com"),
                 port=80,
@@ -362,9 +328,7 @@ class TestFailureSummariesAreClosedTaxonomy:
 class TestScopeAssertAllowed:
     def test_returns_decision_when_allowed(self) -> None:
         engine = ScopeEngine([ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com")])
-        decision = engine.assert_allowed(
-            TargetSpec(kind=TargetKind.HOST, host="example.com")
-        )
+        decision = engine.assert_allowed(TargetSpec(kind=TargetKind.HOST, host="example.com"))
         assert decision.allowed is True
 
     def test_raises_violation_with_summary(self) -> None:
@@ -375,7 +339,5 @@ class TestScopeAssertAllowed:
             ]
         )
         with pytest.raises(ScopeViolation) as exc_info:
-            engine.assert_allowed(
-                TargetSpec(kind=TargetKind.HOST, host="x.example.com")
-            )
+            engine.assert_allowed(TargetSpec(kind=TargetKind.HOST, host="x.example.com"))
         assert exc_info.value.summary == "target_explicitly_denied"

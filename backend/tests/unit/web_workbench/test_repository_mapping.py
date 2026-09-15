@@ -7,7 +7,7 @@ scope semantics (kind, deny, port ranges) and the EAP projection.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.db.models_web_workbench import (
     WbScopeRule,
@@ -60,7 +60,7 @@ def test_eap_to_view_none_is_none() -> None:
 
 
 def test_eap_to_view_projects_fields() -> None:
-    expires = datetime(2026, 12, 31, tzinfo=timezone.utc)
+    expires = datetime(2026, 12, 31, tzinfo=UTC)
     record = WebWorkbenchEapRecord(
         tenant_id="t",
         project_id="p",
@@ -79,7 +79,7 @@ def test_eap_to_view_projects_fields() -> None:
 
 
 def test_project_to_dto_maps_all_fields() -> None:
-    now = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
     project = WebWorkbenchProject(
         id="proj-1",
         tenant_id="tenant-1",

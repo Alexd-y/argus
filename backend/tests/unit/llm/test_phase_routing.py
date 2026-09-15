@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.llm import phase_routing
 from src.llm.task_router import LLMTask
 
@@ -40,8 +39,10 @@ class TestFacadePhaseRouteExecution:
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         from src.llm import facade
 
-        with patch.object(facade, "_call_via_task_router", new_callable=AsyncMock) as cloud, \
-             patch.object(facade, "_call_via_whiterabbitneo", new_callable=AsyncMock) as wrb_call:
+        with (
+            patch.object(facade, "_call_via_task_router", new_callable=AsyncMock) as cloud,
+            patch.object(facade, "_call_via_whiterabbitneo", new_callable=AsyncMock) as wrb_call,
+        ):
             cloud.return_value = "cloud-out"
             out = await facade.call_llm_unified(
                 "sys", "usr", task=LLMTask.THREAT_MODELING, phase="threat_modeling"
@@ -60,8 +61,12 @@ class TestFacadePhaseRouteExecution:
         orig = wrb._base_url
         wrb._base_url = "http://wrb:8000/v1"
         try:
-            with patch.object(facade, "_call_via_task_router", new_callable=AsyncMock) as cloud, \
-                 patch.object(facade, "_call_via_whiterabbitneo", new_callable=AsyncMock) as wrb_call:
+            with (
+                patch.object(facade, "_call_via_task_router", new_callable=AsyncMock) as cloud,
+                patch.object(
+                    facade, "_call_via_whiterabbitneo", new_callable=AsyncMock
+                ) as wrb_call,
+            ):
                 cloud.side_effect = RuntimeError("cloud down")
                 wrb_call.return_value = "wrb-fallback"
                 out = await facade.call_llm_unified(

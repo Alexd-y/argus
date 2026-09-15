@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -68,10 +69,8 @@ def parse_asnmap_stdout_structured(stdout: str) -> dict[str, Any]:
                     rows.append(it)
 
     if raw:
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             _push_obj(json.loads(raw))
-        except json.JSONDecodeError:
-            pass
     if not rows:
         for ln in raw.splitlines():
             ln = ln.strip()
@@ -263,7 +262,12 @@ def _run_gowitness_one_sync(
         os.makedirs(shot_root, exist_ok=True)
         argv = build_gowitness_single_argv(url, shot_root, timeout_sec=int(timeout_sec))
         if not argv:
-            return {"url": url, "success": False, "minio_key": None, "error": "invalid_url"}
+            return {
+                "url": url,
+                "success": False,
+                "minio_key": None,
+                "error": "invalid_url",
+            }
 
         pol = evaluate_kal_mcp_policy(
             category="web_screenshots",
@@ -346,7 +350,8 @@ async def run_recon_asnmap_bundle(
     argv = build_recon_asnmap_argv(domain)
     if not argv:
         logger.info(
-            "recon_asnmap_skipped", extra={"event": "recon_asnmap_skipped", "reason": "bad_domain"}
+            "recon_asnmap_skipped",
+            extra={"event": "recon_asnmap_skipped", "reason": "bad_domain"},
         )
         return out
 
@@ -381,7 +386,8 @@ async def run_recon_asnmap_bundle(
             await asyncio.to_thread(raw_sink.upload_json, "asn_summary", summary)
         except Exception:
             logger.warning(
-                "asn_summary_upload_failed", extra={"event": "asn_summary_upload_failed"}
+                "asn_summary_upload_failed",
+                extra={"event": "asn_summary_upload_failed"},
             )
 
     return out
@@ -414,7 +420,10 @@ async def run_recon_gowitness_bundle(
             "return_code": -1,
             "execution_time": 0.0,
         }
-        out["gowitness_screenshots"] = {"artifacts": [], "summary": {"attempted": 0, "uploaded": 0}}
+        out["gowitness_screenshots"] = {
+            "artifacts": [],
+            "summary": {"attempted": 0, "uploaded": 0},
+        }
         return out
 
     eff_to = cfg.gowitness_timeout_sec
@@ -424,7 +433,10 @@ async def run_recon_gowitness_bundle(
 
     urls = collect_live_http_urls(target, tool_results, max_urls=cfg.gowitness_max_urls)
     if not urls:
-        out["gowitness_screenshots"] = {"artifacts": [], "summary": {"attempted": 0, "uploaded": 0}}
+        out["gowitness_screenshots"] = {
+            "artifacts": [],
+            "summary": {"attempted": 0, "uploaded": 0},
+        }
         return out
 
     conc = max(1, min(8, int(cfg.gowitness_concurrency)))
@@ -481,7 +493,8 @@ async def run_recon_gowitness_bundle(
             )
         except Exception:
             logger.warning(
-                "gowitness_index_upload_failed", extra={"event": "gowitness_index_upload_failed"}
+                "gowitness_index_upload_failed",
+                extra={"event": "gowitness_index_upload_failed"},
             )
 
     out["gowitness"] = {

@@ -28,7 +28,10 @@ class TestScanPhaseTask:
         mock_factory = MagicMock(return_value=mock_cm)
 
         with (
-            patch("src.tasks.create_task_engine_and_session", return_value=(mock_engine, mock_factory)),
+            patch(
+                "src.tasks.create_task_engine_and_session",
+                return_value=(mock_engine, mock_factory),
+            ),
             patch("src.tasks.run_scan_state_machine", new_callable=AsyncMock) as mock_sm,
         ):
             from src.tasks import scan_phase_task
@@ -188,7 +191,10 @@ class TestToolRunTask:
         mock_factory = MagicMock(side_effect=[mock_cm, mock_err_cm])
 
         with (
-            patch("src.tasks.create_task_engine_and_session", return_value=(mock_engine, mock_factory)),
+            patch(
+                "src.tasks.create_task_engine_and_session",
+                return_value=(mock_engine, mock_factory),
+            ),
             patch("src.tasks.run_scan_state_machine", new_callable=AsyncMock) as mock_sm,
         ):
             mock_sm.side_effect = RuntimeError("State machine error")
@@ -209,7 +215,6 @@ class TestVaActiveScanToolTask:
 
     def test_task_registered_on_celery_app(self) -> None:
         import src.tasks  # noqa: F401 — register tasks
-
         from src.celery_app import app as celery_app
 
         assert "argus.va_active_scan_tool" in celery_app.tasks

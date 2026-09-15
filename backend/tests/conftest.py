@@ -159,7 +159,8 @@ _RE_REDIS: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 _RE_OAST: Final[re.Pattern[str]] = re.compile(
-    r"\binteractsh(?!.*Fake)|OAST_LISTENER_URL|oast_callback_url|" r"oast_token\b|RealOASTListener",
+    r"\binteractsh(?!.*Fake)|OAST_LISTENER_URL|oast_callback_url|"
+    r"oast_token\b|RealOASTListener",
     re.IGNORECASE,
 )
 
@@ -319,7 +320,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config,  # noqa: ARG001 — pytest hook signature
+    config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
     """Auto-classify each test by infrastructure dependency.
@@ -467,7 +468,7 @@ def _restore_mode(path: Path, original_mode: int) -> None:
     except OSError:
         # File may have been deleted by a misbehaving test — surface to stderr
         # so it's visible in pytest output but do not fail teardown.
-        print(  # noqa: T201 — fixture teardown diagnostic, intentional
+        print(
             f"[read_only_catalog] WARNING: failed to restore mode on {path}",
             file=sys.stderr,
         )

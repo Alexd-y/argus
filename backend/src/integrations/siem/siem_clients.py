@@ -28,6 +28,7 @@ class IntegrationResult:
 
 # ===== Splunk =====
 
+
 async def send_to_splunk(
     findings: list[dict[str, Any]],
     *,
@@ -42,23 +43,25 @@ async def send_to_splunk(
 
     events = []
     for f in findings:
-        events.append({
-            "time": datetime.now(UTC).timestamp(),
-            "host": source,
-            "source": source,
-            "sourcetype": "argus:finding",
-            "index": index,
-            "event": {
-                "finding_id": f.get("id", ""),
-                "title": f.get("title", ""),
-                "severity": f.get("severity", ""),
-                "cwe": f.get("cwe", ""),
-                "cvss": f.get("cvss", 0.0),
-                "description": str(f.get("description", ""))[:500],
-                "file_path": f.get("file_path", ""),
-                "remediation": f.get("remediation", ""),
-            },
-        })
+        events.append(
+            {
+                "time": datetime.now(UTC).timestamp(),
+                "host": source,
+                "source": source,
+                "sourcetype": "argus:finding",
+                "index": index,
+                "event": {
+                    "finding_id": f.get("id", ""),
+                    "title": f.get("title", ""),
+                    "severity": f.get("severity", ""),
+                    "cwe": f.get("cwe", ""),
+                    "cvss": f.get("cvss", 0.0),
+                    "description": str(f.get("description", ""))[:500],
+                    "file_path": f.get("file_path", ""),
+                    "remediation": f.get("remediation", ""),
+                },
+            }
+        )
 
     try:
         url = f"{splunk_url.rstrip('/')}/services/collector/event"
@@ -76,6 +79,7 @@ async def send_to_splunk(
 
 # ===== Elasticsearch =====
 
+
 async def send_to_elastic(
     findings: list[dict[str, Any]],
     *,
@@ -90,15 +94,21 @@ async def send_to_elastic(
     bulk_lines = []
     for f in findings:
         bulk_lines.append(json.dumps({"index": {"_index": index}}))
-        bulk_lines.append(json.dumps({
-            "@timestamp": datetime.now(UTC).isoformat(),
-            "finding": {
-                "id": f.get("id", ""), "title": f.get("title", ""),
-                "severity": f.get("severity", ""), "cwe": f.get("cwe", ""),
-                "cvss": f.get("cvss", 0.0),
-                "description": str(f.get("description", ""))[:500],
-            },
-        }))
+        bulk_lines.append(
+            json.dumps(
+                {
+                    "@timestamp": datetime.now(UTC).isoformat(),
+                    "finding": {
+                        "id": f.get("id", ""),
+                        "title": f.get("title", ""),
+                        "severity": f.get("severity", ""),
+                        "cwe": f.get("cwe", ""),
+                        "cvss": f.get("cvss", 0.0),
+                        "description": str(f.get("description", ""))[:500],
+                    },
+                }
+            )
+        )
 
     try:
         url = f"{elastic_url.rstrip('/')}/_bulk"
@@ -115,6 +125,7 @@ async def send_to_elastic(
 
 # ===== Jira =====
 
+
 async def create_jira_ticket(
     finding: dict[str, Any],
     *,
@@ -129,17 +140,22 @@ async def create_jira_ticket(
         return IntegrationResult(False, "jira", "create_ticket", error="Not configured")
 
     import base64
+
     auth = base64.b64encode(f"{jira_user}:{jira_token}".encode()).decode()
 
-    summary = f"[{finding.get('severity', 'INFO').upper()}] {finding.get('title', 'Security Finding')}"[:150]
-    description = f"""*Severity:* {finding.get('severity', 'unknown')}
-*CWE:* {finding.get('cwe', 'N/A')}
-*CVSS:* {finding.get('cvss', 'N/A')}
-*File:* {finding.get('file_path', 'N/A')}:{finding.get('line_start', '?')}
+    summary = (
+        f"[{finding.get('severity', 'INFO').upper()}] {finding.get('title', 'Security Finding')}"[
+            :150
+        ]
+    )
+    description = f"""*Severity:* {finding.get("severity", "unknown")}
+*CWE:* {finding.get("cwe", "N/A")}
+*CVSS:* {finding.get("cvss", "N/A")}
+*File:* {finding.get("file_path", "N/A")}:{finding.get("line_start", "?")}
 
-*Description:* {finding.get('description', '')[:2000]}
+*Description:* {finding.get("description", "")[:2000]}
 
-*Remediation:* {finding.get('remediation', '')[:2000]}"""
+*Remediation:* {finding.get("remediation", "")[:2000]}"""
 
     payload = {
         "fields": {
@@ -156,7 +172,10 @@ async def create_jira_ticket(
             resp = await client.post(
                 f"{jira_url.rstrip('/')}/rest/api/2/issue",
                 json=payload,
-                headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Basic {auth}",
+                    "Content-Type": "application/json",
+                },
             )
             resp.raise_for_status()
             data = resp.json()
@@ -166,6 +185,7 @@ async def create_jira_ticket(
 
 
 # ===== ServiceNow =====
+
 
 async def create_servicenow_incident(
     finding: dict[str, Any],
@@ -197,7 +217,12 @@ async def create_servicenow_incident(
             )
             resp.raise_for_status()
             data = resp.json()
-        return IntegrationResult(True, "servicenow", "create_incident", external_id=data.get("result", {}).get("number", ""))
+        return IntegrationResult(
+            True,
+            "servicenow",
+            "create_incident",
+            external_id=data.get("result", {}).get("number", ""),
+        )
     except Exception as exc:
         return IntegrationResult(False, "servicenow", "create_incident", error=str(exc))
 
@@ -209,14 +234,21 @@ def _map_severity_to_snow(severity: str) -> str:
 
 # ===== Generic Webhook =====
 
+
 async def send_webhook(
-    url: str, payload: dict[str, Any],
-    *, secret: str = "",
+    url: str,
+    payload: dict[str, Any],
+    *,
+    secret: str = "",
 ) -> IntegrationResult:
     """Send finding to generic webhook endpoint."""
     headers = {"Content-Type": "application/json"}
     if secret:
-        headers["X-Argus-Signature"] = __import__("hashlib").sha256(f"{secret}{json.dumps(payload, sort_keys=True)}".encode()).hexdigest()
+        headers["X-Argus-Signature"] = (
+            __import__("hashlib")
+            .sha256(f"{secret}{json.dumps(payload, sort_keys=True)}".encode())
+            .hexdigest()
+        )
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.web_workbench.message_editor.engine import (
     HttpMessageError,
     RawHttpMessage,
@@ -23,7 +22,7 @@ _RAW_REQUEST = (
     b'{"user":"admin","pass":"x"}'
 )
 
-_RAW_RESPONSE = b"HTTP/1.1 200 OK\r\n" b"Content-Type: text/html\r\n" b"\r\n" b"<html>hi</html>"
+_RAW_RESPONSE = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html>hi</html>"
 
 
 def test_raw_message_splits_head_and_body_byte_exact() -> None:

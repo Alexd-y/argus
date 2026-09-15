@@ -127,9 +127,7 @@ async_session_factory = async_sessionmaker(
 )
 
 
-def create_task_engine_and_session() -> tuple[
-    AsyncEngine, async_sessionmaker[AsyncSession]
-]:
+def create_task_engine_and_session() -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     """Create engine + session factory bound to the current event loop.
 
     Used inside Celery tasks to avoid ``Future attached to different loop``

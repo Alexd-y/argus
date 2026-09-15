@@ -80,7 +80,9 @@ def test_hybrid_retrieval_returns_tenant_scoped_only(pipeline, retriever):
 
     assert pack.chunks
     assert all(chunk.tenant_id == tenant_a for chunk in pack.chunks)
-    assert all("tenant A" in chunk.content or "SQL injection" in chunk.content for chunk in pack.chunks)
+    assert all(
+        "tenant A" in chunk.content or "SQL injection" in chunk.content for chunk in pack.chunks
+    )
     assert not any(chunk.tenant_id == tenant_b for chunk in pack.chunks)
 
 

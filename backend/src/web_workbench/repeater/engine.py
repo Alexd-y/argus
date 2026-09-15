@@ -109,6 +109,6 @@ __all__ = [
     "HttpMessageError",
     "HttpSender",
     "RawResponse",
-    "ReplayResult",
     "RepeaterService",
+    "ReplayResult",
 ]

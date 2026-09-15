@@ -24,12 +24,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
 from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -64,7 +63,6 @@ from src.mcp.services.approval_service import (
 from src.mcp.tools import findings as findings_tools
 from src.policy.policy_engine import PlanTier, PolicyEngine, TenantPolicy
 from src.policy.scope import ScopeEngine, ScopeKind, ScopeRule
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -187,9 +185,7 @@ class TestCapabilitySurface:
             "tool.run.trigger",
             "tool.run.status",
         }
-        assert required.issubset(names), (
-            f"Missing tools: {required - names}; got {names}"
-        )
+        assert required.issubset(names), f"Missing tools: {required - names}; got {names}"
         assert len(names) >= 17
 
     def test_resources_list_returns_four_entries(self, app: FastMCP) -> None:
@@ -272,17 +268,12 @@ class TestE2EToolCalls:
         events = _drain_events(audit_logger)
         # The ``app`` fixture re-installs the audit logger after build_app
         # so emitted events land in the *same* sink the test inspects.
-        assert any(
-            getattr(e, "payload", {}).get("tool_name") == "findings.list"
-            for e in events
-        )
+        assert any(getattr(e, "payload", {}).get("tool_name") == "findings.list" for e in events)
 
     def test_policy_evaluate_round_trip(self, app: FastMCP) -> None:
         policy_service.set_scope_engine_factory(
             lambda _t: ScopeEngine(
-                rules=(
-                    ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),
-                )
+                rules=(ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),)
             )
         )
 
@@ -308,14 +299,10 @@ class TestE2EToolCalls:
     def test_scope_verify_round_trip(self, app: FastMCP) -> None:
         policy_service.set_scope_engine_factory(
             lambda _t: ScopeEngine(
-                rules=(
-                    ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),
-                )
+                rules=(ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),)
             )
         )
-        result = _call(
-            app, "scope.verify", ScopeVerifyInput(target="https://example.com")
-        )
+        result = _call(app, "scope.verify", ScopeVerifyInput(target="https://example.com"))
         assert result.allowed is True
 
 
@@ -345,7 +332,7 @@ class TestTenantIsolation:
     ) -> None:
         repo = InMemoryApprovalRepository()
         set_approval_repository(repo)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Same tool_id, two tenants, one approval each.
         for tid, request_id in (
             (tenant_id, "req-mine-12345"),
@@ -377,7 +364,7 @@ class TestTenantIsolation:
 
         repo = InMemoryApprovalRepository()
         set_approval_repository(repo)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         repo.add(
             StoredApproval(
                 request_id="req-foreign-12345",
@@ -417,17 +404,13 @@ class TestAuditEmission:
     ) -> None:
         policy_service.set_scope_engine_factory(
             lambda _t: ScopeEngine(
-                rules=(
-                    ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),
-                )
+                rules=(ScopeRule(kind=ScopeKind.DOMAIN, pattern="example.com", deny=False),)
             )
         )
         _call(app, "scope.verify", ScopeVerifyInput(target="https://example.com"))
         events = _drain_events(audit_logger)
         scope_events = [
-            e
-            for e in events
-            if getattr(e, "payload", {}).get("tool_name") == "scope.verify"
+            e for e in events if getattr(e, "payload", {}).get("tool_name") == "scope.verify"
         ]
         assert len(scope_events) == 1
         assert scope_events[0].payload["outcome"] == "allowed"  # type: ignore[attr-defined]
@@ -447,9 +430,7 @@ class TestAuditEmission:
             )
         events = _drain_events(audit_logger)
         approval_events = [
-            e
-            for e in events
-            if getattr(e, "payload", {}).get("tool_name") == "approvals.list"
+            e for e in events if getattr(e, "payload", {}).get("tool_name") == "approvals.list"
         ]
         assert approval_events, "expected at least one approvals.list audit row"
         # The denial event records the closed-taxonomy failure summary.

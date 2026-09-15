@@ -12,11 +12,10 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.api.routers.admin_emergency import _kill_switch_dep
 from src.core.config import settings
 from src.policy.kill_switch import KillSwitchService
+from starlette.testclient import TestClient
 
 THROTTLE = "/api/v1/admin/system/emergency/throttle"
 
@@ -109,9 +108,7 @@ def override_kill_switch(client: TestClient, kill_switch: KillSwitchService):
 
 
 @pytest.fixture()
-def override_kill_switch_offline(
-    client: TestClient, offline_kill_switch: KillSwitchService
-):
+def override_kill_switch_offline(client: TestClient, offline_kill_switch: KillSwitchService):
     client.app.dependency_overrides[_kill_switch_dep] = lambda: offline_kill_switch
     try:
         yield offline_kill_switch
@@ -288,17 +285,12 @@ class TestEmergencyThrottleHappyPath:
             r = client.post(
                 THROTTLE,
                 headers=_HEADERS_BASE,
-                json=_throttle_body(
-                    tenant_id=tenant_id, duration_minutes=duration_minutes
-                ),
+                json=_throttle_body(tenant_id=tenant_id, duration_minutes=duration_minutes),
             )
         assert r.status_code == 200
         body = r.json()
         assert body["duration_minutes"] == duration_minutes
-        assert (
-            fake_redis._ttls[f"argus:emergency:tenant:{tenant_id}"]
-            == duration_minutes * 60
-        )
+        assert fake_redis._ttls[f"argus:emergency:tenant:{tenant_id}"] == duration_minutes * 60
         session.commit.assert_awaited()
 
     def test_throttle_404_when_tenant_does_not_exist(
@@ -348,9 +340,7 @@ class TestEmergencyThrottleHappyPath:
         assert r.status_code == 200
         raw = fake_redis.get(f"argus:emergency:tenant:{tenant_id}")
         assert raw is not None
-        assert operator not in raw, (
-            "raw operator subject must never be persisted to Redis"
-        )
+        assert operator not in raw, "raw operator subject must never be persisted to Redis"
 
     def test_throttle_response_includes_audit_id_and_expires_at(
         self,

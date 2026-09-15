@@ -195,7 +195,15 @@ def _category_of(payload: Mapping[str, Any], *, tool_id: str) -> str:
 def _endpoint_of(payload: Mapping[str, Any], *, asset: str) -> str:
     endpoint = _first_str(
         payload,
-        ("matched_at", "matched-at", "endpoint", "url", "affected_url", "location", "host"),
+        (
+            "matched_at",
+            "matched-at",
+            "endpoint",
+            "url",
+            "affected_url",
+            "location",
+            "host",
+        ),
     )
     return (endpoint or asset)[:_MAX_ENDPOINT]
 
@@ -252,7 +260,9 @@ def _confidence_of(payload: Mapping[str, Any], severity: str) -> float:
     return {0: 0.2, 1: 0.35, 2: 0.5, 3: 0.7, 4: 0.85}.get(rank, 0.5)
 
 
-def _iter_payloads(raw: Mapping[str, Any] | Sequence[Any] | str | bytes) -> list[dict[str, Any]]:
+def _iter_payloads(
+    raw: Mapping[str, Any] | Sequence[Any] | str | bytes,
+) -> list[dict[str, Any]]:
     if isinstance(raw, bytes):
         text = raw.decode("utf-8", errors="replace")
         return _iter_payloads(text)
@@ -317,7 +327,9 @@ def _store_raw_artifact(
         return None
 
 
-def _deterministic_verdict(*, severity: str, confidence: float, has_evidence: bool) -> FindingTriageVerdict:
+def _deterministic_verdict(
+    *, severity: str, confidence: float, has_evidence: bool
+) -> FindingTriageVerdict:
     if not has_evidence:
         return FindingTriageVerdict.HYPOTHESIS
     if severity in {"info", "informational"} and confidence < 0.5:

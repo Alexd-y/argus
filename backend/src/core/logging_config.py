@@ -142,8 +142,7 @@ def _redact_mapping(payload: dict[str, Any]) -> dict[str, Any]:
             out[key] = _redact_mapping(value)
         elif isinstance(value, (list, tuple)):
             out[key] = type(value)(
-                _redact_mapping(v) if isinstance(v, dict) else _redact_value(v)
-                for v in value
+                _redact_mapping(v) if isinstance(v, dict) else _redact_value(v) for v in value
             )
         else:
             out[key] = _redact_value(value)
@@ -170,10 +169,30 @@ class SensitiveHeaderRedactor(logging.Filter):
     # keeps emitting them verbatim.
     _RESERVED_ATTRS: Final[frozenset[str]] = frozenset(
         {
-            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-            "created", "msecs", "relativeCreated", "thread", "threadName",
-            "processName", "process", "trace_id", "span_id", "message", "asctime",
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "trace_id",
+            "span_id",
+            "message",
+            "asctime",
             "taskName",
         },
     )
@@ -195,8 +214,7 @@ class SensitiveHeaderRedactor(logging.Filter):
             record.args = _redact_mapping(record.args)  # type: ignore[assignment]
         elif isinstance(record.args, tuple):
             record.args = tuple(
-                _redact_mapping(v) if isinstance(v, dict) else _redact_value(v)
-                for v in record.args
+                _redact_mapping(v) if isinstance(v, dict) else _redact_value(v) for v in record.args
             )
 
         return True

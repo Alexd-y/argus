@@ -48,7 +48,16 @@ def test_build_injection_plan_sort_order() -> None:
     )
     steps = build_injection_plan(inv, mode="standard", flags=flags)
     keys = [(s.family, s.target_url, s.method, s.param, s.tool) for s in steps]
-    assert keys == sorted(keys, key=lambda t: (t[0].lower(), t[1].lower(), t[2].upper(), t[3].lower(), t[4].lower()))
+    assert keys == sorted(
+        keys,
+        key=lambda t: (
+            t[0].lower(),
+            t[1].lower(),
+            t[2].upper(),
+            t[3].lower(),
+            t[4].lower(),
+        ),
+    )
 
 
 def test_build_injection_plan_golden_fingerprint() -> None:
@@ -60,9 +69,7 @@ def test_build_injection_plan_golden_fingerprint() -> None:
     )
     steps = build_injection_plan(inv, mode="standard", flags=flags)
     fp = injection_plan_deterministic_fingerprint(steps)
-    assert fp == (
-        "2e8dde13159e803e5776d9911e952cbb26185a820ac011608d3ee026b7c773b6"
-    )
+    assert fp == ("2e8dde13159e803e5776d9911e952cbb26185a820ac011608d3ee026b7c773b6")
 
 
 def test_oast_disabled_emits_rows() -> None:

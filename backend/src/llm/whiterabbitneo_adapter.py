@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 # Served model id, env-overridable so the adapter's fallback matches whatever the
 # backing OpenAI-compatible server actually serves (laptop Ollama tag / AWS
 # deployment name) even when a caller does not pass an explicit model.
-WRB_DEFAULT_MODEL = os.environ.get("WHITERABBITNEO_MODEL", "").strip() or "taico-ai/WhiteRabbitNeo-v3-7B"
+WRB_DEFAULT_MODEL = (
+    os.environ.get("WHITERABBITNEO_MODEL", "").strip() or "taico-ai/WhiteRabbitNeo-v3-7B"
+)
 WRB_DEFAULT_MAX_TOKENS = 4096
 WRB_DEFAULT_TEMPERATURE = 0.3
 WRB_DEFAULT_TIMEOUT = 3600.0
@@ -117,7 +119,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         payload: dict[str, Any] = {
             "model": model or WRB_DEFAULT_MODEL,
             "messages": messages,
-            "temperature": self._temperature if temperature is None else max(0.0, float(temperature)),
+            "temperature": self._temperature
+            if temperature is None
+            else max(0.0, float(temperature)),
             "max_tokens": max_tokens,
         }
         if self._seed is not None:
@@ -175,9 +179,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
                         "prompt_bytes_total": len(json.dumps(payload)),
                     },
                 )
-                raise RuntimeError(
-                    f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}"
-                )
+                raise RuntimeError(f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}")
             data = resp.json()
 
         choices = data.get("choices", [])
@@ -241,9 +243,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
                         "prompt_bytes_total": len(json.dumps(payload)),
                     },
                 )
-                raise RuntimeError(
-                    f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}"
-                )
+                raise RuntimeError(f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}")
             data = resp.json()
 
         choices = data.get("choices", [])
@@ -267,7 +267,10 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(f"{self._base_url}/models")
                 resp.raise_for_status()
-                return {"status": "available", "models": len(resp.json().get("data", []))}
+                return {
+                    "status": "available",
+                    "models": len(resp.json().get("data", [])),
+                }
         except Exception as exc:
             return {"status": "unavailable", "error": str(exc)}
 

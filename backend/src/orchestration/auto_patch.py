@@ -106,13 +106,17 @@ def build_autopatch_prompt(
 ) -> tuple[str, str]:
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
                 system, user = loader.render_extended_system_user(
                     "auto_patch",
-                    cwe=cwe, description=description, file_path=file_path,
-                    severity=severity, vulnerable_code=vulnerable_code[:20000],
+                    cwe=cwe,
+                    description=description,
+                    file_path=file_path,
+                    severity=severity,
+                    vulnerable_code=vulnerable_code[:20000],
                     context=context[:10000],
                 )
                 if system.strip() and user.strip():
@@ -213,7 +217,9 @@ async def verify_patch_in_sandbox(
             try:
                 result = subprocess.run(
                     ["git", "apply", "--check", diff_path],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                     cwd=tmpdir,
                 )
                 if result.returncode == 0:
@@ -242,7 +248,11 @@ async def verify_patch_in_sandbox(
         patch_id=candidate.finding_id,
         vulnerability_fixed=syntax_ok or None,
         no_regressions=syntax_ok or None,
-        test_results={"note": f"lightweight verification: diff applies={syntax_ok}", "verified": syntax_ok, "diff_applies": syntax_ok},
+        test_results={
+            "note": f"lightweight verification: diff applies={syntax_ok}",
+            "verified": syntax_ok,
+            "diff_applies": syntax_ok,
+        },
     )
 
 
@@ -273,36 +283,58 @@ async def create_patch_pr(
 
     if not token:
         result.error = "No repository token provided; PR creation skipped"
-        logger.warning("auto_patch_pr_no_token", extra={"scan_id": scan_id, "finding_id": candidate.finding_id})
+        logger.warning(
+            "auto_patch_pr_no_token",
+            extra={"scan_id": scan_id, "finding_id": candidate.finding_id},
+        )
         return result
 
     if not candidate.patch_diff or not candidate.file_path:
         result.error = "Patch candidate has no diff or file path; PR creation skipped"
-        logger.warning("auto_patch_pr_no_diff", extra={"scan_id": scan_id, "finding_id": candidate.finding_id})
+        logger.warning(
+            "auto_patch_pr_no_diff",
+            extra={"scan_id": scan_id, "finding_id": candidate.finding_id},
+        )
         return result
 
     try:
         connector = await create_connector(provider, token, base_url=base_url)
     except ValueError as exc:
         result.error = f"Unsupported provider '{provider}': {exc}"
-        logger.warning("auto_patch_pr_bad_provider", extra={"scan_id": scan_id, "provider": provider})
+        logger.warning(
+            "auto_patch_pr_bad_provider",
+            extra={"scan_id": scan_id, "provider": provider},
+        )
         return result
 
-    branch_name = f"argus/patch-{candidate.finding_id[:12]}" if candidate.finding_id else f"argus/patch-{scan_id[:12]}"
+    branch_name = (
+        f"argus/patch-{candidate.finding_id[:12]}"
+        if candidate.finding_id
+        else f"argus/patch-{scan_id[:12]}"
+    )
 
     try:
         default_branch = await connector.get_default_branch(owner, name)
     except Exception as exc:
         result.error = f"Cannot resolve default branch for {owner}/{name}: {exc}"
-        logger.warning("auto_patch_pr_default_branch_failed", extra={"scan_id": scan_id, "error": str(exc)})
+        logger.warning(
+            "auto_patch_pr_default_branch_failed",
+            extra={"scan_id": scan_id, "error": str(exc)},
+        )
         return result
 
     try:
         await connector.create_branch(owner, name, branch=branch_name, from_branch=default_branch)
-        logger.info("auto_patch_branch_created", extra={"scan_id": scan_id, "branch": branch_name})
+        logger.info(
+            "auto_patch_branch_created",
+            extra={"scan_id": scan_id, "branch": branch_name},
+        )
     except Exception as exc:
         result.error = f"Branch creation failed (may already exist): {exc}"
-        logger.warning("auto_patch_branch_failed", extra={"scan_id": scan_id, "branch": branch_name, "error": str(exc)})
+        logger.warning(
+            "auto_patch_branch_failed",
+            extra={"scan_id": scan_id, "branch": branch_name, "error": str(exc)},
+        )
         try:
             await connector.create_branch(
                 owner, name, branch=f"{branch_name}-2", from_branch=default_branch
@@ -317,7 +349,11 @@ async def create_patch_pr(
         for line in candidate.patch_diff.splitlines():
             if line.startswith("+") and not line.startswith("+++"):
                 patched_content += line[1:] + "\n"
-            elif not line.startswith("-") and not line.startswith("@@") and not line.startswith("---"):
+            elif (
+                not line.startswith("-")
+                and not line.startswith("@@")
+                and not line.startswith("---")
+            ):
                 if line.startswith(" "):
                     patched_content += line[1:] + "\n"
                 else:
@@ -329,13 +365,17 @@ async def create_patch_pr(
 
     try:
         commit_sha = await connector.commit_file(
-            owner, name,
+            owner,
+            name,
             file_path=candidate.file_path,
             content=patched_content,
             message=commit_message,
             branch=branch_name,
         )
-        logger.info("auto_patch_file_committed", extra={"scan_id": scan_id, "commit": commit_sha})
+        logger.info(
+            "auto_patch_file_committed",
+            extra={"scan_id": scan_id, "commit": commit_sha},
+        )
     except Exception as exc:
         result.error = f"File commit failed: {exc}"
         logger.warning("auto_patch_commit_failed", extra={"scan_id": scan_id, "error": str(exc)})
@@ -355,7 +395,8 @@ async def create_patch_pr(
 
     try:
         pr_info = await connector.create_pull_request(
-            owner, name,
+            owner,
+            name,
             title=pr_title,
             body=pr_body,
             head_branch=branch_name,
@@ -364,7 +405,11 @@ async def create_patch_pr(
         result.pr_url = pr_info.web_url or ""
         logger.info(
             "auto_patch_pr_created",
-            extra={"scan_id": scan_id, "findin_id": candidate.finding_id, "pr_url": result.pr_url},
+            extra={
+                "scan_id": scan_id,
+                "findin_id": candidate.finding_id,
+                "pr_url": result.pr_url,
+            },
         )
         await _persist_patch_proposal(
             candidate=candidate,
@@ -375,7 +420,10 @@ async def create_patch_pr(
         )
     except Exception as exc:
         result.error = f"PR creation failed: {exc}"
-        logger.warning("auto_patch_pr_creation_failed", extra={"scan_id": scan_id, "error": str(exc)})
+        logger.warning(
+            "auto_patch_pr_creation_failed",
+            extra={"scan_id": scan_id, "error": str(exc)},
+        )
 
     return result
 
@@ -410,7 +458,14 @@ async def _persist_patch_proposal(
             )
             session.add(proposal)
             await session.commit()
-            logger.info("patch_proposal_persisted", extra={"scan_id": scan_id, "finding_id": candidate.finding_id, "pr_url": pr_url})
+            logger.info(
+                "patch_proposal_persisted",
+                extra={
+                    "scan_id": scan_id,
+                    "finding_id": candidate.finding_id,
+                    "pr_url": pr_url,
+                },
+            )
             break
     except Exception as exc:
         logger.debug("patch_proposal_persist_failed: %s", exc)

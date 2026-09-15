@@ -10,14 +10,14 @@ import ast as py_ast
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import PurePath
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     FILE = "file"
     FUNCTION = "function"
     CLASS = "class"
@@ -31,7 +31,7 @@ class NodeType(str, Enum):
     TRUST_BOUNDARY = "trust_boundary"
 
 
-class EdgeType(str, Enum):
+class EdgeType(StrEnum):
     CALLS = "calls"
     READS = "reads"
     WRITES = "writes"
@@ -92,24 +92,43 @@ class CodePropertyGraph:
 
 _SENSITIVE_SINKS: dict[str, list[str]] = {
     "python": [
-        "os.system", "subprocess.call", "subprocess.Popen",
-        "eval", "exec", "__import__",
-        "open", "json.loads", "pickle.loads",
-        "requests.get", "requests.post", "httpx.get", "httpx.post",
-        "sqlalchemy.execute", "cursor.execute",
-        "shutil.rmtree", "os.remove",
+        "os.system",
+        "subprocess.call",
+        "subprocess.Popen",
+        "eval",
+        "exec",
+        "__import__",
+        "open",
+        "json.loads",
+        "pickle.loads",
+        "requests.get",
+        "requests.post",
+        "httpx.get",
+        "httpx.post",
+        "sqlalchemy.execute",
+        "cursor.execute",
+        "shutil.rmtree",
+        "os.remove",
         "smtplib.SMTP",
     ],
     "javascript": [
-        "eval(", "Function(", "require(",
-        "fetch(", "axios.",
-        "fs.writeFile", "fs.readFile",
-        "child_process.exec", "child_process.spawn",
+        "eval(",
+        "Function(",
+        "require(",
+        "fetch(",
+        "axios.",
+        "fs.writeFile",
+        "fs.readFile",
+        "child_process.exec",
+        "child_process.spawn",
     ],
     "go": [
-        "os.Exec", "exec.Command",
-        "http.Get", "http.Post",
-        "sql.DB.Query", "sql.DB.Exec",
+        "os.Exec",
+        "exec.Command",
+        "http.Get",
+        "http.Post",
+        "sql.DB.Query",
+        "sql.DB.Exec",
     ],
 }
 
@@ -117,18 +136,30 @@ _SENSITIVE_SINKS: dict[str, list[str]] = {
 
 _ENTRY_POINTS: dict[str, list[str]] = {
     "python": [
-        "request.args", "request.form", "request.json",
-        "request.files", "request.headers", "request.cookies",
-        "input(", "sys.argv", "os.environ.get",
+        "request.args",
+        "request.form",
+        "request.json",
+        "request.files",
+        "request.headers",
+        "request.cookies",
+        "input(",
+        "sys.argv",
+        "os.environ.get",
     ],
     "javascript": [
-        "req.body", "req.query", "req.params",
-        "req.headers", "req.cookies",
-        "process.argv", "process.env",
+        "req.body",
+        "req.query",
+        "req.params",
+        "req.headers",
+        "req.cookies",
+        "process.argv",
+        "process.env",
     ],
     "go": [
-        "r.URL.Query()", "r.FormValue(",
-        "r.Header.Get", "c.Request.Body",
+        "r.URL.Query()",
+        "r.FormValue(",
+        "r.Header.Get",
+        "c.Request.Body",
     ],
 }
 
@@ -164,8 +195,10 @@ def build_python_cpg(file_path: str, source: str) -> CodePropertyGraph:
         return cpg
 
     file_node = GraphNode(
-        node_type=NodeType.FILE, name=file_path,
-        file_path=file_path, language="python",
+        node_type=NodeType.FILE,
+        name=file_path,
+        file_path=file_path,
+        language="python",
     )
     cpg.add_node(file_node)
 
@@ -173,31 +206,52 @@ def build_python_cpg(file_path: str, source: str) -> CodePropertyGraph:
         if isinstance(node, py_ast.FunctionDef):
             fn_node = GraphNode(
                 node_type=NodeType.FUNCTION if not _is_method(node) else NodeType.METHOD,
-                name=node.name, file_path=file_path,
-                line_start=node.lineno, line_end=node.end_lineno or node.lineno,
+                name=node.name,
+                file_path=file_path,
+                line_start=node.lineno,
+                line_end=node.end_lineno or node.lineno,
                 language="python",
             )
             cpg.add_node(fn_node)
-            cpg.add_edge(GraphEdge(
-                source_id=file_node.id, target_id=fn_node.id,
-                edge_type=EdgeType.CONTAINS,
-            ))
+            cpg.add_edge(
+                GraphEdge(
+                    source_id=file_node.id,
+                    target_id=fn_node.id,
+                    edge_type=EdgeType.CONTAINS,
+                )
+            )
             for child in py_ast.walk(node):
                 if isinstance(child, py_ast.Call) and isinstance(child.func, py_ast.Name):
-                    cpg.add_edge(GraphEdge(
-                        source_id=fn_node.id,
-                        target_id=GraphNode(node_type=NodeType.FUNCTION, name=child.func.id, file_path=file_path, language="python").compute_id(),
-                        edge_type=EdgeType.CALLS,
-                    ))
+                    cpg.add_edge(
+                        GraphEdge(
+                            source_id=fn_node.id,
+                            target_id=GraphNode(
+                                node_type=NodeType.FUNCTION,
+                                name=child.func.id,
+                                file_path=file_path,
+                                language="python",
+                            ).compute_id(),
+                            edge_type=EdgeType.CALLS,
+                        )
+                    )
 
         elif isinstance(node, py_ast.ClassDef):
             cls_node = GraphNode(
-                node_type=NodeType.CLASS, name=node.name,
-                file_path=file_path, line_start=node.lineno,
-                line_end=node.end_lineno or node.lineno, language="python",
+                node_type=NodeType.CLASS,
+                name=node.name,
+                file_path=file_path,
+                line_start=node.lineno,
+                line_end=node.end_lineno or node.lineno,
+                language="python",
             )
             cpg.add_node(cls_node)
-            cpg.add_edge(GraphEdge(source_id=file_node.id, target_id=cls_node.id, edge_type=EdgeType.CONTAINS))
+            cpg.add_edge(
+                GraphEdge(
+                    source_id=file_node.id,
+                    target_id=cls_node.id,
+                    edge_type=EdgeType.CONTAINS,
+                )
+            )
 
     # Detect sensitive sinks and entry points
     for line_no, line in enumerate(source.splitlines(), 1):
@@ -208,21 +262,39 @@ def build_python_cpg(file_path: str, source: str) -> CodePropertyGraph:
         for sink in _SENSITIVE_SINKS.get("python", []):
             if sink in stripped:
                 sink_node = GraphNode(
-                    node_type=NodeType.SENSITIVE_SINK, name=sink,
-                    file_path=file_path, line_start=line_no, language="python",
+                    node_type=NodeType.SENSITIVE_SINK,
+                    name=sink,
+                    file_path=file_path,
+                    line_start=line_no,
+                    language="python",
                 )
                 cpg.add_node(sink_node)
-                cpg.add_edge(GraphEdge(source_id=file_node.id, target_id=sink_node.id, edge_type=EdgeType.CONTAINS))
+                cpg.add_edge(
+                    GraphEdge(
+                        source_id=file_node.id,
+                        target_id=sink_node.id,
+                        edge_type=EdgeType.CONTAINS,
+                    )
+                )
                 break
 
         for ep in _ENTRY_POINTS.get("python", []):
             if ep in stripped:
                 ep_node = GraphNode(
-                    node_type=NodeType.ENTRY_POINT, name=ep,
-                    file_path=file_path, line_start=line_no, language="python",
+                    node_type=NodeType.ENTRY_POINT,
+                    name=ep,
+                    file_path=file_path,
+                    line_start=line_no,
+                    language="python",
                 )
                 cpg.add_node(ep_node)
-                cpg.add_edge(GraphEdge(source_id=file_node.id, target_id=ep_node.id, edge_type=EdgeType.CONTAINS))
+                cpg.add_edge(
+                    GraphEdge(
+                        source_id=file_node.id,
+                        target_id=ep_node.id,
+                        edge_type=EdgeType.CONTAINS,
+                    )
+                )
                 break
 
     return cpg

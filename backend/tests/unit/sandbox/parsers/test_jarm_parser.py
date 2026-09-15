@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -54,9 +53,7 @@ def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
     canonical = tmp_path / "jarm.json"
-    canonical.write_bytes(
-        json.dumps([_record(host="canonical.example")]).encode("utf-8")
-    )
+    canonical.write_bytes(json.dumps([_record(host="canonical.example")]).encode("utf-8"))
     decoy = json.dumps([_record(host="decoy.example")]).encode("utf-8")
     findings = parse_jarm_json(decoy, b"", tmp_path, "jarm")
     assert len(findings) == 1
@@ -75,9 +72,9 @@ def test_finding_category_and_cwe(tmp_path: Path) -> None:
 
 
 def test_array_envelope_supported(tmp_path: Path) -> None:
-    payload = json.dumps(
-        [_record(host="a"), _record(host="b", fingerprint=_OTHER_JARM)]
-    ).encode("utf-8")
+    payload = json.dumps([_record(host="a"), _record(host="b", fingerprint=_OTHER_JARM)]).encode(
+        "utf-8"
+    )
     findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 2
 
@@ -89,17 +86,15 @@ def test_single_object_envelope_supported(tmp_path: Path) -> None:
 
 
 def test_jsonl_envelope_supported(tmp_path: Path) -> None:
-    payload = (
-        json.dumps(_record(host="a")) + "\n" + json.dumps(_record(host="b"))
-    ).encode("utf-8")
+    payload = (json.dumps(_record(host="a")) + "\n" + json.dumps(_record(host="b"))).encode("utf-8")
     findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 2
 
 
 def test_all_zero_fingerprint_dropped(tmp_path: Path) -> None:
-    payload = json.dumps(
-        [_record(fingerprint="0" * 62), _record(host="ok.example")]
-    ).encode("utf-8")
+    payload = json.dumps([_record(fingerprint="0" * 62), _record(host="ok.example")]).encode(
+        "utf-8"
+    )
     findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 1
 
@@ -147,17 +142,15 @@ def test_findings_sorted_by_host(tmp_path: Path) -> None:
 
 
 def test_missing_host_skipped(tmp_path: Path) -> None:
-    payload = json.dumps(
-        [{"jarm": _VALID_JARM, "port": 443}, _record(host="ok")]
-    ).encode("utf-8")
+    payload = json.dumps([{"jarm": _VALID_JARM, "port": 443}, _record(host="ok")]).encode("utf-8")
     findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 1
 
 
 def test_target_field_aliased_to_host(tmp_path: Path) -> None:
-    payload = json.dumps(
-        [{"target": "alias.example", "jarm": _VALID_JARM, "port": 443}]
-    ).encode("utf-8")
+    payload = json.dumps([{"target": "alias.example", "jarm": _VALID_JARM, "port": 443}]).encode(
+        "utf-8"
+    )
     findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
@@ -170,9 +163,7 @@ def test_cap_reached_emits_warning_and_truncates(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(jarm_module, "_MAX_FINDINGS", 2)
-    payload = json.dumps([_record(host=f"host-{i}.example") for i in range(5)]).encode(
-        "utf-8"
-    )
+    payload = json.dumps([_record(host=f"host-{i}.example") for i in range(5)]).encode("utf-8")
     with caplog.at_level("WARNING"):
         findings = parse_jarm_json(payload, b"", tmp_path, "jarm")
     assert len(findings) == 2
@@ -231,18 +222,14 @@ def test_object_envelope_with_non_dict_returns_empty(tmp_path: Path) -> None:
 
 
 def test_port_string_coerced_to_int(tmp_path: Path) -> None:
-    payload = json.dumps([{"host": "x", "port": "8443", "jarm": _VALID_JARM}]).encode(
-        "utf-8"
-    )
+    payload = json.dumps([{"host": "x", "port": "8443", "jarm": _VALID_JARM}]).encode("utf-8")
     parse_jarm_json(payload, b"", tmp_path, "jarm")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["port"] == 8443
 
 
 def test_port_out_of_range_falls_back_to_default(tmp_path: Path) -> None:
-    payload = json.dumps([{"host": "x", "port": 0, "jarm": _VALID_JARM}]).encode(
-        "utf-8"
-    )
+    payload = json.dumps([{"host": "x", "port": 0, "jarm": _VALID_JARM}]).encode("utf-8")
     parse_jarm_json(payload, b"", tmp_path, "jarm")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["port"] == 443
@@ -250,18 +237,14 @@ def test_port_out_of_range_falls_back_to_default(tmp_path: Path) -> None:
 
 def test_port_bool_rejected(tmp_path: Path) -> None:
     """``isinstance(True, int)`` is True — guard explicitly so ``True`` is not 1."""
-    payload = json.dumps([{"host": "x", "port": True, "jarm": _VALID_JARM}]).encode(
-        "utf-8"
-    )
+    payload = json.dumps([{"host": "x", "port": True, "jarm": _VALID_JARM}]).encode("utf-8")
     parse_jarm_json(payload, b"", tmp_path, "jarm")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["port"] == 443
 
 
 def test_port_non_numeric_string_falls_back(tmp_path: Path) -> None:
-    payload = json.dumps(
-        [{"host": "x", "port": "not-a-port", "jarm": _VALID_JARM}]
-    ).encode("utf-8")
+    payload = json.dumps([{"host": "x", "port": "not-a-port", "jarm": _VALID_JARM}]).encode("utf-8")
     parse_jarm_json(payload, b"", tmp_path, "jarm")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["port"] == 443

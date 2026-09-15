@@ -23,7 +23,6 @@ from src.orchestration.phases import (
     VulnAnalysisOutput,
 )
 
-
 _RECON_LLM_RESPONSE = '{"assets": ["93.184.216.34:80 nginx/1.18", "93.184.216.34:443 nginx/1.18"], "subdomains": ["www.example.com", "mail.example.com"], "ports": [80, 443, 22]}'
 _THREAT_LLM_RESPONSE = '{"threat_model": {"threats": ["Outdated nginx may have known CVEs", "SSH exposed on port 22"], "attack_surface": ["80/tcp http", "443/tcp https", "22/tcp ssh"], "cves": ["CVE-2021-23017"]}}'
 _VULN_LLM_RESPONSE = '{"findings": [{"severity": "high", "title": "nginx CVE-2021-23017", "cwe": "CWE-787", "cvss": 7.7, "description": "1-byte memory overwrite in resolver", "affected_asset": "93.184.216.34:80", "remediation": "Upgrade nginx to 1.21+"}]}'
@@ -31,9 +30,27 @@ _EXPLOIT_LLM_RESPONSE = '{"exploits": [{"finding_id": "f1", "status": "theoretic
 _POST_EXPLOIT_LLM_RESPONSE = '{"lateral": [{"technique": "Pivot via compromised web server", "description": "Access internal network", "from_exploit": "nginx overflow"}], "persistence": [{"type": "cron_backdoor", "description": "Crontab reverse shell", "risk_level": "high"}]}'
 _REPORT_LLM_RESPONSE = '{"report": {"summary": {"critical": 0, "high": 1, "medium": 0, "low": 0, "info": 0, "risk_rating": "high"}, "executive_summary": "The target has one high-severity vulnerability.", "sections": ["Scope", "Methodology", "Findings"], "findings_detail": [{"title": "nginx CVE"}], "ai_insights": ["Upgrade nginx immediately"]}}'
 
-_NMAP_OUTPUT = {"success": True, "stdout": "PORT   STATE SERVICE VERSION\n22/tcp open  ssh     OpenSSH 8.4\n80/tcp open  http    nginx 1.18\n443/tcp open  ssl/http nginx 1.18", "stderr": "", "return_code": 0, "execution_time": 5.0}
-_DIG_OUTPUT = {"success": True, "stdout": "example.com. 300 IN A 93.184.216.34", "stderr": "", "return_code": 0, "execution_time": 0.5}
-_WHOIS_OUTPUT = {"success": True, "stdout": "Domain Name: EXAMPLE.COM\nRegistrar: ICANN", "stderr": "", "return_code": 0, "execution_time": 1.0}
+_NMAP_OUTPUT = {
+    "success": True,
+    "stdout": "PORT   STATE SERVICE VERSION\n22/tcp open  ssh     OpenSSH 8.4\n80/tcp open  http    nginx 1.18\n443/tcp open  ssl/http nginx 1.18",
+    "stderr": "",
+    "return_code": 0,
+    "execution_time": 5.0,
+}
+_DIG_OUTPUT = {
+    "success": True,
+    "stdout": "example.com. 300 IN A 93.184.216.34",
+    "stderr": "",
+    "return_code": 0,
+    "execution_time": 0.5,
+}
+_WHOIS_OUTPUT = {
+    "success": True,
+    "stdout": "Domain Name: EXAMPLE.COM\nRegistrar: ICANN",
+    "stderr": "",
+    "return_code": 0,
+    "execution_time": 1.0,
+}
 
 
 class TestRunRecon:
@@ -70,11 +87,17 @@ class TestRunThreatModeling:
         """Threat modeling queries NVD and feeds to LLM."""
         with (
             patch("src.orchestration.handlers.NVDClient") as mock_nvd,
-            patch("src.orchestration.handlers.ai_threat_modeling", new_callable=AsyncMock) as mock_ai,
+            patch(
+                "src.orchestration.handlers.ai_threat_modeling", new_callable=AsyncMock
+            ) as mock_ai,
         ):
             mock_nvd.return_value.query = AsyncMock(return_value={"vulnerabilities": []})
             mock_ai.return_value = ThreatModelOutput(
-                threat_model={"threats": ["SSH brute force"], "attack_surface": ["22/tcp"], "cves": []}
+                threat_model={
+                    "threats": ["SSH brute force"],
+                    "attack_surface": ["22/tcp"],
+                    "cves": [],
+                }
             )
             out = await run_threat_modeling(["22/tcp ssh OpenSSH 8.4", "80/tcp nginx"])
             assert isinstance(out, ThreatModelOutput)
@@ -87,7 +110,9 @@ class TestRunVulnAnalysis:
 
     @pytest.mark.asyncio
     async def test_returns_findings(self) -> None:
-        with patch("src.orchestration.handlers.ai_vuln_analysis", new_callable=AsyncMock) as mock_ai:
+        with patch(
+            "src.orchestration.handlers.ai_vuln_analysis", new_callable=AsyncMock
+        ) as mock_ai:
             mock_ai.return_value = VulnAnalysisOutput(
                 findings=[{"severity": "high", "title": "nginx CVE", "cwe": "CWE-787"}]
             )
@@ -124,7 +149,9 @@ class TestRunPostExploitation:
 
     @pytest.mark.asyncio
     async def test_returns_lateral_and_persistence(self) -> None:
-        with patch("src.orchestration.handlers.ai_post_exploitation", new_callable=AsyncMock) as mock_ai:
+        with patch(
+            "src.orchestration.handlers.ai_post_exploitation", new_callable=AsyncMock
+        ) as mock_ai:
             mock_ai.return_value = PostExploitationOutput(
                 lateral=[{"technique": "Pivot"}],
                 persistence=[{"type": "cron", "description": "cron backdoor"}],
@@ -141,7 +168,11 @@ class TestRunReporting:
     async def test_returns_report_with_all_sections(self) -> None:
         with patch("src.orchestration.handlers.ai_reporting", new_callable=AsyncMock) as mock_ai:
             mock_ai.return_value = ReportingOutput(
-                report={"summary": {"critical": 0, "high": 1}, "sections": ["Scope"], "ai_insights": ["Upgrade nginx"]}
+                report={
+                    "summary": {"critical": 0, "high": 1},
+                    "sections": ["Scope"],
+                    "ai_insights": ["Upgrade nginx"],
+                }
             )
             out = await run_reporting("https://target.com", None, None, None, None, None)
             assert isinstance(out, ReportingOutput)
@@ -166,7 +197,9 @@ class TestRawPhaseArtifactsRecon:
             assert _upload_raw_phase(c) == "recon"
 
     @pytest.mark.asyncio
-    async def test_upload_raw_artifact_uses_recon_phase_with_tenant_and_scan(self) -> None:
+    async def test_upload_raw_artifact_uses_recon_phase_with_tenant_and_scan(
+        self,
+    ) -> None:
         tenant_id = "00000000-0000-0000-0000-0000000000aa"
         scan_id = "scan-raw-002"
         with (
@@ -257,7 +290,10 @@ class TestRawPhaseArtifactsPostExploitation:
                 "src.orchestration.raw_phase_artifacts.upload_raw_artifact",
                 return_value=None,
             ) as mock_upload,
-            patch("src.orchestration.handlers.ai_post_exploitation", new_callable=AsyncMock) as mock_ai,
+            patch(
+                "src.orchestration.handlers.ai_post_exploitation",
+                new_callable=AsyncMock,
+            ) as mock_ai,
         ):
             mock_ai.return_value = PostExploitationOutput(lateral=[], persistence=[])
             await run_post_exploitation([{"id": "e1"}], tenant_id=None, scan_id="s1")

@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.quick.llm_schemas import (
     ASSET_FINGERPRINT_SCHEMA_ID,
     FINDING_TRIAGE_SCHEMA_ID,
@@ -32,7 +31,6 @@ from src.quick.schemas import (
     QuickTask,
     QuickTaskStage,
     QuickTaskStatus,
-    SeverityFloor,
 )
 
 _SCAN_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -61,30 +59,30 @@ def _budget() -> QuickBudget:
 
 
 def _baseline_task(**overrides: object) -> QuickTask:
-    base: dict[str, object] = dict(
-        task_id=_TASK_ID,
-        stage=QuickTaskStage.TEST,
-        target_ref=_TARGET,
-        tool_id="nuclei",
-        capability_id=_CAPABILITY,
-        estimated_seconds=30,
-        estimated_requests=20,
-        priority_score=0.5,
-        idempotency_key="scan:task:nuclei:test",
-        status=QuickTaskStatus.QUEUED,
-    )
+    base: dict[str, object] = {
+        "task_id": _TASK_ID,
+        "stage": QuickTaskStage.TEST,
+        "target_ref": _TARGET,
+        "tool_id": "nuclei",
+        "capability_id": _CAPABILITY,
+        "estimated_seconds": 30,
+        "estimated_requests": 20,
+        "priority_score": 0.5,
+        "idempotency_key": "scan:task:nuclei:test",
+        "status": QuickTaskStatus.QUEUED,
+    }
     base.update(overrides)
     return QuickTask(**base)  # type: ignore[arg-type]
 
 
 def _baseline_plan(**overrides: object) -> QuickScanPlan:
-    base: dict[str, object] = dict(
-        scan_id=_SCAN_ID,
-        profile=QuickProfileName.BALANCED,
-        deadline_at=_DEADLINE,
-        budget=_budget(),
-        tasks=(_baseline_task(),),
-        coverage_intent=(
+    base: dict[str, object] = {
+        "scan_id": _SCAN_ID,
+        "profile": QuickProfileName.BALANCED,
+        "deadline_at": _DEADLINE,
+        "budget": _budget(),
+        "tasks": (_baseline_task(),),
+        "coverage_intent": (
             QuickCoverageRecord(
                 asset_id=_ASSET_ID,
                 capability_id=_CAPABILITY,
@@ -92,10 +90,10 @@ def _baseline_plan(**overrides: object) -> QuickScanPlan:
                 reason_code="not_scheduled_by_quick_profile",
             ),
         ),
-        plan_version=1,
-        prompt_version="deterministic-v1",
-        model_route="deterministic",
-    )
+        "plan_version": 1,
+        "prompt_version": "deterministic-v1",
+        "model_route": "deterministic",
+    }
     base.update(overrides)
     return QuickScanPlan(**base)  # type: ignore[arg-type]
 
@@ -232,9 +230,7 @@ def test_parse_llm_triage_rejects_unknown_verdict() -> None:
 
 def test_parse_llm_critique_missing_citations_invalidates_evidence_link() -> None:
     critique = parse_llm_critique(
-        '{"triage_id":"'
-        + _FINDING_ID
-        + '","evidence_to_weakness_valid":true,"citations":[]}'
+        '{"triage_id":"' + _FINDING_ID + '","evidence_to_weakness_valid":true,"citations":[]}'
     )
     assert critique.evidence_to_weakness_valid is False
     assert "missing_citations" in critique.false_positive_indicators
@@ -242,9 +238,7 @@ def test_parse_llm_critique_missing_citations_invalidates_evidence_link() -> Non
 
 def test_parse_llm_critique_keeps_valid_when_cited() -> None:
     critique = parse_llm_critique(
-        '{"triage_id":"'
-        + _FINDING_ID
-        + '","evidence_to_weakness_valid":true,"citations":["ev-9"]}'
+        '{"triage_id":"' + _FINDING_ID + '","evidence_to_weakness_valid":true,"citations":["ev-9"]}'
     )
     assert critique.evidence_to_weakness_valid is True
     assert critique.citations == ("ev-9",)
@@ -262,9 +256,7 @@ def test_parse_llm_report_happy_path_and_invalid_profile() -> None:
     assert report.incompleteness_warning
     with pytest.raises(LlmSchemaError, match="report_schema_invalid"):
         parse_llm_report(
-            '{"scan_id":"'
-            + _SCAN_ID
-            + '","profile":"stealth","executive_summary":["x"]}'
+            '{"scan_id":"' + _SCAN_ID + '","profile":"stealth","executive_summary":["x"]}'
         )
 
 
@@ -288,9 +280,7 @@ def test_apply_llm_tasks_to_plan_reranks_without_inventing_tools() -> None:
             ),
         ]
     )
-    merged = apply_llm_tasks_to_plan(
-        _baseline_plan(), llm_plan, catalog_tool_ids=_CATALOG
-    )
+    merged = apply_llm_tasks_to_plan(_baseline_plan(), llm_plan, catalog_tool_ids=_CATALOG)
     assert [task.tool_id for task in merged.tasks] == ["nuclei"]
     assert merged.tasks[0].task_id == _TASK_ID
     assert merged.tasks[0].priority_score == 0.99

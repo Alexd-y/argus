@@ -151,9 +151,7 @@ class NetworkPolicyTemplate(BaseModel):
 
     name: StrictStr = Field(min_length=1, max_length=64)
     description: StrictStr = Field(min_length=1, max_length=500)
-    egress_allowlist_static: list[StrictStr] = Field(
-        default_factory=list, max_length=32
-    )
+    egress_allowlist_static: list[StrictStr] = Field(default_factory=list, max_length=32)
     # CIDRs subtracted from each entry of ``egress_allowlist_static`` via the
     # ``ipBlock.except`` field (Backlog §15). Cloud-parity templates use this
     # to expose ``0.0.0.0/0`` minus the private + IMDS blocks.
@@ -519,10 +517,7 @@ def _network_overlaps_deny(net: ipaddress.IPv4Network | ipaddress.IPv6Network) -
         # metadata services are IPv4-only. Future tightening is a
         # follow-up task.
         return False
-    for deny in _PRIVATE_DENY_NETWORKS:
-        if net.subnet_of(deny) or deny.subnet_of(net):
-            return True
-    return False
+    return any(net.subnet_of(deny) or deny.subnet_of(net) for deny in _PRIVATE_DENY_NETWORKS)
 
 
 def _validate_egress_override_entry(entry: str, *, field_name: str) -> None:
@@ -541,17 +536,13 @@ def _validate_egress_override_entry(entry: str, *, field_name: str) -> None:
     emitted a naked ``0.0.0.0/0`` peer with no exceptions at all.
     """
     if not isinstance(entry, str) or not entry:
-        raise ValueError(
-            f"{field_name} entry must be a non-empty string, got {entry!r}"
-        )
+        raise ValueError(f"{field_name} entry must be a non-empty string, got {entry!r}")
     if _is_fqdn_entry(entry):
         return
     try:
         net = ipaddress.ip_network(entry, strict=False)
     except (ValueError, TypeError) as exc:
-        raise ValueError(
-            f"{field_name} entry {entry!r} is not a valid CIDR / IP / FQDN"
-        ) from exc
+        raise ValueError(f"{field_name} entry {entry!r} is not a valid CIDR / IP / FQDN") from exc
     if str(net) in _ANY_CIDRS:
         # Wildcard egress is permitted because the renderer enforces the
         # private-range / IMDS deny list on every wildcard peer it builds.
@@ -575,9 +566,7 @@ def _validate_dns_resolver_entry(entry: str) -> None:
     egress override entries.
     """
     if not isinstance(entry, str) or not entry:
-        raise ValueError(
-            f"dns_resolvers entry must be a non-empty string, got {entry!r}"
-        )
+        raise ValueError(f"dns_resolvers entry must be a non-empty string, got {entry!r}")
     try:
         net = ipaddress.ip_network(entry, strict=False)
     except (ValueError, TypeError) as exc:
@@ -594,9 +583,7 @@ def _validate_dns_resolver_entry(entry: str) -> None:
         )
 
 
-def _validated_egress_overrides(
-    entries: Sequence[str] | None, *, field_name: str
-) -> list[str]:
+def _validated_egress_overrides(entries: Sequence[str] | None, *, field_name: str) -> list[str]:
     """Validate and de-duplicate an override list, preserving caller order."""
     if not entries:
         return []
@@ -639,9 +626,7 @@ def _normalise_cidr(cidr: str) -> str:
     try:
         net = ipaddress.ip_network(cidr, strict=False)
     except (ValueError, TypeError) as exc:
-        raise ValueError(
-            f"target_cidr {cidr!r} is not a valid CIDR / IP literal"
-        ) from exc
+        raise ValueError(f"target_cidr {cidr!r} is not a valid CIDR / IP literal") from exc
     return str(net)
 
 
@@ -667,9 +652,7 @@ def _build_dns_egress_rule(resolvers: list[str]) -> dict[str, Any]:
     if not resolvers:
         return {}
     peers = [{"ipBlock": {"cidr": _normalise_cidr(addr)}} for addr in resolvers]
-    ports: list[dict[str, Any]] = [
-        {"protocol": "UDP", "port": port} for port in _DNS_PORTS_UDP
-    ]
+    ports: list[dict[str, Any]] = [{"protocol": "UDP", "port": port} for port in _DNS_PORTS_UDP]
     ports.extend({"protocol": "TCP", "port": port} for port in _DNS_PORTS_TCP)
     return {"to": peers, "ports": ports}
 
@@ -712,9 +695,7 @@ def _build_ip_block_peer(cidr: str, except_cidrs: Sequence[str]) -> dict[str, An
             try:
                 ex_net = ipaddress.ip_network(raw, strict=False)
             except (ValueError, TypeError) as exc:
-                raise ValueError(
-                    f"egress_except_cidrs entry {raw!r} is not a valid CIDR"
-                ) from exc
+                raise ValueError(f"egress_except_cidrs entry {raw!r} is not a valid CIDR") from exc
             # ``subnet_of`` requires both networks to be the same IP version
             # (mypy cannot narrow on ``.version`` equality, so use isinstance).
             if isinstance(peer_net, ipaddress.IPv4Network):
@@ -754,8 +735,7 @@ def _build_payload_egress_rule(
     if template.egress_target_dynamic:
         if target_cidr is None:
             raise ValueError(
-                f"template {template.name!r} requires a target_cidr "
-                "(egress_target_dynamic=True)"
+                f"template {template.name!r} requires a target_cidr (egress_target_dynamic=True)"
             )
         peers.append(_build_ip_block_peer(target_cidr, ()))
         for cidr in egress_allowlist_override_cidrs:
@@ -773,12 +753,8 @@ def _build_payload_egress_rule(
             peers.append(_build_ip_block_peer(cidr, template.egress_except_cidrs))
 
     ports: list[dict[str, Any]] = []
-    ports.extend(
-        {"protocol": "TCP", "port": port} for port in template.allowed_ports_tcp
-    )
-    ports.extend(
-        {"protocol": "UDP", "port": port} for port in template.allowed_ports_udp
-    )
+    ports.extend({"protocol": "TCP", "port": port} for port in template.allowed_ports_tcp)
+    ports.extend({"protocol": "UDP", "port": port} for port in template.allowed_ports_udp)
     for port_range in template.port_ranges:
         ports.append(
             {

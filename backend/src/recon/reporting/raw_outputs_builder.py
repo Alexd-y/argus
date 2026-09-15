@@ -12,7 +12,10 @@ RAW_OUTPUTS_DIR = "raw_tool_outputs"
 
 # Source locations: (recon_subdir, candidate_filenames) -> output_filename
 SUBFINDER_SOURCES = [
-    ("02_subdomains", ["subdomains_raw.txt", "subfinder_raw.txt", "subfinder_output.json"]),
+    (
+        "02_subdomains",
+        ["subdomains_raw.txt", "subfinder_raw.txt", "subfinder_output.json"],
+    ),
 ]
 HTTPX_SOURCES = [
     ("04_live_hosts", ["httpx_output.json", "httpx_raw.json", "httpx_raw.txt"]),

@@ -83,9 +83,9 @@ def test_observability_compose_pins_grafana_and_prometheus() -> None:
 def test_nuclei_pins_match_adr() -> None:
     root = _repo_root()
     pins = _load_yaml(root / "infra" / "pins" / "nuclei.yaml")
-    adr = (root / "ai_docs" / "develop" / "architecture" / "2026-08-15-adr-unified-ai-rag-lab.md").read_text(
-        encoding="utf-8"
-    )
+    adr = (
+        root / "ai_docs" / "develop" / "architecture" / "2026-08-15-adr-unified-ai-rag-lab.md"
+    ).read_text(encoding="utf-8")
     sandbox = (root / "infra" / "Dockerfile.sandbox").read_text(encoding="utf-8")
     assert pins["nuclei"]["tag"] == "v3.11.1"
     assert pins["nuclei"]["commit"] == "a8c88feb4a1c8e961b7902534ce3af97e9d524a4"

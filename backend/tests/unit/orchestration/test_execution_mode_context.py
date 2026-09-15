@@ -121,7 +121,9 @@ def test_production_destructive_denied_without_flags():
 
 
 def test_production_path_via_options_defaults():
-    ctx = resolve_mode_context_from_options({"scan_id": "s-1"}, tenant_id="t-1", engagement_id="e-1")
+    ctx = resolve_mode_context_from_options(
+        {"scan_id": "s-1"}, tenant_id="t-1", engagement_id="e-1"
+    )
     assert ctx.mode is ExecutionMode.PRODUCTION
     assert ctx.is_lab is False
 

@@ -195,9 +195,7 @@ def _validate_port(name: str, value: str) -> None:
 def _validate_domain(name: str, value: str) -> None:
     _check_universal(name, value)
     if len(value) > 253:
-        raise TemplateRenderError(
-            "domain length out of range (1..253)", placeholder=name
-        )
+        raise TemplateRenderError("domain length out of range (1..253)", placeholder=name)
     if not re.fullmatch(
         r"(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)"
         r"(\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+",
@@ -286,9 +284,7 @@ def _validate_sandbox_path(prefix: str) -> Callable[[str, str], None]:
                 placeholder=name,
             )
         if "//" in value:
-            raise TemplateRenderError(
-                "duplicated slashes are forbidden", placeholder=name
-            )
+            raise TemplateRenderError("duplicated slashes are forbidden", placeholder=name)
         if not re.fullmatch(r"/[A-Za-z0-9_./\-]+", value):
             raise TemplateRenderError(
                 "sandbox path uses an unsafe charset",
@@ -446,9 +442,7 @@ def _validate_params_csv(name: str, value: str) -> None:
 # Linux kernel caps interface names at 15 chars (``IFNAMSIZ - 1``); we
 # additionally restrict to alnum + ``._-`` to refuse any shell metachar even
 # under the universal allowlist (no ``:``, no ``/``).
-_IFACE_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,14}$"
-)
+_IFACE_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,14}$")
 
 
 def _validate_interface(name: str, value: str) -> None:
@@ -648,9 +642,7 @@ def validate_template(template: str | list[str]) -> set[str]:
 
 def _validate_value(name: str, value: str) -> None:
     if not isinstance(value, str):
-        raise TemplateRenderError(
-            "placeholder value must be a string", placeholder=name
-        )
+        raise TemplateRenderError("placeholder value must be a string", placeholder=name)
     validator = _PLACEHOLDER_VALIDATORS.get(name, _validate_safe_token)
     validator(name, value)
 
@@ -793,6 +785,4 @@ def redact_argv_for_logging(
     if not sensitive_values:
         return list(argv)
 
-    return [
-        _REDACTION_SENTINEL if token in sensitive_values else token for token in argv
-    ]
+    return [_REDACTION_SENTINEL if token in sensitive_values else token for token in argv]

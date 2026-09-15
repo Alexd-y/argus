@@ -25,7 +25,7 @@ async def providers_health() -> dict:
     from src.llm_gateway.provider_clients import ALIAS_REGISTRY
 
     providers = {}
-    for alias, cfg in ALIAS_REGISTRY.items():
+    for _alias, cfg in ALIAS_REGISTRY.items():
         for p in cfg["providers"]:
             key = p["key"]
             if key not in providers:

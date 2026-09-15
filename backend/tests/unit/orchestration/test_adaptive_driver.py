@@ -131,7 +131,9 @@ class TestRunAdaptiveVulnAnalysis:
 
 class TestSignedDriver:
     async def test_signed_entry_composes_via_run_signed_tool(self, monkeypatch: Any) -> None:
-        async def _fake_run_signed_tool(tool_id: str, target: str, **_kwargs: Any) -> dict[str, Any]:
+        async def _fake_run_signed_tool(
+            tool_id: str, target: str, **_kwargs: Any
+        ) -> dict[str, Any]:
             return {"exit_code": 0, "stdout": f"{tool_id} hit {target}", "stderr": ""}
 
         monkeypatch.setattr(adaptive_integration, "run_signed_tool", _fake_run_signed_tool)

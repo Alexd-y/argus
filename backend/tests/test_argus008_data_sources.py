@@ -51,46 +51,48 @@ class TestCensysClient:
     @pytest.mark.asyncio
     async def test_query_returns_timeout_payload_on_timeout(self) -> None:
         """Timeout — structured error, no exception propagated."""
-        with patch.dict(
-            os.environ,
-            {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+        with (
+            patch.dict(
+                os.environ,
+                {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+            ),
+            patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls,
         ):
-            with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
-                mock_client = AsyncMock()
-                mock_client.get = AsyncMock(
-                    side_effect=httpx.TimeoutException("Request timed out")
-                )
-                mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("Request timed out"))
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
-                assert result == {
-                    "source": "censys",
-                    "available": True,
-                    "error": "timeout",
-                }
+            result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
+            assert result == {
+                "source": "censys",
+                "available": True,
+                "error": "timeout",
+            }
 
     @pytest.mark.asyncio
     async def test_query_returns_rate_limited_on_429(self) -> None:
         """429 — explicit rate_limited flag."""
-        with patch.dict(
-            os.environ,
-            {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+        with (
+            patch.dict(
+                os.environ,
+                {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+            ),
+            patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls,
         ):
-            with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
-                mock_client = AsyncMock()
-                mock_resp = httpx.Response(429)
-                mock_client.get = AsyncMock(return_value=mock_resp)
-                mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_client = AsyncMock()
+            mock_resp = httpx.Response(429)
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await CensysClient().query(query_type="hosts", ip="8.8.8.8")
-                assert result == {
-                    "source": "censys",
-                    "available": True,
-                    "rate_limited": True,
-                    "status_code": 429,
-                }
+            result = await CensysClient().query(query_type="hosts", ip="8.8.8.8")
+            assert result == {
+                "source": "censys",
+                "available": True,
+                "rate_limited": True,
+                "status_code": 429,
+            }
 
 
 class TestVirusTotalClient:
@@ -110,39 +112,41 @@ class TestVirusTotalClient:
 
     @pytest.mark.asyncio
     async def test_query_returns_timeout_payload_on_timeout(self) -> None:
-        with patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}):
-            with patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls:
-                mock_client = AsyncMock()
-                mock_client.get = AsyncMock(
-                    side_effect=httpx.TimeoutException("Request timed out")
-                )
-                mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+        with (
+            patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}),
+            patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("Request timed out"))
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await VirusTotalClient().query(domain="example.com")
-                assert result == {
-                    "source": "virustotal",
-                    "available": True,
-                    "error": "timeout",
-                }
+            result = await VirusTotalClient().query(domain="example.com")
+            assert result == {
+                "source": "virustotal",
+                "available": True,
+                "error": "timeout",
+            }
 
     @pytest.mark.asyncio
     async def test_query_returns_rate_limited_on_429(self) -> None:
-        with patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}):
-            with patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls:
-                mock_client = AsyncMock()
-                mock_resp = httpx.Response(429)
-                mock_client.get = AsyncMock(return_value=mock_resp)
-                mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+        with (
+            patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}),
+            patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_resp = httpx.Response(429)
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await VirusTotalClient().query(domain="example.com")
-                assert result == {
-                    "source": "virustotal",
-                    "available": True,
-                    "rate_limited": True,
-                    "status_code": 429,
-                }
+            result = await VirusTotalClient().query(domain="example.com")
+            assert result == {
+                "source": "virustotal",
+                "available": True,
+                "rate_limited": True,
+                "status_code": 429,
+            }
 
 
 class TestHIBPClient:
@@ -183,9 +187,7 @@ class TestNVDClient:
     async def test_query_returns_empty_on_timeout(self) -> None:
         with patch("src.data_sources.nvd_client.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
-            mock_client.get = AsyncMock(
-                side_effect=httpx.TimeoutException("Request timed out")
-            )
+            mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("Request timed out"))
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -254,7 +256,7 @@ class TestCrtShClient:
         with patch("src.data_sources.crtsh_client.httpx.AsyncClient") as mock_cls:
             mock_resp = type("Resp", (), {})()
             mock_resp.raise_for_status = lambda: None
-            mock_resp.json = lambda: []
+            mock_resp.json = list
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -273,22 +275,20 @@ class TestDataSourceSecurity:
     ) -> None:
         """Exception with key in message must not propagate; result is empty dict."""
         secret_key = "censys-secret-key-abc123"
-        with patch.dict(
-            os.environ,
-            {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": secret_key},
+        with (
+            patch.dict(
+                os.environ,
+                {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": secret_key},
+            ),
+            patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls,
         ):
-            with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
-                mock_client = AsyncMock()
-                mock_client.get = AsyncMock(
-                    side_effect=ValueError(
-                        f"Auth failed for key={secret_key}"
-                    )
-                )
-                mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=ValueError(f"Auth failed for key={secret_key}"))
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                with caplog.at_level(logging.DEBUG):
-                    result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
+            with caplog.at_level(logging.DEBUG):
+                result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
 
         assert result == {}
         for record in caplog.records:

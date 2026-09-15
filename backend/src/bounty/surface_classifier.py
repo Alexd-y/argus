@@ -8,28 +8,54 @@ from src.bounty.schemas import ClassifiedSurface, SurfaceType
 
 _SURFACE_PATTERNS: dict[SurfaceType, list[str]] = {
     SurfaceType.WEB_APP: [
-        r"https?://", r"www\.", r"\.com$", r"\.io$", r"\.net$",
+        r"https?://",
+        r"www\.",
+        r"\.com$",
+        r"\.io$",
+        r"\.net$",
     ],
     SurfaceType.API: [
-        r"/api", r"api\.", r"rest\.", r"graphql", r"\.json$",
+        r"/api",
+        r"api\.",
+        r"rest\.",
+        r"graphql",
+        r"\.json$",
     ],
     SurfaceType.ADMIN_PANEL: [
-        r"admin\.", r"/admin", r"dashboard\.", r"console\.",
+        r"admin\.",
+        r"/admin",
+        r"dashboard\.",
+        r"console\.",
     ],
     SurfaceType.AUTH_SYSTEM: [
-        r"auth\.", r"login\.", r"sso\.", r"oauth", r"id\.",
+        r"auth\.",
+        r"login\.",
+        r"sso\.",
+        r"oauth",
+        r"id\.",
     ],
     SurfaceType.MOBILE: [
-        r"android", r"ios", r"mobile\.", r"app\.", r"\.apk", r"\.ipa",
+        r"android",
+        r"ios",
+        r"mobile\.",
+        r"app\.",
+        r"\.apk",
+        r"\.ipa",
     ],
     SurfaceType.CLOUD_INFRA: [
-        r"s3\.amazonaws", r"storage\.googleapis", r"blob\.core\.windows",
+        r"s3\.amazonaws",
+        r"storage\.googleapis",
+        r"blob\.core\.windows",
     ],
     SurfaceType.SUBDOMAIN: [
-        r"\*\.", r"[a-z]+\.[a-z]+\.[a-z]+",
+        r"\*\.",
+        r"[a-z]+\.[a-z]+\.[a-z]+",
     ],
     SurfaceType.CDN_ASSETS: [
-        r"cdn\.", r"static\.", r"assets\.", r"media\.",
+        r"cdn\.",
+        r"static\.",
+        r"assets\.",
+        r"media\.",
     ],
 }
 

@@ -24,7 +24,7 @@ ARG-027 adds:
 from __future__ import annotations
 
 import pytest
-
+from pydantic import ValidationError
 from src.sandbox.network_policies import (
     NETWORK_POLICY_NAMES,
     NetworkPolicyTemplate,
@@ -32,7 +32,6 @@ from src.sandbox.network_policies import (
     list_templates,
     render_networkpolicy_manifest,
 )
-
 
 _DEFAULT_POD_SELECTOR: dict[str, str] = {"argus.io/job-id": "abcd1234"}
 _DEFAULT_NAMESPACE = "argus-sandbox"
@@ -45,20 +44,23 @@ _DEFAULT_NAMESPACE = "argus-sandbox"
 
 def test_network_policy_names_constant_lists_eleven_templates() -> None:
     """ARG-003 seeded 5 policies; ARG-017 added 3; ARG-027 added 3 (§15 cloud parity)."""
-    assert NETWORK_POLICY_NAMES == frozenset(
-        {
-            "recon-passive",
-            "recon-active-tcp",
-            "recon-active-udp",
-            "recon-smb",
-            "tls-handshake",
-            "oast-egress",
-            "auth-bruteforce",
-            "offline-no-egress",
-            "cloud-aws",
-            "cloud-gcp",
-            "cloud-azure",
-        }
+    assert (
+        frozenset(
+            {
+                "recon-passive",
+                "recon-active-tcp",
+                "recon-active-udp",
+                "recon-smb",
+                "tls-handshake",
+                "oast-egress",
+                "auth-bruteforce",
+                "offline-no-egress",
+                "cloud-aws",
+                "cloud-gcp",
+                "cloud-azure",
+            }
+        )
+        == NETWORK_POLICY_NAMES
     )
 
 
@@ -82,7 +84,7 @@ def test_get_template_returns_frozen_template(name: str) -> None:
     assert tpl.name == name
     # ``frozen=True`` only freezes the model attributes — assigning to a
     # field MUST raise. (List contents are not deep-frozen by pydantic.)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         tpl.name = "tampered"
 
 
@@ -658,9 +660,7 @@ def test_egress_allowlist_override_zero_zero_carries_mandatory_deny_excepts() ->
         egress_allowlist_override=["0.0.0.0/0"],
     )
     payload_rule = manifest["spec"]["egress"][0]
-    wildcard_peers = [
-        peer for peer in payload_rule["to"] if peer["ipBlock"]["cidr"] == "0.0.0.0/0"
-    ]
+    wildcard_peers = [peer for peer in payload_rule["to"] if peer["ipBlock"]["cidr"] == "0.0.0.0/0"]
     assert len(wildcard_peers) == 1
     excepts = wildcard_peers[0]["ipBlock"].get("except", [])
     for must_block in (

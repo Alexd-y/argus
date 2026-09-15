@@ -15,7 +15,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.llm.cost_tracker import (
     ScanCostTracker,
     _tracker_registry,

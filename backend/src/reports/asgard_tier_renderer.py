@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -56,7 +56,7 @@ from src.reports.replay_command_sanitizer import (
 # URL. The callback may return ``None`` (presigning disabled) and may
 # raise — the renderer catches and downgrades to ``None`` so a presigning
 # bug never breaks report assembly.
-PresignFn: TypeAlias = Callable[[str], str | None]
+type PresignFn = Callable[[str], str | None]
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +228,7 @@ def _remediation_for_finding(f: Finding) -> str:
         rem = poc.get("remediation") or poc.get("mitigation")
         if isinstance(rem, str) and rem.strip():
             return rem.strip()
-    return (
-        "Review the finding and apply vendor-provided patches or compensating controls."
-    )
+    return "Review the finding and apply vendor-provided patches or compensating controls."
 
 
 def _reproducer_argv(f: Finding) -> list[str] | None:
@@ -301,9 +299,7 @@ def _timeline_to_sections(
     *,
     snippet_limit: int = 480,
 ) -> list[AsgardTimelineSection]:
-    rows = sorted(
-        timeline, key=lambda t: (t.order_index, t.phase or "", t.created_at or "")
-    )
+    rows = sorted(timeline, key=lambda t: (t.order_index, t.phase or "", t.created_at or ""))
     out: list[AsgardTimelineSection] = []
     for t in rows:
         snippet = ""
@@ -418,8 +414,8 @@ def assemble_asgard_sections(
     """
     ctx = sanitize_context or SanitizeContext(
         target=data.target or "",
-        endpoints=tuple(),
-        canaries=tuple(),
+        endpoints=(),
+        canaries=(),
     )
     findings = _ordered_findings(list(data.findings))
     title_meta: dict[str, Any] = {
@@ -439,9 +435,7 @@ def assemble_asgard_sections(
         reproducer=_reproducers_for_findings(findings, context=ctx),
         timeline=_timeline_to_sections(list(data.timeline)),
         evidence=_evidence_to_sections(list(data.evidence), presigner=presigner),
-        screenshots=_screenshots_to_sections(
-            list(data.screenshots), presigner=presigner
-        ),
+        screenshots=_screenshots_to_sections(list(data.screenshots), presigner=presigner),
     )
 
 

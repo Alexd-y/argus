@@ -6,11 +6,10 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.core.config import settings
 from src.db.session import get_db
+from starlette.testclient import TestClient
 
 _ADMIN_KEY = "secret-admin-key"
 _ADMIN_HEADERS = {"X-Admin-Key": _ADMIN_KEY, "Content-Type": "application/json"}

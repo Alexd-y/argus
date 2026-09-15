@@ -84,7 +84,9 @@ def test_build_ai_input_payload_severity_fields_from_same_findings_list() -> Non
     p = ReportGenerator.build_ai_input_payload(data, tier="midgard")
     assert p["finding_count"] == 3
     assert p["severity_counts"] == severity_histogram_from_finding_rows(data.findings)
-    assert p["executive_severity_totals"] == executive_severity_totals_from_finding_rows(data.findings)
+    assert p["executive_severity_totals"] == executive_severity_totals_from_finding_rows(
+        data.findings
+    )
     assert p["executive_severity_totals"]["critical"] == 1
     assert p["executive_severity_totals"]["info"] == 1
 

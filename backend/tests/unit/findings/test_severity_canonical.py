@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 import pytest
-
 from src.findings.severity import (
     SEVERITY_BANDS,
     SeverityBand,
@@ -65,9 +64,7 @@ class TestBandFromCvssScore:
     def test_missing_score_is_unknown_not_zero(self) -> None:
         assert band_from_cvss_score(None) == SeverityBand.UNKNOWN
 
-    @pytest.mark.parametrize(
-        "score", [float("nan"), math.inf, -math.inf, -0.1, 10.1, 11.0]
-    )
+    @pytest.mark.parametrize("score", [float("nan"), math.inf, -math.inf, -0.1, 10.1, 11.0])
     def test_invalid_scores_are_unknown(self, score: float) -> None:
         assert band_from_cvss_score(score) == SeverityBand.UNKNOWN
 
@@ -80,8 +77,17 @@ class TestBandFromCvssScore:
 class TestAggregateSeverity:
     def test_sum_equals_population_and_unknown_kept(self) -> None:
         labels = [
-            "critical", "high", "high", "medium", "low", "low", "low",
-            "informational", "", "garbage", None,
+            "critical",
+            "high",
+            "high",
+            "medium",
+            "low",
+            "low",
+            "low",
+            "informational",
+            "",
+            "garbage",
+            None,
         ]
         counts = aggregate_severity(labels)
         assert counts.critical == 1

@@ -55,8 +55,15 @@ class FakeScanReportData:
 def _report_data():
     return FakeReportData(
         findings=[
-            FakeFinding("F-1", "critical", cwe="CWE-89", confidence="confirmed",
-                        validation_status="validated", evidence_refs=["E-1"], tool_run_id="TR-1"),
+            FakeFinding(
+                "F-1",
+                "critical",
+                cwe="CWE-89",
+                confidence="confirmed",
+                validation_status="validated",
+                evidence_refs=["E-1"],
+                tool_run_id="TR-1",
+            ),
             # validated but no evidence → evidence gate must downgrade
             FakeFinding("F-2", "high", confidence="confirmed", validation_status="validated"),
             FakeFinding("F-3", "low", confidence="possible", validation_status="unverified"),
@@ -71,8 +78,16 @@ def _snapshot():
         scan_report_data=FakeScanReportData(
             tool_runs=[{"id": "TR-1", "tool_name": "sqlmap", "status": "ok"}],
             coverage_occurrence=[
-                {"capability_id": "cap.sqli", "status": "tested", "evidence_ids": ["E-1"]},
-                {"capability_id": "cap.xss", "status": "not_assessed", "reason_code": "budget_exhausted"},
+                {
+                    "capability_id": "cap.sqli",
+                    "status": "tested",
+                    "evidence_ids": ["E-1"],
+                },
+                {
+                    "capability_id": "cap.xss",
+                    "status": "not_assessed",
+                    "reason_code": "budget_exhausted",
+                },
             ],
         ),
         generated_at=_FIXED_TS,

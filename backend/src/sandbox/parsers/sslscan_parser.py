@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -46,14 +46,12 @@ EVIDENCE_SIDECAR_NAME: Final[str] = "sslscan_findings.jsonl"
 _CANONICAL_NAMES: Final[tuple[str, ...]] = ("sslscan.xml", "sslscan.txt", "sslscan.log")
 _MAX_FINDINGS: Final[int] = 2_000
 
-_DEPRECATED_PROTOCOLS: Final[frozenset[str]] = frozenset(
-    {"TLSv1.0", "TLSv1.1", "SSLv3", "SSLv2"}
-)
+_DEPRECATED_PROTOCOLS: Final[frozenset[str]] = frozenset({"TLSv1.0", "TLSv1.1", "SSLv3", "SSLv2"})
 _WEAK_CIPHER_KEYWORDS: Final[frozenset[str]] = frozenset(
     {"NULL", "anon", "EXPORT", "RC4", "DES", "3DES", "MD5", "CBC"}
 )
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_sslscan(
@@ -102,9 +100,7 @@ def parse_sslscan(
         if sslversion and sslversion in _DEPRECATED_PROTOCOLS:
             category = FindingCategory.MISCONFIG
             cvss_score = 5.0
-        elif cipher_name and any(
-            kw in cipher_name for kw in _WEAK_CIPHER_KEYWORDS
-        ):
+        elif cipher_name and any(kw in cipher_name for kw in _WEAK_CIPHER_KEYWORDS):
             category = FindingCategory.MISCONFIG
             cvss_score = 4.3
 
@@ -154,7 +150,9 @@ def _build_finding(category: FindingCategory, cvss_score: float) -> FindingDTO:
         cwe=[326, 327],
         cvss_v3_vector=SENTINEL_CVSS_VECTOR,
         cvss_v3_score=cvss_score,
-        confidence=ConfidenceLevel.LIKELY if category == FindingCategory.MISCONFIG else ConfidenceLevel.CONFIRMED,
+        confidence=ConfidenceLevel.LIKELY
+        if category == FindingCategory.MISCONFIG
+        else ConfidenceLevel.CONFIRMED,
         owasp_wstg=["WSTG-CRYP-01", "WSTG-CRYP-02"],
     )
 

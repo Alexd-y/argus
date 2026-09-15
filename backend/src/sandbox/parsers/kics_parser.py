@@ -78,7 +78,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -142,7 +142,7 @@ _SECRET_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -244,14 +244,10 @@ def _build_finding(record: dict[str, Any]) -> FindingDTO:
     cwe_list = list(record.get("cwe") or ())
     if not cwe_list:
         cwe_list = list(
-            _CWE_SECRET_LEAK
-            if category is FindingCategory.SECRET_LEAK
-            else _CWE_MISCONFIG_DEFAULT
+            _CWE_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _CWE_MISCONFIG_DEFAULT
         )
     owasp = list(
-        _OWASP_SECRET_LEAK
-        if category is FindingCategory.SECRET_LEAK
-        else _OWASP_MISCONFIG
+        _OWASP_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _OWASP_MISCONFIG
     )
     return make_finding_dto(
         category=category,
@@ -364,9 +360,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    raw_queries: list[Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(raw_queries: list[Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for query in raw_queries:
         if not isinstance(query, dict):
             continue
@@ -385,9 +379,7 @@ def _iter_normalised(
         severity = _map_severity(kics_severity)
         cwe_list = _extract_cwe(query.get("cwe"))
         category = _classify_category(query_name=query_name)
-        confidence = (
-            ConfidenceLevel.LIKELY if severity == "high" else ConfidenceLevel.SUSPECTED
-        )
+        confidence = ConfidenceLevel.LIKELY if severity == "high" else ConfidenceLevel.SUSPECTED
         platform = _string_field(query, "platform")
         kics_category = _string_field(query, "category")
         query_url = _string_field(query, "query_url")
@@ -454,8 +446,7 @@ def _extract_cwe(raw: Any) -> list[int]:
         return [raw]
     if isinstance(raw, str):
         token = raw.strip().upper()
-        if token.startswith("CWE-"):
-            token = token[4:]
+        token = token.removeprefix("CWE-")
         if token.isdigit():
             value = int(token)
             return [value] if value > 0 else []

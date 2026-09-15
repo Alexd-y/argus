@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
+from src.api.schemas import ReportSummary
 from src.orchestration.prompt_registry import EXPLOITATION
 from src.recon.stage_object_download import StageObjectFetchError
 from src.reports import data_collector as dc
 from src.reports.data_collector import ScanReportData
-from src.api.schemas import ReportSummary
 from src.reports.generators import (
     PhaseOutputEntry,
     ReportData,
@@ -128,14 +127,16 @@ class TestFetchStageFile:
 async def test_collect_async_scan_missing() -> None:
     session = MagicMock()
     session.execute = AsyncMock(return_value=_FakeResult(scalar=None))
-    out = await dc.ReportDataCollector().collect_async(session, "t1", "missing", include_minio=False)
+    out = await dc.ReportDataCollector().collect_async(
+        session, "t1", "missing", include_minio=False
+    )
     assert out.scan is None
     assert out.scan_id == "missing"
 
 
 @pytest.mark.asyncio
 async def test_collect_async_full_no_minio() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     scan_orm = SimpleNamespace(
         id="sc1",
         tenant_id="t1",
@@ -150,7 +151,11 @@ async def test_collect_async_full_no_minio() -> None:
     )
     tl = SimpleNamespace(phase="recon", order_index=0, entry={"x": 1}, created_at=now)
     pi = SimpleNamespace(phase="recon", input_data={}, created_at=now)
-    po = SimpleNamespace(phase=(EXPLOITATION or "exploitation"), output_data={"shell": True}, created_at=now)
+    po = SimpleNamespace(
+        phase=(EXPLOITATION or "exploitation"),
+        output_data={"shell": True},
+        created_at=now,
+    )
     fin = SimpleNamespace(
         id="f1",
         tenant_id="t1",
@@ -185,7 +190,7 @@ async def test_collect_async_full_no_minio() -> None:
 
 @pytest.mark.asyncio
 async def test_collect_async_with_report_id() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     scan_orm = SimpleNamespace(
         id="sc1",
         tenant_id="t1",
@@ -253,7 +258,9 @@ async def test_resolve_scan_id_from_finding() -> None:
 
 @pytest.mark.asyncio
 async def test_run_pipeline_tenant_mismatch() -> None:
-    report = SimpleNamespace(id="r1", tenant_id="other", scan_id="s1", tier="midgard", requested_formats=None)
+    report = SimpleNamespace(
+        id="r1", tenant_id="other", scan_id="s1", tier="midgard", requested_formats=None
+    )
     session = MagicMock()
     session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: report))
     session.commit = AsyncMock()
@@ -272,7 +279,9 @@ async def test_run_pipeline_tenant_mismatch() -> None:
 
 @pytest.mark.asyncio
 async def test_run_pipeline_missing_scan_id() -> None:
-    report = SimpleNamespace(id="r1", tenant_id="t1", scan_id=None, tier="midgard", requested_formats=None)
+    report = SimpleNamespace(
+        id="r1", tenant_id="t1", scan_id=None, tier="midgard", requested_formats=None
+    )
     session = MagicMock()
 
     class _ReportResult:
@@ -332,10 +341,19 @@ def test_reporting_jinja_helpers() -> None:
             technologies=["a", "b"],
         ),
         timeline=[
-            TimelineRow(phase="recon", order_index=1, entry={"msg": "hello world " * 50}, created_at=None)
+            TimelineRow(
+                phase="recon",
+                order_index=1,
+                entry={"msg": "hello world " * 50},
+                created_at=None,
+            )
         ],
         phase_outputs=[
-            PhaseOutputRow(phase=(EXPLOITATION or "exploitation"), output_data={"k": 1}, created_at=None)
+            PhaseOutputRow(
+                phase=(EXPLOITATION or "exploitation"),
+                output_data={"k": 1},
+                created_at=None,
+            )
         ],
         findings=[
             FindingRow(
@@ -357,7 +375,12 @@ def test_reporting_jinja_helpers() -> None:
     # T1: summary_counts follow live findings, not stale report.summary JSON
     assert rec["summary_counts"]["critical"] == 0
     assert rec["summary_counts"]["high"] == 1
-    assert rec["summary_counts"]["medium"] == rec["summary_counts"]["low"] == rec["summary_counts"]["info"] == 0
+    assert (
+        rec["summary_counts"]["medium"]
+        == rec["summary_counts"]["low"]
+        == rec["summary_counts"]["info"]
+        == 0
+    )
     assert rec["findings_count"] == 1
     assert len(rec["timeline_preview"][0]["snippet"]) <= 240
     ex = exploitation_outputs_for_jinja(data)
@@ -494,7 +517,9 @@ class _ExecScalar:
 
 
 @pytest.mark.asyncio
-async def test_run_pipeline_upload_empty_key_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_pipeline_upload_empty_key_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import src.reports.report_pipeline as rp
     from src.services.reporting import ReportContextBuildResult
 
@@ -511,7 +536,7 @@ async def test_run_pipeline_upload_empty_key_fails(monkeypatch: pytest.MonkeyPat
         ai_section_results={"executive_summary": {"status": "ok", "text": "x"}},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -542,7 +567,9 @@ async def test_run_pipeline_upload_empty_key_fails(monkeypatch: pytest.MonkeyPat
 
 
 def test_to_generator_valhalla_executive_preference() -> None:
-    from src.orchestration.prompt_registry import REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA
+    from src.orchestration.prompt_registry import (
+        REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
+    )
 
     gen = ReportGenerator()
     rd = gen.to_generator_report_data(
@@ -556,13 +583,15 @@ def test_to_generator_valhalla_executive_preference() -> None:
 
 
 @pytest.mark.asyncio
-async def test_collect_async_minio_all_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_collect_async_minio_all_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(dc, "download_stage1_artifact", lambda _s, _f: None)
     monkeypatch.setattr(dc, "download_stage2_artifact", lambda _s, _f: None)
     monkeypatch.setattr(dc, "download_stage3_artifact", lambda _s, _f: None)
     monkeypatch.setattr(dc, "download_stage4_artifact", lambda _s, _f: None)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     scan_orm = SimpleNamespace(
         id="sc1",
         tenant_id="t1",

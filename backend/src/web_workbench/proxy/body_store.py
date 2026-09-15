@@ -65,7 +65,7 @@ class InMemoryBodyObjectStore:
         project_id: str,
         sha256: str,
         data: bytes,
-        content_type: str | None,
+        content_type: str | None,  # noqa: ARG002 - retained for signature/API compatibility
     ) -> str:
         key = build_body_key(tenant_id, project_id, sha256)
         self._objects[key] = data

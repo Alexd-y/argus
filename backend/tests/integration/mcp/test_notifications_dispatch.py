@@ -15,11 +15,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications import (
     JiraAdapter,
     LinearAdapter,
@@ -51,7 +50,7 @@ def _make_event(
         approval_id=None,
         root_cause_hash="rch-int-001",
         evidence_url="https://argus.example/evidence/int-001",
-        occurred_at=datetime(2026, 4, 19, 12, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 4, 19, 12, 0, tzinfo=UTC),
         extra_tags=("cwe-918",),
     )
 
@@ -64,9 +63,7 @@ def _wire_adapters(
 ) -> tuple[SlackNotifier, LinearAdapter, JiraAdapter]:
     slack = SlackNotifier(
         webhook_url="https://hooks.slack.example/T0/B0/itest",
-        client=httpx.AsyncClient(
-            transport=httpx.MockTransport(slack_handler), timeout=5.0
-        ),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(slack_handler), timeout=5.0),
         backoff_base_seconds=0.0,
         backoff_factor=1.0,
         rng=lambda: 1.0,
@@ -75,9 +72,7 @@ def _wire_adapters(
         api_key="lin_int_key",
         api_url="https://api.linear.example/graphql",
         team_map={"tenant-alpha": "team-int"},
-        client=httpx.AsyncClient(
-            transport=httpx.MockTransport(linear_handler), timeout=5.0
-        ),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(linear_handler), timeout=5.0),
         backoff_base_seconds=0.0,
         backoff_factor=1.0,
         rng=lambda: 1.0,
@@ -87,9 +82,7 @@ def _wire_adapters(
         user_email="bot@argus.example",
         api_token="jira_int_token",
         project_key="SEC",
-        client=httpx.AsyncClient(
-            transport=httpx.MockTransport(jira_handler), timeout=5.0
-        ),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(jira_handler), timeout=5.0),
         backoff_base_seconds=0.0,
         backoff_factor=1.0,
         rng=lambda: 1.0,
@@ -116,9 +109,7 @@ class TestEndToEndDispatch:
 
         def _linear(req: httpx.Request) -> httpx.Response:
             calls["linear"] += 1
-            return httpx.Response(
-                200, json={"data": {"issueCreate": {"success": True}}}
-            )
+            return httpx.Response(200, json={"data": {"issueCreate": {"success": True}}})
 
         def _jira(req: httpx.Request) -> httpx.Response:
             calls["jira"] += 1
@@ -160,9 +151,7 @@ class TestEndToEndDispatch:
         disp = _disp(slack=slack, linear=linear, jira=jira)
         try:
             results = await disp.dispatch(
-                _make_event(
-                    event_id="evt-int-101", severity=NotificationSeverity.MEDIUM
-                )
+                _make_event(event_id="evt-int-101", severity=NotificationSeverity.MEDIUM)
             )
         finally:
             await disp.aclose()
@@ -253,9 +242,7 @@ class TestDeduplicationAcrossAdapters:
             linear_handler=_count_handler(
                 counts,
                 "linear",
-                lambda: httpx.Response(
-                    200, json={"data": {"issueCreate": {"success": True}}}
-                ),
+                lambda: httpx.Response(200, json={"data": {"issueCreate": {"success": True}}}),
             ),
             jira_handler=_count_handler(
                 counts, "jira", lambda: httpx.Response(201, json={"key": "SEC-3"})
@@ -280,9 +267,7 @@ class TestPerTenantOptOut:
             linear_handler=_count_handler(
                 counts,
                 "linear",
-                lambda: httpx.Response(
-                    200, json={"data": {"issueCreate": {"success": True}}}
-                ),
+                lambda: httpx.Response(200, json={"data": {"issueCreate": {"success": True}}}),
             ),
             jira_handler=_count_handler(
                 counts, "jira", lambda: httpx.Response(201, json={"key": "SEC-4"})
@@ -291,9 +276,7 @@ class TestPerTenantOptOut:
         disp = NotificationDispatcher(
             adapters=[slack, linear, jira],
             enabled=True,
-            per_tenant_disabled_adapters={
-                "tenant-alpha": frozenset({"jira", "linear"})
-            },
+            per_tenant_disabled_adapters={"tenant-alpha": frozenset({"jira", "linear"})},
         )
         for name in ("slack", "linear", "jira"):
             disp.set_adapter_enabled(name, True)

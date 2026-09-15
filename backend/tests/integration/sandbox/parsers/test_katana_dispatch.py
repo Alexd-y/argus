@@ -35,7 +35,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -48,7 +47,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.katana_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture — every test starts from the default surface.
@@ -154,9 +152,7 @@ def test_default_per_tool_registry_includes_all_crawler_json_tools() -> None:
 
 
 @pytest.mark.parametrize("tool_id", CRAWLER_JSON_TOOL_IDS)
-def test_dispatch_routes_each_crawler_tool_to_katana_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_crawler_tool_to_katana_parser(tool_id: str, tmp_path: Path) -> None:
     """Same URL set routed via every JSON-crawler tool_id yields three findings."""
     urls = [
         "https://target.example/admin",
@@ -184,9 +180,7 @@ def test_dispatch_routes_each_crawler_tool_to_katana_parser(
 
 
 @pytest.mark.parametrize("tool_id", CRAWLER_JSON_TOOL_IDS)
-def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_writes_shared_sidecar_with_correct_tool_id(tool_id: str, tmp_path: Path) -> None:
     """Every crawler tool_id triggers the shared ``katana_findings.jsonl``."""
     urls = ["https://target/x", "https://target/y"]
     stdout = _build_stdout(tool_id, urls)
@@ -218,9 +212,7 @@ def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
 
 
 @pytest.mark.parametrize("tool_id", CRAWLER_JSON_TOOL_IDS)
-def test_dispatch_attaches_consistent_owasp_wstg_hints(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_attaches_consistent_owasp_wstg_hints(tool_id: str, tmp_path: Path) -> None:
     """All §4.6 JSON tools share the WSTG-INFO-06/07 hint set."""
     stdout = _build_stdout(tool_id, ["https://target/page"])
     findings = dispatch_parse(
@@ -319,9 +311,7 @@ def test_dispatch_routing_is_deterministic_across_crawler_family(
         )
         sidecar = artifacts_dir / EVIDENCE_SIDECAR_NAME
         records: list[dict[str, Any]] = [
-            json.loads(line)
-            for line in sidecar.read_text(encoding="utf-8").splitlines()
-            if line
+            json.loads(line) for line in sidecar.read_text(encoding="utf-8").splitlines() if line
         ]
         endpoints = tuple(rec["endpoint"] for rec in records)
         methods = tuple(rec["method"] for rec in records)
@@ -329,6 +319,5 @@ def test_dispatch_routing_is_deterministic_across_crawler_family(
 
     first = fingerprints[0]
     assert all(snap == first for snap in fingerprints[1:]), (
-        f"dispatch routing is non-deterministic across the crawler family: "
-        f"{fingerprints}"
+        f"dispatch routing is non-deterministic across the crawler family: {fingerprints}"
     )

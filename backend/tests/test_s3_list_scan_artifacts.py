@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.core.config import settings
 from src.storage.s3 import list_scan_artifacts
 
@@ -16,7 +15,10 @@ def mock_s3_client() -> MagicMock:
 
 class TestListScanArtifacts:
     def test_phase_raw_uses_tenant_scan_phase_raw_prefix(self, mock_s3_client: MagicMock) -> None:
-        mock_s3_client.list_objects_v2.return_value = {"Contents": [], "IsTruncated": False}
+        mock_s3_client.list_objects_v2.return_value = {
+            "Contents": [],
+            "IsTruncated": False,
+        }
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
             out = list_scan_artifacts(
                 "tenant-a",

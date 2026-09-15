@@ -134,7 +134,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
@@ -235,7 +235,7 @@ _SEVERITY_RANK: Final[dict[str, int]] = {
 
 # Stable dedup key shape: ``(kind, *rest)``. Module-level alias keeps
 # the dedup loop signature short.
-DedupKey: TypeAlias = tuple[str, ...]
+type DedupKey = tuple[str, ...]
 
 
 # CVE-id pattern (NIST CVE schema). Matches both the legacy 4-digit
@@ -691,9 +691,7 @@ def _extract_service(port_el: Any) -> dict[str, Any]:
     service_el = port_el.find("service")
     if service_el is None:
         return {}
-    cpe_list = [
-        cpe_el.text or "" for cpe_el in service_el.findall("cpe") if cpe_el.text
-    ]
+    cpe_list = [cpe_el.text or "" for cpe_el in service_el.findall("cpe") if cpe_el.text]
     return {
         "name": service_el.get("name") or "",
         "product": service_el.get("product") or "",
@@ -713,9 +711,7 @@ def _build_port_record(
     service: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the per-port INFO record."""
-    has_banner = bool(
-        service.get("name") or service.get("product") or service.get("version")
-    )
+    has_banner = bool(service.get("name") or service.get("product") or service.get("version"))
     confidence = ConfidenceLevel.LIKELY if has_banner else ConfidenceLevel.SUSPECTED
     owasp_wstg: list[str] = ["WSTG-INFO-04"]
     if has_banner:

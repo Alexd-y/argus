@@ -49,13 +49,12 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
-
 from scripts._verapdf_assert import (
     _AllowEntry,
-    _RuleOffence,
     _collect_offences,
     _load_report,
     _parse_allow_list,
+    _RuleOffence,
     main,
 )
 
@@ -114,16 +113,12 @@ def test_parse_allow_list_single_csv_entry_parsed() -> None:
     raw = [f"6.1.5-3:{_TICKET_BASE}/ARG-099"]
     result = _parse_allow_list(raw)
 
-    assert result == [
-        _AllowEntry(rule_id="6.1.5-3", ticket_url=f"{_TICKET_BASE}/ARG-099")
-    ]
+    assert result == [_AllowEntry(rule_id="6.1.5-3", ticket_url=f"{_TICKET_BASE}/ARG-099")]
 
 
 def test_parse_allow_list_csv_split_on_single_arg() -> None:
     """Comma-separated entries inside ONE ``--allow-warnings`` arg ⇒ all parsed."""
-    raw = [
-        f"6.1.5-3:{_TICKET_BASE}/ARG-099,6.2.7-1:{_TICKET_BASE}/ARG-100"
-    ]
+    raw = [f"6.1.5-3:{_TICKET_BASE}/ARG-099,6.2.7-1:{_TICKET_BASE}/ARG-100"]
     result = _parse_allow_list(raw)
 
     assert result == [
@@ -312,7 +307,7 @@ def test_load_report_task_exception_forwards_verapdf_message(
     """
     p = _write_xml(
         tmp_path,
-        '<report><jobs><job><item><name>x.pdf</name></item>'
+        "<report><jobs><job><item><name>x.pdf</name></item>"
         '<taskException type="PARSE" isExecuted="true" isSuccess="false">'
         "<exceptionMessage>boom: encrypted PDF</exceptionMessage>"
         "</taskException></job></jobs></report>",
@@ -343,10 +338,7 @@ def test_load_report_real_noncompliant_returns_inner_validation_report() -> None
     assert inner.tag == "validationReport"
     assert inner.attrib.get("isCompliant") == "false"
     # The real fixture has 4 failed rules (matches the live capture).
-    failed_rules = [
-        r for r in inner.iter("rule")
-        if r.attrib.get("status") == "failed"
-    ]
+    failed_rules = [r for r in inner.iter("rule") if r.attrib.get("status") == "failed"]
     assert len(failed_rules) == 4
 
 
@@ -420,9 +412,7 @@ def test_collect_offences_real_warning_allowlisted_is_silent() -> None:
     """Real warning fixture + rule on allow-list ⇒ no offence."""
     inner = _load_real_validation_report("verapdf_real_warning.xml")
 
-    offences = _collect_offences(
-        inner, frozenset({"6.1.5-3"}), strict_warnings=True
-    )
+    offences = _collect_offences(inner, frozenset({"6.1.5-3"}), strict_warnings=True)
 
     assert offences == []
 
@@ -459,7 +449,7 @@ def test_collect_offences_unknown_status_surfaces_as_unknown_offence() -> None:
     the offence path is exercised end-to-end through the same loader.
     """
     inner = _root(
-        "<report><jobs><job><validationReport isCompliant=\"true\">"
+        '<report><jobs><job><validationReport isCompliant="true">'
         "<details>"
         '<rule specification="ISO 19005-2:2011" clause="9.9" '
         'testNumber="1" status="skipped" failedChecks="0"/>'
@@ -489,9 +479,7 @@ def test_collect_offences_mixed_failed_and_warnings() -> None:
         "</details></validationReport></job></jobs></report>"
     )
 
-    offences = _collect_offences(
-        inner, frozenset({"WARN-A-1"}), strict_warnings=True
-    )
+    offences = _collect_offences(inner, frozenset({"WARN-A-1"}), strict_warnings=True)
 
     assert len(offences) == 3
     assert sorted(o.status for o in offences) == ["failed", "failed", "warning"]
@@ -528,9 +516,7 @@ def test_main_real_noncompliant_returns_one(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Real noncompliant fixture ⇒ exit 1 + 4 failed annotations."""
-    code = main(
-        ["--report", str(_real_fixture("verapdf_real_noncompliant.xml"))]
-    )
+    code = main(["--report", str(_real_fixture("verapdf_real_noncompliant.xml"))])
     captured = capsys.readouterr()
 
     assert code == 1
@@ -592,9 +578,7 @@ def test_main_real_parse_failure_returns_one(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Real parse-failure fixture ⇒ exit 1 with verapdf's message forwarded."""
-    code = main(
-        ["--report", str(_real_fixture("verapdf_real_parse_failure.xml"))]
-    )
+    code = main(["--report", str(_real_fixture("verapdf_real_parse_failure.xml"))])
     captured = capsys.readouterr()
 
     assert code == 1

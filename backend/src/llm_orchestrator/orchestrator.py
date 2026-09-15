@@ -85,9 +85,7 @@ class OrchestratorPlanRejected(OrchestratorError):
 
     def __init__(self, verdict: CriticVerdict) -> None:
         self.verdict = verdict
-        super().__init__(
-            "validation plan rejected by Critic: " + "; ".join(verdict.reasons)
-        )
+        super().__init__("validation plan rejected by Critic: " + "; ".join(verdict.reasons))
 
 
 class OrchestratorBudgetExceeded(OrchestratorError):
@@ -121,9 +119,7 @@ class OrchestratorProviderFailure(OrchestratorError):
     def __init__(self, agent_role: AgentRole, attempt_log: AttemptLog) -> None:
         self.agent_role = agent_role
         self.attempt_log = attempt_log
-        super().__init__(
-            f"{agent_role.value} agent failed: provider unavailable / errored"
-        )
+        super().__init__(f"{agent_role.value} agent failed: provider unavailable / errored")
 
 
 # ---------------------------------------------------------------------------
@@ -346,8 +342,7 @@ class Orchestrator:
                 self._audit_budget_exhausted(context, agent_role, attempt_log)
                 raise OrchestratorBudgetExceeded(agent_role, attempt_log)
             case (
-                RetryAbortReason.MAX_RETRIES_EXHAUSTED
-                | RetryAbortReason.UNRECOVERABLE_SCHEMA_ERROR
+                RetryAbortReason.MAX_RETRIES_EXHAUSTED | RetryAbortReason.UNRECOVERABLE_SCHEMA_ERROR
             ):
                 raise OrchestratorParseFailure(agent_role, attempt_log)
             case RetryAbortReason.PROVIDER_ERROR:
@@ -377,7 +372,7 @@ class Orchestrator:
                     "reason_count": len(verdict.reasons),
                 },
             )
-        except Exception:  # noqa: BLE001 — audit failures must never crash the orchestrator
+        except Exception:
             _logger.exception(
                 "orchestrator.audit.critic_emit_failed",
                 extra={
@@ -407,12 +402,11 @@ class Orchestrator:
                     "phase": context.phase.value,
                     "total_usd": attempt_log.total_usd_cost,
                     "total_tokens": (
-                        attempt_log.total_prompt_tokens
-                        + attempt_log.total_completion_tokens
+                        attempt_log.total_prompt_tokens + attempt_log.total_completion_tokens
                     ),
                 },
             )
-        except Exception:  # noqa: BLE001 — audit failures must never crash the orchestrator
+        except Exception:
             _logger.exception(
                 "orchestrator.audit.budget_emit_failed",
                 extra={

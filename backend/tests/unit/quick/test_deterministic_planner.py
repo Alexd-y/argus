@@ -112,7 +112,13 @@ def _graph_with_denylist_bait() -> CapabilityGraph:
             _web_node("web.application.cve.known_product", tools=("nuclei",)),
             _web_node(
                 "web.application.auth.session",
-                tools=("sqlmap", "hydra", "clusterbomb", "ffuf-wordlist-full", "nuclei"),
+                tools=(
+                    "sqlmap",
+                    "hydra",
+                    "clusterbomb",
+                    "ffuf-wordlist-full",
+                    "nuclei",
+                ),
             ),
             _web_node(
                 "linux.postex.persist",
@@ -153,24 +159,24 @@ def _registry_with_http_template() -> NucleiTemplateRegistry:
 
 
 def _request(**overrides) -> QuickPlannerRequest:
-    base = dict(
-        scan_id=_SCAN_ID,
-        config=_config(),
-        budget=_budget(),
-        deadline_at=_DEADLINE,
-        fingerprints=(_https_fingerprint(),),
-        targets=(
+    base = {
+        "scan_id": _SCAN_ID,
+        "config": _config(),
+        "budget": _budget(),
+        "deadline_at": _DEADLINE,
+        "fingerprints": (_https_fingerprint(),),
+        "targets": (
             QuickPlannerTarget(
                 target_ref=_TARGET,
                 asset_id=_ASSET_ID,
                 in_scope=True,
             ),
         ),
-        catalog_versions=(("tools", "v1"), ("payloads", "v1")),
-        oast_available=False,
-        headless_signal=False,
-        asset_criticality=0.5,
-    )
+        "catalog_versions": (("tools", "v1"), ("payloads", "v1")),
+        "oast_available": False,
+        "headless_signal": False,
+        "asset_criticality": 0.5,
+    }
     base.update(overrides)
     return QuickPlannerRequest(**base)
 
@@ -210,12 +216,9 @@ def test_out_of_scope_flag_yields_zero_network_tasks() -> None:
     plan = _planner().plan(_request(scope_allowed=False))
     assert plan.tasks == ()
     assert any(
-        f"scope={QuickDisallowedReason.OUT_OF_SCOPE.value}" in item
-        for item in plan.assumptions
+        f"scope={QuickDisallowedReason.OUT_OF_SCOPE.value}" in item for item in plan.assumptions
     )
-    assert all(
-        record.state is QuickCoverageState.NOT_SCHEDULED for record in plan.coverage_intent
-    )
+    assert all(record.state is QuickCoverageState.NOT_SCHEDULED for record in plan.coverage_intent)
 
 
 def test_all_targets_out_of_scope_yields_zero_network_tasks() -> None:

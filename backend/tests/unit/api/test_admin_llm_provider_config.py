@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.core.config import settings
 from src.db.session import get_db
+from starlette.testclient import TestClient
 
 _ADMIN_KEY = "secret-admin-key"
 _ADMIN_HEADERS = {"X-Admin-Key": _ADMIN_KEY}
@@ -59,7 +58,7 @@ def test_list_providers_masks_config_and_shows_last4(
         "model_fallback_chain": ["gpt-4o-mini", "gpt-4o"],
         "note": "ok",
     }
-    row.created_at = datetime.now(timezone.utc)
+    row.created_at = datetime.now(UTC)
 
     r_exec = MagicMock()
     r_exec.scalars.return_value.all.return_value = [row]
@@ -108,7 +107,7 @@ def test_list_providers_masks_secret_like_strings_under_benign_keys(
         "note": f"prefix {embedded} suffix",
         "model": "gpt-4o-mini",
     }
-    row.created_at = datetime.now(timezone.utc)
+    row.created_at = datetime.now(UTC)
 
     r_exec = MagicMock()
     r_exec.scalars.return_value.all.return_value = [row]
@@ -151,7 +150,7 @@ def test_patch_provider_unknown_config_key_422(
             self.provider_key = "openai"
             self.enabled = True
             self.config: dict[str, object] = {"model": "gpt-4o-mini"}
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     prov = FakeProv()
     session = AsyncMock()
@@ -198,7 +197,7 @@ def test_patch_provider_nested_model_fallback_chain_respects_length_limit(
             self.provider_key = "openai"
             self.enabled = True
             self.config: dict[str, object] = {}
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     prov = FakeProv()
     session = AsyncMock()
@@ -245,7 +244,7 @@ def test_patch_provider_never_echoes_plain_api_key(
                 "api_key": "oldoldoldold",
                 "model_fallback_chain": ["x"],
             }
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     prov = FakeProv()
 
@@ -301,7 +300,7 @@ def test_patch_updates_last4_get_list_still_masks(
                 "api_key": "sk-initialkeyvalueoldoldoldold",
                 "model_fallback_chain": ["gpt-4o-mini"],
             }
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     prov = FakeProv()
     exec_calls = 0

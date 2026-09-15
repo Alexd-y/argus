@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.contracts.project import WorkbenchProjectCreate
 from src.web_workbench.projects.repository import WorkbenchProjectRepository
@@ -215,11 +214,11 @@ async def test_no_raw_secret_columns(async_engine: AsyncEngine) -> None:
     async with async_engine.connect() as conn:
         for table in ("wb_session_macros", "wb_session_principals"):
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns " "WHERE table_name = :t"),
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
                 {"t": table},
             )
             columns = {row[0].lower() for row in result.fetchall()}
             for forbidden in _FORBIDDEN_COLUMNS:
-                assert not any(
-                    forbidden in c for c in columns
-                ), f"{table} exposes a raw-secret column matching {forbidden!r}: {columns}"
+                assert not any(forbidden in c for c in columns), (
+                    f"{table} exposes a raw-secret column matching {forbidden!r}: {columns}"
+                )

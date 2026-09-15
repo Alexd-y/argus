@@ -202,8 +202,7 @@ def _emit(
         finding = _build_finding()
         evidence_blob = _build_evidence(record, tool_id=tool_id)
         key = stable_hash_12(
-            f"{record.get('host', '')}::{record.get('exit_code')}::"
-            f"{record.get('last_command', '')}"
+            f"{record.get('host', '')}::{record.get('exit_code')}::{record.get('last_command', '')}"
         )
         keyed.append((key, finding, evidence_blob))
         if len(keyed) >= _MAX_FINDINGS:

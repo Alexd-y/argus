@@ -14,12 +14,13 @@ from __future__ import annotations
 import asyncio
 
 from mcp.server.fastmcp import FastMCP
-
 from src.mcp.prompts import register_all
 from src.mcp.prompts.remediation_advisor import _render_remediation_block
 from src.mcp.prompts.severity_normalizer import register as register_normalizer
 from src.mcp.prompts.vulnerability_explainer import (
     _render_finding_block,
+)
+from src.mcp.prompts.vulnerability_explainer import (
     register as register_explainer,
 )
 

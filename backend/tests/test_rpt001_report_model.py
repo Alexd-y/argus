@@ -110,9 +110,7 @@ class TestReportRpt001Migration009:
         assert "requested_formats" in content
         assert 'server_default="midgard"' in content
         assert 'server_default="ready"' in content
-        assert (
-            'op.alter_column(REPORTS_TABLE, "tier", server_default=None)' not in content
-        )
+        assert 'op.alter_column(REPORTS_TABLE, "tier", server_default=None)' not in content
         assert (
             'op.alter_column(REPORTS_TABLE, "generation_status", server_default=None)'
             not in content

@@ -438,7 +438,10 @@ class PlaywrightAdapter:
             elapsed = (time.monotonic() - start) * 1000
             logger.info(
                 "browser_pool_contended",
-                extra={"event": "browser_pool_contended", "session": self._session.session_id},
+                extra={
+                    "event": "browser_pool_contended",
+                    "session": self._session.session_id,
+                },
             )
             return BrowserResponse(
                 success=False, error="browser_pool_contended", elapsed_ms=elapsed
@@ -469,10 +472,10 @@ def export_auth_context(response: BrowserResponse) -> dict[str, Any]:
 
 
 __all__ = [
+    "MCP_BROWSER_TOOLS",
     "BrowserAction",
     "BrowserRequest",
     "BrowserResponse",
-    "MCP_BROWSER_TOOLS",
     "PlaywrightAdapter",
     "PlaywrightSession",
     "export_auth_context",
@@ -512,7 +515,9 @@ MCP_BROWSER_TOOLS: dict[str, dict[str, str]] = {
 }
 
 
-async def register_browser_tools(adapter: PlaywrightAdapter | None = None) -> dict[str, Any]:
+async def register_browser_tools(
+    adapter: PlaywrightAdapter | None = None,
+) -> dict[str, Any]:
     """Register browser MCP tools with their handlers.
 
     Returns a dict of tool_name -> {description, handler_function} that
@@ -538,7 +543,10 @@ async def register_browser_tools(adapter: PlaywrightAdapter | None = None) -> di
             async def _click(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.click(kwargs.get("selector", ""))
 
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _click}
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _click,
+            }
         elif handler_name == "type_text":
 
             async def _type_text(**kwargs: Any) -> dict[str, Any]:

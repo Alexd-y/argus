@@ -8,11 +8,10 @@ from typing import Any
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications import (
+    SLACK_WEBHOOK_URL_ENV,
     AdapterResult,
     NotificationSeverity,
-    SLACK_WEBHOOK_URL_ENV,
     SlackNotifier,
     build_slack_payload,
 )
@@ -20,6 +19,7 @@ from src.mcp.services.notifications._base import (
     DEFAULT_BACKOFF_BASE_SECONDS,
     CircuitBreaker,
 )
+
 from tests.unit.mcp.services.notifications.conftest import (
     collect_responses,
     make_event,
@@ -81,16 +81,14 @@ class TestSlackPayload:
         ev = make_event(evidence_url="https://example.com/evidence/1")
         body = build_slack_payload(ev)
         assert any(
-            "View evidence" in str(blk.get("text", {}).get("text", ""))
-            for blk in body["blocks"]
+            "View evidence" in str(blk.get("text", {}).get("text", "")) for blk in body["blocks"]
         )
 
     def test_evidence_link_omitted_when_absent(self) -> None:
         ev = make_event(evidence_url=None)
         body = build_slack_payload(ev)
         assert not any(
-            "View evidence" in str(blk.get("text", {}).get("text", ""))
-            for blk in body["blocks"]
+            "View evidence" in str(blk.get("text", {}).get("text", "")) for blk in body["blocks"]
         )
 
     def test_approval_event_includes_action_buttons(self) -> None:
@@ -119,9 +117,7 @@ class TestSlackPayload:
         ev = make_event(summary="B" * 2_000)
         body = build_slack_payload(ev)
         section = next(
-            blk
-            for blk in body["blocks"]
-            if blk.get("type") == "section" and "text" in blk
+            blk for blk in body["blocks"] if blk.get("type") == "section" and "text" in blk
         )
         assert len(section["text"]["text"]) <= 2_900
 
@@ -277,9 +273,7 @@ class TestSlackIdempotency:
 
 
 class TestSlackDisabled:
-    def test_missing_url_skips_with_reason(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_url_skips_with_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(SLACK_WEBHOOK_URL_ENV, raising=False)
         slack = SlackNotifier(
             webhook_url=None,
@@ -314,7 +308,7 @@ class TestSlackSecretHygiene:
         slack = _slack(handler=_handler)
         ev = make_event()
         asyncio.run(slack.send_with_retry(ev, tenant_id=ev.tenant_id))
-        assert "authorization" not in {k.lower() for k in captured["headers"].keys()}
+        assert "authorization" not in {k.lower() for k in captured["headers"]}
 
 
 class TestSlackBackoffSchedule:

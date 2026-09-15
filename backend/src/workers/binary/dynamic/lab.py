@@ -43,7 +43,9 @@ async def run_dynamic_analysis(
 ) -> DynamicResult:
     """Execute binary in isolated sandbox, capture runtime behaviour."""
     result = DynamicResult(
-        id=str(uuid.uuid4()), sample_id=sample_path, tenant_id=tenant_id,
+        id=str(uuid.uuid4()),
+        sample_id=sample_path,
+        tenant_id=tenant_id,
     )
 
     if not Path(sample_path).exists():
@@ -54,12 +56,15 @@ async def run_dynamic_analysis(
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "timeout", str(timeout_seconds), sample_path,
+            "timeout",
+            str(timeout_seconds),
+            sample_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_seconds + 5,
+            proc.communicate(),
+            timeout=timeout_seconds + 5,
         )
         result.exit_code = proc.returncode or 0
         elapsed = int((asyncio.get_event_loop().time() - start) * 1000)
@@ -82,10 +87,16 @@ def _classify_dynamic_output(output: str, exit_code: int) -> str:
     """Heuristic classification based on runtime behaviour."""
     output_lower = output.lower()
     malicious_indicators = [
-        "reverse shell", "backdoor", "exploit successful",
-        "password found", "hash dumped", "token stolen",
-        "persistence installed", "c2 connected",
-        "data exfiltrated", "privilege escalated",
+        "reverse shell",
+        "backdoor",
+        "exploit successful",
+        "password found",
+        "hash dumped",
+        "token stolen",
+        "persistence installed",
+        "c2 connected",
+        "data exfiltrated",
+        "privilege escalated",
     ]
     for ind in malicious_indicators:
         if ind in output_lower:
@@ -99,6 +110,7 @@ def _classify_dynamic_output(output: str, exit_code: int) -> str:
 
 
 # === Custody: chain-of-custody and quarantine ===
+
 
 @dataclass
 class CustodyRecord:
@@ -115,12 +127,17 @@ class CustodyRecord:
 
 
 async def quarantine_sample(
-    file_path: str, data: bytes | None = None,
-    *, tenant_id: str = "", submitted_by: str = "",
+    file_path: str,
+    data: bytes | None = None,
+    *,
+    tenant_id: str = "",
+    submitted_by: str = "",
 ) -> CustodyRecord:
     """Quarantine a sample and establish chain-of-custody."""
     record = CustodyRecord(
-        id=str(uuid.uuid4()), sample_id=file_path, tenant_id=tenant_id,
+        id=str(uuid.uuid4()),
+        sample_id=file_path,
+        tenant_id=tenant_id,
         submitted_by=submitted_by,
         submitted_at=datetime.now(UTC).isoformat(),
     )
@@ -133,41 +150,57 @@ async def quarantine_sample(
             return record
 
     record.hash_before = hashlib.sha256(data).hexdigest()
-    record.custody_chain.append({
-        "action": "quarantine", "by": submitted_by,
-        "at": datetime.now(UTC).isoformat(),
-        "hash": record.hash_before,
-    })
+    record.custody_chain.append(
+        {
+            "action": "quarantine",
+            "by": submitted_by,
+            "at": datetime.now(UTC).isoformat(),
+            "hash": record.hash_before,
+        }
+    )
     record.status = "quarantined"
     return record
 
 
 def request_export_approval(
-    record: CustodyRecord, approver_id: str,
+    record: CustodyRecord,
+    approver_id: str,
 ) -> bool:
     """Dual-approval check for exporting indicators or unpacked payloads.
 
     Pure synchronous custody-chain logic (no I/O); callers invoke it directly.
     """
-    existing = [e for e in record.custody_chain if e.get("action") == "approve" and e.get("by") == approver_id]
+    existing = [
+        e
+        for e in record.custody_chain
+        if e.get("action") == "approve" and e.get("by") == approver_id
+    ]
     if existing:
-        record.custody_chain.append({
-            "action": "duplicate_approval_rejected",
-            "by": approver_id,
-            "at": datetime.now(UTC).isoformat(),
-        })
+        record.custody_chain.append(
+            {
+                "action": "duplicate_approval_rejected",
+                "by": approver_id,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
         return False
 
     approvals = [e for e in record.custody_chain if e.get("action") == "approve"]
     if len(approvals) < 1:
-        record.custody_chain.append({
-            "action": "approve", "by": approver_id,
-            "at": datetime.now(UTC).isoformat(),
-        })
+        record.custody_chain.append(
+            {
+                "action": "approve",
+                "by": approver_id,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
         return False  # Need second approval
 
-    record.custody_chain.append({
-        "action": "export_approved", "by": approver_id,
-        "at": datetime.now(UTC).isoformat(),
-    })
+    record.custody_chain.append(
+        {
+            "action": "export_approved",
+            "by": approver_id,
+            "at": datetime.now(UTC).isoformat(),
+        }
+    )
     return True

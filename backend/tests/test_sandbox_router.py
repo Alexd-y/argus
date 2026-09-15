@@ -2,9 +2,8 @@
 
 from unittest.mock import patch
 
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 
 class TestSandboxExecute:
@@ -119,7 +118,10 @@ class TestSandboxPython:
         ):
             response = client.post(
                 "/api/v1/sandbox/python",
-                json={"code": "import subprocess\nsubprocess.run(['echo','x'])", "timeout_sec": 10},
+                json={
+                    "code": "import subprocess\nsubprocess.run(['echo','x'])",
+                    "timeout_sec": 10,
+                },
             )
         assert response.status_code == 200
         body = response.json()

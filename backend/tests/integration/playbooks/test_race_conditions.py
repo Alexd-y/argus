@@ -18,7 +18,7 @@ from src.playbooks.schema import HttpMethod, InputKind, Playbook
 from src.policy.engagement_authorization import ActionClass
 
 
-def _make_race_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_race_vuln() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"redemptions": 0}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
@@ -33,7 +33,7 @@ def _make_race_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]
     return _r
 
 
-def _make_race_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_race_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"redemptions": 0, "used": False}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
@@ -55,12 +55,12 @@ def test_race_planning_routes_by_approval(
     plan_pb: Callable[..., object],
 ) -> None:
     pb = get_playbook("race.single-use-token")
-    kwargs = dict(
-        method=HttpMethod.POST,
-        path="/api/v1/redeem",
-        input_kinds=frozenset({InputKind.BODY_JSON}),
-        principals=frozenset({"attacker"}),
-    )
+    kwargs = {
+        "method": HttpMethod.POST,
+        "path": "/api/v1/redeem",
+        "input_kinds": frozenset({InputKind.BODY_JSON}),
+        "principals": frozenset({"attacker"}),
+    }
     assert plan_pb(pb, **kwargs).status is ScenarioStatus.WAITING_APPROVAL
     assert plan_pb(pb, is_preauthorized=lambda _pb: True, **kwargs).status is ScenarioStatus.PLANNED
 

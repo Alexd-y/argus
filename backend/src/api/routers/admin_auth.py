@@ -359,9 +359,7 @@ async def admin_login(
         )
 
     try:
-        principal = await verify_credentials(
-            db, subject=body.subject, password=body.password
-        )
+        principal = await verify_credentials(db, subject=body.subject, password=body.password)
     except SQLAlchemyError:
         logger.exception(
             "admin_login_handler_db_error",
@@ -425,9 +423,7 @@ async def admin_logout(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=ADMIN_SESSION_COOKIE)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=ADMIN_SESSION_COOKIE)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> LogoutResponse:
     """Revoke the active session (if any) and unconditionally clear the cookie.
@@ -471,9 +467,7 @@ async def admin_logout(
 async def admin_whoami(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=ADMIN_SESSION_COOKIE)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=ADMIN_SESSION_COOKIE)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> WhoAmIResponse:
     """Resolve the active session from cookie OR ``Authorization: Bearer``.

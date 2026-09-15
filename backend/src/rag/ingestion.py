@@ -49,7 +49,7 @@ def deterministic_embed(text: str, dims: int = EMBEDDING_DIMS) -> list[float]:
         for offset in range(0, len(digest) - 3, 4):
             if len(vec) >= dims:
                 break
-            raw = struct.unpack(">f", digest[offset:offset + 4])[0]
+            raw = struct.unpack(">f", digest[offset : offset + 4])[0]
             if math.isnan(raw):
                 raw = 0.0
             vec.append(raw)

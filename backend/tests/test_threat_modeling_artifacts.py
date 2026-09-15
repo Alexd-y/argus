@@ -4,6 +4,14 @@ from __future__ import annotations
 
 import json
 
+from src.recon.threat_modeling.artifacts import (
+    generate_ai_reasoning_trace_json,
+    generate_all_artifacts,
+    generate_critical_assets_csv,
+    generate_mcp_trace_json,
+    generate_stage2_inputs_json,
+    generate_threat_scenarios_csv,
+)
 from src.schemas.ai.common import PriorityLevel
 from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
@@ -17,14 +25,6 @@ from src.schemas.threat_modeling.schemas import (
     ThreatModelInputBundle,
     ThreatScenario,
     TrustBoundary,
-)
-from src.recon.threat_modeling.artifacts import (
-    generate_ai_reasoning_trace_json,
-    generate_all_artifacts,
-    generate_critical_assets_csv,
-    generate_mcp_trace_json,
-    generate_stage2_inputs_json,
-    generate_threat_scenarios_csv,
 )
 
 
@@ -42,7 +42,12 @@ def _minimal_bundle() -> ThreatModelInputBundle:
             AttackerProfile(id="ap1", name="Script kiddie", capability_level="low"),
         ],
         entry_points=[
-            EntryPoint(id="ep1", name="Login API", entry_type="api", host_or_component="api.example.com"),
+            EntryPoint(
+                id="ep1",
+                name="Login API",
+                entry_type="api",
+                host_or_component="api.example.com",
+            ),
         ],
         application_flows=[
             ApplicationFlow(id="af1", source="Client", sink="API", data_type="JSON"),
@@ -187,7 +192,9 @@ class TestGenerateAllArtifacts:
         bundle = _minimal_bundle()
         artifact = _minimal_artifact()
         ai_results = {
-            "report_summary": type("ReportSummaryOutput", (), {"executive_summary": "Summary for exec"})(),
+            "report_summary": type(
+                "ReportSummaryOutput", (), {"executive_summary": "Summary for exec"}
+            )(),
         }
         result = generate_all_artifacts(bundle, artifact, ai_results=ai_results)
         md = result["threat_model.md"]

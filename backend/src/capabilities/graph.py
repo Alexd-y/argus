@@ -676,9 +676,7 @@ class CapabilityGraph:
         selected_ids = {node.id for node in ordered}
         for node in ordered:
             prereq_ids = tuple(
-                item.id
-                for item in self.prerequisites(node.id)
-                if item.id in selected_ids
+                item.id for item in self.prerequisites(node.id) if item.id in selected_ids
             )
             step_completed = node.id in completed
             if record_eval:

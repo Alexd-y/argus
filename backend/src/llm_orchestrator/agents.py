@@ -130,9 +130,7 @@ class ReportNarrative(BaseModel):
 
     executive_summary: StrictStr = Field(min_length=1, max_length=4000)
     technical_summary: StrictStr = Field(min_length=1, max_length=8000)
-    recommendations: list[StrictStr] = Field(
-        default_factory=list, max_length=_MAX_RECOMMENDATIONS
-    )
+    recommendations: list[StrictStr] = Field(default_factory=list, max_length=_MAX_RECOMMENDATIONS)
 
 
 class AgentContext(BaseModel):
@@ -219,9 +217,7 @@ class BaseAgent(ABC):
         presence before returning to :meth:`run`.
         """
         prepared = self._prepare_kwargs(context, dict(kwargs))
-        request = self._build_request(
-            context, response_format=response_format, **prepared
-        )
+        request = self._build_request(context, response_format=response_format, **prepared)
         return await self._provider.call(request)
 
     async def run(
@@ -251,7 +247,7 @@ class BaseAgent(ABC):
 
     def _prepare_kwargs(
         self,
-        context: AgentContext,
+        context: AgentContext,  # noqa: ARG002 - agent hook signature
         kwargs: dict[str, object],
     ) -> dict[str, object]:
         """Inject context-derived defaults into ``kwargs`` before rendering.
@@ -278,9 +274,7 @@ class BaseAgent(ABC):
         **kwargs: Any,
     ) -> LLMRequest:
         format_hint = response_format or self._expected_response_format()
-        rendered_user_prompt = _render_template(
-            self._prompt.user_prompt_template, **kwargs
-        )
+        rendered_user_prompt = _render_template(self._prompt.user_prompt_template, **kwargs)
         return LLMRequest(
             correlation_id=context.correlation_id,
             model_id=self._prompt.default_model_id,
@@ -374,10 +368,7 @@ class PlannerAgent(BaseAgent):
         kwargs.setdefault(
             "previous_findings",
             json.dumps(
-                [
-                    f.model_dump(mode="json", exclude_none=True)
-                    for f in context.previous_findings
-                ],
+                [f.model_dump(mode="json", exclude_none=True) for f in context.previous_findings],
                 sort_keys=True,
                 ensure_ascii=False,
             ),
@@ -416,15 +407,14 @@ class CriticAgent(BaseAgent):
 
     def _prepare_kwargs(
         self,
-        context: AgentContext,
+        context: AgentContext,  # noqa: ARG002 - agent hook signature
         kwargs: dict[str, object],
     ) -> dict[str, object]:
         """Serialise ``plan_json`` + ``policy`` into the rendered template fields."""
         plan_json: object = kwargs.pop("plan_json", None)
         if plan_json is None:
             raise AgentConfigError(
-                "CriticAgent.run requires a 'plan_json' keyword argument "
-                "(serialised draft plan)"
+                "CriticAgent.run requires a 'plan_json' keyword argument (serialised draft plan)"
             )
         if isinstance(plan_json, BaseModel):
             plan_repr = plan_json.model_dump_json()
@@ -434,8 +424,7 @@ class CriticAgent(BaseAgent):
             plan_repr = plan_json
         else:
             raise AgentConfigError(
-                f"plan_json must be a Pydantic model, dict, or str; "
-                f"got {type(plan_json).__name__}"
+                f"plan_json must be a Pydantic model, dict, or str; got {type(plan_json).__name__}"
             )
         kwargs.setdefault("plan", plan_repr)
         kwargs.setdefault(
@@ -483,14 +472,10 @@ class VerifierAgent(BaseAgent):
         """Serialise ``tool_output`` and ``oast_evidence`` into the template."""
         tool_output: object = kwargs.pop("tool_output", None)
         if tool_output is None:
-            raise AgentConfigError(
-                "VerifierAgent.run requires a 'tool_output' keyword argument"
-            )
+            raise AgentConfigError("VerifierAgent.run requires a 'tool_output' keyword argument")
         oast_evidence = kwargs.pop("oast_evidence", None) or []
         if not isinstance(oast_evidence, list):
-            raise AgentConfigError(
-                "oast_evidence must be a list of OASTInteraction objects"
-            )
+            raise AgentConfigError("oast_evidence must be a list of OASTInteraction objects")
         oast_repr = [
             (
                 e.model_dump(mode="json", exclude_none=True)
@@ -585,14 +570,11 @@ class ReporterAgent(BaseAgent):
                 findings_payload.append(f)
             else:
                 raise AgentConfigError(
-                    "every finding must be a FindingDTO or dict; got "
-                    f"{type(f).__name__}"
+                    f"every finding must be a FindingDTO or dict; got {type(f).__name__}"
                 )
         kwargs.setdefault(
             "findings",
-            json.dumps(
-                findings_payload, sort_keys=True, ensure_ascii=False, default=str
-            ),
+            json.dumps(findings_payload, sort_keys=True, ensure_ascii=False, default=str),
         )
         return kwargs
 
@@ -638,15 +620,13 @@ class FixerAgent(BaseAgent):
 
     def _prepare_kwargs(
         self,
-        context: AgentContext,
+        context: AgentContext,  # noqa: ARG002 - agent hook signature
         kwargs: dict[str, object],
     ) -> dict[str, object]:
         """Validate that the three Fixer-specific placeholders were supplied."""
         for required in ("original_content", "schema_errors", "schema_ref"):
             if required not in kwargs:
-                raise AgentConfigError(
-                    f"FixerAgent.run requires a {required!r} keyword argument"
-                )
+                raise AgentConfigError(f"FixerAgent.run requires a {required!r} keyword argument")
         return kwargs
 
     async def run(

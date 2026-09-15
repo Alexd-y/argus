@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.quick import llm_routes as quick_llm_routes
 from src.quick.llm_routes import plan_with_ai
 from src.quick.llm_schemas import (
@@ -127,11 +126,7 @@ def _request(*, enable_ai: bool = True) -> QuickPlannerRequest:
                 protocol=FingerprintFact(value="https", confidence=1.0),
             ),
         ),
-        targets=(
-            QuickPlannerTarget(
-                target_ref=_TARGET, asset_id=_ASSET_ID, in_scope=True
-            ),
-        ),
+        targets=(QuickPlannerTarget(target_ref=_TARGET, asset_id=_ASSET_ID, in_scope=True),),
     )
 
 

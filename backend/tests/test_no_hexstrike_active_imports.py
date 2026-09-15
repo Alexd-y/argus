@@ -113,9 +113,7 @@ def _scan_for_forbidden_token() -> dict[str, list[int]]:
                 continue
 
             line_hits = [
-                i + 1
-                for i, line in enumerate(content.splitlines())
-                if needle in line.lower()
+                i + 1 for i, line in enumerate(content.splitlines()) if needle in line.lower()
             ]
             if line_hits:
                 hits[_normalize(path)] = line_hits
@@ -133,8 +131,7 @@ def test_no_hexstrike_in_active_source() -> None:
     hits = _scan_for_forbidden_token()
     if hits:
         formatted = "\n".join(
-            f"  {path}:{','.join(str(n) for n in lines)}"
-            for path, lines in sorted(hits.items())
+            f"  {path}:{','.join(str(n) for n in lines)}" for path, lines in sorted(hits.items())
         )
         pytest.fail(
             f"Forbidden token '{_FORBIDDEN_TOKEN}' found in active files:\n"

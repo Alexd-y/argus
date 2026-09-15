@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 
+from src.api.schemas import Finding
 from src.reports.data_collector import FindingRow, ScanReportData
 from src.reports.evidence_partition import (
     is_provable_from_raw,
     partition_findings,
     unconfirmed_reason,
 )
-from src.api.schemas import Finding
 from src.reports.generators import (
     _build_branded_pdf_context,
     _render_branded_pdf_html,
@@ -51,6 +51,7 @@ def _finding(**overrides: object) -> dict[str, object]:
 # --------------------------------------------------------------------------- #
 # Unit: the predicate and the reason text                                      #
 # --------------------------------------------------------------------------- #
+
 
 def test_validated_finding_is_provable() -> None:
     f = _finding(evidence_classification="validated")
@@ -106,6 +107,7 @@ def test_predicate_recomputes_when_classification_absent() -> None:
 # Fixtures for the integration tests                                           #
 # --------------------------------------------------------------------------- #
 
+
 def _provable_row(fid: str = "prov") -> FindingRow:
     return FindingRow(
         id=fid,
@@ -146,6 +148,7 @@ def _inference_row(fid: str = "inf") -> FindingRow:
 # --------------------------------------------------------------------------- #
 # Integration: no silent data loss + consistent split across formats           #
 # --------------------------------------------------------------------------- #
+
 
 def test_normalize_no_longer_drops_threat_model_inference() -> None:
     out = normalize_findings_for_report([_inference_row()])
@@ -225,9 +228,9 @@ def test_generate_markdown_valhalla_has_unconfirmed_section() -> None:
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
     report_data = build_report_data_from_scan_report(data, report_id="r1")
 
-    md = generate_markdown(
-        report_data, tier="valhalla", jinja_context={"tier": "valhalla"}
-    ).decode("utf-8")
+    md = generate_markdown(report_data, tier="valhalla", jinja_context={"tier": "valhalla"}).decode(
+        "utf-8"
+    )
     assert "## Unconfirmed Observations (require manual verification)" in md
     assert "privilege escalation" in md.lower()
 
@@ -238,9 +241,7 @@ def test_generate_csv_exposes_provability_columns() -> None:
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
     report_data = build_report_data_from_scan_report(data, report_id="r1")
 
-    csv_text = generate_csv(
-        report_data, jinja_context={"tier": "valhalla"}
-    ).decode("utf-8")
+    csv_text = generate_csv(report_data, jinja_context={"tier": "valhalla"}).decode("utf-8")
     assert "is_provable" in csv_text
     assert "unconfirmed_reason" in csv_text
 
@@ -248,6 +249,7 @@ def test_generate_csv_exposes_provability_columns() -> None:
 # --------------------------------------------------------------------------- #
 # Review follow-ups: ReportService path, offline context, HTML + PDF surfaces  #
 # --------------------------------------------------------------------------- #
+
 
 def _provable_finding() -> Finding:
     return Finding(

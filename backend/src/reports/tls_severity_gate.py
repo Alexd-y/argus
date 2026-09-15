@@ -74,7 +74,15 @@ def _blob(finding: dict[str, Any]) -> str:
     ]
     poc = finding.get("proof_of_concept")
     if isinstance(poc, dict):
-        for key in ("protocols", "ciphers", "protocol", "cipher", "vulnerabilities", "finding", "detail"):
+        for key in (
+            "protocols",
+            "ciphers",
+            "protocol",
+            "cipher",
+            "vulnerabilities",
+            "finding",
+            "detail",
+        ):
             val = poc.get(key)
             if val:
                 parts.append(str(val))

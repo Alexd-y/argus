@@ -11,7 +11,6 @@ from __future__ import annotations
 import sys
 
 import pytest
-
 from src.orchestration.auto_patch import _syntax_check_argv
 
 _TARGET = "/tmp/argus_patch_x/app.py"

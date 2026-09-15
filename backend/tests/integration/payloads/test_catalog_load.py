@@ -21,11 +21,9 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.payloads.encoders import ENCODER_NAMES
 from src.payloads.mutations import MUTATION_NAMES
 from src.payloads.registry import PayloadFamily, PayloadRegistry
-
 
 EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
     {
@@ -136,8 +134,7 @@ def loaded_registry(catalog_dir: Path) -> PayloadRegistry:
     registry = PayloadRegistry(payloads_dir=catalog_dir)
     summary = registry.load()
     assert summary.total >= len(EXPECTED_FAMILIES), (
-        f"catalog shrunk: expected at least {len(EXPECTED_FAMILIES)} families, "
-        f"got {summary.total}"
+        f"catalog shrunk: expected at least {len(EXPECTED_FAMILIES)} families, got {summary.total}"
     )
     return registry
 
@@ -165,26 +162,20 @@ def test_catalog_total_matches_expected(loaded_registry: PayloadRegistry) -> Non
 
 
 @pytest.mark.parametrize("family_id", sorted(EXPECTED_FAMILIES))
-def test_family_returns_pydantic_instance(
-    loaded_registry: PayloadRegistry, family_id: str
-) -> None:
+def test_family_returns_pydantic_instance(loaded_registry: PayloadRegistry, family_id: str) -> None:
     family = loaded_registry.get_family(family_id)
     assert isinstance(family, PayloadFamily)
     assert family.family_id == family_id
 
 
 @pytest.mark.parametrize("family_id", sorted(APPROVAL_REQUIRED))
-def test_approval_required_families(
-    loaded_registry: PayloadRegistry, family_id: str
-) -> None:
+def test_approval_required_families(loaded_registry: PayloadRegistry, family_id: str) -> None:
     family = loaded_registry.get_family(family_id)
     assert family.requires_approval is True
 
 
 @pytest.mark.parametrize("family_id", sorted(EXPECTED_FAMILIES - APPROVAL_REQUIRED))
-def test_non_approval_families(
-    loaded_registry: PayloadRegistry, family_id: str
-) -> None:
+def test_non_approval_families(loaded_registry: PayloadRegistry, family_id: str) -> None:
     family = loaded_registry.get_family(family_id)
     assert family.requires_approval is False
 
@@ -215,8 +206,7 @@ def test_family_uses_registered_encoders_only(
     for pipeline in family.encodings:
         for stage in pipeline.stages:
             assert stage in ENCODER_NAMES, (
-                f"{family_id} pipeline {pipeline.name!r} references unknown "
-                f"encoder stage {stage!r}"
+                f"{family_id} pipeline {pipeline.name!r} references unknown encoder stage {stage!r}"
             )
 
 

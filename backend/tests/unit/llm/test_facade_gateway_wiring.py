@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.core.config import settings
 from src.llm.gateway import (
     ProviderCallResult,
@@ -122,14 +121,14 @@ class TestFacadeAliasChangesProvider:
 
         async def fake_invoke(route, req, system_prompt=""):
             seen.append((route.alias, route.provider_id, route.model))
-            return ProviderCallResult(text=f"from-{route.provider_id}", input_tokens=1, output_tokens=1)
+            return ProviderCallResult(
+                text=f"from-{route.provider_id}", input_tokens=1, output_tokens=1
+            )
 
         gateway._invoke_provider = fake_invoke  # type: ignore[method-assign]
         monkeypatch.setattr("src.llm.facade.get_unified_llm_gateway", lambda: gateway)
 
-        text_a = await call_llm_unified(
-            "sys", "user", task=LLMTask.ORCHESTRATION, phase="recon"
-        )
+        text_a = await call_llm_unified("sys", "user", task=LLMTask.ORCHESTRATION, phase="recon")
         text_b = await call_llm_unified(
             "sys", "user", task=LLMTask.EXPLOIT_GENERATION, phase="exploitation"
         )
@@ -141,9 +140,7 @@ class TestFacadeAliasChangesProvider:
         assert (seen[0][1], seen[0][2]) != (seen[1][1], seen[1][2])
 
     @pytest.mark.asyncio
-    async def test_explicit_preferred_alias_overrides_task_map(
-        self, gateway_flag_on: None
-    ) -> None:
+    async def test_explicit_preferred_alias_overrides_task_map(self, gateway_flag_on: None) -> None:
         from src.llm.facade import call_llm_unified
 
         envelope = LlmResponseEnvelope(
@@ -172,9 +169,7 @@ class TestFacadeAliasChangesProvider:
 
 class TestFacadeLabModeWiring:
     @pytest.mark.asyncio
-    async def test_lab_execution_mode_forwarded_to_gateway(
-        self, gateway_flag_on: None
-    ) -> None:
+    async def test_lab_execution_mode_forwarded_to_gateway(self, gateway_flag_on: None) -> None:
         from src.llm.facade import call_llm_unified
 
         envelope = LlmResponseEnvelope(
@@ -228,9 +223,7 @@ class TestFacadeLabModeWiring:
 
 class TestFacadeFlagOffUnchanged:
     @pytest.mark.asyncio
-    async def test_flag_off_skips_gateway_for_analysis_task(
-        self, gateway_flag_off: None
-    ) -> None:
+    async def test_flag_off_skips_gateway_for_analysis_task(self, gateway_flag_off: None) -> None:
         from src.llm.facade import call_llm_unified
         from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
 
@@ -240,18 +233,20 @@ class TestFacadeFlagOffUnchanged:
 
         try:
             wrb._base_url = "http://wrb:8000/v1"
-            with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-                with patch(
+            with (
+                patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+                patch(
                     "src.llm.facade._call_via_whiterabbitneo",
                     new_callable=AsyncMock,
                     return_value="legacy",
-                ) as mock_wrb:
-                    result = await call_llm_unified(
-                        "sys",
-                        "user",
-                        task=LLMTask.THREAT_MODELING,
-                        execution_mode="lab_unrestricted",
-                    )
+                ) as mock_wrb,
+            ):
+                result = await call_llm_unified(
+                    "sys",
+                    "user",
+                    task=LLMTask.THREAT_MODELING,
+                    execution_mode="lab_unrestricted",
+                )
 
             assert result == "legacy"
             mock_gateway.generate.assert_not_called()

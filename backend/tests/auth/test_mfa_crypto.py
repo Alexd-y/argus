@@ -44,7 +44,6 @@ from typing import Final
 
 import pytest
 from cryptography.fernet import Fernet, MultiFernet
-
 from src.auth import _mfa_crypto
 from src.auth._mfa_crypto import (
     MfaCryptoError,
@@ -99,9 +98,7 @@ def test_encrypt_decrypt_roundtrip_single_key(
     assert _SENTINEL_PLAINTEXT not in caplog.text, (
         "happy-path encrypt/decrypt must NOT log the plaintext"
     )
-    assert only_key not in caplog.text, (
-        "happy-path encrypt/decrypt must NOT log the raw Fernet key"
-    )
+    assert only_key not in caplog.text, "happy-path encrypt/decrypt must NOT log the raw Fernet key"
 
 
 # ---------------------------------------------------------------------------
@@ -217,9 +214,11 @@ def test_encrypt_refuses_empty_plaintext(
     _ = mfa_keyring  # ensure a valid keyring is present so the refusal
     # path is the only thing the test exercises.
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(ValueError, match="empty TOTP secret"):
-            encrypt(blank)
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises(ValueError, match="empty TOTP secret"),
+    ):
+        encrypt(blank)
 
     # No log records should have been emitted on the crypto logger:
     # the refusal path raises before any logger call. This invariant
@@ -260,9 +259,11 @@ def test_malformed_keyring_fails_fast_with_index_only_log(
     bad_key_token = "not-base64-junk-totally-bogus-fernet-key-value"
     monkeypatch.setattr(settings, "admin_mfa_keyring", bad_key_token)
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises((ValueError, MfaCryptoError)):
-            encrypt(_SENTINEL_PLAINTEXT)
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises((ValueError, MfaCryptoError)),
+    ):
+        encrypt(_SENTINEL_PLAINTEXT)
 
     assert bad_key_token not in caplog.text, (
         "malformed-keyring log MUST NOT include the raw bad key value — "
@@ -276,13 +277,10 @@ def test_malformed_keyring_fails_fast_with_index_only_log(
         if r.name == _CRYPTO_LOGGER and "keyring" in r.getMessage().lower()
     ]
     assert keyring_records, (
-        "malformed keyring must produce at least one structured log "
-        "record on the crypto logger"
+        "malformed keyring must produce at least one structured log record on the crypto logger"
     )
 
-    has_index_field = any(
-        getattr(r, "key_index", None) is not None for r in keyring_records
-    )
+    has_index_field = any(getattr(r, "key_index", None) is not None for r in keyring_records)
     assert has_index_field, (
         "structured log for malformed keyring must carry a `key_index` "
         "field so the operator can locate the bad CSV column"
@@ -313,9 +311,7 @@ def test_current_key_id_stable_then_changes_on_rotation(
         "current_key_id must be deterministic for an unchanged keyring"
     )
     assert isinstance(fid_before_a, str)
-    assert len(fid_before_a) == 12, (
-        "current_key_id must return a 12-hex-char fingerprint"
-    )
+    assert len(fid_before_a) == 12, "current_key_id must return a 12-hex-char fingerprint"
 
     third_key = Fernet.generate_key().decode("ascii")
     rotated_csv = f"{third_key},{mfa_keyring.primary},{mfa_keyring.secondary}"
@@ -324,13 +320,9 @@ def test_current_key_id_stable_then_changes_on_rotation(
     with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
         fid_after = current_key_id()
 
-    assert fid_after != fid_before_a, (
-        "current_key_id MUST change after the primary key is rotated"
-    )
+    assert fid_after != fid_before_a, "current_key_id MUST change after the primary key is rotated"
     for forbidden in (third_key, mfa_keyring.primary, mfa_keyring.secondary):
-        assert forbidden not in caplog.text, (
-            "current_key_id must NOT log the raw keyring material"
-        )
+        assert forbidden not in caplog.text, "current_key_id must NOT log the raw keyring material"
 
 
 # ---------------------------------------------------------------------------
@@ -362,9 +354,8 @@ def test_decrypt_tampered_ciphertext_raises_without_leaking_bytes(
     tampered_bytes = bytes(tampered)
     assert tampered_bytes != pristine, "bit-flip must actually change the bytes"
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(MfaCryptoError):
-            decrypt(tampered_bytes)
+    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER), pytest.raises(MfaCryptoError):
+        decrypt(tampered_bytes)
 
     forbidden_fragments = [
         tampered_bytes,
@@ -397,9 +388,8 @@ def test_decrypt_refuses_empty_ciphertext(
     """``decrypt(b"")`` must surface :class:`MfaCryptoError` immediately."""
     _ = mfa_keyring
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(MfaCryptoError):
-            decrypt(b"")
+    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER), pytest.raises(MfaCryptoError):
+        decrypt(b"")
 
     assert mfa_keyring.primary not in caplog.text, (
         "empty-ciphertext refusal must not echo the keyring material"
@@ -467,9 +457,11 @@ def test_empty_keyring_refused_with_remediation_hint(
     """
     monkeypatch.setattr(settings, "admin_mfa_keyring", blank)
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(ValueError, match="ADMIN_MFA_KEYRING is empty"):
-            encrypt(_SENTINEL_PLAINTEXT)
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises(ValueError, match="ADMIN_MFA_KEYRING is empty"),
+    ):
+        encrypt(_SENTINEL_PLAINTEXT)
 
     # The error message must include the Fernet.generate_key() recipe so
     # an on-call operator can mint a key without leaving the terminal.
@@ -501,9 +493,11 @@ def test_keyring_with_only_separators_refused(
     """
     monkeypatch.setattr(settings, "admin_mfa_keyring", ",,, , ,")
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(ValueError, match="no non-empty entries"):
-            encrypt(_SENTINEL_PLAINTEXT)
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises(ValueError, match="no non-empty entries"),
+    ):
+        encrypt(_SENTINEL_PLAINTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -538,9 +532,11 @@ def test_encrypt_wraps_unexpected_crypto_failure(
 
     monkeypatch.setattr(_mfa_crypto, "_build_multifernet", _fake_build_multifernet)
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(MfaCryptoError, match="admin_mfa_encrypt_failed"):
-            encrypt(_SENTINEL_PLAINTEXT)
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises(MfaCryptoError, match="admin_mfa_encrypt_failed"),
+    ):
+        encrypt(_SENTINEL_PLAINTEXT)
 
     failure_records = [
         r
@@ -594,11 +590,11 @@ def test_decrypt_wraps_unexpected_crypto_failure(
 
     monkeypatch.setattr(_mfa_crypto, "_build_multifernet", _fake_build_multifernet)
 
-    with caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER):
-        with pytest.raises(MfaCryptoError, match="admin_mfa_decrypt_failed"):
-            # Non-empty bytes — must reach the crypto layer (not the
-            # short-circuit in the function head).
-            decrypt(b"non-empty-ciphertext-stand-in")
+    with (
+        caplog.at_level(logging.DEBUG, logger=_CRYPTO_LOGGER),
+        pytest.raises(MfaCryptoError, match="admin_mfa_decrypt_failed"),
+    ):
+        decrypt(b"non-empty-ciphertext-stand-in")
 
     failure_records = [
         r

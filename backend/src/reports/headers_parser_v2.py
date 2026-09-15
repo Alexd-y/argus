@@ -2,7 +2,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-__all__ = ["EndpointHeaders", "FullHeadersContextV2", "RECOMMENDED_HEADERS", "analyze_headers_from_curl", "parse_curl_headers_response", "get_missing_headers", "get_all_missing_recommended"]
+__all__ = [
+    "RECOMMENDED_HEADERS",
+    "EndpointHeaders",
+    "FullHeadersContextV2",
+    "analyze_headers_from_curl",
+    "get_all_missing_recommended",
+    "get_missing_headers",
+    "parse_curl_headers_response",
+]
 
 
 class EndpointHeaders(BaseModel):
@@ -69,10 +77,12 @@ def parse_curl_headers_response(response: str) -> dict:
         if line.startswith("< Location:"):
             location = line.replace("< Location:", "").strip()
             if location:
-                result["redirect_chain"].append({
-                    "location": location,
-                    "status": result["status_code"],
-                })
+                result["redirect_chain"].append(
+                    {
+                        "location": location,
+                        "status": result["status_code"],
+                    }
+                )
 
         if line.startswith("< "):
             header_part = line[2:].split(":", 1)

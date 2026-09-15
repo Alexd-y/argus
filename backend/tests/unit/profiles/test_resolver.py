@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.execution_mode.mode import ExecutionMode
 from src.profiles import (
     ScanProfile,
@@ -94,7 +93,9 @@ def test_enum_accepts_string_and_enum():
 
 class TestLegacyConflict:
     def test_no_conflict_when_legacy_absent(self):
-        assert detect_legacy_conflict("deep", legacy_scan_mode=None, legacy_execution_mode=None) == []
+        assert (
+            detect_legacy_conflict("deep", legacy_scan_mode=None, legacy_execution_mode=None) == []
+        )
 
     def test_no_conflict_when_legacy_matches(self):
         assert (

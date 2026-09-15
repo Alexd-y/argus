@@ -45,7 +45,7 @@ def register(mcp: FastMCP) -> None:
     async def tool_catalog_list(
         payload: ToolCatalogListInput, ctx: MCPContext | None = None
     ) -> ToolCatalogListResult:
-        async def body(call: MCPCallContext) -> ToolCatalogListResult:
+        async def body(call: MCPCallContext) -> ToolCatalogListResult:  # noqa: ARG001 - retained for signature/API compatibility
             return svc_list_catalog(
                 category=payload.category,
                 risk_level=payload.risk_level,
@@ -94,8 +94,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name="tool.run.status",
         description=(
-            "Return the lifecycle state of an ad-hoc tool run owned by the "
-            "authenticated tenant."
+            "Return the lifecycle state of an ad-hoc tool run owned by the authenticated tenant."
         ),
     )
     async def tool_run_status(

@@ -81,7 +81,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -163,7 +163,7 @@ _PUBLIC_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_prowler_json(
@@ -319,9 +319,7 @@ def _iter_normalised(payload: list[Any], *, tool_id: str) -> Iterator[dict[str, 
 def _resolve_resource_id(raw: dict[str, Any]) -> str | None:
     resource = raw.get("Resource")
     if isinstance(resource, dict):
-        identifier = _string_field(resource, "Identifier") or _string_field(
-            resource, "Id"
-        )
+        identifier = _string_field(resource, "Identifier") or _string_field(resource, "Id")
         if identifier is not None:
             return identifier
     return _string_field(raw, "ResourceId") or _string_field(raw, "ResourceArn")
@@ -359,8 +357,7 @@ def _shrink_remediation(raw: Any) -> str | None:
 
 def _classify_category(record: dict[str, Any]) -> FindingCategory:
     haystack = (
-        f"{(record.get('check_id') or '').lower()} "
-        f"{(record.get('check_title') or '').lower()}"
+        f"{(record.get('check_id') or '').lower()} {(record.get('check_title') or '').lower()}"
     )
     if any(token in haystack for token in _CRYPTO_KEYWORDS):
         return FindingCategory.CRYPTO
@@ -371,8 +368,7 @@ def _classify_category(record: dict[str, Any]) -> FindingCategory:
 
 def _classify_cwe(category: FindingCategory, record: dict[str, Any]) -> Iterable[int]:
     haystack = (
-        f"{(record.get('check_id') or '').lower()} "
-        f"{(record.get('check_title') or '').lower()}"
+        f"{(record.get('check_id') or '').lower()} {(record.get('check_title') or '').lower()}"
     )
     if category is FindingCategory.CRYPTO:
         return (327, 326)

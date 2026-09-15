@@ -45,7 +45,7 @@ _FileSystemLoader = None
 _BaseLoader = None
 
 try:
-    from jinja2 import BaseLoader, Environment, FileSystemLoader, TemplateError
+    from jinja2 import BaseLoader, Environment, FileSystemLoader
 
     _JINJA_AVAILABLE = True
     _Environment = Environment
@@ -204,9 +204,7 @@ class PromptLoader:
         """
         return self.render(f"extended/{template_name}.j2", **kwargs)
 
-    def render_extended_system_user(
-        self, module_name: str, **kwargs: Any
-    ) -> tuple[str, str]:
+    def render_extended_system_user(self, module_name: str, **kwargs: Any) -> tuple[str, str]:
         """Render (system, user) for an extended module.
 
         Looks up prompts/extended/{module_name}_system.j2 and _user.j2
@@ -289,6 +287,7 @@ class PromptLoader:
                 _, user_tpl = prompts[phase]
                 try:
                     from src.orchestration.prompt_registry import _TEMPLATE_DEFAULTS
+
                     merged = {**_TEMPLATE_DEFAULTS, **kwargs}
                     return user_tpl.format(**merged)
                 except (KeyError, AttributeError):

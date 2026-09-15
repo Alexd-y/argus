@@ -18,8 +18,8 @@ _SCRIPTS_DIR = _REPO_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-import argus_validate  # noqa: E402
-import run_npm_audit_gate  # noqa: E402
+import argus_validate  # noqa: E402 — after sys.path insert
+import run_npm_audit_gate  # noqa: E402 — after sys.path insert
 
 _EXPECTED_ADVISORY_ORDER: tuple[str, ...] = (
     "helm_kubeconform",

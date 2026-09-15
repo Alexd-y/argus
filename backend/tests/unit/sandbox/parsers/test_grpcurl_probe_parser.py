@@ -22,7 +22,7 @@ from src.sandbox.parsers.grpcurl_probe_parser import (
 )
 
 _SERVICE_LIST = (
-    "grpc.reflection.v1alpha.ServerReflection\n" "helloworld.Greeter\n" "routeguide.RouteGuide\n"
+    "grpc.reflection.v1alpha.ServerReflection\nhelloworld.Greeter\nrouteguide.RouteGuide\n"
 )
 
 

@@ -20,11 +20,19 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.core.config import settings
-from src.llm.provider_guard import CallScope, provider_guard, reset_call_scope, set_call_scope
+from src.llm.provider_guard import (
+    CallScope,
+    provider_guard,
+    reset_call_scope,
+    set_call_scope,
+)
 from src.orchestration.agent_contracts import AgentUsage
 from src.orchestration.budget_ledger import BudgetDeniedError, BudgetLedger
 from src.orchestration.budget_ledger_pg import PostgresBudgetStore, create_budget_tables
-from src.orchestration.budget_scan_registry import register_scan_ledger, unregister_scan_ledger
+from src.orchestration.budget_scan_registry import (
+    register_scan_ledger,
+    unregister_scan_ledger,
+)
 
 pytestmark = pytest.mark.requires_postgres
 

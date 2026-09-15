@@ -224,7 +224,11 @@ class TestCsvSections:
         ctx = {
             "ai_sections": {
                 "cost_summary": json.dumps(
-                    {"total_cost_usd": 9.9, "tenant_id": "t-secret", "blob": "y" * 200000}
+                    {
+                        "total_cost_usd": 9.9,
+                        "tenant_id": "t-secret",
+                        "blob": "y" * 200000,
+                    }
                 )
             },
         }
@@ -274,9 +278,7 @@ class TestMarkdown:
         rd = _report([_finding(finding_id="fid-1")])
         ctx = {
             "ai_sections": {
-                "cost_summary": json.dumps(
-                    {"total_cost_usd": 1.0, "tenant_id": "t-secret"}
-                ),
+                "cost_summary": json.dumps({"total_cost_usd": 1.0, "tenant_id": "t-secret"}),
                 "business_risk": "Account takeover is feasible via the login endpoint.",
             }
         }
@@ -301,7 +303,13 @@ class TestCrossFormatGate:
             "r-1",
             "https://t",
             "scan-1",
-            expected_severity_totals={"critical": 0, "high": 1, "medium": 0, "low": 0, "info": 0},
+            expected_severity_totals={
+                "critical": 0,
+                "high": 1,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            },
             expected_finding_count=1,
             tier="valhalla",
         )
@@ -314,23 +322,33 @@ class TestCrossFormatGate:
             "r-1",
             "https://t",
             "scan-1",
-            expected_severity_totals={"critical": 5, "high": 0, "medium": 0, "low": 0, "info": 0},
+            expected_severity_totals={
+                "critical": 5,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            },
             tier="valhalla",
         )
         assert not ok
         assert any("severity_totals_mismatch" in i for i in issues)
 
     def test_flags_missing_finding_id(self) -> None:
-        ok, issues = _verify_cross_format(
-            [_finding(finding_id="")], "r-1", "https://t", "scan-1"
-        )
+        ok, issues = _verify_cross_format([_finding(finding_id="")], "r-1", "https://t", "scan-1")
         assert not ok
         assert "finding_without_id" in issues
 
     def test_export_validation_report_consistent(self) -> None:
         rd = _report([_finding(finding_id="a", severity="high")])
         ctx = {
-            "severity_counts": {"critical": 0, "high": 1, "medium": 0, "low": 0, "info": 0},
+            "severity_counts": {
+                "critical": 0,
+                "high": 1,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            },
             "findings_count": 1,
         }
         report = json.loads(
@@ -395,9 +413,7 @@ class TestTimelineSnippetLeakSafe:
             offline_minimal_jinja_context_from_report_data,
         )
 
-        ctx = offline_minimal_jinja_context_from_report_data(
-            self._leaky_report(), "valhalla"
-        )
+        ctx = offline_minimal_jinja_context_from_report_data(self._leaky_report(), "valhalla")
         blob = json.dumps(ctx)
         assert "169.254.169.254" not in blob
         assert "AKIAIOSFODNN7EXAMPLE" not in blob

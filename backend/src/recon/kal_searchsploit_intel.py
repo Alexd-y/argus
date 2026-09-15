@@ -58,7 +58,11 @@ async def run_searchsploit_for_recon_assets(
             except Exception:
                 logger.warning(
                     "searchsploit_query_failed",
-                    extra={"scan_id": scan_id, "query_len": len(q), "json_mode": use_json},
+                    extra={
+                        "scan_id": scan_id,
+                        "query_len": len(q),
+                        "json_mode": use_json,
+                    },
                     exc_info=True,
                 )
                 chunk = []

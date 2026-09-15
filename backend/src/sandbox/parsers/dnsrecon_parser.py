@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -55,7 +55,7 @@ _CANONICAL_FILENAME: Final[str] = "dnsrecon.json"
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_dnsrecon(

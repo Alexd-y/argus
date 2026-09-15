@@ -71,7 +71,7 @@ import re
 from collections.abc import Iterable, Iterator
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -158,7 +158,7 @@ _HTML_TAG_RE: Final[re.Pattern[str]] = re.compile(r"<[^>]+>")
 _WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 
 
-DedupKey: TypeAlias = tuple[str, str, str, str]
+type DedupKey = tuple[str, str, str, str]
 
 
 class _HTMLStripper(HTMLParser):
@@ -289,9 +289,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "reference": record.get("reference"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
@@ -325,9 +323,7 @@ def _iter_records(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str
             yield from _expand_instances(normalised, alert)
 
 
-def _normalise_alert(
-    alert: dict[str, Any], *, site_name: str | None
-) -> dict[str, Any] | None:
+def _normalise_alert(alert: dict[str, Any], *, site_name: str | None) -> dict[str, Any] | None:
     riskcode = _string_field(alert, "riskcode") or "0"
     confidence_raw = _string_field(alert, "confidence") or "2"
     if confidence_raw == "0":
@@ -357,9 +353,7 @@ def _normalise_alert(
     }
 
 
-def _expand_instances(
-    base: dict[str, Any], alert: dict[str, Any]
-) -> Iterable[dict[str, Any]]:
+def _expand_instances(base: dict[str, Any], alert: dict[str, Any]) -> Iterable[dict[str, Any]]:
     instances = alert.get("instances")
     if not isinstance(instances, list) or not instances:
         yield {**base, "uri": None, "method": None, "param": None, "evidence": None}
@@ -376,9 +370,7 @@ def _expand_instances(
         }
 
 
-def _classify(
-    title: str, *, cweid: int | None
-) -> tuple[FindingCategory, tuple[int, ...]]:
+def _classify(title: str, *, cweid: int | None) -> tuple[FindingCategory, tuple[int, ...]]:
     lowered = title.lower()
     for keyword, category, default_cwes in _KEYWORD_CATEGORY:
         if keyword in lowered:

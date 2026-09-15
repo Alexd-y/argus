@@ -6,7 +6,6 @@ import hashlib
 from uuid import uuid4
 
 import pytest
-
 from src.evidence.pipeline import (
     EvidencePersistError,
     EvidencePipeline,
@@ -15,8 +14,8 @@ from src.evidence.pipeline import (
 from src.evidence.redaction import Redactor
 from src.pipeline.contracts.finding_dto import EvidenceDTO, EvidenceKind
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
-from tests.unit.evidence.conftest import InMemoryUploader
 
+from tests.unit.evidence.conftest import InMemoryUploader
 
 # ---------------------------------------------------------------------------
 # Identifiers / fixtures
@@ -99,9 +98,7 @@ async def test_persist_filename_deterministic_for_same_bytes(
     assert a.sha256 == b.sha256
 
 
-async def test_persist_filename_format(
-    uploader: InMemoryUploader, ids: dict[str, object]
-) -> None:
+async def test_persist_filename_format(uploader: InMemoryUploader, ids: dict[str, object]) -> None:
     pipeline = EvidencePipeline(
         storage_uploader=uploader,
         redactor=Redactor(),
@@ -163,9 +160,7 @@ async def test_persist_uploader_returns_none_raises(
         ) -> str | None:
             self.calls.append(
                 # Reuse the dataclass for symmetry though we never read it.
-                __import__(
-                    "tests.unit.evidence.conftest", fromlist=["UploadCall"]
-                ).UploadCall(
+                __import__("tests.unit.evidence.conftest", fromlist=["UploadCall"]).UploadCall(
                     tenant_id=tenant_id,
                     scan_id=scan_id,
                     object_type=object_type,

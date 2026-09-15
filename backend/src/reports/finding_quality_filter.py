@@ -19,15 +19,17 @@ from src.pipeline.contracts.finding_dto import ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
-_INVALID_TITLES = frozenset({
-    "unknown finding",
-    "unknown",
-    "untitled",
-    "n/a",
-    "none",
-    "test",
-    "placeholder",
-})
+_INVALID_TITLES = frozenset(
+    {
+        "unknown finding",
+        "unknown",
+        "untitled",
+        "n/a",
+        "none",
+        "test",
+        "placeholder",
+    }
+)
 
 _MIN_DESCRIPTION_LENGTH = 10
 
@@ -88,7 +90,9 @@ def filter_valid_findings(findings: list) -> list:
     if removed_count > 0:
         logger.info(
             "Quality filter removed %d findings (%d -> %d)",
-            removed_count, len(findings), len(valid),
+            removed_count,
+            len(findings),
+            len(valid),
         )
 
     return valid

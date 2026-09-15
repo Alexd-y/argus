@@ -22,7 +22,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.scheduling import redbeat_loader
 from src.scheduling.redbeat_loader import (
     SCAN_TRIGGER_TASK_NAME,
@@ -32,7 +31,6 @@ from src.scheduling.redbeat_loader import (
     sync_all_from_db,
     sync_one,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -225,9 +223,7 @@ class TestRemoveOne:
     def test_returns_true_when_entry_already_absent(self) -> None:
         """Idempotent semantics: missing key is success."""
         entry_cls = MagicMock()
-        entry_cls.generate_key = MagicMock(
-            return_value="argus:redbeat:argus.schedule.x"
-        )
+        entry_cls.generate_key = MagicMock(return_value="argus:redbeat:argus.schedule.x")
         entry_cls.from_key = MagicMock(side_effect=KeyError("missing"))
 
         with _patch_entry_cls(entry_cls), _patch_celery_app(MagicMock()):
@@ -343,11 +339,10 @@ class TestBeatInitSignalRegistration:
     def test_beat_init_signal_handler_is_registered(self) -> None:
         """Importing :mod:`src.celery_app` must register a beat_init
         receiver (the T33 hydration handler)."""
-        from celery.signals import beat_init
-
         # Ensure the handler module has been imported at least once so
         # the ``@beat_init.connect`` decorator has registered.
         import src.celery_app  # noqa: F401
+        from celery.signals import beat_init
 
         # ``beat_init.receivers`` is a list of (uid, weakref) tuples; a
         # non-empty list confirms at least one handler is wired up.
@@ -362,10 +357,9 @@ class TestBeatInitSignalRegistration:
         packages are not yet registered as attributes on their parent."""
         from contextlib import asynccontextmanager
 
-        from celery.signals import beat_init
-
         # Force the handler to register and the patch targets to exist.
         import src.celery_app  # noqa: F401  — registers the handler
+        from celery.signals import beat_init
         from src.db import session as session_mod
         from src.scheduling import redbeat_loader as loader_mod
 

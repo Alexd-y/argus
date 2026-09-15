@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from src.execution_mode import (
     LAB_ALLOW_ALL,
     ExecutionMode,
@@ -24,17 +23,17 @@ from src.orchestration.execution_mode_context import (
 
 
 def _manifest(**overrides):
-    base = dict(
-        tenant_id="t-1",
-        engagement_id="e-1",
-        cidrs=("10.90.0.0/16",),
-        dns_suffixes=("lab.argus",),
-        k8s_namespace="argus-lab-42",
-        vm_network_ids=("labnet-42",),
-        capture_full=True,
-        expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=4),
-        created_by="u-1",
-    )
+    base = {
+        "tenant_id": "t-1",
+        "engagement_id": "e-1",
+        "cidrs": ("10.90.0.0/16",),
+        "dns_suffixes": ("lab.argus",),
+        "k8s_namespace": "argus-lab-42",
+        "vm_network_ids": ("labnet-42",),
+        "capture_full": True,
+        "expires_at": datetime.now(tz=UTC) + timedelta(hours=4),
+        "created_by": "u-1",
+    }
     base.update(overrides)
     return LabScopeManifest(**base)
 
@@ -190,14 +189,17 @@ def test_quick_preflight_ignores_embedded_lab_lease() -> None:
     )
     assert preflight.lab_lease_active is False
     assert preflight.reason == "quick_production_like"
-    assert is_lab_lease_active_from_options(
-        {
-            "execution_mode": "quick",
-            "lab_lease": lease.to_storage_dict(),
-        },
-        tenant_id="t-1",
-        engagement_id="e-1",
-    ) is False
+    assert (
+        is_lab_lease_active_from_options(
+            {
+                "execution_mode": "quick",
+                "lab_lease": lease.to_storage_dict(),
+            },
+            tenant_id="t-1",
+            engagement_id="e-1",
+        )
+        is False
+    )
 
 
 def test_extract_execution_mode_scan_depth_quick_stays_production() -> None:

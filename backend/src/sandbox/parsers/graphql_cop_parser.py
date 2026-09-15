@@ -36,7 +36,7 @@ import logging
 import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -118,7 +118,7 @@ _CURL_AUTH_HEADER_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 def parse_graphql_cop_json(
@@ -221,9 +221,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "curl_verify": record.get("curl_verify"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 

@@ -13,7 +13,7 @@ helpers reproduce that by:
 
 This does NOT weaken any assertion — it makes the RLS policies observable at
 all, which is the whole point of the test. Seed/setup work stays on the
-superuser connection; only the isolation/​WITH-CHECK assertions assume the
+superuser connection; only the isolation/\u200bWITH-CHECK assertions assume the
 restricted role.
 """
 
@@ -59,9 +59,7 @@ def ensure_rls_role(database_url: str) -> None:
     AUTOCOMMIT sync connection (superuser) so the role/grants persist past the
     caller's transaction.
     """
-    engine = sa.create_engine(
-        _to_sync_url(database_url), future=True, isolation_level="AUTOCOMMIT"
-    )
+    engine = sa.create_engine(_to_sync_url(database_url), future=True, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as conn:
             conn.execute(text(_CREATE_ROLE_SQL))

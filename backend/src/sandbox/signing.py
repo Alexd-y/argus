@@ -151,9 +151,7 @@ def sign_blob(private_key: Ed25519PrivateKey, payload: bytes) -> str:
     return base64.b64encode(signature).decode("ascii")
 
 
-def verify_blob(
-    public_key: Ed25519PublicKey, payload: bytes, signature_b64: str
-) -> bool:
+def verify_blob(public_key: Ed25519PublicKey, payload: bytes, signature_b64: str) -> bool:
     """Verify an Ed25519 ``signature_b64`` (base64) over ``payload``.
 
     Returns ``True`` on a valid signature; ``False`` on any verification
@@ -254,9 +252,7 @@ class KeyManager:
                     f"file claims {match.group(1)}, actual {actual_id}"
                 )
             if actual_id in self._index:
-                raise SignatureError(
-                    f"duplicate public_key_id {actual_id} in {self._keys_dir}"
-                )
+                raise SignatureError(f"duplicate public_key_id {actual_id} in {self._keys_dir}")
             self._index[actual_id] = public_key
             loaded += 1
         return loaded
@@ -273,9 +269,7 @@ class KeyManager:
             ) from exc
 
     @staticmethod
-    def generate_dev_keypair(
-        out_dir: Path, name: str = "dev_signing"
-    ) -> tuple[Path, Path, str]:
+    def generate_dev_keypair(out_dir: Path, name: str = "dev_signing") -> tuple[Path, Path, str]:
         """Generate a fresh Ed25519 dev keypair under ``out_dir``.
 
         Returns ``(private_key_path, public_key_path, key_id)``. Files are
@@ -344,13 +338,9 @@ class SignatureRecord:
                 f"relative_path {self.relative_path!r} contains illegal characters"
             )
         if "/.." in self.relative_path or self.relative_path.startswith(".."):
-            raise SignatureError(
-                "relative_path must not traverse out of the catalog dir"
-            )
+            raise SignatureError("relative_path must not traverse out of the catalog dir")
         if self.relative_path.startswith("/"):
-            raise SignatureError(
-                "relative_path must be a relative POSIX path (no leading /)"
-            )
+            raise SignatureError("relative_path must be a relative POSIX path (no leading /)")
         try:
             decoded = base64.b64decode(self.signature_b64, validate=True)
         except (binascii.Error, ValueError) as exc:
@@ -364,7 +354,9 @@ class SignatureRecord:
 
     def serialize(self) -> str:
         """Render the record as one whitespace-separated line (no trailing \\n)."""
-        return f"{self.sha256_hex}  {self.relative_path}  {self.signature_b64}  {self.public_key_id}"
+        return (
+            f"{self.sha256_hex}  {self.relative_path}  {self.signature_b64}  {self.public_key_id}"
+        )
 
 
 _HEADER_LINES: tuple[str, ...] = (
@@ -483,7 +475,6 @@ class SignaturesFile:
         public_key = public_key_resolver(record.public_key_id)
         if not verify_blob(public_key, yaml_bytes, record.signature_b64):
             raise IntegrityError(
-                f"Ed25519 signature mismatch for {relative_path!r} "
-                f"(key_id={record.public_key_id})"
+                f"Ed25519 signature mismatch for {relative_path!r} (key_id={record.public_key_id})"
             )
         return record

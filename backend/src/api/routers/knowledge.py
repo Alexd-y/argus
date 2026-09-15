@@ -11,8 +11,8 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 @router.get("/strategy")
 async def get_knowledge_strategy(
-    owasp_ids: list[str] = Query(default_factory=list),  # noqa: B008
-    cwe_ids: list[str] = Query(default_factory=list),  # noqa: B008
+    owasp_ids: list[str] = Query(default_factory=list),
+    cwe_ids: list[str] = Query(default_factory=list),
 ) -> dict[str, object]:
     """Merge OWASP/CWE inputs into skills, tools, and priority (same as KB planner)."""
     kb = get_knowledge_base()

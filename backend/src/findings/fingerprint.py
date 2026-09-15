@@ -169,9 +169,7 @@ def compute_evidence_signal_hash(evidence: dict[str, Any] | str | bytes) -> str:
     elif isinstance(evidence, str):
         payload = evidence.encode("utf-8")
     else:
-        payload = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        payload = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 

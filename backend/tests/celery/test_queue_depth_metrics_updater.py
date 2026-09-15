@@ -32,7 +32,6 @@ from __future__ import annotations
 # Layer 1 — env defaults BEFORE any ``src.*`` import. Mirrors the patterns in
 # tests/celery/test_webhook_dlq_replay_task.py and tests/unit/conftest.py.
 # ---------------------------------------------------------------------------
-
 import os
 
 os.environ.setdefault("DEBUG", "true")
@@ -48,17 +47,17 @@ os.environ.setdefault("ARGUS_TEST_MODE", "1")
 # Layer 2 — module-under-test imports.
 # ---------------------------------------------------------------------------
 
-from datetime import timedelta  # noqa: E402
-from typing import Any  # noqa: E402
+from datetime import timedelta
+from typing import Any
 
-import pytest  # noqa: E402
-from prometheus_client import CollectorRegistry  # noqa: E402
-
-from src.celery import beat_schedule  # noqa: E402
-from src.celery import metrics_updater  # noqa: E402
-from src.celery_app import app as celery_app  # noqa: E402
-from src.core import observability as obs  # noqa: E402
-
+import pytest
+from prometheus_client import CollectorRegistry
+from src.celery import (
+    beat_schedule,
+    metrics_updater,
+)
+from src.celery_app import app as celery_app
+from src.core import observability as obs
 
 # ---------------------------------------------------------------------------
 # Helpers + fixtures
@@ -107,7 +106,7 @@ class _FakeRedis:
 class _ExplodingRedis:
     """Redis stub whose ``llen`` always raises (broker-offline simulation)."""
 
-    def llen(self, queue: str) -> int:  # noqa: ARG002
+    def llen(self, queue: str) -> int:
         raise ConnectionError("redis://broker is gone")
 
 
@@ -148,21 +147,17 @@ class _StubInspector:
         return self._scheduled
 
 
-def _patch_inspect(
-    monkeypatch: pytest.MonkeyPatch, inspector: object
-) -> None:
+def _patch_inspect(monkeypatch: pytest.MonkeyPatch, inspector: object) -> None:
     """Force ``celery_app.control.inspect(...)`` to return ``inspector``."""
 
     class _Control:
-        def inspect(self, timeout: float = 1.0) -> object:  # noqa: ARG002
+        def inspect(self, timeout: float = 1.0) -> object:
             return inspector
 
     monkeypatch.setattr(celery_app, "control", _Control(), raising=False)
 
 
-def _patch_redis(
-    monkeypatch: pytest.MonkeyPatch, fake: object | None
-) -> None:
+def _patch_redis(monkeypatch: pytest.MonkeyPatch, fake: object | None) -> None:
     """Stub ``src.core.redis_client.get_redis`` to return ``fake``."""
     import src.core.redis_client as redis_module
 
@@ -182,9 +177,7 @@ class TestBeatScheduleRegistration:
 
     def test_beat_schedule_registers_queue_depth_refresh_every_15s(self) -> None:
         entry = beat_schedule.BEAT_SCHEDULE.get(self._ENTRY)
-        assert entry is not None, (
-            f"{self._ENTRY!r} missing from BEAT_SCHEDULE"
-        )
+        assert entry is not None, f"{self._ENTRY!r} missing from BEAT_SCHEDULE"
         assert entry["task"] == self._ENTRY
         assert entry["options"] == {"queue": self._QUEUE}
 
@@ -192,9 +185,7 @@ class TestBeatScheduleRegistration:
         assert isinstance(sched, timedelta), (
             f"schedule must be a timedelta; got {type(sched).__name__}"
         )
-        assert sched == timedelta(
-            seconds=beat_schedule.QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS
-        )
+        assert sched == timedelta(seconds=beat_schedule.QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS)
         assert beat_schedule.QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS == 15
 
     def test_celery_app_routes_queue_depth_refresh_onto_argus_intel(self) -> None:
@@ -331,9 +322,7 @@ def test_refresh_swallows_broker_offline_failures(
 
     depths = metrics_updater.refresh_queue_depths()
     assert all(v == 0 for v in depths.values())
-    assert any(
-        "metrics_updater.redis_unavailable" in r.message for r in caplog.records
-    ) or any(
+    assert any("metrics_updater.redis_unavailable" in r.message for r in caplog.records) or any(
         "metrics_updater.inspect_failed" in r.message for r in caplog.records
     )
 
@@ -367,8 +356,7 @@ def test_gauge_registered_against_observability_default_registry(
 
     metrics_updater.refresh_queue_depths()
     assert obs.get_registry() is _isolated_registry, (
-        "gauge must register against the observability registry, "
-        "not the global default"
+        "gauge must register against the observability registry, not the global default"
     )
     snapshot = _gauge_samples(_isolated_registry)
     assert snapshot.get("argus.scans") == 9.0

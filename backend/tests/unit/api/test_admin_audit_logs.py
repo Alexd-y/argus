@@ -8,18 +8,17 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
+from main import app
+from src.api.routers import admin as admin_router
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.session import get_db
-from main import app
-from src.api.routers import admin as admin_router
+from starlette.testclient import TestClient
 
 AUDIT_LIST = "/api/v1/admin/audit-logs"
 AUDIT_EXPORT = "/api/v1/admin/audit-logs/export"
@@ -55,7 +54,7 @@ def _sample_row(
         resource_id=str(uuid.uuid4()),
         details=details if details is not None else {"requested_count": 1},
         ip_address="203.0.113.10",
-        created_at=datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 1, 12, 0, tzinfo=UTC),
     )
 
 
@@ -89,8 +88,8 @@ class TestAdminAuditRbac:
 
 class TestAdminAuditValidation:
     def test_list_422_until_before_since(self, client: TestClient) -> None:
-        since = datetime(2026, 4, 2, tzinfo=timezone.utc)
-        until = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        since = datetime(2026, 4, 2, tzinfo=UTC)
+        until = datetime(2026, 4, 1, tzinfo=UTC)
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.get(
                 AUDIT_LIST,
@@ -293,18 +292,20 @@ class TestAdminAuditHappyPath:
         )
         _override_db([row])
         try:
-            with caplog.at_level(logging.DEBUG):
-                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                    r_json = client.get(
-                        AUDIT_EXPORT,
-                        headers=_ADMIN_HEADERS,
-                        params={"format": "json"},
-                    )
-                    r_csv = client.get(
-                        AUDIT_EXPORT,
-                        headers=_ADMIN_HEADERS,
-                        params={"format": "csv"},
-                    )
+            with (
+                caplog.at_level(logging.DEBUG),
+                patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            ):
+                r_json = client.get(
+                    AUDIT_EXPORT,
+                    headers=_ADMIN_HEADERS,
+                    params={"format": "json"},
+                )
+                r_csv = client.get(
+                    AUDIT_EXPORT,
+                    headers=_ADMIN_HEADERS,
+                    params={"format": "csv"},
+                )
         finally:
             _clear_db_override()
         assert r_json.status_code == 200

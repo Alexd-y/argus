@@ -33,7 +33,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -66,7 +66,7 @@ _SKIP_PLUGINS: Final[frozenset[str]] = frozenset(
 )
 
 
-_DedupKey: TypeAlias = tuple[str, str, str]
+type _DedupKey = tuple[str, str, str]
 
 
 def parse_whatweb(
@@ -110,9 +110,7 @@ def parse_whatweb(
                 if key in seen:
                     continue
                 seen.add(key)
-                confidence = (
-                    ConfidenceLevel.CONFIRMED if version else ConfidenceLevel.LIKELY
-                )
+                confidence = ConfidenceLevel.CONFIRMED if version else ConfidenceLevel.LIKELY
                 finding = _build_finding(confidence)
                 evidence: dict[str, object] = {
                     "tool_id": tool_id,
@@ -120,9 +118,7 @@ def parse_whatweb(
                     "http_status": http_status,
                     "plugin": plugin_name,
                     "version": version,
-                    "fingerprint_hash": stable_hash_12(
-                        f"{host}|{plugin_name}|{version}"
-                    ),
+                    "fingerprint_hash": stable_hash_12(f"{host}|{plugin_name}|{version}"),
                 }
                 keyed.append((key, finding, _serialise(evidence)))
                 if len(keyed) >= _MAX_FINDINGS:
@@ -177,9 +173,8 @@ def _load_payload(*, stdout: bytes, artifacts_dir: Path, tool_id: str) -> Any:
 def _normalise_payload(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
-    if isinstance(payload, dict):
-        if "plugins" in payload or "target" in payload:
-            return [payload]
+    if isinstance(payload, dict) and ("plugins" in payload or "target" in payload):
+        return [payload]
     return []
 
 

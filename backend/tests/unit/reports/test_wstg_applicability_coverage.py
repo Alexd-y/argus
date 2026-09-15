@@ -48,7 +48,7 @@ def _coverage(findings):
         wid for f in findings if f.get("_has_evidence") for wid in wstg_ids_for_finding(f)
     )
     decisions = decide_applicability(finding_test_ids=finding_test_ids)
-    ev = {tid: True for tid in aggregated}  # finding is the (upstream-validated) evidence
+    ev = dict.fromkeys(aggregated, True)  # finding is the (upstream-validated) evidence
     states = build_wstg_states(
         decisions=decisions, aggregated=aggregated, evidence_validated_by_test=ev
     )

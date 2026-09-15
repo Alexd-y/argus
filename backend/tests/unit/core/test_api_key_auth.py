@@ -13,7 +13,6 @@ against the API-key allowlist. Unknown credentials must never authenticate.
 
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
-
 from src.core.auth import create_access_token, get_optional_auth
 from src.core.config import settings
 

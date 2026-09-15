@@ -32,10 +32,7 @@ def test_plan_steps_put_prerequisites_first() -> None:
     graph = default_capability_graph()
     steps = graph.plan_steps("vuln_analysis", "production", asset_types=("web_app", "api"))
     ids = [step.node_id for step in steps]
-    if (
-        "web.application.api.rest" in ids
-        and "web.application.forms.input_validation" in ids
-    ):
+    if "web.application.api.rest" in ids and "web.application.forms.input_validation" in ids:
         assert ids.index("web.application.api.rest") < ids.index(
             "web.application.forms.input_validation"
         )

@@ -38,13 +38,19 @@ def _mock_session_factory(*, scan_exists: bool = True):
 
 
 def test_artifacts_404_when_scan_missing(client: TestClient) -> None:
-    with patch("src.api.routers.scans.async_session_factory", _mock_session_factory(scan_exists=False)):
+    with patch(
+        "src.api.routers.scans.async_session_factory",
+        _mock_session_factory(scan_exists=False),
+    ):
         r = client.get(f"/api/v1/scans/{SCAN_ID}/artifacts")
     assert r.status_code == 404
 
 
 def test_artifacts_422_invalid_phase(client: TestClient) -> None:
-    with patch("src.api.routers.scans.async_session_factory", _mock_session_factory(scan_exists=True)):
+    with patch(
+        "src.api.routers.scans.async_session_factory",
+        _mock_session_factory(scan_exists=True),
+    ):
         r = client.get(f"/api/v1/scans/{SCAN_ID}/artifacts", params={"phase": "invalid_phase"})
     assert r.status_code == 422
 
@@ -59,7 +65,10 @@ def test_artifacts_200_with_mocked_list(client: TestClient) -> None:
         }
     ]
     with (
-        patch("src.api.routers.scans.async_session_factory", _mock_session_factory(scan_exists=True)),
+        patch(
+            "src.api.routers.scans.async_session_factory",
+            _mock_session_factory(scan_exists=True),
+        ),
         patch("src.api.routers.scans.list_scan_artifacts", return_value=sample),
         patch("src.api.routers.scans.get_presigned_url_by_key", return_value=None),
     ):
@@ -85,7 +94,10 @@ def test_artifacts_presigned_query(client: TestClient) -> None:
         }
     ]
     with (
-        patch("src.api.routers.scans.async_session_factory", _mock_session_factory(scan_exists=True)),
+        patch(
+            "src.api.routers.scans.async_session_factory",
+            _mock_session_factory(scan_exists=True),
+        ),
         patch("src.api.routers.scans.list_scan_artifacts", return_value=sample),
         patch(
             "src.api.routers.scans.get_presigned_url_by_key",
@@ -115,7 +127,10 @@ def test_openapi_lists_artifacts_endpoint(client: TestClient) -> None:
 
 def test_artifacts_503_when_storage_unavailable(client: TestClient) -> None:
     with (
-        patch("src.api.routers.scans.async_session_factory", _mock_session_factory(scan_exists=True)),
+        patch(
+            "src.api.routers.scans.async_session_factory",
+            _mock_session_factory(scan_exists=True),
+        ),
         patch("src.api.routers.scans.list_scan_artifacts", return_value=None),
     ):
         r = client.get(f"/api/v1/scans/{SCAN_ID}/artifacts")

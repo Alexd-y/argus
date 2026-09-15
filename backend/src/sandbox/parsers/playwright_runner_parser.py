@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -77,7 +77,7 @@ _MAX_REQUEST_FINDINGS: Final[int] = 250
 _MAX_ERROR_FINDINGS: Final[int] = 100
 
 
-_REQUEST_DEDUP_KEY: TypeAlias = tuple[str, str, str, str]
+type _REQUEST_DEDUP_KEY = tuple[str, str, str, str]
 
 
 def parse_playwright_runner(
@@ -96,14 +96,10 @@ def parse_playwright_runner(
     evidence_blobs: list[str] = []
 
     findings.extend(
-        _emit_request_findings(
-            har_payload, evidence_blobs=evidence_blobs, tool_id=tool_id
-        )
+        _emit_request_findings(har_payload, evidence_blobs=evidence_blobs, tool_id=tool_id)
     )
     findings.extend(
-        _emit_error_findings(
-            result_payload, evidence_blobs=evidence_blobs, tool_id=tool_id
-        )
+        _emit_error_findings(result_payload, evidence_blobs=evidence_blobs, tool_id=tool_id)
     )
 
     if evidence_blobs:

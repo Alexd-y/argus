@@ -13,10 +13,9 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.core.config import settings
 from src.db.models import Finding as FindingModel
+from starlette.testclient import TestClient
 
 LIST = "/api/v1/admin/findings"
 _ADMIN_KEY = "secret-admin-key"
@@ -86,34 +85,38 @@ class TestSuperAdminRbac:
     def test_super_admin_no_tenant_200(self, client: TestClient) -> None:
         session = _ok_session()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+            )
         assert r.status_code == 200
 
     def test_super_admin_own_tenant_200(self, client: TestClient, my_tid: str) -> None:
         session = _ok_session(with_set_local=True)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "super-admin",
-                        "X-Admin-Tenant": my_tid,
-                    },
-                    params={"tenant_id": my_tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "super-admin",
+                    "X-Admin-Tenant": my_tid,
+                },
+                params={"tenant_id": my_tid},
+            )
         assert r.status_code == 200
 
     def test_super_admin_other_tenant_200(
@@ -122,20 +125,22 @@ class TestSuperAdminRbac:
         """super-admin can scope to any tenant; X-Admin-Tenant cross-check is bypassed."""
         session = _ok_session(with_set_local=True)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "super-admin",
-                        "X-Admin-Tenant": my_tid,
-                    },
-                    params={"tenant_id": other_tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "super-admin",
+                    "X-Admin-Tenant": my_tid,
+                },
+                params={"tenant_id": other_tid},
+            )
         assert r.status_code == 200
 
 
@@ -160,25 +165,25 @@ class TestAdminRbac:
     def test_admin_own_tenant_200(self, client: TestClient, my_tid: str) -> None:
         session = _ok_session(with_set_local=True)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "admin",
-                        "X-Admin-Tenant": my_tid,
-                    },
-                    params={"tenant_id": my_tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "admin",
+                    "X-Admin-Tenant": my_tid,
+                },
+                params={"tenant_id": my_tid},
+            )
         assert r.status_code == 200
 
-    def test_admin_other_tenant_403(
-        self, client: TestClient, my_tid: str, other_tid: str
-    ) -> None:
+    def test_admin_other_tenant_403(self, client: TestClient, my_tid: str, other_tid: str) -> None:
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.get(
                 LIST,
@@ -213,20 +218,22 @@ class TestOperatorRbac:
     def test_operator_own_tenant_200(self, client: TestClient, my_tid: str) -> None:
         session = _ok_session(with_set_local=True)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "operator",
-                        "X-Admin-Tenant": my_tid,
-                    },
-                    params={"tenant_id": my_tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "operator",
+                    "X-Admin-Tenant": my_tid,
+                },
+                params={"tenant_id": my_tid},
+            )
         assert r.status_code == 200
 
     def test_operator_other_tenant_403(
@@ -290,9 +297,7 @@ class TestUnknownRoleRbac:
 
 
 class TestHeaderValidation:
-    def test_invalid_admin_tenant_header_uuid_403(
-        self, client: TestClient, my_tid: str
-    ) -> None:
+    def test_invalid_admin_tenant_header_uuid_403(self, client: TestClient, my_tid: str) -> None:
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.get(
                 LIST,

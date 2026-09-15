@@ -127,7 +127,12 @@ class TestApplyFloorToDict:
                 "title": "Security headers missing",
                 "cvss": 4.3,
             },
-            {"severity": "low", "cwe": "CWE-16", "title": "SPF not enforced (~all)", "cvss": 3.1},
+            {
+                "severity": "low",
+                "cwe": "CWE-16",
+                "title": "SPF not enforced (~all)",
+                "cvss": 3.1,
+            },
         ]
         apply_floor_to_findings(findings)
         assert findings[0]["severity"] == "high"

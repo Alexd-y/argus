@@ -46,6 +46,7 @@ class IntelAdapter(abc.ABC):
         if self.env_key is None:
             return True
         import os
+
         v = os.environ.get(self.env_key, "")
         return bool((v or "").strip())
 

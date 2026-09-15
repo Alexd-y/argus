@@ -50,7 +50,13 @@ def test_buffer_and_drain_roundtrip():
     scan_id = "scan-drain-1"
     _clear(scan_id)
     _schedule_tool_run_record(
-        "t1", scan_id, "nmap", _result(True, "scan output"), _now(), _now(), "nmap -sV t"
+        "t1",
+        scan_id,
+        "nmap",
+        _result(True, "scan output"),
+        _now(),
+        _now(),
+        "nmap -sV t",
     )
     records = drain_pending_tool_runs(scan_id)
     assert len(records) == 1
@@ -83,7 +89,11 @@ async def test_flush_persists_buffered_records_to_session():
 def test_error_captures_stderr_reason():
     scan_id = "scan-stderr-1"
     _clear(scan_id)
-    result = {"success": False, "stdout": "", "stderr": "naabu: operation not permitted"}
+    result = {
+        "success": False,
+        "stdout": "",
+        "stderr": "naabu: operation not permitted",
+    }
     _schedule_tool_run_record("t1", scan_id, "naabu", result, _now(), _now(), "naabu -host t")
     records = drain_pending_tool_runs(scan_id)
     assert len(records) == 1

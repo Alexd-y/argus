@@ -30,7 +30,6 @@ from typing import Final
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers.mcp_slack_callbacks import (
     MAX_BODY_BYTES,
     REPLAY_WINDOW_SECONDS,
@@ -105,9 +104,9 @@ def _sign(body: bytes, *, secret: str, timestamp: int | None = None) -> dict[str
 
 
 def _assert_no_audit_side_effects(audit_sink: InMemoryAuditSink) -> None:
-    assert (
-        len(list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))) == 0
-    ), "Failed callback MUST NOT have written an audit row"
+    assert len(list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))) == 0, (
+        "Failed callback MUST NOT have written an audit row"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +125,7 @@ class TestReplayAttacks:
         body = _payload_body()
         old_ts = int(time.time()) - REPLAY_WINDOW_SECONDS - 5
         headers = _sign(body, secret=SIGNING_SECRET, timestamp=old_ts)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "stale_timestamp"
         _assert_no_audit_side_effects(audit_sink)
@@ -143,9 +140,7 @@ class TestReplayAttacks:
         body = _payload_body()
         future_ts = int(time.time()) + REPLAY_WINDOW_SECONDS + 5
         headers = _sign(body, secret=SIGNING_SECRET, timestamp=future_ts)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -158,9 +153,7 @@ class TestReplayAttacks:
         the replay window for any host with a roughly-correct clock."""
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET, timestamp=0)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -171,9 +164,7 @@ class TestReplayAttacks:
     ) -> None:
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET, timestamp=-10)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -193,9 +184,7 @@ class TestSignatureTampering:
         impersonate Slack."""
         body = _payload_body()
         headers = _sign(body, secret=ATTACKER_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "invalid_signature"
         _assert_no_audit_side_effects(audit_sink)
@@ -211,9 +200,7 @@ class TestSignatureTampering:
         headers = _sign(original, secret=SIGNING_SECRET)
 
         forged = _payload_body(action_id="deny::approval-orig")
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=forged, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=forged, headers=headers)
         assert resp.status_code == 401
         assert resp.json()["detail"] == "invalid_signature"
         _assert_no_audit_side_effects(audit_sink)
@@ -230,9 +217,7 @@ class TestSignatureTampering:
         headers = _sign(body, secret=SIGNING_SECRET, timestamp=ts_old)
         # Tamper: bump timestamp without re-signing.
         headers["X-Slack-Request-Timestamp"] = str(int(time.time()))
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -244,9 +229,7 @@ class TestSignatureTampering:
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET)
         headers["X-Slack-Signature"] = headers["X-Slack-Signature"][:20]
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -258,9 +241,7 @@ class TestSignatureTampering:
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET)
         headers["X-Slack-Signature"] = ""
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -273,12 +254,8 @@ class TestSignatureTampering:
         a bare hex without the prefix MUST NOT be accepted."""
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET)
-        headers["X-Slack-Signature"] = headers["X-Slack-Signature"].removeprefix(
-            "v0="
-        )
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        headers["X-Slack-Signature"] = headers["X-Slack-Signature"].removeprefix("v0=")
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)
 
@@ -296,9 +273,7 @@ class TestBodySmuggling:
     ) -> None:
         body = b"payload=" + b"A" * (MAX_BODY_BYTES + 1024)
         headers = _sign(body, secret=SIGNING_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 413
         _assert_no_audit_side_effects(audit_sink)
 
@@ -310,9 +285,7 @@ class TestBodySmuggling:
         """A signature-valid body that fails UTF-8 decode MUST 400."""
         body = b"\xff\xfe\xfd" + b"x" * 10
         headers = _sign(body, secret=SIGNING_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         # 400 (invalid_body_encoding) or 400 (missing_payload_field) — both
         # are accepted defensive responses.
         assert resp.status_code == 400
@@ -325,9 +298,7 @@ class TestBodySmuggling:
     ) -> None:
         body = b""
         headers = _sign(body, secret=SIGNING_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 400
         _assert_no_audit_side_effects(audit_sink)
 
@@ -349,9 +320,7 @@ class TestHardFailMode:
         monkeypatch.setattr(settings, "slack_signing_secret", None)
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 503
         assert resp.json()["detail"] == "slack_signing_secret_not_configured"
         _assert_no_audit_side_effects(audit_sink)
@@ -365,9 +334,7 @@ class TestHardFailMode:
         monkeypatch.setattr(settings, "slack_signing_secret", "")
         body = _payload_body()
         headers = _sign(body, secret=SIGNING_SECRET)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 503
         _assert_no_audit_side_effects(audit_sink)
 
@@ -391,8 +358,6 @@ class TestConstantTimeCompare:
         good_sig = headers["X-Slack-Signature"]
         forged = good_sig[:35] + ("0" * (len(good_sig) - 35))
         headers["X-Slack-Signature"] = forged
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 401
         _assert_no_audit_side_effects(audit_sink)

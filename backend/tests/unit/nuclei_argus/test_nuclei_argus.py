@@ -16,7 +16,6 @@ import json
 from pathlib import Path
 
 import yaml
-
 from src.recon.schemas.base import FindingType
 from src.recon.vulnerability_analysis.active_scan.nuclei_va_adapter import (
     ARGUS_NUCLEI_TEMPLATES_DIR,
@@ -119,9 +118,7 @@ def test_category_d_families_do_not_collide_with_existing_payloads() -> None:
     existing = set(json.loads(_PAYLOAD_INDEX.read_text(encoding="utf-8"))["families"])
     data = _load_checklist()
     proposed = {
-        str(entry["target_artifact"])
-        for entry in data["entries"]
-        if entry["category"] == "D"
+        str(entry["target_artifact"]) for entry in data["entries"] if entry["category"] == "D"
     }
     assert proposed, "expected at least one category-D proposed payload family"
     collisions = proposed & existing
@@ -131,9 +128,7 @@ def test_category_d_families_do_not_collide_with_existing_payloads() -> None:
 def test_category_e_targets_match_argus_templates() -> None:
     data = _load_checklist()
     e_targets = {
-        str(entry["target_artifact"])
-        for entry in data["entries"]
-        if entry["category"] == "E"
+        str(entry["target_artifact"]) for entry in data["entries"] if entry["category"] == "E"
     }
     assert e_targets == _ARGUS_TEMPLATE_IDS
 
@@ -194,7 +189,7 @@ def test_argus_templates_argv_uses_builtin_dir() -> None:
     template_path = Path(argv[argv.index("-t") + 1])
     assert template_path == ARGUS_NUCLEI_TEMPLATES_DIR
     assert template_path.is_dir()
-    assert ARGUS_NUCLEI_TEMPLATES_DIR == ARGUS_NUCLEI_TEMPLATES_DIR.resolve()
+    assert ARGUS_NUCLEI_TEMPLATES_DIR.resolve() == ARGUS_NUCLEI_TEMPLATES_DIR
 
 
 def test_arbitrary_templates_path_is_rejected() -> None:

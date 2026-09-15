@@ -325,7 +325,7 @@ try:
         max_retries=0,
         ignore_result=True,
     )
-    def queue_depth_refresh_task(self: Any) -> dict[str, int]:  # noqa: ARG001
+    def queue_depth_refresh_task(self: Any) -> dict[str, int]:  # noqa: ARG001 - Celery task/signal signature
         """Beat-driven 15 s refresh of :func:`refresh_queue_depths`.
 
         Returns the per-queue depths so Celery's result backend (and any

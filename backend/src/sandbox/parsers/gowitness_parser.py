@@ -36,7 +36,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -76,7 +76,7 @@ _MANIFEST_CANDIDATES: Final[tuple[str, ...]] = (
 _MAX_FINDINGS: Final[int] = 1_000
 
 
-_DedupKey: TypeAlias = tuple[str, str, str]
+type _DedupKey = tuple[str, str, str]
 
 
 def parse_gowitness(
@@ -174,11 +174,7 @@ def _iter_records(payload: Any) -> Iterable[dict[str, Any]]:
                 yield item
         return
     if isinstance(payload, dict):
-        rows = (
-            payload.get("screenshots")
-            or payload.get("results")
-            or payload.get("entries")
-        )
+        rows = payload.get("screenshots") or payload.get("results") or payload.get("entries")
         if isinstance(rows, list):
             for item in rows:
                 if isinstance(item, dict):

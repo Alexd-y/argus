@@ -27,30 +27,59 @@ def _build(findings):
 
 
 def test_validator_id_from_source_tool():
-    doc = _build([
-        _Finding(finding_id="f1", title="TLS weakness", severity="medium", cwe="CWE-326",
-                 description="weak tls", validation_status="unverified", confidence="likely",
-                 evidence_refs=["tool:testssl"], source_tool="testssl"),
-    ])
+    doc = _build(
+        [
+            _Finding(
+                finding_id="f1",
+                title="TLS weakness",
+                severity="medium",
+                cwe="CWE-326",
+                description="weak tls",
+                validation_status="unverified",
+                confidence="likely",
+                evidence_refs=["tool:testssl"],
+                source_tool="testssl",
+            ),
+        ]
+    )
     assert doc.findings[0].validator_id == "testssl"
 
 
 def test_raw_artifact_ref_from_poc_key():
-    doc = _build([
-        _Finding(finding_id="f2", title="Reflected XSS", severity="high", cwe="CWE-79",
-                 description="xss", validation_status="validated", confidence="confirmed",
-                 evidence_refs=["tool:dalfox"], source_tool="dalfox",
-                 proof_of_concept={"screenshot_key": "argus/poc/f2.png"}),
-    ])
+    doc = _build(
+        [
+            _Finding(
+                finding_id="f2",
+                title="Reflected XSS",
+                severity="high",
+                cwe="CWE-79",
+                description="xss",
+                validation_status="validated",
+                confidence="confirmed",
+                evidence_refs=["tool:dalfox"],
+                source_tool="dalfox",
+                proof_of_concept={"screenshot_key": "argus/poc/f2.png"},
+            ),
+        ]
+    )
     assert doc.findings[0].raw_artifact_ref == "argus/poc/f2.png"
 
 
 def test_missing_provenance_stays_none():
-    doc = _build([
-        _Finding(finding_id="f3", title="Info", severity="info", cwe=None,
-                 description="d", validation_status="missing", confidence="advisory",
-                 evidence_refs=[]),
-    ])
+    doc = _build(
+        [
+            _Finding(
+                finding_id="f3",
+                title="Info",
+                severity="info",
+                cwe=None,
+                description="d",
+                validation_status="missing",
+                confidence="advisory",
+                evidence_refs=[],
+            ),
+        ]
+    )
     f = doc.findings[0]
     assert f.validator_id is None
     assert f.raw_artifact_ref is None
@@ -120,11 +149,25 @@ class _RDWithEvidence:
 def test_finding_cross_linked_to_evidence_passes_gate():
     rd = _RDWithEvidence(
         findings=[
-            _Finding(finding_id="F-1", title="SQL injection", severity="high", cwe="CWE-89",
-                     description="sqli confirmed via sqlmap", validation_status="validated",
-                     confidence="confirmed", evidence_refs=[], source_tool="sqlmap"),
+            _Finding(
+                finding_id="F-1",
+                title="SQL injection",
+                severity="high",
+                cwe="CWE-89",
+                description="sqli confirmed via sqlmap",
+                validation_status="validated",
+                confidence="confirmed",
+                evidence_refs=[],
+                source_tool="sqlmap",
+            ),
         ],
-        evidence=[{"finding_id": "F-1", "object_key": "argus/poc/F-1.json", "kind": "artifact"}],
+        evidence=[
+            {
+                "finding_id": "F-1",
+                "object_key": "argus/poc/F-1.json",
+                "kind": "artifact",
+            }
+        ],
     )
     doc = build_snapshot_from_report_data(rd, scan_meta={"scan_id": "s1"})
     f = doc.findings[0]
@@ -138,9 +181,17 @@ def test_finding_cross_linked_to_evidence_passes_gate():
 def test_confirmed_without_persisted_evidence_is_downgraded():
     rd = _RDWithEvidence(
         findings=[
-            _Finding(finding_id="F-2", title="Reflected XSS", severity="high", cwe="CWE-79",
-                     description="xss", validation_status="validated",
-                     confidence="confirmed", evidence_refs=[], source_tool="dalfox"),
+            _Finding(
+                finding_id="F-2",
+                title="Reflected XSS",
+                severity="high",
+                cwe="CWE-79",
+                description="xss",
+                validation_status="validated",
+                confidence="confirmed",
+                evidence_refs=[],
+                source_tool="dalfox",
+            ),
         ],
         evidence=[],
     )

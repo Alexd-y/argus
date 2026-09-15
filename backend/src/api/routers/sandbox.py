@@ -46,19 +46,19 @@ router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 _OUTPUT_MAX_LEN = 32_768
 
 _DANGEROUS_PYTHON_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bgetattr\s*\(", re.I),
-    re.compile(r"\bos\.\s*(system|popen|spawn)", re.I),
-    re.compile(r"\bos\.system\s*\(", re.I),
-    re.compile(r"\bsubprocess\b", re.I),
-    re.compile(r"\b__import__\s*\(", re.I),
-    re.compile(r"\bimportlib\b", re.I),
-    re.compile(r"\beval\s*\(", re.I),
-    re.compile(r"\bexec\s*\(", re.I),
-    re.compile(r"\bcompile\s*\(", re.I),
-    re.compile(r"\bopen\s*\(", re.I),
-    re.compile(r"\bsocket\b", re.I),
-    re.compile(r"\bpty\b", re.I),
-    re.compile(r"`", re.M),  # backticks in code often abuse subprocess
+    re.compile(r"\bgetattr\s*\(", re.IGNORECASE),
+    re.compile(r"\bos\.\s*(system|popen|spawn)", re.IGNORECASE),
+    re.compile(r"\bos\.system\s*\(", re.IGNORECASE),
+    re.compile(r"\bsubprocess\b", re.IGNORECASE),
+    re.compile(r"\b__import__\s*\(", re.IGNORECASE),
+    re.compile(r"\bimportlib\b", re.IGNORECASE),
+    re.compile(r"\beval\s*\(", re.IGNORECASE),
+    re.compile(r"\bexec\s*\(", re.IGNORECASE),
+    re.compile(r"\bcompile\s*\(", re.IGNORECASE),
+    re.compile(r"\bopen\s*\(", re.IGNORECASE),
+    re.compile(r"\bsocket\b", re.IGNORECASE),
+    re.compile(r"\bpty\b", re.IGNORECASE),
+    re.compile(r"`", re.MULTILINE),  # backticks in code often abuse subprocess
 )
 
 
@@ -106,7 +106,10 @@ def _list_processes_impl() -> dict[str, Any]:
             if proc.returncode != 0:
                 logger.warning(
                     "sandbox_ps_docker_failed",
-                    extra={"event": "argus.sandbox.ps_docker_failed", "returncode": proc.returncode},
+                    extra={
+                        "event": "argus.sandbox.ps_docker_failed",
+                        "returncode": proc.returncode,
+                    },
                 )
                 return {
                     "success": False,
@@ -119,7 +122,12 @@ def _list_processes_impl() -> dict[str, Any]:
                 row = _parse_ps_docker_line(line)
                 if row:
                     processes.append(row)
-            return {"success": True, "source": "docker", "processes": processes, "detail": None}
+            return {
+                "success": True,
+                "source": "docker",
+                "processes": processes,
+                "detail": None,
+            }
         except subprocess.TimeoutExpired:
             return {
                 "success": False,
@@ -166,7 +174,12 @@ def _list_processes_impl() -> dict[str, Any]:
                 except ValueError:
                     continue
                 processes.append({"pid": pid, "comm": name, "command": name})
-            return {"success": True, "source": "host", "processes": processes, "detail": None}
+            return {
+                "success": True,
+                "source": "host",
+                "processes": processes,
+                "detail": None,
+            }
 
         proc = subprocess.run(
             ["ps", "-eo", "pid=,comm=,args="],
@@ -187,7 +200,12 @@ def _list_processes_impl() -> dict[str, Any]:
             row = _parse_ps_docker_line(line)
             if row:
                 processes.append(row)
-        return {"success": True, "source": "host", "processes": processes, "detail": None}
+        return {
+            "success": True,
+            "source": "host",
+            "processes": processes,
+            "detail": None,
+        }
     except subprocess.TimeoutExpired:
         return {
             "success": False,
@@ -227,13 +245,21 @@ def _kill_process_impl(pid: int) -> dict[str, Any]:
                 }
             return {"success": True, "source": "docker", "detail": None}
         except subprocess.TimeoutExpired:
-            return {"success": False, "source": "docker", "detail": "Kill request timed out"}
+            return {
+                "success": False,
+                "source": "docker",
+                "detail": "Kill request timed out",
+            }
         except OSError:
             logger.exception(
                 "sandbox_kill_docker_os_error",
                 extra={"event": "argus.sandbox.kill_docker_os_error"},
             )
-            return {"success": False, "source": "docker", "detail": "Kill request failed"}
+            return {
+                "success": False,
+                "source": "docker",
+                "detail": "Kill request failed",
+            }
 
     try:
         if platform.system() == "Windows":
@@ -372,7 +398,11 @@ async def sandbox_kill_process(pid: int) -> JSONResponse:
     if pid < 1:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={"success": False, "feature": "sandbox_kill_process", "detail": "Invalid pid"},
+            content={
+                "success": False,
+                "feature": "sandbox_kill_process",
+                "detail": "Invalid pid",
+            },
         )
     payload = await asyncio.to_thread(_kill_process_impl, pid)
     if not payload.get("success"):

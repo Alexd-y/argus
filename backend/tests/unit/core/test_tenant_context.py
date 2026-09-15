@@ -8,7 +8,6 @@ fallback, so these tests double as a guard against re-introducing one.
 
 import pytest
 from fastapi import HTTPException
-
 from src.core.auth import AuthContext
 from src.core.config import settings
 from src.core.tenant import get_current_tenant_id
@@ -25,9 +24,7 @@ class TestAuthenticated:
 
     async def test_matching_header_is_accepted(self) -> None:
         auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-        assert (
-            await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_A) == _TENANT_A
-        )
+        assert await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_A) == _TENANT_A
 
     async def test_mismatching_header_is_rejected(self) -> None:
         auth = AuthContext(user_id="u", tenant_id=_TENANT_A)

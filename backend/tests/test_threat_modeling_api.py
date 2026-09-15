@@ -242,9 +242,7 @@ class TestInputBundleEndpoint:
 class TestTraceEndpoints:
     """GET ai-traces, mcp-traces."""
 
-    def test_get_ai_traces_returns_json_structure(
-        self, client_with_db: TestClient
-    ) -> None:
+    def test_get_ai_traces_returns_json_structure(self, client_with_db: TestClient) -> None:
         """GET ai-traces returns AI reasoning traces structure."""
         engagement_id = "eng-004"
         run_id = "run-ai"
@@ -280,9 +278,7 @@ class TestTraceEndpoints:
         assert len(data["traces"]) == 1
         assert data["traces"][0]["step_id"] == "step1"
 
-    def test_get_mcp_traces_returns_json_structure(
-        self, client_with_db: TestClient
-    ) -> None:
+    def test_get_mcp_traces_returns_json_structure(self, client_with_db: TestClient) -> None:
         """GET mcp-traces returns MCP trace structure."""
         engagement_id = "eng-005"
         run_id = "run-mcp"
@@ -321,9 +317,7 @@ class TestTraceEndpoints:
 class TestArtifactDownloadEndpoint:
     """GET artifacts/{type}/download."""
 
-    def test_download_returns_404_for_unknown_type(
-        self, client_with_db: TestClient
-    ) -> None:
+    def test_download_returns_404_for_unknown_type(self, client_with_db: TestClient) -> None:
         """GET artifacts/{type}/download returns 404 for unknown artifact type."""
         engagement_id = "eng-006"
         run_id = "run-art"

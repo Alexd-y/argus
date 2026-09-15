@@ -40,13 +40,12 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
+from pydantic import ValidationError
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import ToolCategory, ToolDescriptor
 from src.sandbox.templating import validate_template
 from src.sandbox.tool_registry import ToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # Expected catalog inventory (matches Backlog/dev1_md §4.1-§4.3 verbatim).
@@ -529,9 +528,7 @@ SQLI_APPROVAL_REQUIRED: Final[frozenset[str]] = SQLI_TOOLS
 # (``interactsh_client`` / ``oastify_client``), the offline payload
 # generator (``gopherus``) and the lightweight canary
 # (``oast_dns_probe``) stay approval-free.
-OAST_APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"ssrfmap", "cloud_metadata_check"}
-)
+OAST_APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset({"ssrfmap", "cloud_metadata_check"})
 
 # §4.12 Auth / bruteforce batch — every active credential test requires
 # operator approval.  ``snmp_check`` (read-only SNMPv1/v2c walk) and
@@ -545,9 +542,7 @@ AUTH_APPROVAL_REQUIRED: Final[frozenset[str]] = AUTH_TOOLS - {
 
 # §4.13 Hash / crypto batch — the three crackers require approval; the
 # two classifiers (``hashid`` / ``hash_analyzer``) stay approval-free.
-HASH_APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"hashcat", "john", "ophcrack"}
-)
+HASH_APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset({"hashcat", "john", "ophcrack"})
 
 # §4.14 API / GraphQL / gRPC batch — uniformly approval-free in Cycle 2.
 # Every entry only emits read-only / introspection-style probes; the
@@ -650,19 +645,14 @@ _AUTH_RECON_TOOLS: Final[frozenset[str]] = frozenset({"snmp_check"})
 _AUTH_POST_EXPLOITATION_TOOLS: Final[frozenset[str]] = frozenset({"evil_winrm"})
 _AUTH_VULN_ANALYSIS_TOOLS: Final[frozenset[str]] = frozenset({"gobuster_auth"})
 _AUTH_EXPLOITATION_TOOLS: Final[frozenset[str]] = (
-    AUTH_TOOLS
-    - _AUTH_RECON_TOOLS
-    - _AUTH_POST_EXPLOITATION_TOOLS
-    - _AUTH_VULN_ANALYSIS_TOOLS
+    AUTH_TOOLS - _AUTH_RECON_TOOLS - _AUTH_POST_EXPLOITATION_TOOLS - _AUTH_VULN_ANALYSIS_TOOLS
 )
 # §4.13 Hash / crypto — every entry runs after credentials / hashes
 # have been collected, so the whole batch lives in ``post_exploitation``.
 _HASH_POST_EXPLOITATION_TOOLS: Final[frozenset[str]] = HASH_TOOLS
 # §4.14 API / GraphQL — two recon-phase fingerprints (``graphw00f`` /
 # ``grpcurl_probe``); the rest live in vuln_analysis.
-_API_GRAPHQL_RECON_TOOLS: Final[frozenset[str]] = frozenset(
-    {"graphw00f", "grpcurl_probe"}
-)
+_API_GRAPHQL_RECON_TOOLS: Final[frozenset[str]] = frozenset({"graphw00f", "grpcurl_probe"})
 _API_GRAPHQL_VULN_ANALYSIS_TOOLS: Final[frozenset[str]] = (
     API_GRAPHQL_TOOLS - _API_GRAPHQL_RECON_TOOLS
 )
@@ -695,9 +685,7 @@ _NETWORK_PROTOCOL_RECON_TOOLS: Final[frozenset[str]] = frozenset(
         "mongodb_probe",
     }
 )
-_NETWORK_PROTOCOL_EXPLOITATION_TOOLS: Final[frozenset[str]] = frozenset(
-    {"responder", "ntlmrelayx"}
-)
+_NETWORK_PROTOCOL_EXPLOITATION_TOOLS: Final[frozenset[str]] = frozenset({"responder", "ntlmrelayx"})
 _NETWORK_PROTOCOL_POST_EXPLOITATION_TOOLS: Final[frozenset[str]] = frozenset(
     {"impacket_secretsdump", "bloodhound_python"}
 )
@@ -707,9 +695,7 @@ _BINARY_VULN_ANALYSIS_TOOLS: Final[frozenset[str]] = BINARY_TOOLS
 # §4.19 Browser — split between recon (passive screenshots) and
 # vuln_analysis (active misconfig probes / runner).
 _BROWSER_RECON_TOOLS: Final[frozenset[str]] = frozenset({"puppeteer_screens"})
-_BROWSER_VULN_ANALYSIS_TOOLS: Final[frozenset[str]] = (
-    BROWSER_TOOLS - _BROWSER_RECON_TOOLS
-)
+_BROWSER_VULN_ANALYSIS_TOOLS: Final[frozenset[str]] = BROWSER_TOOLS - _BROWSER_RECON_TOOLS
 # §4.9 / §4.10 / §4.11 / §4.12 / §4.15 / §4.17 tools that escalate to
 # the exploitation phase.  Reviewer C1 (cycle 2) added the §4.11
 # ``cloud_metadata_check`` entry — it shares the IMDS-touching
@@ -776,9 +762,7 @@ def loaded_registry(catalog_dir: Path) -> ToolRegistry:
     """Load the real signed catalog exactly as the application does at startup."""
     registry = ToolRegistry(tools_dir=catalog_dir)
     summary = registry.load()
-    assert summary.total >= 157, (
-        f"catalog shrunk: expected at least 157 tools, got {summary.total}"
-    )
+    assert summary.total >= 157, f"catalog shrunk: expected at least 157 tools, got {summary.total}"
     return registry
 
 
@@ -807,9 +791,7 @@ def test_catalog_total_meets_arg003_threshold(
 
 
 @pytest.mark.parametrize("tool_id", sorted(EXPECTED_TOOLS))
-def test_descriptor_template_is_in_allowlist(
-    loaded_registry: ToolRegistry, tool_id: str
-) -> None:
+def test_descriptor_template_is_in_allowlist(loaded_registry: ToolRegistry, tool_id: str) -> None:
     descriptor = loaded_registry.get(tool_id)
     assert descriptor is not None, f"{tool_id} is missing from the catalog"
     # ``validate_template`` raises on any forbidden placeholder; reaching the
@@ -828,9 +810,7 @@ def test_descriptor_uses_runtime_default_seccomp(
 
 
 @pytest.mark.parametrize("tool_id", sorted(EXPECTED_TOOLS))
-def test_descriptor_declares_resource_limits(
-    loaded_registry: ToolRegistry, tool_id: str
-) -> None:
+def test_descriptor_declares_resource_limits(loaded_registry: ToolRegistry, tool_id: str) -> None:
     descriptor = loaded_registry.get(tool_id)
     assert descriptor is not None
     assert descriptor.cpu_limit, f"{tool_id} has empty cpu_limit"
@@ -838,15 +818,11 @@ def test_descriptor_declares_resource_limits(
 
 
 @pytest.mark.parametrize("tool_id", sorted(EXPECTED_TOOLS))
-def test_descriptor_has_non_empty_description(
-    loaded_registry: ToolRegistry, tool_id: str
-) -> None:
+def test_descriptor_has_non_empty_description(loaded_registry: ToolRegistry, tool_id: str) -> None:
     descriptor = loaded_registry.get(tool_id)
     assert descriptor is not None
     assert descriptor.description, f"{tool_id} has empty description"
-    assert "§4." in descriptor.description, (
-        f"{tool_id} description must reference Backlog §4.x"
-    )
+    assert "§4." in descriptor.description, f"{tool_id} description must reference Backlog §4.x"
 
 
 _APPROVAL_REQUIRED: Final[frozenset[str]] = (
@@ -994,9 +970,7 @@ def test_descriptor_declares_evidence_artifacts(
 
 def test_grouping_by_phase_matches_backlog(loaded_registry: ToolRegistry) -> None:
     recon_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.RECON)}
-    vuln_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)
-    }
+    vuln_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)}
 
     # Recon must include every passive-recon tool plus active-recon tools that
     # are not the medium-risk nmap_vuln (which §4.2 places in vuln_analysis).
@@ -1260,7 +1234,7 @@ def test_descriptors_are_frozen_pydantic_instances(
     """Defence-in-depth: the registry hands out immutable descriptors."""
     for descriptor in loaded_registry.all_descriptors():
         assert isinstance(descriptor, ToolDescriptor)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             descriptor.tool_id = "tampered"
 
 
@@ -1480,9 +1454,7 @@ def test_web_vuln_tools_have_cwe_and_owasp_hints(
     for tool_id in sorted(WEB_VULN_TOOLS):
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
-        assert descriptor.cwe_hints, (
-            f"{tool_id}: §4.8 tools must declare at least one CWE hint"
-        )
+        assert descriptor.cwe_hints, f"{tool_id}: §4.8 tools must declare at least one CWE hint"
         assert descriptor.owasp_wstg, (
             f"{tool_id}: §4.8 tools must declare at least one OWASP WSTG hint"
         )
@@ -1548,9 +1520,7 @@ def test_sqli_tools_risk_level_distribution(loaded_registry: ToolRegistry) -> No
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None, f"{tool_id} missing from catalog"
         if descriptor.risk_level is not want:
-            mismatches.append(
-                f"{tool_id}: expected {want}, got {descriptor.risk_level}"
-            )
+            mismatches.append(f"{tool_id}: expected {want}, got {descriptor.risk_level}")
     assert not mismatches, "§4.9 risk_level mismatches:\n" + "\n".join(mismatches)
 
 
@@ -1586,9 +1556,7 @@ def test_sqli_tools_have_correct_cwe_hints(loaded_registry: ToolRegistry) -> Non
         cwes = set(descriptor.cwe_hints)
         missing = required - cwes
         if missing:
-            mismatches.append(
-                f"{tool_id}: missing CWE hints {sorted(missing)}, got {sorted(cwes)}"
-            )
+            mismatches.append(f"{tool_id}: missing CWE hints {sorted(missing)}, got {sorted(cwes)}")
     assert not mismatches, "§4.9 CWE hint mismatches:\n" + "\n".join(mismatches)
 
 
@@ -1655,8 +1623,7 @@ def test_xss_tools_use_correct_image(loaded_registry: ToolRegistry) -> None:
         assert descriptor is not None, f"{tool_id} missing from catalog"
         if tool_id == "playwright_xss_verify":
             assert descriptor.image == "argus-kali-browser:latest", (
-                f"{tool_id} must use argus-kali-browser:latest, "
-                f"got {descriptor.image!r}"
+                f"{tool_id} must use argus-kali-browser:latest, got {descriptor.image!r}"
             )
         else:
             assert descriptor.image == "argus-kali-web:latest", (
@@ -1681,8 +1648,7 @@ def test_xss_tools_phase_split(loaded_registry: ToolRegistry) -> None:
                 f"{tool_id} must escalate to exploitation phase"
             )
             assert descriptor.category is ToolCategory.BROWSER, (
-                f"{tool_id} must classify as ToolCategory.BROWSER, "
-                f"got {descriptor.category}"
+                f"{tool_id} must classify as ToolCategory.BROWSER, got {descriptor.category}"
             )
         else:
             assert descriptor.phase is ScanPhase.VULN_ANALYSIS, (
@@ -1712,9 +1678,7 @@ def test_xss_tools_risk_level_distribution(loaded_registry: ToolRegistry) -> Non
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None, f"{tool_id} missing from catalog"
         if descriptor.risk_level is not want:
-            mismatches.append(
-                f"{tool_id}: expected {want}, got {descriptor.risk_level}"
-            )
+            mismatches.append(f"{tool_id}: expected {want}, got {descriptor.risk_level}")
     assert not mismatches, "§4.10 risk_level mismatches:\n" + "\n".join(mismatches)
 
 
@@ -1775,9 +1739,7 @@ def test_arg016_phase_placement_matches_grouping_constants(
     right phase, and this test confirms ``list_by_phase`` surfaces the
     same two tool IDs (no silent drift between metadata and dispatch).
     """
-    exploitation_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)
-    }
+    exploitation_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)}
     arg016_exploitation = exploitation_ids & (SQLI_TOOLS | XSS_TOOLS)
     expected_arg016 = frozenset({"sqlmap_confirm", "playwright_xss_verify"})
     assert arg016_exploitation == expected_arg016, (
@@ -1807,9 +1769,7 @@ def test_oast_tools_use_correct_image(loaded_registry: ToolRegistry) -> None:
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None, f"{tool_id} missing from catalog"
         expected_image = (
-            "argus-kali-cloud:latest"
-            if tool_id in cloud_image_tools
-            else "argus-kali-web:latest"
+            "argus-kali-cloud:latest" if tool_id in cloud_image_tools else "argus-kali-web:latest"
         )
         assert descriptor.image == expected_image, (
             f"{tool_id} expected {expected_image}, got {descriptor.image!r}"
@@ -1837,9 +1797,7 @@ def test_oast_tools_phase_classification(loaded_registry: ToolRegistry) -> None:
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
         expected_phase = (
-            ScanPhase.EXPLOITATION
-            if tool_id in exploitation_oast
-            else ScanPhase.VULN_ANALYSIS
+            ScanPhase.EXPLOITATION if tool_id in exploitation_oast else ScanPhase.VULN_ANALYSIS
         )
         assert descriptor.phase is expected_phase, (
             f"{tool_id} expected {expected_phase!r}, got {descriptor.phase}"
@@ -1859,12 +1817,10 @@ def test_oast_tools_have_cwe918_and_inpv19_hints(
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
         assert 918 in descriptor.cwe_hints, (
-            f"{tool_id}: §4.11 OAST tools must declare CWE-918 (SSRF); "
-            f"got {descriptor.cwe_hints}"
+            f"{tool_id}: §4.11 OAST tools must declare CWE-918 (SSRF); got {descriptor.cwe_hints}"
         )
         assert "WSTG-INPV-19" in descriptor.owasp_wstg, (
-            f"{tool_id}: §4.11 OAST tools must declare WSTG-INPV-19; "
-            f"got {descriptor.owasp_wstg}"
+            f"{tool_id}: §4.11 OAST tools must declare WSTG-INPV-19; got {descriptor.owasp_wstg}"
         )
 
 
@@ -1946,8 +1902,7 @@ def test_auth_tools_phase_split(loaded_registry: ToolRegistry) -> None:
             )
         elif tool_id == "evil_winrm":
             assert descriptor.phase is ScanPhase.POST_EXPLOITATION, (
-                f"{tool_id} expected ScanPhase.POST_EXPLOITATION, "
-                f"got {descriptor.phase}"
+                f"{tool_id} expected ScanPhase.POST_EXPLOITATION, got {descriptor.phase}"
             )
         elif tool_id == "gobuster_auth":
             assert descriptor.phase is ScanPhase.VULN_ANALYSIS, (
@@ -2054,9 +2009,7 @@ def test_arg017_phase_placement_matches_grouping_constants(
     here so future drift cannot silently re-collapse the §4.11 / §4.12
     phase splits.
     """
-    exploitation_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)
-    }
+    exploitation_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)}
     arg017_exploitation = exploitation_ids & AUTH_TOOLS
     assert arg017_exploitation == _AUTH_EXPLOITATION_TOOLS, (
         f"§4.12 exploitation drift: "
@@ -2071,9 +2024,7 @@ def test_arg017_phase_placement_matches_grouping_constants(
         f"got {sorted(arg011_exploitation)}"
     )
 
-    vuln_analysis_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)
-    }
+    vuln_analysis_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)}
     arg012_vuln_analysis = vuln_analysis_ids & AUTH_TOOLS
     assert arg012_vuln_analysis == _AUTH_VULN_ANALYSIS_TOOLS, (
         f"§4.12 vuln_analysis drift: "
@@ -2113,8 +2064,7 @@ def test_network_protocol_tools_use_correct_image(
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None, f"{tool_id} missing from catalog"
         assert descriptor.image == "argus-kali-network:latest", (
-            f"{tool_id} expected argus-kali-network:latest, "
-            f"got {descriptor.image!r}"
+            f"{tool_id} expected argus-kali-network:latest, got {descriptor.image!r}"
         )
 
 
@@ -2142,8 +2092,7 @@ def test_network_protocol_tools_phase_split(loaded_registry: ToolRegistry) -> No
             )
         elif tool_id in _NETWORK_PROTOCOL_POST_EXPLOITATION_TOOLS:
             assert descriptor.phase is ScanPhase.POST_EXPLOITATION, (
-                f"{tool_id} expected ScanPhase.POST_EXPLOITATION, "
-                f"got {descriptor.phase}"
+                f"{tool_id} expected ScanPhase.POST_EXPLOITATION, got {descriptor.phase}"
             )
         else:
             pytest.fail(f"{tool_id} not classified into any §4.17 phase grouping")
@@ -2202,8 +2151,7 @@ def test_network_protocol_tools_classify_as_network(
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
         assert descriptor.category is ToolCategory.NETWORK, (
-            f"{tool_id}: §4.17 tools must classify as NETWORK; "
-            f"got {descriptor.category}"
+            f"{tool_id}: §4.17 tools must classify as NETWORK; got {descriptor.category}"
         )
 
 
@@ -2219,9 +2167,7 @@ def test_network_protocol_tools_have_cwe_and_owasp_hints(
     for tool_id in sorted(NETWORK_PROTOCOL_TOOLS):
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
-        assert descriptor.cwe_hints, (
-            f"{tool_id}: §4.17 tools must declare at least one CWE hint"
-        )
+        assert descriptor.cwe_hints, f"{tool_id}: §4.17 tools must declare at least one CWE hint"
         assert descriptor.owasp_wstg, (
             f"{tool_id}: §4.17 tools must declare at least one OWASP WSTG hint"
         )
@@ -2295,9 +2241,7 @@ def test_binary_tools_have_cwe_and_owasp_hints(
     for tool_id in sorted(BINARY_TOOLS):
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
-        assert descriptor.cwe_hints, (
-            f"{tool_id}: §4.18 tools must declare at least one CWE hint"
-        )
+        assert descriptor.cwe_hints, f"{tool_id}: §4.18 tools must declare at least one CWE hint"
         assert descriptor.owasp_wstg, (
             f"{tool_id}: §4.18 tools must declare at least one OWASP WSTG hint"
         )
@@ -2345,8 +2289,7 @@ def test_browser_tools_phase_split(loaded_registry: ToolRegistry) -> None:
                 f"{tool_id} expected ScanPhase.VULN_ANALYSIS, got {descriptor.phase}"
             )
         assert descriptor.category is ToolCategory.BROWSER, (
-            f"{tool_id}: §4.19 tools must classify as BROWSER; "
-            f"got {descriptor.category}"
+            f"{tool_id}: §4.19 tools must classify as BROWSER; got {descriptor.category}"
         )
         expected_approval = tool_id in BROWSER_APPROVAL_REQUIRED
         assert descriptor.requires_approval is expected_approval, (
@@ -2369,13 +2312,9 @@ def test_browser_tools_network_policy_split(
     for tool_id in sorted(BROWSER_TOOLS):
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
-        if tool_id in _BROWSER_RECON_TOOLS:
-            expected = "recon-passive"
-        else:
-            expected = "recon-active-tcp"
+        expected = "recon-passive" if tool_id in _BROWSER_RECON_TOOLS else "recon-active-tcp"
         assert descriptor.network_policy.name == expected, (
-            f"{tool_id} expected policy {expected!r}, "
-            f"got {descriptor.network_policy.name!r}"
+            f"{tool_id} expected policy {expected!r}, got {descriptor.network_policy.name!r}"
         )
 
 
@@ -2391,9 +2330,7 @@ def test_browser_tools_have_cwe_and_owasp_hints(
     for tool_id in sorted(BROWSER_TOOLS):
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None
-        assert descriptor.cwe_hints, (
-            f"{tool_id}: §4.19 tools must declare at least one CWE hint"
-        )
+        assert descriptor.cwe_hints, f"{tool_id}: §4.19 tools must declare at least one CWE hint"
         assert descriptor.owasp_wstg, (
             f"{tool_id}: §4.19 tools must declare at least one OWASP WSTG hint"
         )
@@ -2420,13 +2357,10 @@ def test_arg019_phase_placement_matches_grouping_constants(
     arg019_recon = recon_ids & arg019_tools
     expected_recon = _NETWORK_PROTOCOL_RECON_TOOLS | _BROWSER_RECON_TOOLS
     assert arg019_recon == expected_recon, (
-        f"§4.17/§4.19 recon drift: "
-        f"expected {sorted(expected_recon)}, got {sorted(arg019_recon)}"
+        f"§4.17/§4.19 recon drift: expected {sorted(expected_recon)}, got {sorted(arg019_recon)}"
     )
 
-    vuln_analysis_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)
-    }
+    vuln_analysis_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.VULN_ANALYSIS)}
     arg019_vuln = vuln_analysis_ids & arg019_tools
     expected_vuln = _BINARY_VULN_ANALYSIS_TOOLS | _BROWSER_VULN_ANALYSIS_TOOLS
     assert arg019_vuln == expected_vuln, (
@@ -2434,9 +2368,7 @@ def test_arg019_phase_placement_matches_grouping_constants(
         f"expected {sorted(expected_vuln)}, got {sorted(arg019_vuln)}"
     )
 
-    exploitation_ids = {
-        d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)
-    }
+    exploitation_ids = {d.tool_id for d in loaded_registry.list_by_phase(ScanPhase.EXPLOITATION)}
     arg019_exploit = exploitation_ids & arg019_tools
     assert arg019_exploit == _NETWORK_PROTOCOL_EXPLOITATION_TOOLS, (
         f"§4.17 exploitation drift: "
@@ -2472,9 +2404,7 @@ def test_arg019_total_tool_count_closes_catalog(
         f"catalog drift: expected exactly 162 tools, got {len(loaded_registry)}"
     )
     arg019_total = len(NETWORK_PROTOCOL_TOOLS | BINARY_TOOLS | BROWSER_TOOLS)
-    assert arg019_total == 20, (
-        f"ARG-019 frozenset drift: expected 20 tools, got {arg019_total}"
-    )
+    assert arg019_total == 20, f"ARG-019 frozenset drift: expected 20 tools, got {arg019_total}"
 
 
 # ---------------------------------------------------------------------------
@@ -2512,9 +2442,7 @@ def test_network_protocol_tools_risk_level_distribution(
         descriptor = loaded_registry.get(tool_id)
         assert descriptor is not None, f"{tool_id} missing from catalog"
         if descriptor.risk_level is not want:
-            mismatches.append(
-                f"{tool_id}: expected {want}, got {descriptor.risk_level}"
-            )
+            mismatches.append(f"{tool_id}: expected {want}, got {descriptor.risk_level}")
     assert not mismatches, "§4.17 risk_level mismatches:\n" + "\n".join(mismatches)
 
 

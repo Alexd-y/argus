@@ -124,7 +124,10 @@ def _load_anomalies_structured(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Failed to load anomalies_structured", extra={"path": str(path), "error": str(e)})
+        logger.warning(
+            "Failed to load anomalies_structured",
+            extra={"path": str(path), "error": str(e)},
+        )
         return None
 
 
@@ -135,7 +138,10 @@ def _load_stage2_structured(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Failed to load stage2_structured", extra={"path": str(path), "error": str(e)})
+        logger.warning(
+            "Failed to load stage2_structured",
+            extra={"path": str(path), "error": str(e)},
+        )
         return None
 
 
@@ -157,7 +163,10 @@ def _load_stage3_readiness(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Failed to load stage3_readiness", extra={"path": str(path), "error": str(e)})
+        logger.warning(
+            "Failed to load stage3_readiness",
+            extra={"path": str(path), "error": str(e)},
+        )
         return None
 
 
@@ -176,7 +185,9 @@ def _render_stage2_from_structured(structured: dict) -> str:
     ) -> None:
         normalized_block_type = _normalize_taxonomy_type(block_type)
         out.append(f'<div class="{normalized_block_type}">')
-        out.append(f'<span class="badge badge-{normalized_block_type}">{_escape(normalized_block_type)}</span>')
+        out.append(
+            f'<span class="badge badge-{normalized_block_type}">{_escape(normalized_block_type)}</span>'
+        )
         out.append(f"<h3>{_escape(title)}</h3>")
         if not items:
             out.append("<p><em>No items.</em></p>")
@@ -191,10 +202,14 @@ def _render_stage2_from_structured(structured: dict) -> str:
             out.append(f'<li class="{i_type}">')
             out.append(f'<span class="badge badge-{i_type}">{_escape(i_type)}</span>')
             if source:
-                out.append(f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span> ')
+                out.append(
+                    f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span> '
+                )
             if priority:
                 safe_priority = _normalize_priority(priority)
-                out.append(f'<span class="badge badge-{safe_priority}">{_escape(safe_priority)}</span> ')
+                out.append(
+                    f'<span class="badge badge-{safe_priority}">{_escape(safe_priority)}</span> '
+                )
             if code_items:
                 out.append(f"<code>{_escape(text)}</code>")
             else:
@@ -204,9 +219,23 @@ def _render_stage2_from_structured(structured: dict) -> str:
         out.append("</div>")
 
     _render_section("Priority Hypotheses", structured.get("priority_hypotheses", []), "hypothesis")
-    _render_section("Candidate Trust Boundaries", structured.get("trust_boundaries", []), "inference")
-    _render_section("Candidate Critical Assets", structured.get("critical_assets", []), "observation", code_items=True)
-    _render_section("Candidate Entry Points", structured.get("entry_points", []), "hypothesis", code_items=True)
+    _render_section(
+        "Candidate Trust Boundaries",
+        structured.get("trust_boundaries", []),
+        "inference",
+    )
+    _render_section(
+        "Candidate Critical Assets",
+        structured.get("critical_assets", []),
+        "observation",
+        code_items=True,
+    )
+    _render_section(
+        "Candidate Entry Points",
+        structured.get("entry_points", []),
+        "hypothesis",
+        code_items=True,
+    )
 
     return "\n".join(out)
 
@@ -227,7 +256,9 @@ def _render_anomalies_from_structured(structured: dict) -> str:
             out.append(f'<div class="{a_type}">')
             out.append(f'<span class="badge badge-{a_type}">{_escape(a_type)}</span>')
             if source:
-                out.append(f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span>')
+                out.append(
+                    f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span>'
+                )
             out.append("<ul>")
             for key in ("host", "description", "evidence"):
                 val = a.get(key)
@@ -248,7 +279,9 @@ def _render_anomalies_from_structured(structured: dict) -> str:
             out.append('<li class="hypothesis">')
             out.append(f'<span class="badge badge-{h_type}">{_escape(h_type)}</span>')
             if source:
-                out.append(f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span> ')
+                out.append(
+                    f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span> '
+                )
             out.append(_escape(text))
             out.append("</li>")
         out.append("</ul>")
@@ -372,12 +405,17 @@ def _md_to_html(text: str) -> str:
                 in_list = True
             content = stripped[2:]
             content = re.sub(r"`([^`]+)`", lambda m: f"<code>{_escape(m.group(1))}</code>", content)
-            content = re.sub(r"\*\*([^*]+)\*\*", lambda m: f"<strong>{_escape(m.group(1))}</strong>", content)
+            content = re.sub(
+                r"\*\*([^*]+)\*\*",
+                lambda m: f"<strong>{_escape(m.group(1))}</strong>",
+                content,
+            )
             placeholders: list[str] = []
 
             def _protect(m: re.Match[str], _ph: list[str] = placeholders) -> str:
                 _ph.append(m.group(0))
                 return f"\u0001P{len(_ph) - 1}\u0001"
+
             content = re.sub(r"<code>[^<]*</code>|<strong>[^<]*</strong>", _protect, content)
             content = _escape(content)
             for i, p in enumerate(placeholders):
@@ -411,12 +449,12 @@ def _derive_target_domain(recon_dir: Path) -> str:
     """Extract target domain from scope.txt, targets.txt, or directory name."""
     scope_path = recon_dir / "00_scope" / "scope.txt"
     text = _read_text(scope_path)
-    m = re.search(r"Target:\s*([^\s#\n]+)", text, re.I)
+    m = re.search(r"Target:\s*([^\s#\n]+)", text, re.IGNORECASE)
     if m:
         return m.group(1).strip()
     targets_path = recon_dir / "00_scope" / "targets.txt"
     text = _read_text(targets_path)
-    m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.I)
+    m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.IGNORECASE)
     if m:
         return m.group(1).strip()
     name = recon_dir.name
@@ -430,7 +468,11 @@ def _csv_to_html_table(rows: list[dict], columns: list[str] | None = None) -> st
     if not rows:
         return "<p><em>No data.</em></p>"
     cols = columns or list(rows[0].keys())
-    out = ["<table>", "<thead><tr>" + "".join(f"<th>{_escape(c)}</th>" for c in cols) + "</tr></thead>", "<tbody>"]
+    out = [
+        "<table>",
+        "<thead><tr>" + "".join(f"<th>{_escape(c)}</th>" for c in cols) + "</tr></thead>",
+        "<tbody>",
+    ]
     for row in rows:
         cells = [str(row.get(c, ""))[:200] for c in cols]
         out.append("<tr>" + "".join(f"<td>{_escape(c)}</td>" for c in cells) + "</tr>")
@@ -445,8 +487,12 @@ def _build_tools_ai_section(tools_ai_metadata: dict | None, mcp_used: bool) -> s
     # MCP tools
     mcp_tools: list[str] = []
     if mcp_used:
-        mcp_tools.append("mcp-server-fetch: <code>fetch</code> — endpoint discovery (robots.txt, sitemap.xml, security.txt, favicon.ico, manifest.json)")
-    mcp_tools.append("ARGUS MCP server (argus-mcp container): available for Cursor/IDE — create_scan, subfinder, httpx, nuclei, etc.")
+        mcp_tools.append(
+            "mcp-server-fetch: <code>fetch</code> — endpoint discovery (robots.txt, sitemap.xml, security.txt, favicon.ico, manifest.json)"
+        )
+    mcp_tools.append(
+        "ARGUS MCP server (argus-mcp container): available for Cursor/IDE — create_scan, subfinder, httpx, nuclei, etc."
+    )
 
     parts.append("<h3>MCP Tools</h3>")
     parts.append("<ul>")
@@ -474,7 +520,9 @@ def _build_tools_ai_section(tools_ai_metadata: dict | None, mcp_used: bool) -> s
                 parts.append(f"<pre>{_escape(desc[:800])}{'...' if len(desc) > 800 else ''}</pre>")
     else:
         parts.append("<h3>AI Used</h3>")
-        parts.append("<p><em>No AI configured (LLM keys not set). Rule-based analysis used.</em></p>")
+        parts.append(
+            "<p><em>No AI configured (LLM keys not set). Rule-based analysis used.</em></p>"
+        )
 
     return "\n".join(parts)
 
@@ -560,7 +608,9 @@ def build_html_report(
 
     # 1. Executive summary
     sub_count = len(subdomain_csv) if subdomain_csv else len(resolved)
-    live_count = len({r.get("host", "") for r in live_hosts_csv if r.get("host")}) if live_hosts_csv else 0
+    live_count = (
+        len({r.get("host", "") for r in live_hosts_csv if r.get("host")}) if live_hosts_csv else 0
+    )
     anom_count = 0
     if anomalies_structured and "anomalies" in anomalies_structured:
         anom_count = len(anomalies_structured["anomalies"])
@@ -581,7 +631,13 @@ def build_html_report(
     <p>CNAME takeover assessment and anomaly validation should be prioritized for Stage 2.</p>
     </div>
     """
-    exec_source = _source_block(["subdomain_classification.csv", "live_hosts_detailed.csv", "anomalies_structured.json"])
+    exec_source = _source_block(
+        [
+            "subdomain_classification.csv",
+            "live_hosts_detailed.csv",
+            "anomalies_structured.json",
+        ]
+    )
     sections.append(
         f'<section id="section-01-executive-summary" class="section"><h2>1. Executive Summary</h2>{exec_summary}{exec_source}</section>'
     )
@@ -618,20 +674,22 @@ def build_html_report(
     if dns_split.get("evidence"):
         dns_blocks.append(
             f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
-            f'{_md_to_html(dns_split["evidence"])}</div>'
+            f"{_md_to_html(dns_split['evidence'])}</div>"
         )
     if dns_split.get("observation"):
         dns_blocks.append(
             f'<div class="observation"><span class="badge badge-observation">Observation</span>'
-            f'{_md_to_html(dns_split["observation"])}</div>'
+            f"{_md_to_html(dns_split['observation'])}</div>"
         )
     if dns_split.get("inference"):
         dns_blocks.append(
             f'<div class="inference"><span class="badge badge-inference">Inference</span>'
-            f'{_md_to_html(dns_split["inference"])}</div>'
+            f"{_md_to_html(dns_split['inference'])}</div>"
         )
     if not dns_blocks:
-        dns_fallback = _md_to_html(dns_summary) if dns_summary else "<p><em>No DNS summary available.</em></p>"
+        dns_fallback = (
+            _md_to_html(dns_summary) if dns_summary else "<p><em>No DNS summary available.</em></p>"
+        )
         dns_blocks.append(
             f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_fallback}</div>'
         )
@@ -642,26 +700,52 @@ def build_html_report(
 
     # 4. Subdomain classification (REC-010: Evidence, Observation, Inference, Hypothesis)
     sub_cols = ["subdomain", "role", "confidence", "priority", "notes"]
-    sub_table = _csv_to_html_table(subdomain_csv, sub_cols) if subdomain_csv else "<p><em>No subdomain classification.</em></p>"
+    sub_table = (
+        _csv_to_html_table(subdomain_csv, sub_cols)
+        if subdomain_csv
+        else "<p><em>No subdomain classification.</em></p>"
+    )
     sub_count_val = len(subdomain_csv) if subdomain_csv else 0
     sub_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span><p>Raw subdomain inventory: <strong>{sub_count_val}</strong> entries from subdomain enumeration.</p></div>'
     sub_observation = f'<div class="observation"><span class="badge badge-observation">Observation</span>{sub_table}</div>'
     sub_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Role classification (api, admin, auth, static, etc.) derived from hostname patterns and probe results.</p></div>'
     sub_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Prioritize high-confidence admin/auth subdomains for Stage 2 validation; verify unresolved or low-confidence entries.</p></div>'
-    sub_source = _source_block(["02_subdomains/subdomains_clean.txt", "subdomain_classification.csv"])
+    sub_source = _source_block(
+        ["02_subdomains/subdomains_clean.txt", "subdomain_classification.csv"]
+    )
     sections.append(
         f'<section id="section-04-subdomain-classification" class="section"><h2>4. Subdomain Classification</h2>'
-        f'{sub_evidence}{sub_observation}{sub_inference}{sub_hypothesis}{sub_source}</section>'
+        f"{sub_evidence}{sub_observation}{sub_inference}{sub_hypothesis}{sub_source}</section>"
     )
 
     # 5. DNS validation (resolution matrix, CNAME mapping)
     res_rows: list[dict] = []
     for sub, ips in sorted(resolved.items()):
-        res_rows.append({"subdomain": sub, "ips": ", ".join(ips[:5]) + ("..." if len(ips) > 5 else "")})
-    res_table = _csv_to_html_table(res_rows, ["subdomain", "ips"]) if res_rows else "<p><em>No resolved data.</em></p>"
+        res_rows.append(
+            {
+                "subdomain": sub,
+                "ips": ", ".join(ips[:5]) + ("..." if len(ips) > 5 else ""),
+            }
+        )
+    res_table = (
+        _csv_to_html_table(res_rows, ["subdomain", "ips"])
+        if res_rows
+        else "<p><em>No resolved data.</em></p>"
+    )
 
-    cname_rows = [{"host": r.get("host", ""), "target": r.get("value", ""), "comment": r.get("comment", "")} for r in cname_map]
-    cname_table = _csv_to_html_table(cname_rows, ["host", "target", "comment"]) if cname_rows else "<p><em>No CNAME records.</em></p>"
+    cname_rows = [
+        {
+            "host": r.get("host", ""),
+            "target": r.get("value", ""),
+            "comment": r.get("comment", ""),
+        }
+        for r in cname_map
+    ]
+    cname_table = (
+        _csv_to_html_table(cname_rows, ["host", "target", "comment"])
+        if cname_rows
+        else "<p><em>No CNAME records.</em></p>"
+    )
 
     dns_val_evidence = f"""
     <h3>Resolution Matrix (from resolved.txt)</h3>
@@ -676,12 +760,25 @@ def build_html_report(
     sections.append(
         f'<section id="section-05-dns-validation-results" class="section"><h2>5. DNS Validation Results</h2>'
         f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_val_evidence}</div>'
-        f'{dns_val_observation}{dns_val_inference}{dns_val_hypothesis}{dns_val_source}</section>'
+        f"{dns_val_observation}{dns_val_inference}{dns_val_hypothesis}{dns_val_source}</section>"
     )
 
     # 6. Live host analysis (REC-010: Evidence, Observation, Inference, Hypothesis)
-    live_cols = ["host", "ip", "cname", "final_url", "status", "title", "server", "notes"]
-    live_table = _csv_to_html_table(live_hosts_csv, live_cols) if live_hosts_csv else "<p><em>No live hosts data.</em></p>"
+    live_cols = [
+        "host",
+        "ip",
+        "cname",
+        "final_url",
+        "status",
+        "title",
+        "server",
+        "notes",
+    ]
+    live_table = (
+        _csv_to_html_table(live_hosts_csv, live_cols)
+        if live_hosts_csv
+        else "<p><em>No live hosts data.</em></p>"
+    )
     live_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{live_table}</div>'
     live_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>HTTP probe results: status codes, titles, server headers; hosts responding to safe HTTP requests.</p></div>'
     live_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Server headers and redirect chains indicate technology stack and potential admin/auth endpoints.</p></div>'
@@ -689,7 +786,7 @@ def build_html_report(
     live_source = _source_block(["04_live_hosts/http_probe.csv", "live_hosts_detailed.csv"])
     sections.append(
         f'<section id="section-06-live-host-analysis" class="section"><h2>6. Live Host Analysis</h2>'
-        f'{live_evidence}{live_observation}{live_inference}{live_hypothesis}{live_source}</section>'
+        f"{live_evidence}{live_observation}{live_inference}{live_hypothesis}{live_source}</section>"
     )
 
     # 7. Technology profile (REC-010: Evidence, Observation, Inference, Hypothesis)
@@ -701,26 +798,42 @@ def build_html_report(
     tech_source = _source_block(["tech_profile.csv", "04_live_hosts/http_probe.csv"])
     sections.append(
         f'<section id="section-07-technology-profile" class="section"><h2>7. Technology Profile</h2>'
-        f'{tech_evidence}{tech_observation}{tech_inference}{tech_hypothesis}{tech_source}</section>'
+        f"{tech_evidence}{tech_observation}{tech_inference}{tech_hypothesis}{tech_source}</section>"
     )
 
     # 8. JavaScript / Frontend Analysis
-    js_routes_table = _csv_to_html_table(
-        js_routes_csv,
-        ["route_hint", "evidence_ref"],
-    ) if js_routes_csv else "<p><em>No js_routes.csv.</em></p>"
-    js_api_refs_table = _csv_to_html_table(
-        js_api_refs_csv,
-        ["api_ref", "evidence_ref"],
-    ) if js_api_refs_csv else "<p><em>No js_api_refs.csv.</em></p>"
-    js_integrations_table = _csv_to_html_table(
-        js_integrations_csv,
-        ["integration_hint", "integration_type", "evidence_ref"],
-    ) if js_integrations_csv else "<p><em>No js_integrations.csv.</em></p>"
-    js_config_table = _csv_to_html_table(
-        js_config_hints_csv,
-        ["config_hint", "evidence_ref"],
-    ) if js_config_hints_csv else "<p><em>No js_config_hints.csv.</em></p>"
+    js_routes_table = (
+        _csv_to_html_table(
+            js_routes_csv,
+            ["route_hint", "evidence_ref"],
+        )
+        if js_routes_csv
+        else "<p><em>No js_routes.csv.</em></p>"
+    )
+    js_api_refs_table = (
+        _csv_to_html_table(
+            js_api_refs_csv,
+            ["api_ref", "evidence_ref"],
+        )
+        if js_api_refs_csv
+        else "<p><em>No js_api_refs.csv.</em></p>"
+    )
+    js_integrations_table = (
+        _csv_to_html_table(
+            js_integrations_csv,
+            ["integration_hint", "integration_type", "evidence_ref"],
+        )
+        if js_integrations_csv
+        else "<p><em>No js_integrations.csv.</em></p>"
+    )
+    js_config_table = (
+        _csv_to_html_table(
+            js_config_hints_csv,
+            ["config_hint", "evidence_ref"],
+        )
+        if js_config_hints_csv
+        else "<p><em>No js_config_hints.csv.</em></p>"
+    )
     js_summary_html = _md_to_html(js_findings) if js_findings else "<p><em>No JS findings.</em></p>"
     sections.append(
         f'<section id="section-08-javascript-frontend-analysis" class="section"><h2>8. JavaScript / Frontend Analysis</h2>'
@@ -729,49 +842,90 @@ def build_html_report(
         f'<h3>JS Integrations</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_integrations_table}</div>'
         f'<h3>JS Config Hints</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_config_table}</div>'
         f'<h3>Interpretation</h3><div class="inference"><span class="badge badge-inference">Inference</span>{js_summary_html}</div>'
-        f'{_source_block(["js_routes.csv", "js_api_refs.csv", "js_integrations.csv", "js_config_hints.csv", "js_findings.md"])}</section>'
+        f"{_source_block(['js_routes.csv', 'js_api_refs.csv', 'js_integrations.csv', 'js_config_hints.csv', 'js_findings.md'])}</section>"
     )
 
     # 9. Parameters and Input Surfaces (REC-010: Evidence, Observation, Hypothesis)
-    input_surfaces_table = _csv_to_html_table(
-        input_surfaces_csv,
-        ["surface_type", "surface_name", "context_url", "classification", "evidence_ref"],
-    ) if input_surfaces_csv else "<p><em>No input_surfaces.csv.</em></p>"
-    route_params_map_table = _csv_to_html_table(
-        route_params_map_csv,
-        ["context_url", "route_path", "param_names", "sources", "evidence_refs"],
-    ) if route_params_map_csv else "<p><em>No route_params_map.csv.</em></p>"
+    input_surfaces_table = (
+        _csv_to_html_table(
+            input_surfaces_csv,
+            [
+                "surface_type",
+                "surface_name",
+                "context_url",
+                "classification",
+                "evidence_ref",
+            ],
+        )
+        if input_surfaces_csv
+        else "<p><em>No input_surfaces.csv.</em></p>"
+    )
+    route_params_map_table = (
+        _csv_to_html_table(
+            route_params_map_csv,
+            ["context_url", "route_path", "param_names", "sources", "evidence_refs"],
+        )
+        if route_params_map_csv
+        else "<p><em>No route_params_map.csv.</em></p>"
+    )
     params_hypothesis = (
         '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        '<p>Prioritize auth-related parameters and form actions for Stage 2 validation; validate IDOR candidates on parameterized routes.</p></div>'
+        "<p>Prioritize auth-related parameters and form actions for Stage 2 validation; validate IDOR candidates on parameterized routes.</p></div>"
     )
     sections.append(
         f'<section id="section-09-parameters-input-surfaces" class="section"><h2>9. Parameters and Input Surfaces</h2>'
         f'<h3>Input Surfaces</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{input_surfaces_table}</div>'
         f'<h3>Route-Parameter Mapping</h3><div class="observation"><span class="badge badge-observation">Observation</span>{route_params_map_table}</div>'
-        f'{params_hypothesis}'
-        f'{_source_block(["params_inventory.csv", "forms_inventory.csv", "input_surfaces.csv", "route_params_map.csv"])}</section>'
+        f"{params_hypothesis}"
+        f"{_source_block(['params_inventory.csv', 'forms_inventory.csv', 'input_surfaces.csv', 'route_params_map.csv'])}</section>"
     )
 
     # 10. API Surface Mapping
-    api_table = _csv_to_html_table(
-        endpoint_csv,
-        ["url", "status", "content_type", "exists", "notes"],
-    ) if endpoint_csv else "<p><em>No endpoint inventory.</em></p>"
+    api_table = (
+        _csv_to_html_table(
+            endpoint_csv,
+            ["url", "status", "content_type", "exists", "notes"],
+        )
+        if endpoint_csv
+        else "<p><em>No endpoint inventory.</em></p>"
+    )
     api_surface_table = _csv_to_html_table(
         _load_csv(base / "api_surface.csv"),
-        ["host", "path", "full_url", "source", "api_type", "method_hint", "auth_boundary_hint", "evidence_ref"],
+        [
+            "host",
+            "path",
+            "full_url",
+            "source",
+            "api_type",
+            "method_hint",
+            "auth_boundary_hint",
+            "evidence_ref",
+        ],
     )
-    graphql_table = _csv_to_html_table(
-        graphql_candidates_csv,
-        ["host", "path", "full_url", "source", "evidence_ref"],
-    ) if graphql_candidates_csv else "<p><em>No graphql_candidates.csv.</em></p>"
-    json_candidates_table = _csv_to_html_table(
-        json_endpoint_candidates_csv,
-        ["host", "path", "full_url", "source", "evidence_ref"],
-    ) if json_endpoint_candidates_csv else "<p><em>No json_endpoint_candidates.csv.</em></p>"
-    boundaries_html = _md_to_html(frontend_backend_boundaries) if frontend_backend_boundaries else "<p><em>No frontend_backend_boundaries.md.</em></p>"
-    app_flow_html = _md_to_html(app_flow_hints) if app_flow_hints else "<p><em>No app_flow_hints.md.</em></p>"
+    graphql_table = (
+        _csv_to_html_table(
+            graphql_candidates_csv,
+            ["host", "path", "full_url", "source", "evidence_ref"],
+        )
+        if graphql_candidates_csv
+        else "<p><em>No graphql_candidates.csv.</em></p>"
+    )
+    json_candidates_table = (
+        _csv_to_html_table(
+            json_endpoint_candidates_csv,
+            ["host", "path", "full_url", "source", "evidence_ref"],
+        )
+        if json_endpoint_candidates_csv
+        else "<p><em>No json_endpoint_candidates.csv.</em></p>"
+    )
+    boundaries_html = (
+        _md_to_html(frontend_backend_boundaries)
+        if frontend_backend_boundaries
+        else "<p><em>No frontend_backend_boundaries.md.</em></p>"
+    )
+    app_flow_html = (
+        _md_to_html(app_flow_hints) if app_flow_hints else "<p><em>No app_flow_hints.md.</em></p>"
+    )
     sections.append(
         f'<section id="section-10-api-surface-mapping" class="section"><h2>10. API Surface Mapping</h2>'
         f'<h3>Endpoint Inventory</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{api_table}</div>'
@@ -780,11 +934,13 @@ def build_html_report(
         f'<h3>JSON Endpoint Candidates</h3><div class="observation"><span class="badge badge-observation">Observation</span>{json_candidates_table}</div>'
         f'<h3>Frontend/Backend Boundaries</h3><div class="inference"><span class="badge badge-inference">Inference</span>{boundaries_html}</div>'
         f'<h3>App Flow Hints</h3><div class="inference"><span class="badge badge-inference">Inference</span>{app_flow_html}</div>'
-        f'{_source_block(["api_surface.csv", "graphql_candidates.csv", "json_endpoint_candidates.csv", "frontend_backend_boundaries.md", "app_flow_hints.md"])}</section>'
+        f"{_source_block(['api_surface.csv', 'graphql_candidates.csv', 'json_endpoint_candidates.csv', 'frontend_backend_boundaries.md', 'app_flow_hints.md'])}</section>"
     )
 
     # 11. Headers / Cookies / TLS Analysis
-    headers_html = _md_to_html(headers_summary) if headers_summary else "<p><em>No headers summary.</em></p>"
+    headers_html = (
+        _md_to_html(headers_summary) if headers_summary else "<p><em>No headers summary.</em></p>"
+    )
     headers_detailed_table = (
         _csv_to_html_table(
             headers_detailed_csv,
@@ -802,15 +958,35 @@ def build_html_report(
         else "<p><em>No headers_detailed.csv.</em></p>"
     )
     tls_html = _md_to_html(tls_summary) if tls_summary else "<p><em>No TLS summary.</em></p>"
-    host_posture_table = _csv_to_html_table(
-        host_security_posture_csv,
-        ["host", "security_header_score", "cookie_count", "cookies_secure", "cookies_httponly", "cookies_samesite", "evidence_ref"],
-    ) if host_security_posture_csv else "<p><em>No host_security_posture.csv.</em></p>"
+    host_posture_table = (
+        _csv_to_html_table(
+            host_security_posture_csv,
+            [
+                "host",
+                "security_header_score",
+                "cookie_count",
+                "cookies_secure",
+                "cookies_httponly",
+                "cookies_samesite",
+                "evidence_ref",
+            ],
+        )
+        if host_security_posture_csv
+        else "<p><em>No host_security_posture.csv.</em></p>"
+    )
     control_inconsistencies_html = (
-        _md_to_html(control_inconsistencies) if control_inconsistencies else "<p><em>No control_inconsistencies.md.</em></p>"
+        _md_to_html(control_inconsistencies)
+        if control_inconsistencies
+        else "<p><em>No control_inconsistencies.md.</em></p>"
     )
     headers_source = _source_block(
-        ["headers_summary.md", "headers_detailed.csv", "tls_summary.md", "host_security_posture.csv", "control_inconsistencies.md"]
+        [
+            "headers_summary.md",
+            "headers_detailed.csv",
+            "tls_summary.md",
+            "host_security_posture.csv",
+            "control_inconsistencies.md",
+        ]
     )
     sections.append(
         f'<section id="section-11-headers-cookies-tls-analysis" class="section"><h2>11. Headers / Cookies / TLS Analysis</h2>'
@@ -819,7 +995,7 @@ def build_html_report(
         f'<div class="observation"><span class="badge badge-observation">Observation</span>{headers_html}</div>'
         f'<div class="observation"><span class="badge badge-observation">Observation</span>{control_inconsistencies_html}</div>'
         f'<div class="inference"><span class="badge badge-inference">Inference</span>{tls_html}</div>'
-        f'{headers_source}</section>'
+        f"{headers_source}</section>"
     )
 
     # 12. Content Similarity and Routing Behavior
@@ -855,37 +1031,55 @@ def build_html_report(
         if redirect_clusters_csv
         else "<p><em>No redirect clusters.</em></p>"
     )
-    response_similarity_table = _csv_to_html_table(
-        response_similarity_csv,
-        [
-            "cluster_id",
-            "host",
-            "url",
-            "similarity_score",
-            "template_hint",
-            "similarity_type",
-            "shared_redirect_target",
-            "evidence_ref",
-        ],
-    ) if response_similarity_csv else "<p><em>No response_similarity.csv.</em></p>"
-    hostname_behavior_table = _csv_to_html_table(
-        hostname_behavior_matrix_csv,
-        [
-            "host",
-            "behavior_type",
-            "related_hosts",
-            "content_cluster",
-            "template_hint",
-            "catch_all_hint",
-            "redirect_cluster",
-            "shared_with_root",
-            "suspicious_host",
-            "evidence_refs",
-        ],
-    ) if hostname_behavior_matrix_csv else "<p><em>No hostname_behavior_matrix.csv.</em></p>"
-    catch_all_html = _md_to_html(catch_all_evidence) if catch_all_evidence else "<p><em>No catch_all_evidence.md.</em></p>"
+    response_similarity_table = (
+        _csv_to_html_table(
+            response_similarity_csv,
+            [
+                "cluster_id",
+                "host",
+                "url",
+                "similarity_score",
+                "template_hint",
+                "similarity_type",
+                "shared_redirect_target",
+                "evidence_ref",
+            ],
+        )
+        if response_similarity_csv
+        else "<p><em>No response_similarity.csv.</em></p>"
+    )
+    hostname_behavior_table = (
+        _csv_to_html_table(
+            hostname_behavior_matrix_csv,
+            [
+                "host",
+                "behavior_type",
+                "related_hosts",
+                "content_cluster",
+                "template_hint",
+                "catch_all_hint",
+                "redirect_cluster",
+                "shared_with_root",
+                "suspicious_host",
+                "evidence_refs",
+            ],
+        )
+        if hostname_behavior_matrix_csv
+        else "<p><em>No hostname_behavior_matrix.csv.</em></p>"
+    )
+    catch_all_html = (
+        _md_to_html(catch_all_evidence)
+        if catch_all_evidence
+        else "<p><em>No catch_all_evidence.md.</em></p>"
+    )
     content_source = _source_block(
-        ["content_clusters.csv", "redirect_clusters.csv", "response_similarity.csv", "hostname_behavior_matrix.csv", "catch_all_evidence.md"]
+        [
+            "content_clusters.csv",
+            "redirect_clusters.csv",
+            "response_similarity.csv",
+            "hostname_behavior_matrix.csv",
+            "catch_all_evidence.md",
+        ]
     )
     sections.append(
         f'<section id="section-12-content-similarity-and-routing-behavior" class="section"><h2>12. Content Similarity and Routing Behavior</h2>'
@@ -894,25 +1088,33 @@ def build_html_report(
         f'<h3>Response Similarity</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{response_similarity_table}</div>'
         f'<h3>Hostname Behavior Matrix</h3><div class="observation"><span class="badge badge-observation">Observation</span>{hostname_behavior_table}</div>'
         f'<h3>Catch-all Evidence</h3><div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>{catch_all_html}</div>'
-        f'{content_source}</section>'
+        f"{content_source}</section>"
     )
 
     # 13. Anomaly Validation
-    anomaly_validation_table = _csv_to_html_table(
-        anomaly_validation_csv,
-        ["host", "classification", "confidence", "recommendation", "evidence_refs"],
-    ) if anomaly_validation_csv else "<p><em>No anomaly_validation.csv.</em></p>"
+    anomaly_validation_table = (
+        _csv_to_html_table(
+            anomaly_validation_csv,
+            ["host", "classification", "confidence", "recommendation", "evidence_refs"],
+        )
+        if anomaly_validation_csv
+        else "<p><em>No anomaly_validation.csv.</em></p>"
+    )
     if anomaly_validation:
         anomaly_validation_html = _md_to_html(anomaly_validation)
     elif anomalies_structured:
         anomaly_validation_html = _render_anomalies_from_structured(anomalies_structured)
     else:
-        anomaly_validation_html = _md_to_html(anomalies_text) if anomalies_text else "<p><em>No anomalies detected.</em></p>"
+        anomaly_validation_html = (
+            _md_to_html(anomalies_text)
+            if anomalies_text
+            else "<p><em>No anomalies detected.</em></p>"
+        )
     sections.append(
         f'<section id="section-13-anomaly-validation" class="section"><h2>13. Anomaly Validation</h2>'
         f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{anomaly_validation_table}</div>'
         f'<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>{anomaly_validation_html}</div>'
-        f'{_source_block(["anomaly_validation.md", "anomaly_validation.csv", "anomalies_structured.json", "anomalies.md"])}</section>'
+        f"{_source_block(['anomaly_validation.md', 'anomaly_validation.csv', 'anomalies_structured.json', 'anomalies.md'])}</section>"
     )
 
     # 14. Stage 2 preparation (REC-010: Evidence, Observation, Inference, Hypothesis)
@@ -930,8 +1132,8 @@ def build_html_report(
     stage2_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Priority hypotheses and candidate entry points should be validated manually before penetration testing.</p></div>'
     sections.append(
         f'<section id="section-14-stage-2-preparation" class="section"><h2>14. Stage 2 Preparation</h2>'
-        f'{stage2_evidence}{stage2_observation}{stage2_inference}{stage2_hypothesis}'
-        f'{_source_block(["stage2_preparation.md", "stage2_inputs.md", "stage2_structured.json", "anomaly_validation.md"])}</section>'
+        f"{stage2_evidence}{stage2_observation}{stage2_inference}{stage2_hypothesis}"
+        f"{_source_block(['stage2_preparation.md', 'stage2_inputs.md', 'stage2_structured.json', 'anomaly_validation.md'])}</section>"
     )
 
     # 15. Tools & AI Used (REC-010: Evidence badge for tools inventory)
@@ -949,17 +1151,21 @@ def build_html_report(
     else:
         intel_html = (
             '<div class="observation"><span class="badge badge-observation">Observation</span>'
-            '<p><em>No intel data. Configure API keys (e.g. SHODAN_API_KEY) and run Stage 1 report.</em></p></div>'
+            "<p><em>No intel data. Configure API keys (e.g. SHODAN_API_KEY) and run Stage 1 report.</em></p></div>"
         )
     intel_source = _source_block("intel_findings.json")
     sections.append(
         f'<section id="section-16-intel-osint-enrichment" class="section"><h2>16. Intel/OSINT Enrichment</h2>'
-        f'{intel_html}{intel_source}</section>'
+        f"{intel_html}{intel_source}</section>"
     )
 
     # 17. Stage 3 Readiness (REC-010: Evidence, Observation, Inference, Hypothesis; section 17 from REC-008)
     stage3_readiness_text = _read_text(base / "stage3_readiness.md")
-    stage3_readiness_html = _md_to_html(stage3_readiness_text) if stage3_readiness_text else "<p><em>No stage3_readiness.md.</em></p>"
+    stage3_readiness_html = (
+        _md_to_html(stage3_readiness_text)
+        if stage3_readiness_text
+        else "<p><em>No stage3_readiness.md.</em></p>"
+    )
     stage3_evidence_parts: list[str] = []
     if stage3_readiness_json:
         status = stage3_readiness_json.get("status", "unknown")
@@ -970,34 +1176,38 @@ def build_html_report(
         content = float(scores.get("content_anomaly") or 0)
         boundary = float(scores.get("boundary_mapping") or 0)
         stage3_evidence_parts.append(
-            f'<p><strong>Status:</strong> {_escape(str(status))}. '
-            f'Coverage: route={route:.2f}, input_surface={inp:.2f}, api_surface={api:.2f}, '
-            f'content_anomaly={content:.2f}, boundary_mapping={boundary:.2f}.</p>'
+            f"<p><strong>Status:</strong> {_escape(str(status))}. "
+            f"Coverage: route={route:.2f}, input_surface={inp:.2f}, api_surface={api:.2f}, "
+            f"content_anomaly={content:.2f}, boundary_mapping={boundary:.2f}.</p>"
         )
-    stage3_evidence = (
-        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{"".join(stage3_evidence_parts) or "<p>No stage3_readiness.json.</p>"}</div>'
-    )
+    stage3_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{"".join(stage3_evidence_parts) or "<p>No stage3_readiness.json.</p>"}</div>'
     stage3_observation_parts: list[str] = []
     if stage3_readiness_json:
         missing = stage3_readiness_json.get("missing_evidence", [])[:10]
         follow_up = stage3_readiness_json.get("recommended_follow_up", [])[:5]
         if missing:
-            stage3_observation_parts.append("<p><strong>Missing evidence:</strong> " + _escape(", ".join(missing)) + "</p>")
+            stage3_observation_parts.append(
+                "<p><strong>Missing evidence:</strong> " + _escape(", ".join(missing)) + "</p>"
+            )
         if follow_up:
-            stage3_observation_parts.append("<p><strong>Recommended follow-up:</strong> " + _escape("; ".join(follow_up)) + "</p>")
+            stage3_observation_parts.append(
+                "<p><strong>Recommended follow-up:</strong> "
+                + _escape("; ".join(follow_up))
+                + "</p>"
+            )
     stage3_observation = (
         f'<div class="observation"><span class="badge badge-observation">Observation</span>'
-        f'{"".join(stage3_observation_parts) or "<p>Coverage gaps and recommended actions from readiness assessment.</p>"}</div>'
+        f"{''.join(stage3_observation_parts) or '<p>Coverage gaps and recommended actions from readiness assessment.</p>'}</div>"
     )
     stage3_inference = f'<div class="inference"><span class="badge badge-inference">Inference</span>{stage3_readiness_html}</div>'
     stage3_hypothesis = (
         '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        '<p>Prioritize route and API surface coverage before penetration testing; address missing evidence gaps for Stage 3.</p></div>'
+        "<p>Prioritize route and API surface coverage before penetration testing; address missing evidence gaps for Stage 3.</p></div>"
     )
     sections.append(
         f'<section id="section-17-stage-3-readiness" class="section"><h2>17. Stage 3 Readiness</h2>'
-        f'{stage3_evidence}{stage3_observation}{stage3_inference}{stage3_hypothesis}'
-        f'{_source_block(["stage3_readiness.json", "stage3_readiness.md", "ai_stage3_preparation_summary_normalized.json"])}</section>'
+        f"{stage3_evidence}{stage3_observation}{stage3_inference}{stage3_hypothesis}"
+        f"{_source_block(['stage3_readiness.json', 'stage3_readiness.md', 'ai_stage3_preparation_summary_normalized.json'])}</section>"
     )
 
     # 18. Route Classification (REC-010: Evidence, Observation, Inference, Hypothesis)
@@ -1011,25 +1221,25 @@ def build_html_report(
     )
     route_evidence = (
         f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
-        f'<p>Route inventory with classification (login_flow, admin_flow, api, static, etc.) from discovery sources.</p>'
-        f'{route_classification_table}</div>'
+        f"<p>Route inventory with classification (login_flow, admin_flow, api, static, etc.) from discovery sources.</p>"
+        f"{route_classification_table}</div>"
     )
     route_observation = (
         '<div class="observation"><span class="badge badge-observation">Observation</span>'
-        '<p>Classification derived from path patterns and endpoint behavior; used for Stage 3 readiness assessment.</p></div>'
+        "<p>Classification derived from path patterns and endpoint behavior; used for Stage 3 readiness assessment.</p></div>"
     )
     route_inference = (
         '<div class="inference"><span class="badge badge-inference">Inference</span>'
-        '<p>login_flow and admin_flow routes indicate auth boundaries; api routes define backend attack surface.</p></div>'
+        "<p>login_flow and admin_flow routes indicate auth boundaries; api routes define backend attack surface.</p></div>"
     )
     route_hypothesis = (
         '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        '<p>Prioritize login_flow and admin_flow for auth testing; validate API routes for injection and access control.</p></div>'
+        "<p>Prioritize login_flow and admin_flow for auth testing; validate API routes for injection and access control.</p></div>"
     )
     sections.append(
         f'<section id="section-18-route-classification" class="section"><h2>18. Route Classification</h2>'
-        f'{route_evidence}{route_observation}{route_inference}{route_hypothesis}'
-        f'{_source_block(["route_classification.csv", "route_inventory.csv", "stage3_readiness.json"])}</section>'
+        f"{route_evidence}{route_observation}{route_inference}{route_hypothesis}"
+        f"{_source_block(['route_classification.csv', 'route_inventory.csv', 'stage3_readiness.json'])}</section>"
     )
 
     html_content = f"""<!DOCTYPE html>

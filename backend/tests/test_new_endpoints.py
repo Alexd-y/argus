@@ -6,9 +6,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 
 def _async_session_factory(session: AsyncMock):
@@ -82,9 +81,7 @@ class TestScanTimelineEndpoint:
 
 
 class TestFindingFalsePositiveEndpoint:
-    def test_false_positive_post_updates_via_mock_session(
-        self, client: TestClient
-    ) -> None:
+    def test_false_positive_post_updates_via_mock_session(self, client: TestClient) -> None:
         fid = str(uuid.uuid4())
         finding = MagicMock()
         finding.tenant_id = settings.default_tenant_id
@@ -135,9 +132,7 @@ class TestFindingRemediationEndpoint:
                 return "## Remediation\n- Encode output\n- Use CSP"
             return ""
 
-        monkeypatch.setattr(
-            "src.api.routers.findings.is_llm_available", lambda: False
-        )
+        monkeypatch.setattr("src.api.routers.findings.is_llm_available", lambda: False)
         with (
             patch(
                 "src.api.routers.findings._load_finding_for_tenant",

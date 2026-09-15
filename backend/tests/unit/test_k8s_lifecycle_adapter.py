@@ -60,25 +60,29 @@ class _FakeCoreV1:
         self._phase = phase
         self._owned = owned or []
 
-    def create_namespaced_pod(self, namespace, body):  # noqa: ARG002 — SDK signature
+    def create_namespaced_pod(self, namespace, body):
         if self._create_error:
             raise RuntimeError("apiserver unreachable")
         self.created.append(body)
 
-    def read_namespaced_pod(self, name, namespace):  # noqa: ARG002 — SDK signature
+    def read_namespaced_pod(self, name, namespace):
         return _FakePod(self._phase)
 
-    def delete_namespaced_pod(self, name, namespace, grace_period_seconds=0):  # noqa: ARG002
+    def delete_namespaced_pod(self, name, namespace, grace_period_seconds=0):
         self.deleted.append(name)
 
-    def list_namespaced_pod(self, namespace, label_selector):  # noqa: ARG002 — SDK signature
+    def list_namespaced_pod(self, namespace, label_selector):
         return _FakeList(self._owned)
 
 
 def _tool_exec_fn(_core, _pod, _ns, argv, _container):
     # Distinguish the collect_artifacts `find` probe from a real tool run.
     if argv and argv[0] == "find":
-        return (0, "/workspace/artifacts/report.json\n/workspace/artifacts/nuclei.log\n", "")
+        return (
+            0,
+            "/workspace/artifacts/report.json\n/workspace/artifacts/nuclei.log\n",
+            "",
+        )
     return (0, "tool-ran", "")
 
 
@@ -165,9 +169,7 @@ async def test_collect_artifacts_parses_find_output():
 
 async def test_collect_artifacts_empty_when_find_fails():
     core = _FakeCoreV1()
-    adapter = K8sLifecycleSandboxAdapter(
-        core_v1=core, exec_fn=lambda *_a: (1, "", "no such dir")
-    )
+    adapter = K8sLifecycleSandboxAdapter(core_v1=core, exec_fn=lambda *_a: (1, "", "no such dir"))
     assert await adapter.collect_artifacts("pod-1", "p") == []
 
 
@@ -205,7 +207,9 @@ async def test_run_in_sandbox_success_end_to_end():
 
 
 def test_build_factory_returns_adapter():
-    assert isinstance(build_k8s_lifecycle_adapter(core_v1=_FakeCoreV1()), K8sLifecycleSandboxAdapter)
+    assert isinstance(
+        build_k8s_lifecycle_adapter(core_v1=_FakeCoreV1()), K8sLifecycleSandboxAdapter
+    )
 
 
 def test_empty_namespace_rejected():

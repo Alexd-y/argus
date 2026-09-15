@@ -45,7 +45,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -54,7 +53,6 @@ from src.sandbox.parsers.semgrep_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_semgrep_json,
 )
-
 
 # ---------------------------------------------------------------------------
 # Builders for canonical fixture shapes

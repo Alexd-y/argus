@@ -80,7 +80,7 @@ async def chat_completions(request: GatewayRequest) -> GatewayResponse:
                 "message": str(exc),
                 "details": exc.details,
             },
-        )
+        ) from exc
 
     # 2. Route through WRB → cloud fallback
     router = ProviderRouter()
@@ -99,10 +99,11 @@ async def chat_completions(request: GatewayRequest) -> GatewayResponse:
                 "code": "llm_all_providers_failed",
                 "message": str(exc),
             },
-        )
+        ) from exc
 
     # 3. Record usage
     from src.llm_gateway.usage_ledger import record_usage
+
     record_usage(
         tenant_id=metadata.get("tenant_id", ""),
         scan_id=metadata.get("scan_id", ""),
@@ -113,12 +114,17 @@ async def chat_completions(request: GatewayRequest) -> GatewayResponse:
         model=provider["model"],
         prompt_tokens=raw["usage"]["prompt_tokens"],
         completion_tokens=raw["usage"]["completion_tokens"],
-        estimated_cost=provider.get("price", {}).get("input_per_million_usd", 0) * raw["usage"]["prompt_tokens"] / 1_000_000 +
-                       provider.get("price", {}).get("output_per_million_usd", 0) * raw["usage"]["completion_tokens"] / 1_000_000,
+        estimated_cost=provider.get("price", {}).get("input_per_million_usd", 0)
+        * raw["usage"]["prompt_tokens"]
+        / 1_000_000
+        + provider.get("price", {}).get("output_per_million_usd", 0)
+        * raw["usage"]["completion_tokens"]
+        / 1_000_000,
     )
 
     # 4. Redact response
     from src.llm_gateway.redaction import redact_response
+
     content = redact_response(raw["content"])
 
     return GatewayResponse(
@@ -140,7 +146,11 @@ async def chat_completions(request: GatewayRequest) -> GatewayResponse:
 @router.get("/models")
 async def list_models() -> list[dict[str, str]]:
     return [
-        {"id": "argus-pentest-primary", "object": "model", "owned_by": "whiterabbitneo"},
+        {
+            "id": "argus-pentest-primary",
+            "object": "model",
+            "owned_by": "whiterabbitneo",
+        },
         {"id": "argus-planner-fast", "object": "model", "owned_by": "deepseek"},
         {"id": "argus-planner-deep", "object": "model", "owned_by": "deepseek"},
         {"id": "argus-code-cloud", "object": "model", "owned_by": "qwen"},

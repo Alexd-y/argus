@@ -206,9 +206,7 @@ class InMemoryExecutionModeRepository:
         self._modes[engagement_id] = row
         return dict(row)
 
-    async def mark_first_execution(
-        self, *, tenant_id: str, engagement_id: str
-    ) -> dict[str, Any]:
+    async def mark_first_execution(self, *, tenant_id: str, engagement_id: str) -> dict[str, Any]:
         existing = await self.get_execution_mode(tenant_id=tenant_id, engagement_id=engagement_id)
         if existing and existing.get("first_execution_at"):
             return existing
@@ -339,9 +337,7 @@ class SqlAlchemyExecutionModeRepository:
             await session.refresh(row)
             return _mode_row_to_api(row)
 
-    async def mark_first_execution(
-        self, *, tenant_id: str, engagement_id: str
-    ) -> dict[str, Any]:
+    async def mark_first_execution(self, *, tenant_id: str, engagement_id: str) -> dict[str, Any]:
         async with self._session_factory() as session:
             await set_session_tenant(session, tenant_id)
             result = await session.execute(
@@ -421,7 +417,10 @@ class SqlAlchemyExecutionModeRepository:
                 row.capture_full = lease.capture_full
                 row.k8s_namespace = lease.k8s_namespace
                 row.expires_at = lease.expires_at
-                if lease.status is LabLeaseStatus.REVOKED or lease.status is LabLeaseStatus.KILL_SWITCHED:
+                if (
+                    lease.status is LabLeaseStatus.REVOKED
+                    or lease.status is LabLeaseStatus.KILL_SWITCHED
+                ):
                     row.revoked_at = row.revoked_at or _utcnow()
                     row.revoke_reason = lease.status.value
             await session.commit()

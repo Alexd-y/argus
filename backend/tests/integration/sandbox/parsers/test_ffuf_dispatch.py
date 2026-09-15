@@ -46,7 +46,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -59,7 +58,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.ffuf_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture — every test starts from the default surface.
@@ -143,9 +141,7 @@ def test_default_per_tool_registry_includes_all_ffuf_family_tools() -> None:
 
 
 @pytest.mark.parametrize("tool_id", FFUF_FAMILY_TOOL_IDS)
-def test_dispatch_routes_each_ffuf_family_tool_to_ffuf_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_ffuf_family_tool_to_ffuf_parser(tool_id: str, tmp_path: Path) -> None:
     """Same input bytes routed via every family tool_id yield the same shape.
 
     Validates the registration wiring AND the per-tool branching inside
@@ -183,9 +179,7 @@ def test_dispatch_routes_each_ffuf_family_tool_to_ffuf_parser(
     # ``_extract_findings_list`` in the parser.
     sidecar = artifacts_dir / EVIDENCE_SIDECAR_NAME
     sidecar_records = [
-        json.loads(line)
-        for line in sidecar.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in sidecar.read_text(encoding="utf-8").splitlines() if line
     ]
     confidence_by_url = {
         rec["url"]: finding.confidence
@@ -223,9 +217,7 @@ def test_dispatch_writes_evidence_sidecar_for_each_ffuf_family_tool(
 
     assert len(findings) == 2
     sidecar = artifacts_dir / EVIDENCE_SIDECAR_NAME
-    assert sidecar.is_file(), (
-        f"{tool_id}: ffuf parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: ffuf parser must write evidence sidecar at {sidecar}"
     lines = [line for line in sidecar.read_text(encoding="utf-8").splitlines() if line]
     assert len(lines) == 2, (
         f"{tool_id}: sidecar must hold one JSONL record per finding, got {lines}"
@@ -352,8 +344,7 @@ def test_text_lines_tools_have_no_json_object_parser(
         )
 
     assert len(findings) == 1, (
-        f"{tool_id}: expected one heartbeat via JSON_OBJECT misroute, "
-        f"got {len(findings)} findings"
+        f"{tool_id}: expected one heartbeat via JSON_OBJECT misroute, got {len(findings)} findings"
     )
     heartbeat = findings[0]
     assert heartbeat.category is FindingCategory.INFO
@@ -401,9 +392,7 @@ def test_arjun_real_shape_via_dispatch_emits_finding(tmp_path: Path) -> None:
     sidecar = tmp_path / EVIDENCE_SIDECAR_NAME
     assert sidecar.is_file()
     sidecar_records = [
-        json.loads(line)
-        for line in sidecar.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in sidecar.read_text(encoding="utf-8").splitlines() if line
     ]
     assert sidecar_records[0]["url"] == "https://target/api/users"
     assert sidecar_records[0]["parameter_name"] == "user_id"

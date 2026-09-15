@@ -14,7 +14,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
 from src.mcp.exceptions import (
     ApprovalRequiredError,
     ResourceNotFoundError,
@@ -41,7 +40,6 @@ from src.sandbox.adapter_base import (
     ToolCategory,
     ToolDescriptor,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixture: hand-crafted descriptors + stub registry
@@ -192,9 +190,7 @@ class TestListCatalog:
         # MCP entry round-trips without truncation.
         long = "X" * 500
         reset_registry_for_tests(
-            _StubRegistry(
-                [_make_descriptor(tool_id="long", risk=RiskLevel.LOW, description=long)]
-            )
+            _StubRegistry([_make_descriptor(tool_id="long", risk=RiskLevel.LOW, description=long)])
         )
         result = list_catalog()
         assert result.items[0].description == long
@@ -228,9 +224,7 @@ class TestTriggerToolRun:
     def test_high_risk_without_justification_blocks(self) -> None:
         with pytest.raises(ApprovalRequiredError):
             trigger_tool_run(
-                payload=ToolRunTriggerInput(
-                    tool_id="sqlmap", target="https://example.com/login"
-                ),
+                payload=ToolRunTriggerInput(tool_id="sqlmap", target="https://example.com/login"),
                 actor="alice",
                 tenant_id="t-1",
             )
@@ -322,9 +316,7 @@ class TestGetToolRunStatus:
             assert tool_run_id == "run-12345abc"
             return canned
 
-        result = get_tool_run_status(
-            tenant_id="t-1", tool_run_id="run-12345abc", lookup=lookup
-        )
+        result = get_tool_run_status(tenant_id="t-1", tool_run_id="run-12345abc", lookup=lookup)
         assert result.tool_run_id == "run-12345abc"
         assert result.status is ToolRunStatus.RUNNING
 
@@ -333,9 +325,7 @@ class TestGetToolRunStatus:
             return None
 
         with pytest.raises(ResourceNotFoundError):
-            get_tool_run_status(
-                tenant_id="t-1", tool_run_id="missing-run-id", lookup=lookup
-            )
+            get_tool_run_status(tenant_id="t-1", tool_run_id="missing-run-id", lookup=lookup)
 
 
 def test_module_public_api() -> None:

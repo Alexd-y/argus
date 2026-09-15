@@ -14,7 +14,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
-
 from src.db.models import Scan
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]

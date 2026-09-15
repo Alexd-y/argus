@@ -12,7 +12,11 @@ import io
 import tarfile
 
 import pytest
-from src.orchestration.sandbox_lifecycle import SandboxCreateError, SandboxStatus, run_in_sandbox
+from src.orchestration.sandbox_lifecycle import (
+    SandboxCreateError,
+    SandboxStatus,
+    run_in_sandbox,
+)
 from src.sandbox.docker_sandbox_adapter import DockerLifecycleSandboxAdapter
 
 
@@ -65,7 +69,7 @@ class _FakeContainers:
     def get(self, cid):
         return self._by_id.get(cid) or _FakeContainer(cid, archive=self.archive)
 
-    def list(self, all, filters):  # noqa: A002 — mirror docker-py signature
+    def list(self, all, filters):
         self.list_filters = filters
         return list(self._owned)
 

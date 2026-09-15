@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from src.reports.data_collector import FindingRow, ReportRowSlice, ScanReportData, ScanRowData
+from src.reports.data_collector import (
+    FindingRow,
+    ReportRowSlice,
+    ScanReportData,
+    ScanRowData,
+)
 from src.reports.valhalla_report_context import (
     CriticalVulnRefModel,
     RiskMatrixCellModel,

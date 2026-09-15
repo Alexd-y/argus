@@ -185,18 +185,16 @@ def test_026_orm_model_matches_spec() -> None:
         for uc in table.constraints
         if isinstance(uc, sa.UniqueConstraint)
     }
-    assert unique_constraints.get("uq_scan_schedules_tenant_name") == ("name", "tenant_id"), (
-        "ScanSchedule must declare UniqueConstraint(tenant_id, name)"
-    )
+    assert unique_constraints.get("uq_scan_schedules_tenant_name") == (
+        "name",
+        "tenant_id",
+    ), "ScanSchedule must declare UniqueConstraint(tenant_id, name)"
 
     index_names = {ix.name for ix in table.indexes}
     missing = _EXPECTED_INDEXES - index_names
     assert not missing, f"ScanSchedule missing ORM indexes: {missing}"
 
-    fk_targets = {
-        (fk.column.table.name, fk.column.name, fk.ondelete)
-        for fk in table.foreign_keys
-    }
+    fk_targets = {(fk.column.table.name, fk.column.name, fk.ondelete) for fk in table.foreign_keys}
     assert ("tenants", "id", "CASCADE") in fk_targets, (
         "ScanSchedule.tenant_id must FK tenants(id) ON DELETE CASCADE"
     )
@@ -313,7 +311,9 @@ def _insert_schedule(
 
 @pytestmark_pg
 @pytest.mark.requires_postgres
-def test_026_upgrade_creates_table_with_expected_columns(migrated_engine: Engine) -> None:
+def test_026_upgrade_creates_table_with_expected_columns(
+    migrated_engine: Engine,
+) -> None:
     insp = inspect(migrated_engine)
     assert insp.has_table(_TABLE), f"{_TABLE} should exist after upgrade head"
 
@@ -357,13 +357,17 @@ def test_026_rls_enabled_and_policy_present(migrated_engine: Engine) -> None:
             f"{_TABLE} must have FORCE ROW LEVEL SECURITY set (T32 hardening over 019/020)"
         )
 
-        policy_names = conn.execute(
-            # CAST(:table AS regclass) — avoid mixing a ``:table`` bind with the
-            # ``::regclass`` shorthand, which the psycopg2 paramstyle renders as
-            # a stray ``:`` ("syntax error at or near :").
-            text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:table AS regclass)"),
-            {"table": _TABLE},
-        ).scalars().all()
+        policy_names = (
+            conn.execute(
+                # CAST(:table AS regclass) — avoid mixing a ``:table`` bind with the
+                # ``::regclass`` shorthand, which the psycopg2 paramstyle renders as
+                # a stray ``:`` ("syntax error at or near :").
+                text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:table AS regclass)"),
+                {"table": _TABLE},
+            )
+            .scalars()
+            .all()
+        )
         assert _POLICY in policy_names, (
             f"canonical {_POLICY!r} policy missing on {_TABLE}; found {policy_names!r}"
         )
@@ -377,13 +381,10 @@ def test_026_unique_tenant_name_enforced(migrated_engine: Engine) -> None:
         _insert_schedule(conn, tid, "daily")
 
     with migrated_engine.connect() as conn:
-        tid = conn.execute(
-            text("SELECT id FROM tenants WHERE name = 't-unique'")
-        ).scalar_one()
+        tid = conn.execute(text("SELECT id FROM tenants WHERE name = 't-unique'")).scalar_one()
 
-    with pytest.raises(IntegrityError):
-        with migrated_engine.begin() as conn:
-            _insert_schedule(conn, tid, "daily")
+    with pytest.raises(IntegrityError), migrated_engine.begin() as conn:
+        _insert_schedule(conn, tid, "daily")
 
 
 @pytestmark_pg
@@ -400,20 +401,14 @@ def test_026_rls_isolation_on_select(migrated_engine: Engine) -> None:
     with migrated_engine.begin() as conn:
         assume_rls_role_sync(conn)  # enforce RLS (superuser would bypass it)
         _set_tenant(conn, tenant_a)
-        rows_a = conn.execute(
-            text("SELECT tenant_id FROM scan_schedules")
-        ).scalars().all()
-        assert rows_a == [tenant_a], (
-            f"tenant A session leaked other tenants' rows: {rows_a!r}"
-        )
+        rows_a = conn.execute(text("SELECT tenant_id FROM scan_schedules")).scalars().all()
+        assert rows_a == [tenant_a], f"tenant A session leaked other tenants' rows: {rows_a!r}"
 
     # Tenant B session — symmetric guarantee.
     with migrated_engine.begin() as conn:
         assume_rls_role_sync(conn)
         _set_tenant(conn, tenant_b)
-        rows_b = conn.execute(
-            text("SELECT tenant_id FROM scan_schedules")
-        ).scalars().all()
+        rows_b = conn.execute(text("SELECT tenant_id FROM scan_schedules")).scalars().all()
         assert rows_b == [tenant_b]
 
     # No tenant set at all — policy rejects every row.
@@ -421,8 +416,7 @@ def test_026_rls_isolation_on_select(migrated_engine: Engine) -> None:
         assume_rls_role_sync(conn)
         visible = conn.execute(text("SELECT COUNT(*) FROM scan_schedules")).scalar_one()
         assert visible == 0, (
-            "with no app.current_tenant_id set, RLS must hide every row; "
-            f"got {visible} visible"
+            f"with no app.current_tenant_id set, RLS must hide every row; got {visible} visible"
         )
 
 
@@ -458,9 +452,7 @@ def test_026_rls_isolation_on_update(migrated_engine: Engine) -> None:
         assume_rls_role_sync(conn)
         _set_tenant(conn, tenant_b)
         still_enabled = conn.execute(
-            text(
-                "SELECT enabled FROM scan_schedules WHERE tenant_id = :t"
-            ),
+            text("SELECT enabled FROM scan_schedules WHERE tenant_id = :t"),
             {"t": tenant_b},
         ).scalar_one()
         assert still_enabled is True, (

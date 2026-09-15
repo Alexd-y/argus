@@ -51,15 +51,12 @@ from src.reports.report_service import (
     ReportService,
 )
 
-
 # ---------------------------------------------------------------------------
 # Snapshot directory + refresh policy (shared with ARG-024)
 # ---------------------------------------------------------------------------
 
 
-SNAPSHOT_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "snapshots" / "reports"
-)
+SNAPSHOT_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "snapshots" / "reports"
 SNAPSHOT_REFRESH_ENV: Final[str] = "ARGUS_SNAPSHOT_REFRESH"
 SNAPSHOT_TOOL_VERSION: Final[str] = "arg-025-snapshot"
 
@@ -383,9 +380,7 @@ def test_asgard_no_secret_leak_in_any_format(
     )
     blob = bundle.content
     for needle in _FORBIDDEN_LITERALS:
-        assert needle not in blob, (
-            f"raw secret literal leaked into {fmt.value}: {needle!r}"
-        )
+        assert needle not in blob, f"raw secret literal leaked into {fmt.value}: {needle!r}"
     for pattern in _FORBIDDEN_REGEXES:
         match = pattern.search(blob)
         assert match is None, f"raw secret regex leaked into {fmt.value}: {match!r}"
@@ -637,6 +632,4 @@ def test_asgard_pdf_structural_snapshot(
         "Asgard PDF must declare its tier somewhere in body text"
     )
     assert "SQLi" in extracted, "Critical finding title missing from PDF body"
-    assert REDACTED_BEARER in extracted, (
-        "Sanitised bearer placeholder missing from PDF body"
-    )
+    assert REDACTED_BEARER in extracted, "Sanitised bearer placeholder missing from PDF body"

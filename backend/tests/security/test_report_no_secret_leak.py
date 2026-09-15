@@ -38,7 +38,6 @@ from src.reports.report_service import (
     ReportService,
 )
 
-
 # ---------------------------------------------------------------------------
 # Catalogue — ≥50 known secret / destructive patterns
 # ---------------------------------------------------------------------------
@@ -430,8 +429,7 @@ def test_no_pattern_leak_in_tier_output(
     blob = bundle.content
     needle_bytes = needle.encode("utf-8", errors="replace")
     assert needle_bytes not in blob, (
-        f"raw secret leaked into {tier.value}/{fmt.value} for pattern "
-        f"{label!r}: {needle!r} present"
+        f"raw secret leaked into {tier.value}/{fmt.value} for pattern {label!r}: {needle!r} present"
     )
 
     # ARG-036 — for PDFs we additionally inspect the *extracted* text. This
@@ -498,9 +496,7 @@ def test_destructive_flags_stripped_end_to_end(
                 owasp_category="A05",
                 confidence="confirmed",
                 evidence_type="tool_output",
-                proof_of_concept={
-                    "replay_command": ["rm", "-rf", "/tmp/build", "--force"]
-                },
+                proof_of_concept={"replay_command": ["rm", "-rf", "/tmp/build", "--force"]},
             )
         ],
         technologies=base_report.technologies,

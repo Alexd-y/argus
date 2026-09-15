@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -83,9 +82,7 @@ def _katana_record(
 
 def _katana_jsonl(*records: dict[str, Any]) -> bytes:
     """Build a katana-style JSONL stream from the supplied records."""
-    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode("utf-8")
 
 
 def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
@@ -262,9 +259,7 @@ def test_method_is_normalised_to_uppercase(tmp_path: Path) -> None:
     assert sidecar[0]["method"] == "GET"
 
 
-def test_missing_endpoint_is_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_endpoint_is_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Records with no ``request.endpoint`` are skipped silently."""
     caplog.set_level(logging.WARNING)
     raw = _katana_jsonl(
@@ -284,9 +279,7 @@ def test_missing_endpoint_is_skipped(
 # ---------------------------------------------------------------------------
 
 
-def test_malformed_jsonl_line_is_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_malformed_jsonl_line_is_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """A malformed JSON line does not abort parsing of the rest of the stream."""
     caplog.set_level(logging.WARNING)
     good_record = json.dumps(_katana_record("https://target/ok"), sort_keys=True)
@@ -301,9 +294,7 @@ def test_malformed_jsonl_line_is_skipped(
 def test_non_dict_jsonl_payload_is_skipped(tmp_path: Path) -> None:
     """A JSONL payload that is a list / scalar (not dict) is silently skipped."""
     good_record = json.dumps(_katana_record("https://target/ok"), sort_keys=True)
-    raw = (good_record + '\n[1,2,3]\n42\n"naked string"\n' + good_record + "\n").encode(
-        "utf-8"
-    )
+    raw = (good_record + '\n[1,2,3]\n42\n"naked string"\n' + good_record + "\n").encode("utf-8")
 
     findings = parse_katana_jsonl(raw, b"", tmp_path, "katana")
 
@@ -393,8 +384,7 @@ def test_sidecar_write_failure_is_swallowed(
 
     assert len(findings) == 1
     assert any(
-        "katana_parser.evidence_sidecar_write_failed" in record.message
-        for record in caplog.records
+        "katana_parser.evidence_sidecar_write_failed" in record.message for record in caplog.records
     )
 
 
@@ -414,9 +404,7 @@ def test_runaway_crawl_is_capped_at_5000_records(
     findings = parse_katana_jsonl(raw, b"", tmp_path, "katana")
 
     assert len(findings) == 5_000
-    assert any(
-        "katana_parser.cap_reached" in record.message for record in caplog.records
-    )
+    assert any("katana_parser.cap_reached" in record.message for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -429,16 +417,12 @@ def test_runaway_crawl_is_capped_at_5000_records(
 
 def _gospider_jsonl(*records: dict[str, Any]) -> bytes:
     """Build a gospider-style JSONL stream from the supplied records."""
-    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode("utf-8")
 
 
 def _gau_jsonl(*records: dict[str, Any]) -> bytes:
     """Build a gau-style JSONL stream from the supplied records."""
-    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode("utf-8")
 
 
 def test_parse_gospider_jsonl_normalises_output_and_string_stat(
@@ -503,9 +487,7 @@ def test_parse_gospider_jsonl_drops_non_numeric_stat_string(
 
     Exercises the ``_string_field(stat).isdigit()`` fall-back branch.
     """
-    raw = _gospider_jsonl(
-        {"output": "https://target/x", "stat": "error", "source": "scan"}
-    )
+    raw = _gospider_jsonl({"output": "https://target/x", "stat": "error", "source": "scan"})
 
     parse_gospider_jsonl(raw, b"", tmp_path, "gospider")
 
@@ -635,6 +617,5 @@ def test_parse_gau_jsonl_drops_boolean_status_code_field(tmp_path: Path) -> None
     assert len(sidecar) == 1
     record = sidecar[0]
     assert "status_code" not in record, (
-        "boolean values must be dropped — bool ≢ int even though "
-        "issubclass(bool, int) is True"
+        "boolean values must be dropped — bool ≢ int even though issubclass(bool, int) is True"
     )

@@ -27,7 +27,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -60,7 +60,7 @@ _CANONICAL_NAMES: Final[tuple[str, ...]] = (
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_hashcat(

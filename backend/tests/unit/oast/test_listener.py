@@ -9,7 +9,6 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.oast.correlator import (
     InteractionKind,
     OASTCorrelator,
@@ -20,7 +19,6 @@ from src.oast.listener_protocol import (
     OASTListenerProtocol,
 )
 from src.oast.provisioner import InternalOASTProvisioner
-
 
 _TENANT = UUID("11111111-1111-1111-1111-111111111111")
 _SCAN = UUID("22222222-2222-2222-2222-222222222222")

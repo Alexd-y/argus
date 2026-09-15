@@ -16,14 +16,7 @@ import pytest
 
 ARGUS_ROOT = Path(__file__).resolve().parent.parent.parent
 VALHALLA_PARTIALS_DIR = (
-    ARGUS_ROOT
-    / "backend"
-    / "src"
-    / "reports"
-    / "templates"
-    / "reports"
-    / "partials"
-    / "valhalla"
+    ARGUS_ROOT / "backend" / "src" / "reports" / "templates" / "reports" / "partials" / "valhalla"
 )
 
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
@@ -67,15 +60,16 @@ class TestValhallaTemplatesNoCyrillic:
         ],
     )
     def test_template_no_cyrillic(
-        self, valhalla_templates: dict[str, str], template_name: str,
+        self,
+        valhalla_templates: dict[str, str],
+        template_name: str,
     ) -> None:
         if template_name not in valhalla_templates:
             pytest.skip(f"Template {template_name} not found")
         content = valhalla_templates[template_name]
         matches = CYRILLIC_RE.findall(content)
         assert not matches, (
-            f"Template {template_name} contains Cyrillic characters: "
-            f"{''.join(matches[:20])!r}"
+            f"Template {template_name} contains Cyrillic characters: {''.join(matches[:20])!r}"
         )
 
 

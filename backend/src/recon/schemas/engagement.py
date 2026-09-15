@@ -10,6 +10,7 @@ from src.recon.schemas.scope import ScopeConfig
 
 class ContactInfo(BaseModel):
     """Engagement contact metadata."""
+
     name: str
     role: str = ""
     email: str = ""
@@ -19,6 +20,7 @@ class ContactInfo(BaseModel):
 
 class EngagementCreate(BaseModel):
     """Create engagement request."""
+
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     scope_config: ScopeConfig = Field(default_factory=ScopeConfig)
@@ -28,6 +30,7 @@ class EngagementCreate(BaseModel):
 
 class EngagementUpdate(BaseModel):
     """Partial update engagement request."""
+
     name: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     scope_config: ScopeConfig | None = None
@@ -38,6 +41,7 @@ class EngagementUpdate(BaseModel):
 
 class EngagementResponse(BaseModel):
     """Engagement response with stats."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -59,6 +63,7 @@ class EngagementResponse(BaseModel):
 
 class EngagementListResponse(BaseModel):
     """Paginated engagement list."""
+
     items: list[EngagementResponse]
     total: int
     offset: int

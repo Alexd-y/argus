@@ -10,7 +10,7 @@ from src.core.config import settings
 
 _DOMAIN_RE_HOST = re.compile(
     r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -65,7 +65,15 @@ def merge_subdomain_hosts_into_tool_results(tool_results: dict[str, Any], *, dom
                 if isinstance(h, str):
                     _add_host(hosts, h, apex=apex)
 
-    for name in ("subfinder", "assetfinder", "findomain", "theharvester", "dnsrecon", "fierce", "amass"):
+    for name in (
+        "subfinder",
+        "assetfinder",
+        "findomain",
+        "theharvester",
+        "dnsrecon",
+        "fierce",
+        "amass",
+    ):
         block = tool_results.get(name)
         if not isinstance(block, dict):
             continue

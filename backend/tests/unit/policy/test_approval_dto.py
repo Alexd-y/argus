@@ -21,14 +21,13 @@ from __future__ import annotations
 import ast
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.policy import approval_dto
 from src.policy.approval_dto import (
     APPROVAL_FAILURE_REASONS,
@@ -62,7 +61,7 @@ _SCAN_ID: UUID = UUID("22222222-2222-4222-8222-222222222222")
 
 def _utc_now() -> datetime:
     """Return a fixed tz-aware UTC instant for deterministic tests."""
-    return datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
 
 
 def _make_request(**overrides: Any) -> ApprovalRequest:
@@ -110,9 +109,7 @@ class TestModuleStructure:
         """
         source_path = Path(approval_dto.__file__)
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
-        allowed: frozenset[str] = (
-            sys.stdlib_module_names | _ALLOWED_THIRD_PARTY_ROOTS
-        )
+        allowed: frozenset[str] = sys.stdlib_module_names | _ALLOWED_THIRD_PARTY_ROOTS
         offending: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -124,9 +121,7 @@ class TestModuleStructure:
                 # Relative imports would mean the DTO module reaches into
                 # sibling policy modules — exactly what T02 forbids.
                 if node.level > 0:
-                    offending.append(
-                        f"{'.' * node.level}{node.module or ''}"
-                    )
+                    offending.append(f"{'.' * node.level}{node.module or ''}")
                     continue
                 if node.module is None:
                     continue
@@ -188,9 +183,7 @@ class TestFailureTaxonomy:
             "_REASON_REVOKED",
         ],
     )
-    def test_private_constant_value_in_public_set(
-        self, constant_name: str
-    ) -> None:
+    def test_private_constant_value_in_public_set(self, constant_name: str) -> None:
         """Every private ``_REASON_*`` constant is reachable via the public set.
 
         ``ApprovalService`` raises ``ApprovalError(_REASON_X)`` with the
@@ -250,17 +243,13 @@ class TestEnums:
         }
 
     @pytest.mark.parametrize("action", list(ApprovalAction))
-    def test_action_roundtrips_through_string(
-        self, action: ApprovalAction
-    ) -> None:
+    def test_action_roundtrips_through_string(self, action: ApprovalAction) -> None:
         """StrEnum lets callers compare enum to plain string identically."""
         assert action == action.value
         assert ApprovalAction(action.value) is action
 
     @pytest.mark.parametrize("status", list(ApprovalStatus))
-    def test_status_roundtrips_through_string(
-        self, status: ApprovalStatus
-    ) -> None:
+    def test_status_roundtrips_through_string(self, status: ApprovalStatus) -> None:
         """StrEnum behaviour mirrors :class:`ApprovalAction`."""
         assert status == status.value
         assert ApprovalStatus(status.value) is status
@@ -275,7 +264,7 @@ class TestHelpers:
     def test_utcnow_returns_tz_aware_utc(self) -> None:
         """``_utcnow`` MUST return tz-aware UTC; naive datetimes are rejected."""
         now = _utcnow()
-        assert now.tzinfo is timezone.utc
+        assert now.tzinfo is UTC
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +322,7 @@ class TestApprovalRequestSchema:
             tool_id="burp_active",
             target="https://example.com/api",
             justification="approved by lead via security review",
-            expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(tz=UTC) + timedelta(hours=1),
         )
         assert req.created_at.tzinfo is not None
         assert req.created_at.utcoffset() == timedelta(0)
@@ -613,12 +602,8 @@ class TestCanonicalPayload:
         MUST collapse to the same wire bytes.
         """
         now = _utc_now()
-        utc_req = _make_request(
-            created_at=now, expires_at=now + timedelta(hours=1)
-        )
-        non_utc_expires = (now + timedelta(hours=1)).astimezone(
-            timezone(timedelta(hours=5))
-        )
+        utc_req = _make_request(created_at=now, expires_at=now + timedelta(hours=1))
+        non_utc_expires = (now + timedelta(hours=1)).astimezone(timezone(timedelta(hours=5)))
         non_utc_req = ApprovalRequest(
             request_id=utc_req.request_id,
             tenant_id=utc_req.tenant_id,
@@ -630,9 +615,7 @@ class TestCanonicalPayload:
             created_at=utc_req.created_at,
             expires_at=non_utc_expires,
         )
-        assert _canonical_approval_payload(utc_req) == _canonical_approval_payload(
-            non_utc_req
-        )
+        assert _canonical_approval_payload(utc_req) == _canonical_approval_payload(non_utc_req)
 
     def test_payload_is_valid_utf8_json(self) -> None:
         """The bytes MUST decode as UTF-8 JSON for portable verification."""

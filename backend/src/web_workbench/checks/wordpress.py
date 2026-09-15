@@ -92,7 +92,9 @@ def _query(request: NormalizedRequest) -> str:
 
 
 def detect_fingerprint(
-    request: NormalizedRequest, response: NormalizedResponse, body_text: str
+    request: NormalizedRequest,  # noqa: ARG001 - retained for signature/API compatibility
+    response: NormalizedResponse,
+    body_text: str,
 ) -> str | None:
     """Return a fingerprint marker if the exchange looks like WordPress, else ``None``."""
     if response.header("X-Pingback"):
@@ -322,8 +324,7 @@ def wordpress_finding_to_dto(
         else EvidenceTier.SUSPECTED
     )
     summary = (
-        f"{finding.title}: {finding.detail} "
-        f"(evidence: {finding.evidence}; at {finding.location})"
+        f"{finding.title}: {finding.detail} (evidence: {finding.evidence}; at {finding.location})"
     )
     return FindingDTO(
         id=finding_id or uuid4(),

@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-
 from src.auth import access_dependency
 from src.auth.abac import AccessAction, ResourceType, Role
 from src.auth.access_dependency import require_access

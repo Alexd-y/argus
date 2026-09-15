@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.core.config import settings
 from src.llm.gateway import (
     ProviderCallError,
@@ -143,19 +142,19 @@ class TestFacadeGatewayFlagOn:
         mock_gateway = AsyncMock()
         mock_gateway.generate = AsyncMock(return_value=envelope)
 
-        with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-            with pytest.raises(RuntimeError, match="schema validation failed"):
-                await call_llm_unified(
-                    "system",
-                    "user",
-                    task=LLMTask.VULN_ANALYSIS,
-                    response_schema_id="TestSchemaV1",
-                )
+        with (
+            patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+            pytest.raises(RuntimeError, match="schema validation failed"),
+        ):
+            await call_llm_unified(
+                "system",
+                "user",
+                task=LLMTask.VULN_ANALYSIS,
+                response_schema_id="TestSchemaV1",
+            )
 
     @pytest.mark.asyncio
-    async def test_provider_error_fail_closed_for_pentest(
-        self, gateway_flag_on: None
-    ) -> None:
+    async def test_provider_error_fail_closed_for_pentest(self, gateway_flag_on: None) -> None:
         from src.llm.facade import call_llm_unified
 
         envelope = LlmResponseEnvelope(
@@ -166,13 +165,15 @@ class TestFacadeGatewayFlagOn:
         mock_gateway = AsyncMock()
         mock_gateway.generate = AsyncMock(return_value=envelope)
 
-        with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-            with pytest.raises(RuntimeError, match="provider error"):
-                await call_llm_unified(
-                    "system",
-                    "user",
-                    task=LLMTask.ORCHESTRATION,
-                )
+        with (
+            patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+            pytest.raises(RuntimeError, match="provider error"),
+        ):
+            await call_llm_unified(
+                "system",
+                "user",
+                task=LLMTask.ORCHESTRATION,
+            )
 
     @pytest.mark.asyncio
     async def test_provider_error_falls_through_for_report_task(
@@ -188,17 +189,19 @@ class TestFacadeGatewayFlagOn:
         mock_gateway = AsyncMock()
         mock_gateway.generate = AsyncMock(return_value=envelope)
 
-        with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-            with patch(
+        with (
+            patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+            patch(
                 "src.llm.facade._call_via_task_router",
                 new_callable=AsyncMock,
                 return_value="legacy report",
-            ) as mock_legacy:
-                result = await call_llm_unified(
-                    "system",
-                    "user",
-                    task=LLMTask.REPORT_SECTION,
-                )
+            ) as mock_legacy,
+        ):
+            result = await call_llm_unified(
+                "system",
+                "user",
+                task=LLMTask.REPORT_SECTION,
+            )
 
         assert result == "legacy report"
         mock_legacy.assert_awaited_once()
@@ -210,26 +213,26 @@ class TestFacadeGatewayFlagOff:
         from src.llm.facade import call_llm_unified
 
         mock_gateway = AsyncMock()
-        with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-            with patch(
+        with (
+            patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+            patch(
                 "src.llm.facade._call_via_task_router",
                 new_callable=AsyncMock,
                 return_value="legacy osint",
-            ) as mock_legacy:
-                result = await call_llm_unified(
-                    "system",
-                    "user",
-                    task=LLMTask.PERPLEXITY_OSINT,
-                )
+            ) as mock_legacy,
+        ):
+            result = await call_llm_unified(
+                "system",
+                "user",
+                task=LLMTask.PERPLEXITY_OSINT,
+            )
 
         assert result == "legacy osint"
         mock_gateway.generate.assert_not_called()
         mock_legacy.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_flag_false_pentest_task_skips_gateway(
-        self, gateway_flag_off: None
-    ) -> None:
+    async def test_flag_false_pentest_task_skips_gateway(self, gateway_flag_off: None) -> None:
         from src.llm.facade import call_llm_unified
         from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
 
@@ -239,17 +242,19 @@ class TestFacadeGatewayFlagOff:
 
         try:
             wrb._base_url = "http://wrb:8000/v1"
-            with patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway):
-                with patch(
+            with (
+                patch("src.llm.facade.get_unified_llm_gateway", return_value=mock_gateway),
+                patch(
                     "src.llm.facade._call_via_whiterabbitneo",
                     new_callable=AsyncMock,
                     return_value="legacy wrb",
-                ) as mock_wrb:
-                    result = await call_llm_unified(
-                        "system",
-                        "user",
-                        task=LLMTask.ORCHESTRATION,
-                    )
+                ) as mock_wrb,
+            ):
+                result = await call_llm_unified(
+                    "system",
+                    "user",
+                    task=LLMTask.ORCHESTRATION,
+                )
 
             assert result == "legacy wrb"
             mock_gateway.generate.assert_not_called()

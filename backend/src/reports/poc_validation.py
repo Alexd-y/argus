@@ -70,7 +70,8 @@ def validate_xss_poc(proof_of_concept: dict) -> XssValidationResult:
         reflection_context=xss_obj.get("reflection_context") or poc_obj.get("reflection_context"),
         payload_entered=xss_obj.get("payload_entered") or poc_obj.get("payload_entered"),
         payload_reflected=xss_obj.get("payload_reflected") or poc_obj.get("payload_reflected"),
-        verified_via_browser=xss_obj.get("verified_via_browser") or poc_obj.get("verified_via_browser"),
+        verified_via_browser=xss_obj.get("verified_via_browser")
+        or poc_obj.get("verified_via_browser"),
         browser_alert_text=xss_obj.get("browser_alert_text") or poc_obj.get("browser_alert_text"),
         affected_parameter=xss_obj.get("affected_parameter") or poc_obj.get("affected_parameter"),
         negative_control=xss_obj.get("negative_control") or poc_obj.get("negative_control"),

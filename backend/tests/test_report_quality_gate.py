@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from src.api.schemas import Finding, ReportSummary
 from src.findings.cvss import parse_cvss_vector
-from src.reports.data_collector import FindingRow, ReportRowSlice, ScanReportData, ScanRowData
+from src.reports.data_collector import (
+    FindingRow,
+    ReportRowSlice,
+    ScanReportData,
+    ScanRowData,
+)
 from src.reports.evidence_partition import partition_findings
 from src.reports.finding_metadata import estimate_cvss_vector
 from src.reports.generators import ReportData

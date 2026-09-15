@@ -19,7 +19,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
 from src.sandbox.parsers import reset_registry
 
 

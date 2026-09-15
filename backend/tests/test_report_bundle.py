@@ -17,7 +17,6 @@ import hashlib
 
 import pytest
 from pydantic import ValidationError
-
 from src.reports.report_bundle import (
     ReportBundle,
     ReportFormat,

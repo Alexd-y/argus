@@ -28,15 +28,12 @@ from src.sandbox.parsers._text_base import (
     redact_hashes_in_evidence,
 )
 
-
 # Sample fingerprints used as canaries below.
 _LM: Final[str] = "aad3b435b51404eeaad3b435b51404ee"
 _NT: Final[str] = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _SHA1: Final[str] = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 _SHA256: Final[str] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-_KRB: Final[str] = (
-    "$krb5tgs$23$*sqlsvc$CONTOSO$cifs/dc01.contoso.local*$cafe1234$babefacecafe"
-)
+_KRB: Final[str] = "$krb5tgs$23$*sqlsvc$CONTOSO$cifs/dc01.contoso.local*$cafe1234$babefacecafe"
 
 
 def test_parse_kv_lines_yields_trimmed_pairs() -> None:
@@ -73,9 +70,7 @@ def test_parse_kv_lines_handles_empty_input_safely() -> None:
 
 
 def test_parse_kv_lines_skips_empty_keys() -> None:
-    assert list(parse_kv_lines("= no key here\nactual = value\n")) == [
-        ("actual", "value")
-    ]
+    assert list(parse_kv_lines("= no key here\nactual = value\n")) == [("actual", "value")]
 
 
 def test_extract_regex_findings_preserves_pattern_insertion_order() -> None:

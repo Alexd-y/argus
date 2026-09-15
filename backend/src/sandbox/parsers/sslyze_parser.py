@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -65,7 +65,7 @@ _DEPRECATED_VERSIONS: Final[frozenset[str]] = frozenset(
     {"tls_1_0", "tls_1_1", "ssl_3_0", "ssl_2_0"}
 )
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_sslyze(
@@ -117,9 +117,7 @@ def parse_sslyze(
                 if not accepted:
                     continue
                 cs = entry.get("cipher_suite")
-                cipher_name = (
-                    cs.get("name") if isinstance(cs, dict) else str(cs) if cs else None
-                )
+                cipher_name = cs.get("name") if isinstance(cs, dict) else str(cs) if cs else None
                 if not isinstance(cipher_name, str) or not cipher_name.strip():
                     continue
                 key: _DedupKey = ("cipher", cipher_name.lower())
@@ -164,9 +162,7 @@ def parse_sslyze(
                     "type": "tls_version",
                     "version": version_name,
                     "supported": True,
-                    "fingerprint_hash": stable_hash_12(
-                        f"sslyze|tls|{version_name}"
-                    ),
+                    "fingerprint_hash": stable_hash_12(f"sslyze|tls|{version_name}"),
                 }
                 keyed.append((key, finding, _serialise(evidence)))
                 if len(keyed) >= _MAX_FINDINGS:
@@ -234,7 +230,9 @@ def _build_finding(category: FindingCategory, cvss_score: float) -> FindingDTO:
         cwe=[326, 327],
         cvss_v3_vector=SENTINEL_CVSS_VECTOR,
         cvss_v3_score=cvss_score,
-        confidence=ConfidenceLevel.LIKELY if category == FindingCategory.MISCONFIG else ConfidenceLevel.CONFIRMED,
+        confidence=ConfidenceLevel.LIKELY
+        if category == FindingCategory.MISCONFIG
+        else ConfidenceLevel.CONFIRMED,
         owasp_wstg=["WSTG-CRYP-01", "WSTG-CRYP-02"],
     )
 

@@ -73,7 +73,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -152,7 +152,7 @@ _CATEGORY_DEFAULT_CWE: Final[dict[FindingCategory, tuple[int, ...]]] = {
 }
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_openapi_scanner_json(
@@ -343,8 +343,7 @@ def _normalise_finding(
         "endpoint": _string_field(raw, "endpoint"),
         "method": _string_field(raw, "method"),
         "path": _string_field(raw, "path"),
-        "operation_id": _string_field(raw, "operationId")
-        or _string_field(raw, "operation_id"),
+        "operation_id": _string_field(raw, "operationId") or _string_field(raw, "operation_id"),
         "category": category_hint,
         "severity": severity,
         "schema_version": schema_version,
@@ -364,11 +363,7 @@ def _normalise_endpoint(
     if method is None or path is None:
         return None
     endpoint = f"{method.upper()} {path}"
-    responses = [
-        str(item)
-        for item in (raw.get("responses") or [])
-        if isinstance(item, str | int)
-    ]
+    responses = [str(item) for item in (raw.get("responses") or []) if isinstance(item, str | int)]
     return {
         "kind": "endpoint",
         "finding_id": endpoint,
@@ -376,8 +371,7 @@ def _normalise_endpoint(
         "endpoint": endpoint,
         "method": method.upper(),
         "path": path,
-        "operation_id": _string_field(raw, "operationId")
-        or _string_field(raw, "operation_id"),
+        "operation_id": _string_field(raw, "operationId") or _string_field(raw, "operation_id"),
         "auth": _string_field(raw, "auth") or "none",
         "responses": sorted(set(responses)),
         "category": "discovery",

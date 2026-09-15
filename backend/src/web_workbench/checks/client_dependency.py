@@ -271,9 +271,7 @@ def _cmp(a: str, b: str) -> int:
 def _in_range(version: str, vr: VulnRange) -> bool:
     if vr.at_or_above is not None and _cmp(version, vr.at_or_above) < 0:
         return False
-    if vr.below is not None and _cmp(version, vr.below) >= 0:
-        return False
-    return True
+    return not (vr.below is not None and _cmp(version, vr.below) >= 0)
 
 
 def detect_libraries(*, content: str = "", uri: str = "") -> list[DetectedLibrary]:

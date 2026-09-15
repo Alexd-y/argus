@@ -19,10 +19,12 @@ async def scan_id_hint_for_report_findings(
     if report_scan_id:
         return str(report_scan_id)
     r = await session.execute(
-        select(FindingModel.scan_id).where(
+        select(FindingModel.scan_id)
+        .where(
             cast(FindingModel.tenant_id, String) == tenant_id,
             cast(FindingModel.report_id, String) == report_id,
-        ).limit(1)
+        )
+        .limit(1)
     )
     row = r.first()
     if row and row[0] is not None:
@@ -60,8 +62,10 @@ async def load_findings_for_report(
             .order_by(FindingModel.created_at.desc())
         )
     else:
-        stmt = select(FindingModel).where(tenant_ok, by_report).order_by(
-            FindingModel.created_at.desc()
+        stmt = (
+            select(FindingModel)
+            .where(tenant_ok, by_report)
+            .order_by(FindingModel.created_at.desc())
         )
     result = await session.execute(stmt)
     return list(result.scalars().all())

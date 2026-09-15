@@ -15,11 +15,11 @@ registered tool's underlying coroutine directly.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
+from pydantic import ValidationError
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -85,9 +85,7 @@ class TestReportGenerate:
                 queued=True,
             )
 
-        monkeypatch.setattr(
-            reports_tools, "svc_request_report_generation", _fake_request
-        )
+        monkeypatch.setattr(reports_tools, "svc_request_report_generation", _fake_request)
         result = _call(
             app,
             "report.generate",
@@ -125,9 +123,7 @@ class TestReportGenerate:
                 queued=True,
             )
 
-        monkeypatch.setattr(
-            reports_tools, "svc_request_report_generation", _fake_request
-        )
+        monkeypatch.setattr(reports_tools, "svc_request_report_generation", _fake_request)
         _call(
             app,
             "report.generate",
@@ -141,7 +137,7 @@ class TestReportGenerate:
         assert captured["format"] is ReportFormat.SARIF
 
     def test_short_scan_id_rejected_by_schema(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ReportGenerateInput(scan_id="abc")
 
 
@@ -152,7 +148,7 @@ class TestReportDownload:
         monkeypatch: pytest.MonkeyPatch,
         audit_logger: MCPAuditLogger,
     ) -> None:
-        expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        expires = datetime.now(UTC) + timedelta(hours=1)
 
         async def _fake_download(
             *, tenant_id: str, report_id: str, format: ReportFormat

@@ -48,14 +48,12 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.mcp.services.notifications.webhook_dlq_persistence import (
     enqueue,
     list_for_tenant,
@@ -71,9 +69,7 @@ _BACKEND_ROOT: Path = Path(__file__).resolve().parents[2]
 # auto-marker classifier ``_RE_POSTGRES`` matches; without it the file
 # would silently run against SQLite (which has no RLS surface).
 _PG_URL_RAW: str = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL: bool = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL: bool = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
@@ -205,9 +201,7 @@ async def _set_session_tenant(session: AsyncSession, tenant_id: str) -> None:
     in PostgreSQL — safe here because the id is a UUID string with no
     quotes or semicolons.
     """
-    await session.execute(
-        text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'")
-    )
+    await session.execute(text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'"))
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +263,9 @@ async def test_dlq_dao_rls_isolation_select(async_engine: AsyncEngine) -> None:
     async with sm() as s, s.begin():
         await _set_session_tenant(s, tenant_a)
         rows_a, total_a = await list_for_tenant(s, tenant_id=None)
-        assert total_a == 1, (
-            f"tenant_a session must see exactly one row via RLS, got {total_a}"
-        )
+        assert total_a == 1, f"tenant_a session must see exactly one row via RLS, got {total_a}"
         assert [r.tenant_id for r in rows_a] == [tenant_a], (
-            f"tenant_a session leaked other tenants' rows: "
-            f"{[r.tenant_id for r in rows_a]!r}"
+            f"tenant_a session leaked other tenants' rows: {[r.tenant_id for r in rows_a]!r}"
         )
 
     # tenant_b session — symmetric guarantee.
@@ -283,8 +274,7 @@ async def test_dlq_dao_rls_isolation_select(async_engine: AsyncEngine) -> None:
         rows_b, total_b = await list_for_tenant(s, tenant_id=None)
         assert total_b == 1
         assert [r.tenant_id for r in rows_b] == [tenant_b], (
-            f"tenant_b session leaked other tenants' rows: "
-            f"{[r.tenant_id for r in rows_b]!r}"
+            f"tenant_b session leaked other tenants' rows: {[r.tenant_id for r in rows_b]!r}"
         )
 
 
@@ -357,9 +347,7 @@ async def test_dlq_dao_rls_force_owner_session(async_engine: AsyncEngine) -> Non
         await _set_session_tenant(s, tenant_a)
         rows, total = await list_for_tenant(s, tenant_id=None)
         ids = {r.tenant_id for r in rows}
-        assert tenant_a in ids, (
-            f"tenant_a's own row must remain visible to itself: {ids!r}"
-        )
+        assert tenant_a in ids, f"tenant_a's own row must remain visible to itself: {ids!r}"
         assert tenant_b not in ids, (
             "FORCE ROW LEVEL SECURITY is broken — table-owner session "
             "scoped to tenant_a can still read tenant_b's row, which "

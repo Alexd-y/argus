@@ -35,9 +35,13 @@ def _install_key_capture(monkeypatch) -> dict[str, object]:
 
 async def test_browser_pool_keyed_by_scan_id(monkeypatch):
     captured = _install_key_capture(monkeypatch)
-    adapter = pw.PlaywrightAdapter(sandbox_runner=_FakeRunner(), session_id="sess", scan_id="scan-42")
+    adapter = pw.PlaywrightAdapter(
+        sandbox_runner=_FakeRunner(), session_id="sess", scan_id="scan-42"
+    )
 
-    await adapter._run_in_sandbox(Path("x.js"), pw.BrowserRequest(action="navigate", url="http://t"))
+    await adapter._run_in_sandbox(
+        Path("x.js"), pw.BrowserRequest(action="navigate", url="http://t")
+    )
 
     assert captured["pool_type"] == "browser"
     assert captured["key"] == "scan-42"
@@ -47,7 +51,9 @@ async def test_browser_pool_falls_back_to_session_id(monkeypatch):
     captured = _install_key_capture(monkeypatch)
     adapter = pw.PlaywrightAdapter(sandbox_runner=_FakeRunner(), session_id="sess-only")
 
-    await adapter._run_in_sandbox(Path("x.js"), pw.BrowserRequest(action="navigate", url="http://t"))
+    await adapter._run_in_sandbox(
+        Path("x.js"), pw.BrowserRequest(action="navigate", url="http://t")
+    )
 
     assert captured["key"] == "sess-only"
 

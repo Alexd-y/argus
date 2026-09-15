@@ -3,11 +3,31 @@
 import shlex
 
 # Allowlist for POST /tools/execute — only these tools may be executed
-ALLOWED_TOOLS = frozenset({
-    "nmap", "nuclei", "nikto", "gobuster", "sqlmap", "dig", "whois", "host", "curl",
-    "gitleaks", "trivy", "semgrep", "trufflehog", "prowler", "scout", "checkov", "terrascan",
-    "searchsploit", "subfinder", "dnsx", "amass",
-})
+ALLOWED_TOOLS = frozenset(
+    {
+        "nmap",
+        "nuclei",
+        "nikto",
+        "gobuster",
+        "sqlmap",
+        "dig",
+        "whois",
+        "host",
+        "curl",
+        "gitleaks",
+        "trivy",
+        "semgrep",
+        "trufflehog",
+        "prowler",
+        "scout",
+        "checkov",
+        "terrascan",
+        "searchsploit",
+        "subfinder",
+        "dnsx",
+        "amass",
+    }
+)
 
 # Tool -> (flag, tool_name for validate_target_for_tool)
 _TOOL_TARGET_PATTERNS: dict[str, tuple[str, str]] = {

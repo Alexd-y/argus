@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -37,9 +36,7 @@ from src.sandbox.parsers.postman_newman_parser import (
 
 _AWS_KEY_RE = re.compile(rb"AKIA[0-9A-Z]{16}")
 _BEARER_RE = re.compile(rb"Bearer\s+[A-Za-z0-9._\-/+=]+")
-_JWT_RE = re.compile(
-    rb"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"
-)
+_JWT_RE = re.compile(rb"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}")
 
 
 def _failure(
@@ -201,9 +198,7 @@ def test_jwt_redacted_in_response_preview(tmp_path: Path) -> None:
     )
     sidecar_bytes = (tmp_path / EVIDENCE_SIDECAR_NAME).read_bytes()
     assert b"REDACTED-TOKEN" in sidecar_bytes
-    assert not _JWT_RE.search(sidecar_bytes), (
-        "raw JWT leaked into postman newman sidecar"
-    )
+    assert not _JWT_RE.search(sidecar_bytes), "raw JWT leaked into postman newman sidecar"
 
 
 def test_aws_key_redacted_in_response_preview(tmp_path: Path) -> None:
@@ -243,8 +238,7 @@ def test_envelope_not_object_emits_warning(
         findings = parse_postman_newman_json(b"", b"", tmp_path, "postman_newman")
     assert findings == []
     assert any(
-        "postman_newman_parser_envelope_not_object"
-        in (record.__dict__.get("event") or "")
+        "postman_newman_parser_envelope_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -268,9 +262,7 @@ def test_cap_reached_emits_warning_and_truncates(
 ) -> None:
     monkeypatch.setattr(newman_module, "_MAX_FINDINGS", 2)
     payload = _payload(
-        failures=[
-            _failure(test_name=f"check-{i}", message=f"err-{i}") for i in range(5)
-        ]
+        failures=[_failure(test_name=f"check-{i}", message=f"err-{i}") for i in range(5)]
     )
     with caplog.at_level("WARNING"):
         findings = parse_postman_newman_json(payload, b"", tmp_path, "postman_newman")
@@ -288,9 +280,7 @@ def test_dedup_collapses_duplicate_failures(tmp_path: Path) -> None:
     assert len(findings) == 1
 
 
-def test_failure_not_object_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_failure_not_object_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Failures that aren't objects are dropped with a debug log."""
     document: dict[str, Any] = {"run": {"failures": ["not-an-object", _failure()]}}
     with caplog.at_level("DEBUG", logger=newman_module._logger.name):
@@ -299,8 +289,7 @@ def test_failure_not_object_skipped(
         )
     assert len(findings) == 1
     assert any(
-        "postman_newman_parser_failure_not_object"
-        in (record.__dict__.get("event") or "")
+        "postman_newman_parser_failure_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -318,18 +307,14 @@ def test_failure_without_error_dropped(tmp_path: Path) -> None:
 
 def test_failure_without_message_or_test_dropped(tmp_path: Path) -> None:
     """A failure with empty error.message and error.test must be dropped."""
-    document: dict[str, Any] = {
-        "run": {"failures": [{"error": {}, "source": {"name": "X"}}]}
-    }
+    document: dict[str, Any] = {"run": {"failures": [{"error": {}, "source": {"name": "X"}}]}}
     findings = parse_postman_newman_json(
         json.dumps(document).encode("utf-8"), b"", tmp_path, "postman_newman"
     )
     assert findings == []
 
 
-def test_execution_not_object_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_execution_not_object_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Executions that aren't objects are dropped with a debug log."""
     document: dict[str, Any] = {"run": {"executions": ["bad", _execution()]}}
     with caplog.at_level("DEBUG", logger=newman_module._logger.name):
@@ -338,8 +323,7 @@ def test_execution_not_object_skipped(
         )
     assert len(findings) == 1
     assert any(
-        "postman_newman_parser_execution_not_object"
-        in (record.__dict__.get("event") or "")
+        "postman_newman_parser_execution_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -363,9 +347,7 @@ def test_url_extracted_from_plain_string(tmp_path: Path) -> None:
         "url": "https://api.example.com/legacy-shape",
     }
     document: dict[str, Any] = {"run": {"failures": [failure]}}
-    parse_postman_newman_json(
-        json.dumps(document).encode("utf-8"), b"", tmp_path, "postman_newman"
-    )
+    parse_postman_newman_json(json.dumps(document).encode("utf-8"), b"", tmp_path, "postman_newman")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "https://api.example.com/legacy-shape" in sidecar
 
@@ -389,9 +371,7 @@ def test_request_method_from_cursor_field(tmp_path: Path) -> None:
         "error": {"message": "bad", "test": "x"},
     }
     document: dict[str, Any] = {"run": {"failures": [failure]}}
-    parse_postman_newman_json(
-        json.dumps(document).encode("utf-8"), b"", tmp_path, "postman_newman"
-    )
+    parse_postman_newman_json(json.dumps(document).encode("utf-8"), b"", tmp_path, "postman_newman")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["method"] == "PATCH"
 

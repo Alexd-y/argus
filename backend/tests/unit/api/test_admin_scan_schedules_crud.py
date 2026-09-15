@@ -21,13 +21,11 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.api.routers.admin_schedules import (
     EVENT_SCHEDULE_CREATED,
     EVENT_SCHEDULE_DELETED,
@@ -35,6 +33,7 @@ from src.api.routers.admin_schedules import (
     EVENT_SCHEDULE_UPDATED,
 )
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -129,7 +128,7 @@ def _make_create_session(
         added.append(row)
 
     async def _refresh(row: Any) -> None:
-        now = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 22, 12, 0, tzinfo=UTC)
         if getattr(row, "created_at", None) is None:
             row.created_at = now
         if getattr(row, "updated_at", None) is None:
@@ -139,9 +138,7 @@ def _make_create_session(
     session.execute = AsyncMock(return_value=tenant_count)
     session.add = MagicMock(side_effect=_record_add)
     if integrity_error:
-        session.flush = AsyncMock(
-            side_effect=IntegrityError("stmt", {}, Exception("conflict"))
-        )
+        session.flush = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("conflict")))
     else:
         session.flush = AsyncMock()
     session.commit = AsyncMock()
@@ -176,8 +173,8 @@ def _build_schedule_row(
     row.maintenance_window_cron = maintenance_window_cron
     row.last_run_at = last_run_at
     row.next_run_at = next_run_at
-    row.created_at = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)
-    row.updated_at = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)
+    row.created_at = datetime(2026, 4, 22, 12, 0, tzinfo=UTC)
+    row.updated_at = datetime(2026, 4, 22, 12, 0, tzinfo=UTC)
     return row
 
 
@@ -197,9 +194,7 @@ def _make_load_session(row: Any | None) -> AsyncMock:
 def _make_list_session(*, total: int, rows: list[Any]) -> AsyncMock:
     """Mock for GET /scan-schedules: count then paged list."""
     session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[_scalar_result(total), _scalars_list_result(rows)]
-    )
+    session.execute = AsyncMock(side_effect=[_scalar_result(total), _scalars_list_result(rows)])
     return session
 
 
@@ -278,9 +273,7 @@ class TestScanScheduleRbac:
         assert r.status_code == 403
         assert r.json()["detail"] == "tenant_mismatch"
 
-    def test_create_403_admin_without_session_tenant_header(
-        self, client: TestClient
-    ) -> None:
+    def test_create_403_admin_without_session_tenant_header(self, client: TestClient) -> None:
         headers = {**_HEADERS_SUPER, "X-Admin-Role": "admin"}
         r = client.post(LIST_PATH, headers=headers, json=_create_body())
         assert r.status_code == 403
@@ -415,9 +408,7 @@ class TestScanScheduleCreate:
         assert r.status_code == 201
         assert EVENT_SCHEDULE_CREATED in captured_actions
 
-    def test_create_strips_url_query_string_in_request_body(
-        self, client: TestClient
-    ) -> None:
+    def test_create_strips_url_query_string_in_request_body(self, client: TestClient) -> None:
         """S2.2: query strings + fragments must be stripped at the schema
         boundary so they never reach AuditLog details or Celery task args
         (PII safety — operators sometimes paste reset / auth URLs).
@@ -513,9 +504,7 @@ class TestScanScheduleUpdate:
         assert r.json()["enabled"] is False
         sync_mock.assert_called_once()
 
-    def test_update_200_changes_cron_recomputes_next_run(
-        self, client: TestClient
-    ) -> None:
+    def test_update_200_changes_cron_recomputes_next_run(self, client: TestClient) -> None:
         row = _build_schedule_row()
         session = _make_load_session(row)
         with _patch_session(session), _patch_redbeat_sync():
@@ -571,9 +560,7 @@ class TestScanScheduleUpdate:
 
         row = _build_schedule_row()
         session = _make_load_session(row)
-        session.flush = AsyncMock(
-            side_effect=IntegrityError("stmt", {}, Exception("conflict"))
-        )
+        session.flush = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("conflict")))
         with _patch_session(session), _patch_redbeat_sync():
             r = client.patch(
                 ITEM_PATH.format(schedule_id=_SCHEDULE_ID),
@@ -694,9 +681,7 @@ class TestScanScheduleRunNow:
             )
         assert r.status_code == 404
 
-    def test_run_now_409_when_maintenance_window_active(
-        self, client: TestClient
-    ) -> None:
+    def test_run_now_409_when_maintenance_window_active(self, client: TestClient) -> None:
         # 409 (not 423) per the T33 contract: the request is well-formed
         # but the *current schedule state* (maintenance window open)
         # prevents fulfilling it. Window cron that fires every hour AND
@@ -716,9 +701,7 @@ class TestScanScheduleRunNow:
         assert r.status_code == 409
         assert r.json()["detail"] == "in_maintenance_window"
 
-    def test_run_now_202_with_bypass_skips_maintenance_check(
-        self, client: TestClient
-    ) -> None:
+    def test_run_now_202_with_bypass_skips_maintenance_check(self, client: TestClient) -> None:
         row = _build_schedule_row(maintenance_window_cron="0 * * * *")
         session = _make_load_session(row)
         with (
@@ -791,9 +774,7 @@ class TestScanScheduleRunNow:
         )
         assert r.status_code == 422
 
-    def test_run_now_audit_records_bypass_flag_and_reason(
-        self, client: TestClient
-    ) -> None:
+    def test_run_now_audit_records_bypass_flag_and_reason(self, client: TestClient) -> None:
         row = _build_schedule_row()
         session = _make_load_session(row)
         captured_actions: list[str] = []
@@ -828,9 +809,7 @@ class TestScanScheduleRunNow:
 
 
 class TestScanScheduleAuditAttribution:
-    def test_create_audit_persists_only_hashed_operator(
-        self, client: TestClient
-    ) -> None:
+    def test_create_audit_persists_only_hashed_operator(self, client: TestClient) -> None:
         operator_subject = "named-operator@argus.example"
         session = _make_create_session()
         captured_details: list[dict] = []

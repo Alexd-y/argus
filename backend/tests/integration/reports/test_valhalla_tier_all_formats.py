@@ -55,15 +55,12 @@ from src.reports.valhalla_tier_renderer import (
     assemble_valhalla_sections,
 )
 
-
 # ---------------------------------------------------------------------------
 # Snapshot directory + refresh policy (shared with ARG-024 / ARG-025)
 # ---------------------------------------------------------------------------
 
 
-SNAPSHOT_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "snapshots" / "reports"
-)
+SNAPSHOT_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "snapshots" / "reports"
 SNAPSHOT_REFRESH_ENV: Final[str] = "ARGUS_SNAPSHOT_REFRESH"
 SNAPSHOT_TOOL_VERSION: Final[str] = "arg-031-snapshot"
 
@@ -418,9 +415,7 @@ def test_valhalla_no_secret_leak_in_any_format(
     )
     blob = bundle.content
     for needle in _FORBIDDEN_LITERALS:
-        assert needle not in blob, (
-            f"raw secret literal leaked into {fmt.value}: {needle!r}"
-        )
+        assert needle not in blob, f"raw secret literal leaked into {fmt.value}: {needle!r}"
     for pattern in _FORBIDDEN_REGEXES:
         match = pattern.search(blob)
         assert match is None, f"raw secret regex leaked into {fmt.value}: {match!r}"

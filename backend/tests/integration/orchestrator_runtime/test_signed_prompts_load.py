@@ -16,7 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from src.llm_orchestrator.prompt_registry import (
     AgentRole,
     PromptRegistry,
@@ -60,9 +59,7 @@ def test_all_five_roles_present(loaded_registry: PromptRegistry) -> None:
         AgentRole.REPORTER,
         AgentRole.FIXER,
     ):
-        assert role_counts.get(role.value, 0) >= 1, (
-            f"missing prompt for role={role.value}"
-        )
+        assert role_counts.get(role.value, 0) >= 1, f"missing prompt for role={role.value}"
 
 
 def test_canonical_prompt_ids_present(loaded_registry: PromptRegistry) -> None:
@@ -73,9 +70,7 @@ def test_canonical_prompt_ids_present(loaded_registry: PromptRegistry) -> None:
         "reporter_v1",
         "fixer_v1",
     ):
-        assert prompt_id in loaded_registry, (
-            f"prompt_id={prompt_id!r} missing from real catalog"
-        )
+        assert prompt_id in loaded_registry, f"prompt_id={prompt_id!r} missing from real catalog"
 
 
 def test_planner_expected_schema_ref(loaded_registry: PromptRegistry) -> None:

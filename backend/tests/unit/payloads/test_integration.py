@@ -19,10 +19,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.payloads.builder import (
-    PayloadBuildRequest,
     PayloadBuilder,
+    PayloadBuildRequest,
     PayloadBundle,
 )
 from src.payloads.integration import (
@@ -115,9 +114,7 @@ def test_from_bundle_requires_namespace(bundle: PayloadBundle) -> None:
 
 def test_from_bundle_requires_name_prefix(bundle: PayloadBundle) -> None:
     with pytest.raises(PayloadIntegrationError):
-        PayloadDeliveryConfigMap.from_bundle(
-            bundle, namespace="argus-sandbox", name_prefix=""
-        )
+        PayloadDeliveryConfigMap.from_bundle(bundle, namespace="argus-sandbox", name_prefix="")
 
 
 def test_to_manifest_emits_v1_configmap(bundle: PayloadBundle) -> None:
@@ -174,9 +171,7 @@ def test_attach_payload_bundle_adds_volume_and_mount(bundle: PayloadBundle) -> N
     container = pod_spec["containers"][0]
     mount_names = [m["name"] for m in container["volumeMounts"]]
     assert "argus-payloads" in mount_names
-    payload_mount = next(
-        m for m in container["volumeMounts"] if m["name"] == "argus-payloads"
-    )
+    payload_mount = next(m for m in container["volumeMounts"] if m["name"] == "argus-payloads")
     assert payload_mount["mountPath"] == "/in/payloads"
     assert payload_mount["readOnly"] is True
 

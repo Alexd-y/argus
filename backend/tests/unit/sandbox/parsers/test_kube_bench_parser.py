@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -202,9 +201,7 @@ def test_findings_sorted_severity_desc_then_node_then_test(tmp_path: Path) -> No
     assert len(findings) == 3
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_kube_bench_json(b"[]", b"", tmp_path, "kube_bench")
     assert findings == []
@@ -224,8 +221,7 @@ def test_missing_test_number_emits_warning(
         findings = parse_kube_bench_json(payload, b"", tmp_path, "kube_bench")
     assert len(findings) == 1
     assert any(
-        "kube_bench_parser_result_missing_test_number"
-        in (record.__dict__.get("event") or "")
+        "kube_bench_parser_result_missing_test_number" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 

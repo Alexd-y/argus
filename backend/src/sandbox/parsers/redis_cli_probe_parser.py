@@ -29,7 +29,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -60,7 +60,7 @@ _TRUTHY: Final[frozenset[str]] = frozenset({"yes", "true", "1", "on"})
 _FALSY: Final[frozenset[str]] = frozenset({"no", "false", "0", "off", ""})
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_redis_cli_probe(
@@ -207,9 +207,7 @@ def _build_evidence(record: dict[str, object], *, tool_id: str) -> str:
         "kind": record["kind"],
         "subject": record["subject"],
         "value": record["value"],
-        "fingerprint_hash": stable_hash_12(
-            f"redis_cli_probe|{record['kind']}|{record['subject']}"
-        ),
+        "fingerprint_hash": stable_hash_12(f"redis_cli_probe|{record['kind']}|{record['subject']}"),
     }
     cleaned = scrub_evidence_strings(payload)
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)

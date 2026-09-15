@@ -2,13 +2,13 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from src.schemas.ai.common import ReconAiTask, build_task_metadata
 from src.schemas.ai.schema_export import to_report_notes
 from src.schemas.ai.stage2_preparation_summary import (
     Stage2PreparationSummaryInput,
     Stage2PreparationSummaryOutput,
 )
-from pydantic import ValidationError
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 

@@ -1,7 +1,5 @@
 """Tests for the skills system (ENH-V3: Strix-style knowledge injection)."""
 
-import pytest
-
 from src.skills import (
     build_skills_prompt_block,
     get_available_skills,
@@ -23,10 +21,21 @@ class TestGetAvailableSkills:
         skills = get_available_skills()
         vuln_skills = skills["vulnerabilities"]
         expected = [
-            "sql_injection", "xss", "ssrf", "csrf", "idor",
-            "xxe", "rce", "authentication_jwt", "business_logic",
-            "race_conditions", "path_traversal", "open_redirect",
-            "mass_assignment", "file_upload", "information_disclosure",
+            "sql_injection",
+            "xss",
+            "ssrf",
+            "csrf",
+            "idor",
+            "xxe",
+            "rce",
+            "authentication_jwt",
+            "business_logic",
+            "race_conditions",
+            "path_traversal",
+            "open_redirect",
+            "mass_assignment",
+            "file_upload",
+            "information_disclosure",
             "subdomain_takeover",
         ]
         for name in expected:

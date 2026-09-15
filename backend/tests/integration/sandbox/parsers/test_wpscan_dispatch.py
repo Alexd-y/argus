@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     FindingCategory,
     FindingDTO,
@@ -50,7 +49,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.wpscan_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -181,9 +179,7 @@ def test_default_per_tool_registry_includes_all_cms_json_tools() -> None:
 
 
 @pytest.mark.parametrize("tool_id", CMS_JSON_TOOL_IDS)
-def test_dispatch_routes_each_cms_tool_to_wpscan_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_cms_tool_to_wpscan_parser(tool_id: str, tmp_path: Path) -> None:
     """Both §4.7 JSON tool_ids dispatch via JSON_OBJECT and produce findings."""
     findings = dispatch_parse(
         ParseStrategy.JSON_OBJECT,
@@ -197,9 +193,7 @@ def test_dispatch_routes_each_cms_tool_to_wpscan_parser(
 
 
 @pytest.mark.parametrize("tool_id", CMS_JSON_TOOL_IDS)
-def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_writes_shared_sidecar_with_correct_tool_id(tool_id: str, tmp_path: Path) -> None:
     """Each CMS dispatch emits a per-finding sidecar tagged with the tool_id."""
     artifacts_dir = tmp_path / tool_id
     findings = dispatch_parse(
@@ -279,8 +273,7 @@ def test_text_lines_cms_tools_have_no_json_object_parser(
         )
 
     assert len(findings) == 1, (
-        f"{tool_id}: expected exactly one heartbeat via JSON_OBJECT misroute, "
-        f"got {len(findings)}"
+        f"{tool_id}: expected exactly one heartbeat via JSON_OBJECT misroute, got {len(findings)}"
     )
     heartbeat = findings[0]
     assert heartbeat.category is FindingCategory.INFO
@@ -315,15 +308,11 @@ def test_nuclei_cms_tools_inert_when_misrouted_via_json_object(
         tool_id=tool_id,
     )
 
-    assert findings == [], (
-        f"{tool_id}: nuclei parser must yield no findings on wpscan-shaped JSON"
-    )
+    assert findings == [], f"{tool_id}: nuclei parser must yield no findings on wpscan-shaped JSON"
 
 
 @pytest.mark.parametrize("tool_id", NUCLEI_CMS_TOOL_IDS)
-def test_nuclei_cms_wrappers_produce_findings_after_arg015(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_nuclei_cms_wrappers_produce_findings_after_arg015(tool_id: str, tmp_path: Path) -> None:
     """ARG-015 graduation: the 3 §4.7 nuclei wrappers now produce findings.
 
     Pre-ARG-015 these tool_ids were declared in YAML (cycle 2) but had no
@@ -362,9 +351,7 @@ def test_nuclei_cms_wrappers_produce_findings_after_arg015(
         tool_id=tool_id,
     )
 
-    assert findings, (
-        f"{tool_id}: ARG-015 should have wired this wrapper to parse_nuclei_jsonl"
-    )
+    assert findings, f"{tool_id}: ARG-015 should have wired this wrapper to parse_nuclei_jsonl"
     sidecar = artifacts_dir / "nuclei_findings.jsonl"
     assert sidecar.is_file()
     parsed = [

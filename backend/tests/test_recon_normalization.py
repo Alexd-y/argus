@@ -1,7 +1,5 @@
 """Tests for normalization pipeline and dedup logic."""
 
-import pytest
-
 from src.recon.normalization.dedup import dedup_key, deduplicate_findings
 
 
@@ -28,11 +26,13 @@ class TestDedupKey:
         assert k1 == k2  # query params stripped
 
     def test_service_key(self):
-        key = dedup_key({
-            "finding_type": "service",
-            "value": "x",
-            "data": {"ip": "1.2.3.4", "port": 443, "protocol": "tcp"},
-        })
+        key = dedup_key(
+            {
+                "finding_type": "service",
+                "value": "x",
+                "data": {"ip": "1.2.3.4", "port": 443, "protocol": "tcp"},
+            }
+        )
         assert "1.2.3.4" in key
         assert "443" in key
 
@@ -46,8 +46,16 @@ class TestDeduplication:
 
     def test_dedup_removes_duplicates(self):
         findings = [
-            {"finding_type": "subdomain", "value": "api.example.com", "confidence": 0.8},
-            {"finding_type": "subdomain", "value": "api.example.com", "confidence": 0.9},
+            {
+                "finding_type": "subdomain",
+                "value": "api.example.com",
+                "confidence": 0.8,
+            },
+            {
+                "finding_type": "subdomain",
+                "value": "api.example.com",
+                "confidence": 0.9,
+            },
         ]
         result = deduplicate_findings(findings)
         assert len(result) == 1

@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.core.config import settings
 from src.db.models import Target
 from src.db.session import get_db
+from starlette.testclient import TestClient
 
 _ADMIN_KEY = "secret-admin-key"
 _ADMIN_HEADERS = {"X-Admin-Key": _ADMIN_KEY, "Content-Type": "application/json"}
@@ -77,7 +76,10 @@ def test_create_target_422_invalid_scope_rule(
         r = client.post(
             f"/api/v1/admin/tenants/{tid}/targets",
             headers=_ADMIN_HEADERS,
-            json={"url": "https://example.com", "scope_config": {"rules": [{"bad": True}]}},
+            json={
+                "url": "https://example.com",
+                "scope_config": {"rules": [{"bad": True}]},
+            },
         )
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -197,7 +199,7 @@ def test_create_target_200_with_mocked_session(
         assert call is not None
         row = call[0][0]
         rid = str(uuid.uuid4())
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
         object.__setattr__(row, "id", rid)
         object.__setattr__(row, "created_at", ts)
 
@@ -243,7 +245,7 @@ def test_patch_target_200(
     row.tenant_id = tid
     row.url = "https://old.example/"
     row.scope_config = {"rules": []}
-    row.created_at = datetime.now(timezone.utc)
+    row.created_at = datetime.now(UTC)
     r_target = MagicMock()
     r_target.scalar_one_or_none.return_value = row
     r_pol = _policy_execute_empty()
@@ -469,18 +471,14 @@ def test_patch_target_422_no_fields(
 class TestAdminTargetsRbac:
     """401 when X-Admin-Key missing (same pattern as test_admin_bulk_ops / tenant_delete)."""
 
-    def test_list_targets_401_without_key(
-        self, client: TestClient, _clear_db_override
-    ) -> None:
+    def test_list_targets_401_without_key(self, client: TestClient, _clear_db_override) -> None:
         tid = str(uuid.uuid4())
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.get(f"/api/v1/admin/tenants/{tid}/targets")
         assert r.status_code == 401
         assert r.json()["detail"] == "Invalid X-Admin-Key"
 
-    def test_create_target_401_without_key(
-        self, client: TestClient, _clear_db_override
-    ) -> None:
+    def test_create_target_401_without_key(self, client: TestClient, _clear_db_override) -> None:
         tid = str(uuid.uuid4())
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.post(
@@ -490,9 +488,7 @@ class TestAdminTargetsRbac:
         assert r.status_code == 401
         assert r.json()["detail"] == "Invalid X-Admin-Key"
 
-    def test_patch_target_401_without_key(
-        self, client: TestClient, _clear_db_override
-    ) -> None:
+    def test_patch_target_401_without_key(self, client: TestClient, _clear_db_override) -> None:
         tid = str(uuid.uuid4())
         target_id = str(uuid.uuid4())
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
@@ -503,9 +499,7 @@ class TestAdminTargetsRbac:
         assert r.status_code == 401
         assert r.json()["detail"] == "Invalid X-Admin-Key"
 
-    def test_delete_target_401_without_key(
-        self, client: TestClient, _clear_db_override
-    ) -> None:
+    def test_delete_target_401_without_key(self, client: TestClient, _clear_db_override) -> None:
         tid = str(uuid.uuid4())
         target_id = str(uuid.uuid4())
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
@@ -513,9 +507,7 @@ class TestAdminTargetsRbac:
         assert r.status_code == 401
         assert r.json()["detail"] == "Invalid X-Admin-Key"
 
-    def test_preview_scope_401_without_key(
-        self, client: TestClient, _clear_db_override
-    ) -> None:
+    def test_preview_scope_401_without_key(self, client: TestClient, _clear_db_override) -> None:
         tid = str(uuid.uuid4())
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
             r = client.post(

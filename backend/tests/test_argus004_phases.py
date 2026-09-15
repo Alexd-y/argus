@@ -6,10 +6,10 @@ ScanPhase values, input/output model validation.
 import pytest
 from pydantic import ValidationError
 from src.orchestration.phases import (
-    ExploitationInput,
-    ExploitationOutput,
     PHASE_ORDER,
     PHASE_PROGRESS,
+    ExploitationInput,
+    ExploitationOutput,
     PhaseDefinition,
     PostExploitationInput,
     PostExploitationOutput,
@@ -146,9 +146,7 @@ class TestVulnAnalysisOutput:
 
     def test_with_findings(self) -> None:
         """findings list accepted."""
-        out = VulnAnalysisOutput(
-            findings=[{"severity": "high", "title": "XSS"}]
-        )
+        out = VulnAnalysisOutput(findings=[{"severity": "high", "title": "XSS"}])
         assert len(out.findings) == 1
         assert out.findings[0]["severity"] == "high"
 

@@ -6,7 +6,6 @@ import re
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     EvidenceTier,

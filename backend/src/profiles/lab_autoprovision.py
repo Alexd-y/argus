@@ -125,7 +125,9 @@ async def autoprovision_deep_lab_lease(
     Returns ``(engagement_id, lab_lease_id)``. Raises a typed ``LabLeaseError`` on
     boundary failure (rendered by the profile error handler in the API layer).
     """
-    hours = int(ttl_hours if ttl_hours is not None else settings.deep_profile_autoprovision_ttl_hours)
+    hours = int(
+        ttl_hours if ttl_hours is not None else settings.deep_profile_autoprovision_ttl_hours
+    )
     host = _extract_host(target)
     scope = _target_scope(target)
     repo = get_execution_mode_repository()

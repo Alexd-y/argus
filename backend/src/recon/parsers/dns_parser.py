@@ -59,7 +59,7 @@ def _parse_dns_line(line: str, fname: str) -> dict | None:
         m = _RE_MX.search(line)
         if m:
             return {"type": "MX", "value": m.group(1).strip()}
-    if "txt.txt" in fname or 'text =' in line:
+    if "txt.txt" in fname or "text =" in line:
         m = _RE_TXT.search(line)
         if m:
             return {"type": "TXT", "value": m.group(1)}

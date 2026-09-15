@@ -9,7 +9,12 @@ from src.orchestration.pool_leases import pool_capacity, pool_slot
 
 def test_metric_labels_drops_high_cardinality_ids():
     labels = metric_labels(
-        phase="vuln", outcome="ok", tenant_id="t1", scan_id="s1", task_id="x", attempt_id="a"
+        phase="vuln",
+        outcome="ok",
+        tenant_id="t1",
+        scan_id="s1",
+        task_id="x",
+        attempt_id="a",
     )
     assert labels == {"phase": "vuln", "outcome": "ok"}
     # High-cardinality identifiers must never become Prometheus labels.

@@ -19,7 +19,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from src.api.routers.ws import (
     _WS_CLOSE_FORBIDDEN,
     _WS_CLOSE_UNAUTHORIZED,
@@ -130,9 +129,7 @@ class TestAuthenticatedHandshake:
         assert resolved is not None
         assert resolved[0] == "tenant-a"
 
-    async def test_api_key_resolves_its_bound_tenant(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_api_key_resolves_its_bound_tenant(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "api_keys", ["svc-key-1:tenant-b"])
         ws = _FakeWebSocket(headers={"X-API-Key": "svc-key-1"})
 
@@ -146,9 +143,7 @@ class TestAuthenticatedHandshake:
 
     async def test_matching_tenant_hint_is_accepted(self) -> None:
         token = create_access_token("operator-1", "tenant-a")
-        ws = _FakeWebSocket(
-            headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"}
-        )
+        ws = _FakeWebSocket(headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"})
 
         resolved = await _resolve_ws_tenant(ws, _SCAN_ID)
 
@@ -187,9 +182,7 @@ class TestCrossTenantPivot:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(settings, "api_keys", ["svc-key-1:tenant-b"])
-        ws = _FakeWebSocket(
-            headers={"X-API-Key": "svc-key-1", "X-Tenant-ID": _VICTIM_TENANT}
-        )
+        ws = _FakeWebSocket(headers={"X-API-Key": "svc-key-1", "X-Tenant-ID": _VICTIM_TENANT})
 
         assert await _resolve_ws_tenant(ws, _SCAN_ID) is None
         assert ws.closed_with == (_WS_CLOSE_FORBIDDEN, "Tenant mismatch")
@@ -217,9 +210,7 @@ class TestCredentialExtraction:
 
     async def test_blank_tenant_hint_is_ignored(self) -> None:
         token = create_access_token("operator-1", "tenant-a")
-        ws = _FakeWebSocket(
-            headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "   "}
-        )
+        ws = _FakeWebSocket(headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "   "})
 
         resolved = await _resolve_ws_tenant(ws, _SCAN_ID)
 

@@ -195,9 +195,7 @@ def _summarise(records: Iterable[CostRecord]) -> CostSummary:
         total_prompt += record.prompt_tokens
         total_completion += record.completion_tokens
         total_usd += record.usd_cost
-        by_role[record.agent_role.value] += (
-            record.prompt_tokens + record.completion_tokens
-        )
+        by_role[record.agent_role.value] += record.prompt_tokens + record.completion_tokens
         count += 1
     return CostSummary(
         total_prompt_tokens=total_prompt,

@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.reports.generators import VALHALLA_SECTIONS_CSV_FORMAT
 from src.reports.report_pipeline import (
     normalize_generation_formats,
@@ -19,7 +18,10 @@ from src.reports.report_pipeline import (
 
 class TestRpt006FormatNormalization:
     def test_explicit_formats_filtered(self) -> None:
-        assert normalize_generation_formats(["HTML", "pdf", "bad"], None) == ["html", "pdf"]
+        assert normalize_generation_formats(["HTML", "pdf", "bad"], None) == [
+            "html",
+            "pdf",
+        ]
 
     def test_explicit_empty_uses_default(self) -> None:
         out = normalize_generation_formats([], None)
@@ -29,7 +31,10 @@ class TestRpt006FormatNormalization:
         assert normalize_generation_formats(None, ["json"]) == ["json"]
 
     def test_requested_dict_formats_key(self) -> None:
-        assert normalize_generation_formats(None, {"formats": ["csv", "html"]}) == ["csv", "html"]
+        assert normalize_generation_formats(None, {"formats": ["csv", "html"]}) == [
+            "csv",
+            "html",
+        ]
 
     def test_safe_error_truncates(self) -> None:
         long = "x" * 600
@@ -91,9 +96,7 @@ class TestFH06GenerateReportTaskArgContract:
         """admin_reports.py: ``.delay(report_id, tenant_id, scan_id)`` (no formats)."""
         from src.tasks import generate_report_task
 
-        bound = inspect.signature(generate_report_task.run).bind(
-            "report-123", "tenant-abc", None
-        )
+        bound = inspect.signature(generate_report_task.run).bind("report-123", "tenant-abc", None)
         bound.apply_defaults()
         assert bound.arguments["report_id"] == "report-123"
         assert bound.arguments["tenant_id"] == "tenant-abc"
@@ -110,7 +113,9 @@ class ExecScalar:
 
 
 @pytest.mark.asyncio
-async def test_run_generate_report_pipeline_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_generate_report_pipeline_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import src.reports.report_pipeline as rp
     from src.reports.data_collector import ScanReportData
     from src.services.reporting import ReportContextBuildResult
@@ -129,7 +134,7 @@ async def test_run_generate_report_pipeline_success(monkeypatch: pytest.MonkeyPa
         ai_section_results={"executive_summary": {"status": "ok", "text": "summary text"}},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -220,7 +225,7 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
         ai_section_results={},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -288,7 +293,7 @@ async def test_run_generate_report_pipeline_validation_failure_skips_upload(
         ai_section_results={"executive_summary": {"status": "ok", "text": "summary text"}},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -357,7 +362,7 @@ async def test_run_generate_report_pipeline_success_emits_structured_completion_
         ai_section_results={"executive_summary": {"status": "ok", "text": "summary text"}},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -436,7 +441,7 @@ async def test_run_generate_report_pipeline_valhalla_completion_log_includes_ful
         ai_section_results={},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)

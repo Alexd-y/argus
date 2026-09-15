@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -128,9 +127,7 @@ def test_findings_sorted_deterministically(tmp_path: Path) -> None:
     )
     parse_naabu_jsonl(payload, b"", tmp_path, "naabu")
     sidecar_lines = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").splitlines()
-    pairs = [
-        (json.loads(line)["ip"], json.loads(line)["port"]) for line in sidecar_lines
-    ]
+    pairs = [(json.loads(line)["ip"], json.loads(line)["port"]) for line in sidecar_lines]
     assert pairs == sorted(pairs)
 
 

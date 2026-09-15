@@ -31,9 +31,7 @@ from src.sandbox.parsers.katana_parser import (
 
 def _gau_jsonl(*records: dict[str, Any]) -> bytes:
     """Build a gau-style JSONL stream from the supplied records."""
-    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode("utf-8")
 
 
 def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:

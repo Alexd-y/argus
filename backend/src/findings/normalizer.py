@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlparse
 from uuid import UUID, uuid5
-from xml.etree import ElementTree as ET  # noqa: N817 - stdlib alias is conventional
+from xml.etree import ElementTree as ET
 
 from src.core.observability import record_finding_emitted
 from src.findings.lifecycle_bridge import FindingIngestContext, FindingLifecycleBridge
@@ -194,9 +194,7 @@ class NormalizedFinding:
 _StrategyFn = Callable[[bytes, NormalizationContext], list[NormalizedFinding]]
 
 
-def _strategy_json_lines(
-    raw: bytes, ctx: NormalizationContext
-) -> list[NormalizedFinding]:
+def _strategy_json_lines(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFinding]:
     """Parse one JSON object per non-empty line."""
     text = _safe_decode(raw, _MAX_JSON_BYTES)
     if not text:
@@ -239,9 +237,7 @@ def _strategy_json(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFind
     return _findings_from_arbitrary_json(payload, ctx)
 
 
-def _strategy_nmap_xml(
-    raw: bytes, ctx: NormalizationContext
-) -> list[NormalizedFinding]:
+def _strategy_nmap_xml(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFinding]:
     """Parse nmap XML; extract one INFO finding per open port."""
     if not raw:
         return []
@@ -256,7 +252,7 @@ def _strategy_nmap_xml(
         )
         return []
     try:
-        root = ET.fromstring(raw)  # noqa: S314 - stdlib ElementTree is the documented choice
+        root = ET.fromstring(raw)
     except ET.ParseError:
         _logger.warning(
             "normalizer.nmap_xml.malformed",
@@ -276,9 +272,7 @@ def _strategy_nmap_xml(
             service_name = service.get("name") if service is not None else "unknown"
             product = service.get("product") if service is not None else None
             version = service.get("version") if service is not None else None
-            asset_url = (
-                f"{protocol}://{host_address}:{port_id}" if host_address else None
-            )
+            asset_url = f"{protocol}://{host_address}:{port_id}" if host_address else None
             title = f"Open port {port_id}/{protocol} ({service_name})"
             description_parts: list[str] = []
             if host_address:
@@ -290,9 +284,7 @@ def _strategy_nmap_xml(
             if version:
                 description_parts.append(f"version={version}")
             description = "; ".join(description_parts)
-            root_cause = (
-                f"open_port:{host_address or '?'}:{port_id}/{protocol}:{service_name}"
-            )
+            root_cause = f"open_port:{host_address or '?'}:{port_id}/{protocol}:{service_name}"
             out.append(
                 NormalizedFinding(
                     category=FindingCategory.INFO,
@@ -309,9 +301,7 @@ def _strategy_nmap_xml(
     return out
 
 
-def _strategy_nuclei_jsonl(
-    raw: bytes, ctx: NormalizationContext
-) -> list[NormalizedFinding]:
+def _strategy_nuclei_jsonl(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFinding]:
     """Parse nuclei JSONL output (specialised over generic JSON_LINES)."""
     text = _safe_decode(raw, _MAX_JSON_BYTES)
     if not text:
@@ -372,9 +362,7 @@ _SEVERITY_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
 )
 _CWE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"CWE-(\d{1,5})", re.IGNORECASE)
 _CVE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"CVE-\d{4}-\d{4,7}")
-_URL_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
-    r"https?://[^\s<>\"]{1,2048}", re.IGNORECASE
-)
+_URL_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"https?://[^\s<>\"]{1,2048}", re.IGNORECASE)
 
 
 def _strategy_text(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFinding]:
@@ -395,9 +383,7 @@ def _strategy_text(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFind
             continue
         severity = sev_match.group(1).lower() if sev_match else "info"
         cwe_id = (
-            int(cwe_match.group(1))
-            if cwe_match
-            else _DEFAULT_CWE_BY_CATEGORY[FindingCategory.INFO]
+            int(cwe_match.group(1)) if cwe_match else _DEFAULT_CWE_BY_CATEGORY[FindingCategory.INFO]
         )
         category = FindingCategory.INFO
         title = stripped[:240]
@@ -421,9 +407,7 @@ def _strategy_text(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFind
     return out
 
 
-def _strategy_json_generic(
-    raw: bytes, ctx: NormalizationContext
-) -> list[NormalizedFinding]:
+def _strategy_json_generic(raw: bytes, ctx: NormalizationContext) -> list[NormalizedFinding]:
     """Best-effort parse of an unknown JSON document shape."""
     return _strategy_json(raw, ctx)
 
@@ -500,9 +484,7 @@ class Normalizer:
         :meth:`normalize_with_enrichment` can hand it to the enricher.
         """
         if not isinstance(raw_output, (bytes, bytearray)):
-            raise TypeError(
-                f"raw_output must be bytes-like, got {type(raw_output).__name__}"
-            )
+            raise TypeError(f"raw_output must be bytes-like, got {type(raw_output).__name__}")
         ctx = NormalizationContext(
             tool_run_id=tool_run_id,
             tool_id=tool_id,
@@ -650,9 +632,7 @@ class Normalizer:
             _SEVERITY_TO_CVSS["info"],
         )
         finding_id = uuid5(_NAMESPACE_FINDING, _dedup_key(ctx.asset_id, item))
-        cwe_list = (
-            list(item.cwe) if item.cwe else [_DEFAULT_CWE_BY_CATEGORY[item.category]]
-        )
+        cwe_list = list(item.cwe) if item.cwe else [_DEFAULT_CWE_BY_CATEGORY[item.category]]
         return FindingDTO(
             id=finding_id,
             tenant_id=ctx.tenant_id,
@@ -742,7 +722,8 @@ _NUCLEI_TAG_TO_CATEGORY: Final[dict[str, FindingCategory]] = {
 
 
 def _finding_from_nuclei_dict(
-    payload: dict[str, Any], ctx: NormalizationContext
+    payload: dict[str, Any],
+    ctx: NormalizationContext,  # noqa: ARG001 - retained for signature/API compatibility
 ) -> NormalizedFinding | None:
     """Build a :class:`NormalizedFinding` from a nuclei JSONL row."""
     template_id_raw = payload.get("template-id") or payload.get("template_id")
@@ -778,9 +759,7 @@ def _finding_from_nuclei_dict(
         if isinstance(cve_list, list):
             cve_ids = tuple(c for c in cve_list if isinstance(c, str))
 
-    root_cause = (
-        f"nuclei:{template_id}:{matcher or 'default'}:{asset_url or 'no-target'}"
-    )
+    root_cause = f"nuclei:{template_id}:{matcher or 'default'}:{asset_url or 'no-target'}"
     description_parts = [f"template={template_id}", f"severity={severity}"]
     if matcher:
         description_parts.append(f"matcher={matcher}")
@@ -794,9 +773,7 @@ def _finding_from_nuclei_dict(
         title=title[:240],
         description=description[:2000],
         severity=severity,
-        raw_payload_hash=_sha256_hex(
-            json.dumps(payload, sort_keys=True).encode("utf-8")
-        ),
+        raw_payload_hash=_sha256_hex(json.dumps(payload, sort_keys=True).encode("utf-8")),
         asset_url=asset_url,
         parameter=_extract_parameter_from_url(asset_url),
         root_cause_hash=_sha256_hex(root_cause.encode("utf-8")),
@@ -966,9 +943,7 @@ def _finding_from_generic_dict(
                         extracted.append(int(match.group(0)))
             cwe_ids = tuple(extracted)
 
-    root_cause = (
-        f"{source}:{category.value}:{title[:120]}:{asset_url or ''}:{parameter or ''}"
-    )
+    root_cause = f"{source}:{category.value}:{title[:120]}:{asset_url or ''}:{parameter or ''}"
     payload_blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return [
         NormalizedFinding(
@@ -1025,9 +1000,7 @@ def _findings_from_arbitrary_json(
                 out: list[NormalizedFinding] = []
                 for entry in value:
                     if isinstance(entry, dict):
-                        out.extend(
-                            _finding_from_generic_dict(entry, ctx, source="json")
-                        )
+                        out.extend(_finding_from_generic_dict(entry, ctx, source="json"))
                 return out
         return _finding_from_generic_dict(payload, ctx, source="json")
     if isinstance(payload, list):

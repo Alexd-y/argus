@@ -181,7 +181,7 @@ async def test_normalize_enrich_prioritize_and_correlate() -> None:
     assert chain.asset_id == asset_id
     assert "T1190" in chain.attack_techniques
     assert "T1059" in chain.attack_techniques
-    assert {f for f in chain.findings} >= {
+    assert set(chain.findings) >= {
         sqli_finding.id,
         next(f.id for f in enriched if f.category is FindingCategory.RCE),
     }
@@ -192,9 +192,7 @@ async def test_findings_pipeline_idempotent_across_runs() -> None:
     scan_id = uuid4()
     asset_id = uuid4()
     tool_run_id = uuid4()
-    raw = _nuclei_payload(
-        "sqli", "high", "https://x.invalid/api?id=1", ["sqli"], cve="CVE-2024-1"
-    )
+    raw = _nuclei_payload("sqli", "high", "https://x.invalid/api?id=1", ["sqli"], cve="CVE-2024-1")
 
     normalizer = Normalizer()
     a = normalizer.normalize(
@@ -223,9 +221,7 @@ async def test_correlator_only_returns_multi_step_chains() -> None:
     scan_id = uuid4()
     asset_id = uuid4()
     tool_run_id = uuid4()
-    raw = _nuclei_payload(
-        "sqli", "high", "https://x.invalid/api?id=1", ["sqli"], cve="CVE-2024-1"
-    )
+    raw = _nuclei_payload("sqli", "high", "https://x.invalid/api?id=1", ["sqli"], cve="CVE-2024-1")
     normalizer = Normalizer()
     findings = normalizer.normalize(
         tool_run_id=tool_run_id,

@@ -190,7 +190,7 @@ class RetryLoop:
 
             await _maybe_sleep(self._config, retry_index)
 
-            assert state.last_error is not None  # noqa: S101 — invariant
+            assert state.last_error is not None
             outcome = await self._fixer_attempt(agent, context, state)
             if outcome is _NEED_RETRY:
                 continue
@@ -211,20 +211,16 @@ class RetryLoop:
         try:
             response = await agent.call_raw(context, **kwargs)
         except (LLMProviderUnavailableError, LLMProviderError) as exc:
-            state.attempts.append(
-                _provider_error_attempt(state.next_attempt(), agent, exc)
-            )
+            state.attempts.append(_provider_error_attempt(state.next_attempt(), agent, exc))
             state.abort_reason = RetryAbortReason.PROVIDER_ERROR
             return None
         attempt_no = state.next_attempt()
         state.add_response(response)
         self._record_cost(agent, context, response, attempt=attempt_no)
         try:
-            result = agent._parse_response(response)  # noqa: SLF001
+            result = agent._parse_response(response)
         except AgentParseError as parse_err:
-            state.attempts.append(
-                _failed_attempt(attempt_no, agent, response, parse_err)
-            )
+            state.attempts.append(_failed_attempt(attempt_no, agent, response, parse_err))
             state.last_error = parse_err
             return _NEED_RETRY
         state.attempts.append(_success_attempt(attempt_no, agent, response))
@@ -237,7 +233,7 @@ class RetryLoop:
         context: AgentContext,
         state: _RunState,
     ) -> Any:
-        assert state.last_error is not None  # noqa: S101 — invariant
+        assert state.last_error is not None
         last_error = state.last_error
         attempt_no = state.next_attempt()
         try:
@@ -262,14 +258,12 @@ class RetryLoop:
                 reason="fixer response is not valid JSON",
                 raw_content=fixed_response.content,
             )
-            state.attempts.append(
-                _failed_attempt(attempt_no, self._fixer, fixed_response, err)
-            )
+            state.attempts.append(_failed_attempt(attempt_no, self._fixer, fixed_response, err))
             state.last_error = err
             return _NEED_RETRY
 
         try:
-            result = agent._parse_response(fixed_response)  # noqa: SLF001
+            result = agent._parse_response(fixed_response)
         except AgentParseError as parse_err:
             state.attempts.append(
                 _failed_attempt(attempt_no, self._fixer, fixed_response, parse_err)
@@ -330,9 +324,7 @@ class _RunState:
         self.total_completion_tokens: int = 0
         self.total_usd: float = 0.0
         self.last_error: AgentParseError | None = None
-        self.abort_reason: RetryAbortReason = (
-            RetryAbortReason.UNRECOVERABLE_SCHEMA_ERROR
-        )
+        self.abort_reason: RetryAbortReason = RetryAbortReason.UNRECOVERABLE_SCHEMA_ERROR
         self._attempt_counter: int = 0
 
     def next_attempt(self) -> int:
@@ -348,9 +340,7 @@ class _RunState:
         if self.total_usd >= self.config.total_budget_usd:
             return False
         total_tokens = self.total_prompt_tokens + self.total_completion_tokens
-        if total_tokens >= self.config.total_budget_tokens:
-            return False
-        return True
+        return not total_tokens >= self.config.total_budget_tokens
 
     def build_log(self) -> AttemptLog:
         return AttemptLog(
@@ -371,9 +361,7 @@ _NEED_RETRY: Final[object] = object()
 # ---------------------------------------------------------------------------
 
 
-def _success_attempt(
-    attempt_no: int, agent: BaseAgent, response: LLMResponse
-) -> AttemptRecord:
+def _success_attempt(attempt_no: int, agent: BaseAgent, response: LLMResponse) -> AttemptRecord:
     return AttemptRecord(
         attempt=attempt_no,
         agent_role=agent.role.value,

@@ -69,7 +69,9 @@ def clear_runtime_execution_context() -> None:
     _scan_options_var.set(None)
 
 
-def peek_execution_mode_from_options(options: dict[str, Any] | None) -> ExecutionMode | None:
+def peek_execution_mode_from_options(
+    options: dict[str, Any] | None,
+) -> ExecutionMode | None:
     """Return a valid ExecutionMode from scan/phase options, or None if absent.
 
     Ignores scan-depth aliases such as ``quick`` / ``deep`` stored under ``mode``.

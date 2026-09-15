@@ -88,7 +88,10 @@ def render_xml(doc: ReportDocumentV1) -> str:
         we.set("legacy_unverified", "true" if w.get("schema_version") is None else "false")
         we.set("applicability_rules_version", str(w.get("applicability_rules_version", "")))
         we.set("scenario_registry_version", str(w.get("scenario_registry_version", "")))
-        we.set("coverage_pct", "" if w.get("coverage_pct") is None else str(w.get("coverage_pct")))
+        we.set(
+            "coverage_pct",
+            "" if w.get("coverage_pct") is None else str(w.get("coverage_pct")),
+        )
         we.set("assessment_status", str(w.get("assessment_status", "")))
         we.set("coverage_gate_passed", str(w.get("coverage_gate_passed", "")))
         we.set("evidence_integrity_passed", str(w.get("evidence_integrity_passed", "")))

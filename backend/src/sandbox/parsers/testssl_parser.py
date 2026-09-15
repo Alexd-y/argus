@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -57,7 +57,7 @@ _SEVERITY_MAP: Final[dict[str, tuple[FindingCategory, float]]] = {
     "LOW": (FindingCategory.INFO, 0.0),
 }
 
-_DedupKey: TypeAlias = tuple[str]
+type _DedupKey = tuple[str]
 
 
 def parse_testssl(
@@ -106,9 +106,7 @@ def parse_testssl(
         seen.add(key)
 
         category, cvss_score = _SEVERITY_MAP.get(severity, (FindingCategory.INFO, 0.0))
-        finding_text = (
-            entry.get("finding") if isinstance(entry.get("finding"), str) else ""
-        )
+        finding_text = entry.get("finding") if isinstance(entry.get("finding"), str) else ""
         cve = entry.get("cve") if isinstance(entry.get("cve"), str) else ""
 
         finding = _build_finding(category, cvss_score)

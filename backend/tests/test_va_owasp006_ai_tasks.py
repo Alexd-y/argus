@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import pytest
-
-from app.prompts.vulnerability_analysis_prompts import VA_PROMPT_GETTERS, get_vulnerability_analysis_prompt
+from app.prompts.vulnerability_analysis_prompts import (
+    VA_PROMPT_GETTERS,
+    get_vulnerability_analysis_prompt,
+)
+from src.recon.vulnerability_analysis.ai_task_registry import (
+    VA_ACTIVE_SCAN_AI_TASKS,
+    VA_AI_TASKS,
+    validate_va_ai_payload,
+)
+from src.recon.vulnerability_analysis.pipeline import run_active_scan_ai_tasks
 from src.schemas.ai.common import VulnerabilityAnalysisAiTask, build_va_task_metadata
 from src.schemas.threat_modeling.schemas import EntryPoint
 from src.schemas.vulnerability_analysis.ai_tasks import (
@@ -14,12 +22,6 @@ from src.schemas.vulnerability_analysis.ai_tasks import (
     XssAnalysisOutput,
 )
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-from src.recon.vulnerability_analysis.ai_task_registry import (
-    VA_ACTIVE_SCAN_AI_TASKS,
-    VA_AI_TASKS,
-    validate_va_ai_payload,
-)
-from src.recon.vulnerability_analysis.pipeline import run_active_scan_ai_tasks
 
 
 def _minimal_bundle() -> VulnerabilityAnalysisInputBundle:
@@ -34,7 +36,12 @@ def _minimal_bundle() -> VulnerabilityAnalysisInputBundle:
             ),
         ],
         intel_findings=[
-            {"type": "xss", "url": "https://example.com/q", "parameter": "q", "description": "reflected"},
+            {
+                "type": "xss",
+                "url": "https://example.com/q",
+                "parameter": "q",
+                "description": "reflected",
+            },
             {"type": "sqli", "url": "https://example.com/api", "parameter": "id"},
         ],
     )
@@ -59,14 +66,20 @@ def test_owasp006_prompt_registered(task: VulnerabilityAnalysisAiTask) -> None:
 
 def test_va_ai_tasks_active_scan_prefix_order() -> None:
     assert VA_AI_TASKS[: len(VA_ACTIVE_SCAN_AI_TASKS)] == VA_ACTIVE_SCAN_AI_TASKS
-    assert VulnerabilityAnalysisAiTask.VALIDATION_TARGET_PLANNING.value == VA_AI_TASKS[len(VA_ACTIVE_SCAN_AI_TASKS)]
+    assert (
+        VulnerabilityAnalysisAiTask.VALIDATION_TARGET_PLANNING.value
+        == VA_AI_TASKS[len(VA_ACTIVE_SCAN_AI_TASKS)]
+    )
 
 
 def test_validate_active_scan_planning_payload() -> None:
     bundle = _minimal_bundle()
     task = VulnerabilityAnalysisAiTask.ACTIVE_SCAN_PLANNING
     meta = build_va_task_metadata(task, "r1", "j1", "e1")
-    inp = {"meta": meta.model_dump(mode="json"), "bundle": bundle.model_dump(mode="json")}
+    inp = {
+        "meta": meta.model_dump(mode="json"),
+        "bundle": bundle.model_dump(mode="json"),
+    }
     out = {
         "plans": [
             {
@@ -106,7 +119,10 @@ def test_va_owasp006_validate_nuclei_analysis_payload() -> None:
     ]
     task = VulnerabilityAnalysisAiTask.NUCLEI_ANALYSIS
     meta = build_va_task_metadata(task, "r1", "j1", "e1")
-    inp = {"meta": meta.model_dump(mode="json"), "bundle": bundle.model_dump(mode="json")}
+    inp = {
+        "meta": meta.model_dump(mode="json"),
+        "bundle": bundle.model_dump(mode="json"),
+    }
     out = {
         "findings": [
             {
@@ -162,7 +178,10 @@ def test_validate_xss_and_sqli_outputs() -> None:
     ]
     for task, out_model, body in cases:
         meta = build_va_task_metadata(task, "r1", "j1", "e1")
-        inp = {"meta": meta.model_dump(mode="json"), "bundle": bundle.model_dump(mode="json")}
+        inp = {
+            "meta": meta.model_dump(mode="json"),
+            "bundle": bundle.model_dump(mode="json"),
+        }
         v = validate_va_ai_payload(task.value, inp, body)
         assert v["input"]["is_valid"], v
         assert v["output"]["is_valid"], v
@@ -173,7 +192,10 @@ def test_non_hypothesis_requires_evidence_refs() -> None:
     task = VulnerabilityAnalysisAiTask.XSS_ANALYSIS
     meta = build_va_task_metadata(task, "r1", "j1", "e1")
     bundle = _minimal_bundle()
-    inp = {"meta": meta.model_dump(mode="json"), "bundle": bundle.model_dump(mode="json")}
+    inp = {
+        "meta": meta.model_dump(mode="json"),
+        "bundle": bundle.model_dump(mode="json"),
+    }
     bad = {
         "findings": [
             {

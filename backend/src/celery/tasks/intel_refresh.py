@@ -57,7 +57,7 @@ _DEFAULT_KEV_CHUNK: Final[int] = 500
 
 
 @app.task(bind=True, name="argus.intel.epss_refresh", max_retries=0)
-def epss_batch_refresh_task(self) -> dict[str, Any]:  # noqa: ARG001
+def epss_batch_refresh_task(self) -> dict[str, Any]:  # noqa: ARG001 - Celery task/signal signature
     """Refresh EPSS scores for CVEs referenced by open findings.
 
     Returns a structured dict suitable for downstream observability /
@@ -72,7 +72,7 @@ def epss_batch_refresh_task(self) -> dict[str, Any]:  # noqa: ARG001
 
 
 @app.task(bind=True, name="argus.intel.kev_refresh", max_retries=0)
-def kev_catalog_refresh_task(self) -> dict[str, Any]:  # noqa: ARG001
+def kev_catalog_refresh_task(self) -> dict[str, Any]:  # noqa: ARG001 - Celery task/signal signature
     """Refresh the full CISA KEV catalog (Postgres + Redis cache)."""
     return _run_with_lock(
         lock_key=_KEV_LOCK_KEY,
@@ -209,9 +209,7 @@ async def _run_epss_refresh() -> dict[str, Any]:
     if epss_client is None:
         return {"status": "error", "reason": "client_unavailable"}
 
-    rows = await epss_client.fetch_epss_batch(
-        cve_ids, chunk_size=_DEFAULT_EPSS_CHUNK
-    )
+    rows = await epss_client.fetch_epss_batch(cve_ids, chunk_size=_DEFAULT_EPSS_CHUNK)
     if not rows:
         return {
             "status": "ok",

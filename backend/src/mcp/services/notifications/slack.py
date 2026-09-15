@@ -68,19 +68,17 @@ class SlackNotifier(NotifierBase):
         env_value = os.environ.get(SLACK_WEBHOOK_URL_ENV, "").strip()
         return env_value
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:
+    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
         url = self._resolve_url()
         if not url:
-            raise _AdapterDisabled(
-                reason="missing_secret", target_redacted=hash_target("")
-            )
+            raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))
         return url
 
     async def _attempt_send(
         self,
         *,
         event: NotificationEvent,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
         target: str,
     ) -> httpx.Response:
         body = build_slack_payload(event)
@@ -123,13 +121,9 @@ def build_slack_payload(event: NotificationEvent) -> dict[str, object]:
         {"type": "mrkdwn", "text": f"*Event:* `{event.event_type}`"},
     ]
     if event.scan_id:
-        context_elements.append(
-            {"type": "mrkdwn", "text": f"*Scan:* `{event.scan_id}`"}
-        )
+        context_elements.append({"type": "mrkdwn", "text": f"*Scan:* `{event.scan_id}`"})
     if event.finding_id:
-        context_elements.append(
-            {"type": "mrkdwn", "text": f"*Finding:* `{event.finding_id}`"}
-        )
+        context_elements.append({"type": "mrkdwn", "text": f"*Finding:* `{event.finding_id}`"})
     blocks.append({"type": "context", "elements": context_elements})
 
     if event.evidence_url:

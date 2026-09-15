@@ -71,10 +71,7 @@ class CVSSVectorSpec(BaseModel):
 
         iss = 1.0 - (1.0 - conf) * (1.0 - integ) * (1.0 - avail)
 
-        if self.s == "U":
-            impact = 6.42 * iss
-        else:
-            impact = 7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)
+        impact = 6.42 * iss if self.s == "U" else 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15
 
         exploitability = 8.22 * av * ac * pr * ui
 
@@ -90,31 +87,104 @@ class CVSSVectorSpec(BaseModel):
 
 
 OWASP_CVSS_MAP: list[tuple[tuple[str, str], CVSSVectorSpec]] = [
-    (("A05", "sqli"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H")),
-    (("A05", "xss"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="C", c="L", i="L", a="N")),
-    (("A05", "ssti"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H")),
-    (("A05", "command"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H")),
-    (("A05", "path_traversal"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="N", a="N")),
-    (("A05", "ssrf"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="L", a="N")),
-    (("A05", "xxe"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="L", a="N")),
-    (("A05", "nosql"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N")),
-    (("A05", "prompt_injection"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="L", a="N")),
-    (("A05", "open_redirect"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="U", c="L", i="L", a="N")),
-    (("A05", "rce"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H")),
-    (("A02", "hsts"), CVSSVectorSpec(av="N", ac="H", pr="N", ui="R", s="U", c="L", i="L", a="N")),
-    (("A02", "csp"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="C", c="L", i="L", a="N")),
-    (("A02", "misconfig"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="N", a="N")),
-    (("A04", "https"), CVSSVectorSpec(av="N", ac="H", pr="N", ui="N", s="U", c="H", i="L", a="N")),
-    (("A01", "bola"), CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N")),
-    (("A01", "idor"), CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N")),
-    (("A01", "access"), CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N")),
-    (("A07", "credential"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N")),
-    (("A07", "jwt"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N")),
-    (("A06", "rate"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="N", i="L", a="H")),
-    (("A03", "supply"), CVSSVectorSpec(av="N", ac="H", pr="N", ui="N", s="U", c="H", i="H", a="H")),
-    (("A08", "integrity"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="H")),
-    (("A09", "logging"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="N", a="N")),
+    (
+        ("A05", "sqli"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H"),
+    ),
+    (
+        ("A05", "xss"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="C", c="L", i="L", a="N"),
+    ),
+    (
+        ("A05", "ssti"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H"),
+    ),
+    (
+        ("A05", "command"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H"),
+    ),
+    (
+        ("A05", "path_traversal"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="N", a="N"),
+    ),
+    (
+        ("A05", "ssrf"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="L", a="N"),
+    ),
+    (
+        ("A05", "xxe"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="L", a="N"),
+    ),
+    (
+        ("A05", "nosql"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A05", "prompt_injection"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="L", a="N"),
+    ),
+    (
+        ("A05", "open_redirect"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="U", c="L", i="L", a="N"),
+    ),
+    (
+        ("A05", "rce"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="C", c="H", i="H", a="H"),
+    ),
+    (
+        ("A02", "hsts"),
+        CVSSVectorSpec(av="N", ac="H", pr="N", ui="R", s="U", c="L", i="L", a="N"),
+    ),
+    (
+        ("A02", "csp"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="R", s="C", c="L", i="L", a="N"),
+    ),
+    (
+        ("A02", "misconfig"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="N", a="N"),
+    ),
+    (
+        ("A04", "https"),
+        CVSSVectorSpec(av="N", ac="H", pr="N", ui="N", s="U", c="H", i="L", a="N"),
+    ),
+    (
+        ("A01", "bola"),
+        CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A01", "idor"),
+        CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A01", "access"),
+        CVSSVectorSpec(av="N", ac="L", pr="L", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A07", "credential"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A07", "jwt"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="N"),
+    ),
+    (
+        ("A06", "rate"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="N", i="L", a="H"),
+    ),
+    (
+        ("A03", "supply"),
+        CVSSVectorSpec(av="N", ac="H", pr="N", ui="N", s="U", c="H", i="H", a="H"),
+    ),
+    (
+        ("A08", "integrity"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="H", i="H", a="H"),
+    ),
+    (
+        ("A09", "logging"),
+        CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="N", a="N"),
+    ),
 ]
+
 
 def auto_score_finding(finding: dict[str, Any]) -> tuple[float, str, str] | None:
     """Derive a *provisional* CVSS v3.1 suggestion from OWASP category + title.

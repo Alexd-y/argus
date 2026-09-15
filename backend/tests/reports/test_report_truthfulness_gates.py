@@ -11,25 +11,25 @@ from types import SimpleNamespace
 
 from src.recon.vulnerability_analysis.active_scan.ansi_sanitizer import (
     strip_ansi,
-    strip_ansi_from_url,
     strip_ansi_from_poc,
+    strip_ansi_from_url,
 )
 from src.recon.vulnerability_analysis.active_scan.poc_schema import (
     build_proof_of_concept,
     merge_proof_of_concept,
 )
 from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
-    whatweb_plugin_entries,
     _WHATWEB_NOISE_CATEGORIES,
+    whatweb_plugin_entries,
+)
+from src.reports.report_quality_gate import (
+    _EVIDENCE_QUALITY_RANK,
+    AUTHENTICATED_TESTING_GAP_WARNING,
+    classify_rate_limit_finding,
 )
 from src.reports.report_text_sanitizer import (
     contains_ai_stub_output,
     sanitize_ai_report_text,
-)
-from src.reports.report_quality_gate import (
-    classify_rate_limit_finding,
-    AUTHENTICATED_TESTING_GAP_WARNING,
-    _EVIDENCE_QUALITY_RANK,
 )
 
 
@@ -77,7 +77,7 @@ def test_ai_stub_detects_hello_world() -> None:
 
 
 def test_ai_stub_detects_code_block_html() -> None:
-    assert contains_ai_stub_output('<h1>This is a code block</h1>') is True
+    assert contains_ai_stub_output("<h1>This is a code block</h1>") is True
 
 
 def test_ai_stub_detects_iostream() -> None:
@@ -212,7 +212,10 @@ def test_poc_schema_merge_strips_ansi() -> None:
 
 
 def test_poc_schema_negative_control_fields_in_keys() -> None:
-    from src.recon.vulnerability_analysis.active_scan.poc_schema import PROOF_OF_CONCEPT_KEYS
+    from src.recon.vulnerability_analysis.active_scan.poc_schema import (
+        PROOF_OF_CONCEPT_KEYS,
+    )
+
     assert "negative_control_url" in PROOF_OF_CONCEPT_KEYS
     assert "negative_control_result" in PROOF_OF_CONCEPT_KEYS
     assert "command_output" in PROOF_OF_CONCEPT_KEYS

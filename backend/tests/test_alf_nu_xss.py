@@ -5,14 +5,12 @@ from __future__ import annotations
 import os
 
 import pytest
-
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-
 from src.recon.vulnerability_analysis.active_scan.planner import (
     build_va_active_scan_plan,
     ensure_minimum_xss_surface_plan,
     renumber_active_scan_plan_indices,
 )
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _alf_nu_bundle() -> VulnerabilityAnalysisInputBundle:

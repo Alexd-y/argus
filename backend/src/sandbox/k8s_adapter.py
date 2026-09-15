@@ -260,13 +260,9 @@ class KubernetesSandboxAdapter:
         preflight_checker: PreflightChecker | None = None,
     ) -> None:
         if not isinstance(mode, SandboxRunMode):
-            raise SandboxConfigError(
-                f"mode must be a SandboxRunMode, got {type(mode)!r}"
-            )
+            raise SandboxConfigError(f"mode must be a SandboxRunMode, got {type(mode)!r}")
         if mode is SandboxRunMode.DRY_RUN and dry_run_artifact_dir is None:
-            raise SandboxConfigError(
-                "dry_run_artifact_dir is required when mode=DRY_RUN"
-            )
+            raise SandboxConfigError("dry_run_artifact_dir is required when mode=DRY_RUN")
         if default_pod_timeout_s <= 0:
             raise SandboxConfigError("default_pod_timeout_s must be > 0")
         if not namespace:
@@ -390,11 +386,7 @@ class KubernetesSandboxAdapter:
         """
         self._validate_pair(tool_job, descriptor)
         template = self._resolve_template(descriptor.network_policy.name)
-        target_cidr = (
-            self._derive_target_cidr(tool_job)
-            if template.egress_target_dynamic
-            else None
-        )
+        target_cidr = self._derive_target_cidr(tool_job) if template.egress_target_dynamic else None
         pod_labels = manifest_helpers.build_pod_labels(tool_job)
         try:
             return manifest_helpers.build_networkpolicy_for_job(
@@ -414,8 +406,7 @@ class KubernetesSandboxAdapter:
             # message names the offending CIDR, which is fine for
             # operator logs but not for the API response.
             raise SandboxConfigError(
-                f"NetworkPolicy override rejected for tool_id="
-                f"{descriptor.tool_id!r}: {exc}"
+                f"NetworkPolicy override rejected for tool_id={descriptor.tool_id!r}: {exc}"
             ) from exc
 
     # ------------------------------------------------------------------
@@ -509,8 +500,7 @@ class KubernetesSandboxAdapter:
             )
         if descriptor.requires_approval and tool_job.approval_id is None:
             raise ApprovalRequiredError(
-                f"tool_id={descriptor.tool_id!r} requires approval but "
-                f"tool_job.approval_id is None"
+                f"tool_id={descriptor.tool_id!r} requires approval but tool_job.approval_id is None"
             )
 
     def _resolve_template(self, name: str) -> NetworkPolicyTemplate:
@@ -541,9 +531,7 @@ class KubernetesSandboxAdapter:
             return target.cidr
         return None
 
-    def _build_container_spec(
-        self, descriptor: ToolDescriptor, argv: list[str]
-    ) -> dict[str, Any]:
+    def _build_container_spec(self, descriptor: ToolDescriptor, argv: list[str]) -> dict[str, Any]:
         return {
             "name": "tool",
             "image": manifest_helpers.resolve_image(descriptor),
@@ -577,9 +565,7 @@ class KubernetesSandboxAdapter:
         template_spec = spec.get("template", {}).get("spec", {})
         for volume in template_spec.get("volumes", []):
             if "hostPath" in volume:
-                raise SandboxConfigError(
-                    "rendered manifest contains a hostPath volume — forbidden"
-                )
+                raise SandboxConfigError("rendered manifest contains a hostPath volume — forbidden")
         for container in template_spec.get("containers", []):
             for mount in container.get("volumeMounts", []):
                 path = mount.get("mountPath", "")
@@ -647,7 +633,7 @@ class KubernetesSandboxAdapter:
         descriptor: ToolDescriptor,
         job_manifest: Mapping[str, Any],
         netpol_manifest: Mapping[str, Any],
-        manifest_yaml: str,
+        manifest_yaml: str,  # noqa: ARG002 - retained for signature/API compatibility
     ) -> None:
         """Persist the rendered manifests + argv to ``dry_run_artifact_dir``.
 
@@ -685,9 +671,7 @@ class KubernetesSandboxAdapter:
             .get("containers", [])
         ):
             container["command"] = list(redacted_argv)
-        redacted_manifest_yaml = self._render_manifest_yaml(
-            redacted_manifest, netpol_manifest
-        )
+        redacted_manifest_yaml = self._render_manifest_yaml(redacted_manifest, netpol_manifest)
 
         manifest_path.write_text(redacted_manifest_yaml, encoding="utf-8")
         argv_payload = {
@@ -700,9 +684,7 @@ class KubernetesSandboxAdapter:
             "network_policy": descriptor.network_policy.name,
             "netpol_name": netpol_manifest.get("metadata", {}).get("name"),
         }
-        argv_path.write_text(
-            json.dumps(argv_payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        argv_path.write_text(json.dumps(argv_payload, indent=2, sort_keys=True), encoding="utf-8")
 
     # ------------------------------------------------------------------
     # Private helpers — cluster I/O
@@ -737,7 +719,7 @@ class KubernetesSandboxAdapter:
                     config_mod.load_incluster_config()
                 except config_mod.ConfigException:
                     config_mod.load_kube_config()
-        except Exception as exc:  # noqa: BLE001 — wrap every kubeconfig error uniformly
+        except Exception as exc:
             # Intentionally do NOT include str(exc) — kubeconfig parser errors
             # may echo file system paths, host names, or token fragments. The
             # exception class name + chained __cause__ are enough for ops.
@@ -848,9 +830,7 @@ class KubernetesSandboxAdapter:
                     # MED-2: log the underlying class + HTTP status only —
                     # NEVER ``str(cause)`` (echoes ApiException body).
                     "cause_class": type(cause).__name__ if cause is not None else None,
-                    "status": getattr(cause, "status", None)
-                    if cause is not None
-                    else None,
+                    "status": getattr(cause, "status", None) if cause is not None else None,
                 },
             )
             return SandboxRunResult(
@@ -984,9 +964,7 @@ class KubernetesSandboxAdapter:
         deadline = time.monotonic() + deadline_s + 30.0  # allow grace for polling
         while time.monotonic() < deadline:
             try:
-                job = batch_api.read_namespaced_job_status(
-                    name=job_name, namespace=self._namespace
-                )
+                job = batch_api.read_namespaced_job_status(name=job_name, namespace=self._namespace)
             except client.exceptions.ApiException as exc:
                 raise SandboxClusterError(
                     f"failed to read Job status {job_name!r}",
@@ -1053,9 +1031,7 @@ class KubernetesSandboxAdapter:
             return None
         items = getattr(pods, "items", []) or []
         for pod in items:
-            statuses = (
-                getattr(getattr(pod, "status", None), "container_statuses", []) or []
-            )
+            statuses = getattr(getattr(pod, "status", None), "container_statuses", []) or []
             for status in statuses:
                 terminated = getattr(getattr(status, "state", None), "terminated", None)
                 if terminated is not None:
@@ -1121,9 +1097,7 @@ class KubernetesSandboxAdapter:
             return None
         items = getattr(pods, "items", []) or []
         for pod in items:
-            statuses = (
-                getattr(getattr(pod, "status", None), "container_statuses", []) or []
-            )
+            statuses = getattr(getattr(pod, "status", None), "container_statuses", []) or []
             for status in statuses:
                 terminated = getattr(getattr(status, "state", None), "terminated", None)
                 if terminated is not None:

@@ -88,10 +88,7 @@ def load_known_executables(path: Path | None = None) -> frozenset[str]:
     """Load executable names from ``infra/sandbox/expected_executables.json``."""
     if path is None:
         path = (
-            Path(__file__).resolve().parents[3]
-            / "infra"
-            / "sandbox"
-            / "expected_executables.json"
+            Path(__file__).resolve().parents[3] / "infra" / "sandbox" / "expected_executables.json"
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

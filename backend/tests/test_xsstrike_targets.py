@@ -5,12 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-
 from src.recon.vulnerability_analysis.xsstrike_targets import (
     MAX_XSSTRIKE_SCANS_PER_RUN,
     collect_xsstrike_scan_jobs,
 )
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _minimal_bundle(
@@ -79,7 +78,8 @@ def test_collect_jobs_empty_when_no_params_or_forms() -> None:
 
 def test_collect_jobs_respects_max() -> None:
     rows = [
-        {"param": "p", "route": f"/r{i}", "host": "example.com"} for i in range(MAX_XSSTRIKE_SCANS_PER_RUN + 5)
+        {"param": "p", "route": f"/r{i}", "host": "example.com"}
+        for i in range(MAX_XSSTRIKE_SCANS_PER_RUN + 5)
     ]
     bundle = _minimal_bundle(params_inventory=rows)
     jobs = collect_xsstrike_scan_jobs(bundle)

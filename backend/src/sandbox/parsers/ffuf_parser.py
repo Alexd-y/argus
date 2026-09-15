@@ -522,9 +522,7 @@ def _build_evidence(
         "parameter_name": _string_field(record, "parameter_name"),
         "method": _string_field(record, "method"),
     }
-    cleaned = {
-        key: value for key, value in payload.items() if value not in (None, "", [], {})
-    }
+    cleaned = {key: value for key, value in payload.items() if value not in (None, "", [], {})}
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
 

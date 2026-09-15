@@ -30,9 +30,7 @@ class MessageQueueBackend(ABC):
     async def publish(self, topic: str, payload: dict[str, Any]) -> None: ...
 
     @abstractmethod
-    async def subscribe(
-        self, topic: str, handler: Any
-    ) -> None: ...
+    async def subscribe(self, topic: str, handler: Any) -> None: ...
 
 
 class _NoopBackend(MessageQueueBackend):
@@ -71,9 +69,7 @@ class NatsJetStreamBackend(MessageQueueBackend):
 
             self._nc = await nats.connect(self._url, **opts)
             self._js = self._nc.jetstream()
-            logger.info(
-                "nats_connected", extra={"url": self._url}
-            )
+            logger.info("nats_connected", extra={"url": self._url})
         except ImportError:
             logger.error("nats_py_not_installed — pip install nats-py")
             raise
@@ -119,16 +115,12 @@ class RabbitMQBackend(MessageQueueBackend):
             self._exchange = await self._channel.declare_exchange(
                 "argus", aio_pika.ExchangeType.TOPIC, durable=True
             )
-            logger.info(
-                "rabbitmq_connected", extra={"url": self._url}
-            )
+            logger.info("rabbitmq_connected", extra={"url": self._url})
         except ImportError:
             logger.error("aio_pika_not_installed — pip install aio-pika")
             raise
         except Exception:
-            logger.exception(
-                "rabbitmq_connect_failed", extra={"url": self._url}
-            )
+            logger.exception("rabbitmq_connect_failed", extra={"url": self._url})
             raise
 
     async def disconnect(self) -> None:
@@ -153,9 +145,7 @@ class RabbitMQBackend(MessageQueueBackend):
     async def subscribe(self, topic: str, handler: Any) -> None:
         if self._channel is None:
             raise RuntimeError("Not connected — call connect() first")
-        queue = await self._channel.declare_queue(
-            name="", exclusive=True, auto_delete=True
-        )
+        queue = await self._channel.declare_queue(name="", exclusive=True, auto_delete=True)
         await queue.bind(self._exchange, routing_key=topic)
 
         async def _wrap(message: Any) -> None:
@@ -192,7 +182,9 @@ def get_message_queue(settings: Any) -> MessageQueueBackend:
         return NatsJetStreamBackend(url=nats_url, creds=nats_creds)
 
     if backend == "rabbitmq":
-        rabbitmq_url = str(getattr(settings, "rabbitmq_url", "") or "amqp://guest:guest@localhost:5672/")
+        rabbitmq_url = str(
+            getattr(settings, "rabbitmq_url", "") or "amqp://guest:guest@localhost:5672/"
+        )
         return RabbitMQBackend(url=rabbitmq_url)
 
     return _NoopBackend()

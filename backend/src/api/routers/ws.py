@@ -24,6 +24,7 @@ Server-side uses FastAPI's built-in ``WebSocket`` support (Starlette).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -67,10 +68,8 @@ class _ConnectionManager:
     def disconnect(self, scan_id: str, ws: WebSocket) -> None:
         conns = self._connections.get(scan_id)
         if conns:
-            try:
+            with contextlib.suppress(ValueError):
                 conns.remove(ws)
-            except ValueError:
-                pass
             if not conns:
                 del self._connections[scan_id]
 
@@ -119,9 +118,7 @@ async def _reject_handshake(ws: WebSocket, code: int, reason: str) -> None:
         logger.debug("ws_reject_failed", extra={"close_reason": reason})
 
 
-async def _resolve_ws_tenant(
-    ws: WebSocket, scan_id: str
-) -> tuple[str, AuthContext | None] | None:
+async def _resolve_ws_tenant(ws: WebSocket, scan_id: str) -> tuple[str, AuthContext | None] | None:
     """Resolve the tenant for a WebSocket handshake, bound to the authenticated identity.
 
     SEC-001 parity for the WebSocket transport: ``get_current_tenant_id`` is a
@@ -135,16 +132,12 @@ async def _resolve_ws_tenant(
     """
     bearer, api_key = _ws_credentials(ws)
     credentials = (
-        HTTPAuthorizationCredentials(scheme="Bearer", credentials=bearer)
-        if bearer
-        else None
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials=bearer) if bearer else None
     )
     auth = await get_optional_auth(credentials=credentials, api_key=api_key)
 
     raw_tenant = ws.headers.get("x-tenant-id") or ws.query_params.get("tenant_id")
-    requested_tenant = (
-        raw_tenant.strip() if raw_tenant and raw_tenant.strip() else None
-    )
+    requested_tenant = raw_tenant.strip() if raw_tenant and raw_tenant.strip() else None
 
     if auth is not None:
         if requested_tenant is not None and requested_tenant != auth.tenant_id:
@@ -192,9 +185,9 @@ def _build_ws_payload(ev: Any) -> dict[str, Any]:
     if getattr(ev, "message", None):
         payload["message"] = ev.message
     if ev.event == "error":
-        payload["error"] = ev.message or (
-            ev.data.get("error") if ev.data else None
-        ) or "Unknown error"
+        payload["error"] = (
+            ev.message or (ev.data.get("error") if ev.data else None) or "Unknown error"
+        )
     filtered_data = _filter_ws_output_data(ev.event, ev.data)
     if filtered_data:
         payload["data"] = filtered_data
@@ -242,10 +235,8 @@ async def _scan_event_stream(
                         "message": event.message,
                         "timestamp": event.timestamp,
                     }
-                    try:
+                    with contextlib.suppress(asyncio.QueueFull):
                         bus_queue.put_nowait(payload)
-                    except asyncio.QueueFull:
-                        pass
 
             bus.subscribe(_on_bus_event)
     except Exception:
@@ -294,7 +285,12 @@ async def _scan_event_stream(
 
             if not events and not seen_ids:
                 await ws.send_json(
-                    {"event": "init", "phase": "init", "progress": 0, "message": "Scan started"}
+                    {
+                        "event": "init",
+                        "phase": "init",
+                        "progress": 0,
+                        "message": "Scan started",
+                    }
                 )
                 seen_ids.add("__init__")
 
@@ -338,9 +334,7 @@ async def _scan_event_stream(
             await asyncio.sleep(_WS_POLL_INTERVAL_SEC)
     finally:
         if bus_queue is not None and bus is not None:
-            try:
-                pass
-            except Exception:
+            with contextlib.suppress(Exception):
                 pass
 
 
@@ -371,10 +365,8 @@ async def ws_scan_events(ws: WebSocket, scan_id: str) -> None:
         logger.debug("ws_client_disconnected", extra={"scan_id": scan_id})
     except Exception:
         logger.warning("ws_scan_events_error", extra={"scan_id": scan_id}, exc_info=True)
-        try:
+        with contextlib.suppress(Exception):
             await ws.close(code=status.WS_1011_INTERNAL_ERROR, reason="Internal error")
-        except Exception:
-            pass
     finally:
         _manager.disconnect(scan_id, ws)
 

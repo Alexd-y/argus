@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from src.celery.tasks import intel_refresh as ir
 
 
@@ -63,9 +62,7 @@ def test_airgap_skips_runner(monkeypatch: pytest.MonkeyPatch) -> None:
         called["runner"] = True
         return {"status": "ok"}
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "airgap"
     assert out["task"] == "t"
     assert called["runner"] is False
@@ -86,9 +83,7 @@ def test_lock_acquire_and_release_on_success(
     async def _runner() -> dict[str, Any]:
         return {"status": "ok", "rows_written": 7}
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "ok"
     assert out["rows_written"] == 7
     assert out["task"] == "t"
@@ -108,9 +103,7 @@ def test_lock_held_skips_work(monkeypatch: pytest.MonkeyPatch) -> None:
         called["runner"] = True
         return {"status": "ok"}
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "skipped"
     assert out["reason"] == "lock_held"
     assert called["runner"] is False
@@ -125,9 +118,7 @@ def test_redis_unavailable_runs_without_lock(
     async def _runner() -> dict[str, Any]:
         return {"status": "ok", "rows_written": 1}
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "ok"
     assert out["rows_written"] == 1
 
@@ -141,9 +132,7 @@ def test_runner_error_returns_error_dict(
     async def _runner() -> dict[str, Any]:
         raise RuntimeError("kaboom")
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "error"
     assert out["reason"] == "task_error"
 
@@ -176,9 +165,7 @@ def test_lock_acquire_failure_continues_unlocked(
 
     # SET NX raised, lock not acquired and we still have a redis stub,
     # so contract is "lock not acquired with redis present" → skipped.
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert out["status"] == "skipped"
     assert out["reason"] == "lock_held"
 
@@ -260,8 +247,6 @@ def test_result_carries_duration(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _runner() -> dict[str, Any]:
         return {"status": "ok"}
 
-    out = ir._run_with_lock(
-        lock_key="argus:lock:test", runner=_runner, task_name="t"
-    )
+    out = ir._run_with_lock(lock_key="argus:lock:test", runner=_runner, task_name="t")
     assert isinstance(out["duration_ms"], int)
     assert out["duration_ms"] >= 0

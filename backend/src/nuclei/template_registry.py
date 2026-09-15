@@ -54,10 +54,7 @@ def _manifest_matches(
         if actual_version != product_version.strip().lower():
             return False
     if severity is not None:
-        if isinstance(severity, str):
-            allowed = {severity.strip().lower()}
-        else:
-            allowed = _lower_set(severity)
+        allowed = {severity.strip().lower()} if isinstance(severity, str) else _lower_set(severity)
         if manifest.severity.strip().lower() not in allowed:
             return False
     if oast is not None and bool(manifest.requires_oast) is not oast:
@@ -165,13 +162,9 @@ class NucleiTemplateRegistry:
                 manifest.source not in (TemplateSource.INTERNAL, TemplateSource.PROJECTDISCOVERY)
                 and not manifest.verified
             ):
-                raise TemplateRegistryError(
-                    f"template_not_verified:{manifest.template_id}"
-                )
+                raise TemplateRegistryError(f"template_not_verified:{manifest.template_id}")
             if manifest.signature is None and manifest.source != TemplateSource.INTERNAL:
-                raise TemplateRegistryError(
-                    f"template_missing_signature:{manifest.template_id}"
-                )
+                raise TemplateRegistryError(f"template_missing_signature:{manifest.template_id}")
 
         self._templates[manifest.template_id] = manifest
         self._provenance_hashes[manifest.template_id] = prov_hash

@@ -142,12 +142,7 @@ class SeverityCounts(BaseModel):
     def total(self) -> int:
         """Population size — the sum of every band (including ``unknown``)."""
         return (
-            self.critical
-            + self.high
-            + self.medium
-            + self.low
-            + self.informational
-            + self.unknown
+            self.critical + self.high + self.medium + self.low + self.informational + self.unknown
         )
 
     def as_dict(self) -> dict[str, int]:

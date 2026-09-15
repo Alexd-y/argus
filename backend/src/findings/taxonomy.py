@@ -121,9 +121,7 @@ def normalize_lifecycle(
 # --- record kind -----------------------------------------------------------
 
 #: Severity bands that, absent other signal, imply an informational record.
-_INFORMATIONAL_BANDS: Final[frozenset[SeverityBand]] = frozenset(
-    {SeverityBand.INFORMATIONAL}
-)
+_INFORMATIONAL_BANDS: Final[frozenset[SeverityBand]] = frozenset({SeverityBand.INFORMATIONAL})
 
 #: OWASP / category tokens that read as hardening rather than an exploitable
 #: vulnerability. Kept intentionally small and explicit.

@@ -43,7 +43,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -103,7 +103,7 @@ _KV_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -168,9 +168,7 @@ def _walk(text: str) -> dict[str, Any]:
             continue
         kv_match = _KV_RE.match(line)
         if kv_match is not None:
-            state["domain_info"][kv_match.group("key").strip()] = kv_match.group(
-                "value"
-            ).strip()
+            state["domain_info"][kv_match.group("key").strip()] = kv_match.group("value").strip()
     return state
 
 

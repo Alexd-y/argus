@@ -21,9 +21,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/findings", tags=["findings"])
 
-_CVSS_VECTOR_RE = re.compile(r"^CVSS:3\.[01]/AV:[NALP]/AC:[LH]/PR:[NLH]/UI:[NR]/S:[UC]/C:[NLH]/I:[NLH]/A:[NLH]$")
+_CVSS_VECTOR_RE = re.compile(
+    r"^CVSS:3\.[01]/AV:[NALP]/AC:[LH]/PR:[NLH]/UI:[NR]/S:[UC]/C:[NLH]/I:[NLH]/A:[NLH]$"
+)
 
-CVSS_OVERRIDE_ALLOWED = frozenset({"critical", "high", "medium", "low", "info", "informational", "none"})
+CVSS_OVERRIDE_ALLOWED = frozenset(
+    {"critical", "high", "medium", "low", "info", "informational", "none"}
+)
 
 
 class CVSSOverrideRequest(BaseModel):
@@ -54,7 +58,10 @@ async def _get_session():
 @router.patch(
     "/{finding_id}/cvss",
     response_model=CVSSOverrideResponse,
-    responses={404: {"description": "Finding not found"}, 422: {"description": "Invalid CVSS vector"}},
+    responses={
+        404: {"description": "Finding not found"},
+        422: {"description": "Invalid CVSS vector"},
+    },
 )
 async def override_finding_cvss(
     finding_id: UUID,
@@ -102,7 +109,7 @@ async def override_finding_cvss(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to compute CVSS score from vector: {exc}",
-        )
+        ) from exc
 
     finding.cvss_vector = override.cvss_vector
     finding.cvss = score

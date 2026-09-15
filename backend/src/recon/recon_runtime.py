@@ -178,11 +178,7 @@ def build_recon_runtime_config(
     )
 
     wl = pick("recon_wordlist_path", ("wordlist_path",))
-    wordlist_path = (
-        str(wl).strip()
-        if wl is not None
-        else str(s.recon_wordlist_path or "").strip()
-    )
+    wordlist_path = str(wl).strip() if wl is not None else str(s.recon_wordlist_path or "").strip()
 
     rl = _coerce_int(pick("recon_rate_limit", ("rate_limit",)))
     rate_rps = _effective_rate_rps(s)
@@ -191,7 +187,9 @@ def build_recon_runtime_config(
 
     dns_depth_enabled = pick_bool("recon_dns_depth_enabled", "dns_depth_enabled")
     dns_depth_dig_deep = pick_bool("recon_dns_depth_dig_deep", "dns_depth_dig_deep")
-    dns_depth_takeover_hints = pick_bool("recon_dns_depth_takeover_hints", "dns_depth_takeover_hints")
+    dns_depth_takeover_hints = pick_bool(
+        "recon_dns_depth_takeover_hints", "dns_depth_takeover_hints"
+    )
 
     dnx_types = pick("recon_dnsx_record_types", ("dnsx_record_types",))
     dnsx_record_types_csv = (
@@ -206,7 +204,9 @@ def build_recon_runtime_config(
     dnsx_silent = pick_bool("recon_dnsx_silent", "dnsx_silent")
 
     dd_to = _coerce_int(pick("recon_dns_depth_timeout_sec", ("dns_depth_timeout_sec",)))
-    dns_depth_timeout_sec = dd_to if dd_to is not None else getattr(s, "recon_dns_depth_timeout_sec", None)
+    dns_depth_timeout_sec = (
+        dd_to if dd_to is not None else getattr(s, "recon_dns_depth_timeout_sec", None)
+    )
 
     xf_pick = pick("recon_dnsx_extra_flags", ("dnsx_extra_flags",))
     dnsx_extra_flags = _coerce_dnsx_extra_flags_frozenset(xf_pick)
@@ -236,7 +236,9 @@ def build_recon_runtime_config(
     )
     dmh = _coerce_int(pick("recon_deep_max_hosts", ("deep_max_hosts",)))
     deep_max_hosts = (
-        max(1, int(dmh)) if dmh is not None else max(1, int(getattr(s, "recon_deep_max_hosts", 5) or 5))
+        max(1, int(dmh))
+        if dmh is not None
+        else max(1, int(getattr(s, "recon_deep_max_hosts", 5) or 5))
     )
     dmph = _coerce_int(pick("recon_deep_max_ports_per_host", ("deep_max_ports_per_host",)))
     deep_max_ports_per_host = (
@@ -255,7 +257,9 @@ def build_recon_runtime_config(
         else max(1, min(500, int(getattr(s, "recon_gowitness_max_urls", 25) or 25)))
     )
     gwt = _coerce_int(pick("recon_gowitness_timeout_sec", ("gowitness_timeout_sec",)))
-    gowitness_timeout_sec = gwt if gwt is not None else getattr(s, "recon_gowitness_timeout_sec", None)
+    gowitness_timeout_sec = (
+        gwt if gwt is not None else getattr(s, "recon_gowitness_timeout_sec", None)
+    )
     gwc = _coerce_int(pick("recon_gowitness_concurrency", ("gowitness_concurrency",)))
     gowitness_concurrency = (
         max(1, min(8, int(gwc)))

@@ -73,19 +73,17 @@ os.environ.setdefault("ADMIN_SESSION_PEPPER", _TEST_SESSION_PEPPER)
 # Layer 2 — heavy ``src.*`` imports.
 # ---------------------------------------------------------------------------
 
-from alembic.migration import MigrationContext  # noqa: E402
-from alembic.operations import Operations  # noqa: E402
-from sqlalchemy import event  # noqa: E402
-from sqlalchemy.ext.asyncio import (  # noqa: E402
+from alembic.migration import MigrationContext  # noqa: E402 — after test env bootstrap above
+from alembic.operations import Operations  # noqa: E402 — after test env bootstrap above
+from sqlalchemy import event  # noqa: E402 — after test env bootstrap above
+from sqlalchemy.ext.asyncio import (  # noqa: E402 — after test env bootstrap above
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-from src.core.config import settings  # noqa: E402
-
+from sqlalchemy.pool import StaticPool  # noqa: E402 — after test env bootstrap above
+from src.core.config import settings  # noqa: E402 — after test env bootstrap above
 
 _BACKEND_ROOT: Path = Path(__file__).resolve().parents[2]
 _VERSIONS_DIR: Path = _BACKEND_ROOT / "alembic" / "versions"
@@ -115,9 +113,7 @@ def _load_revision_module(revision: str = _REVISION) -> Any:
     """Import revision *revision* as a standalone module (no full chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{revision}_*.py"))
     assert matches, f"revision {revision} not found under {_VERSIONS_DIR}"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{revision}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{revision}", matches[0])
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -203,9 +199,7 @@ async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture
-def patch_async_session_factory(
-    session_factory, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def patch_async_session_factory(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-route every ``async_session_factory`` import site to the test engine.
 
     The new auth modules grab the factory by attribute (``from src.db.session
@@ -345,24 +339,17 @@ def mfa_keyring(monkeypatch: pytest.MonkeyPatch) -> MfaKeyring:
 
 
 @pytest.fixture
-async def admin_app(
-    session_factory, monkeypatch: pytest.MonkeyPatch
-) -> AsyncIterator[Any]:
+async def admin_app(session_factory, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Any]:
     """Return a FastAPI app wired to the per-test SQLite engine.
 
     We override ``get_db`` so the ``admin_auth`` router shares the same
     engine the session resolver lives on. Any test that hits the HTTP
     surface should pull this fixture instead of building its own app.
     """
-    monkeypatch.setattr(
-        "src.auth.admin_users.async_session_factory", session_factory
-    )
-    monkeypatch.setattr(
-        "src.auth.admin_dependencies.async_session_factory", session_factory
-    )
+    monkeypatch.setattr("src.auth.admin_users.async_session_factory", session_factory)
+    monkeypatch.setattr("src.auth.admin_dependencies.async_session_factory", session_factory)
 
     from fastapi import FastAPI
-
     from src.api.routers import admin_auth as admin_auth_router
 
     app = FastAPI()
@@ -392,9 +379,7 @@ async def api_client(admin_app):
     from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=admin_app)
-    async with AsyncClient(
-        transport=transport, base_url="https://testserver"
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="https://testserver") as ac:
         yield ac
 
 

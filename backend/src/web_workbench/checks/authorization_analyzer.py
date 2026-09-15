@@ -96,7 +96,7 @@ class AuthorizationFinding:
 def _headers_to_map(headers: tuple[tuple[str, str], ...]) -> dict[str, str]:
     # Structural models want a mapping; duplicate names collapse (last wins).
     # The AuthzOracle never inspects headers, so this is display-only.
-    return {name: value for name, value in headers}
+    return dict(headers)
 
 
 def _method_of(request: NormalizedRequest) -> HttpMethod:

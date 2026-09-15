@@ -35,22 +35,16 @@ class TestMCP001DockerComposeMcpServer:
         """mcp-server service is defined in docker-compose."""
         services = compose_config.get("services", {})
         if MCP_SERVICE not in services:
-            pytest.skip(
-                f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml"
-            )
+            pytest.skip(f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml")
 
     def test_mcp_server_depends_on_backend(self, compose_config: dict) -> None:
         """mcp-server has depends_on: backend."""
         services = compose_config.get("services", {})
         if MCP_SERVICE not in services:
-            pytest.skip(
-                f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml"
-            )
+            pytest.skip(f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml")
         mcp = services.get(MCP_SERVICE, {})
         depends_on = mcp.get("depends_on")
-        assert depends_on is not None, (
-            f"MCP-001: '{MCP_SERVICE}' must have 'depends_on'"
-        )
+        assert depends_on is not None, f"MCP-001: '{MCP_SERVICE}' must have 'depends_on'"
         if isinstance(depends_on, dict):
             assert "backend" in depends_on, (
                 f"MCP-001: '{MCP_SERVICE}' depends_on must include 'backend'"
@@ -67,9 +61,7 @@ class TestMCP001DockerComposeMcpServer:
         """
         services = compose_config.get("services", {})
         if MCP_SERVICE not in services:
-            pytest.skip(
-                f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml"
-            )
+            pytest.skip(f"MCP-001: '{MCP_SERVICE}' is optional; not defined in docker-compose.yml")
         mcp = services.get(MCP_SERVICE, {})
         profiles = mcp.get("profiles")
 

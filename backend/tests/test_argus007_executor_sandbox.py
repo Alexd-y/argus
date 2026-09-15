@@ -8,7 +8,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from src.tools.executor import execute_command
+from src.tools.executor import execute_command  # noqa: E402 — after sys.path insert
 
 _SUCCESS_RESULT = {
     "success": True,
@@ -72,7 +72,7 @@ class TestExecutorSandbox:
             mock_strunner_settings.sandbox_enabled = False
             mock_exec_settings.recon_tools_timeout = 300
             mock_run.return_value = _SUCCESS_RESULT
-            result = execute_command("nmap -sV 8.8.8.8", use_sandbox=True)
+            execute_command("nmap -sV 8.8.8.8", use_sandbox=True)
         call_args = mock_run.call_args
         assert call_args[0][0][0] == "nmap"
         assert "docker" not in str(call_args[0][0])
@@ -98,7 +98,7 @@ class TestExecutorSandbox:
             patch("src.tools.executor.run_argv_simple_sync") as mock_run,
         ):
             mock_run.return_value = _SUCCESS_RESULT
-            result = execute_command("nmap -sV 8.8.8.8")
+            execute_command("nmap -sV 8.8.8.8")
         call_args = mock_run.call_args
         assert call_args[0][0][0] == "nmap"
         assert "docker" not in str(call_args[0][0])

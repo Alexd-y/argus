@@ -114,7 +114,10 @@ class TestQueries:
 
     def test_nodes_by_type(self) -> None:
         g = self._graph()
-        assert {n.node_id for n in g.nodes_by_type(AssetNodeType.ENDPOINT)} == {"ep1", "ep2"}
+        assert {n.node_id for n in g.nodes_by_type(AssetNodeType.ENDPOINT)} == {
+            "ep1",
+            "ep2",
+        }
 
 
 class TestCoverage:

@@ -17,7 +17,11 @@ import os
 import uuid
 
 import pytest
-from src.orchestration.sandbox_lifecycle import SandboxStatus, cleanup_orphans, run_in_sandbox
+from src.orchestration.sandbox_lifecycle import (
+    SandboxStatus,
+    cleanup_orphans,
+    run_in_sandbox,
+)
 from src.sandbox.docker_sandbox_adapter import DockerLifecycleSandboxAdapter
 
 pytestmark = pytest.mark.requires_docker
@@ -47,7 +51,9 @@ def _adapter(_docker_client):
 
 async def test_lifecycle_runs_id_and_cleans_up(_adapter, _docker_client):
     labels = {"argus.owner": f"itest-{uuid.uuid4().hex[:8]}"}
-    result = await run_in_sandbox(_adapter, f"t-{uuid.uuid4().hex[:8]}", ["id"], owner_labels=labels)
+    result = await run_in_sandbox(
+        _adapter, f"t-{uuid.uuid4().hex[:8]}", ["id"], owner_labels=labels
+    )
     assert result.status == SandboxStatus.SUCCEEDED
     assert result.exit_code == 0
     assert result.container_id

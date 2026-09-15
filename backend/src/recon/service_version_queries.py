@@ -36,7 +36,7 @@ def _queries_from_text(text: str) -> list[str]:
     # Drop bare ports / status noise
     if re.fullmatch(r"\d{1,5}", t):
         return out
-    low = t.lower()
+    t.lower()
     noise = {"http", "https", "tcp", "udp", "open", "unknown"}
     parts = [p for p in re.split(r"[/\s,;|]+", t) if p and p.lower() not in noise]
     if len(parts) >= 2:

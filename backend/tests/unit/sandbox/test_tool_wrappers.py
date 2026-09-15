@@ -59,9 +59,9 @@ def test_wrappers_are_structurally_sound() -> None:
         assert text.strip(), f"{name} is empty"
         first_line = text.splitlines()[0]
         assert first_line.startswith("#!"), f"{name} lacks a shebang"
-        assert any(
-            sh in first_line for sh in ("bash", "sh", "node", "env")
-        ), f"{name} shebang is not a recognized interpreter: {first_line!r}"
+        assert any(sh in first_line for sh in ("bash", "sh", "node", "env")), (
+            f"{name} shebang is not a recognized interpreter: {first_line!r}"
+        )
         # Fail-safe artifact discipline: every wrapper provisions its output dir.
         assert "mkdir -p" in text, f"{name} does not create its output directory"
 

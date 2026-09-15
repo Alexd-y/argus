@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from src.playbooks.lifecycle import ScenarioStatus
 from src.playbooks.planner import (
     EndpointContext,
     ScenarioPlanner,
     ScenarioPlanningContext,
 )
-from src.playbooks.lifecycle import ScenarioStatus
 from src.playbooks.schema import ActionType, HttpMethod, InputKind, Playbook
 
 
-def _planner(
-    playbook_dict: Callable[..., dict[str, object]], **over: object
-) -> ScenarioPlanner:
+def _planner(playbook_dict: Callable[..., dict[str, object]], **over: object) -> ScenarioPlanner:
     return ScenarioPlanner([Playbook(**playbook_dict(**over))])
 
 

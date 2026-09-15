@@ -121,7 +121,11 @@ class _Counter:
 @runtime_checkable
 class BudgetStore(Protocol):
     async def set_limits(
-        self, key: str, *, max_tokens: float | None = None, max_cost_usd: float | None = None
+        self,
+        key: str,
+        *,
+        max_tokens: float | None = None,
+        max_cost_usd: float | None = None,
     ) -> None: ...
 
     async def try_reserve(
@@ -161,7 +165,11 @@ class InMemoryBudgetStore:
         return c
 
     async def set_limits(
-        self, key: str, *, max_tokens: float | None = None, max_cost_usd: float | None = None
+        self,
+        key: str,
+        *,
+        max_tokens: float | None = None,
+        max_cost_usd: float | None = None,
     ) -> None:
         async with self._lock:
             c = self._counter(key)

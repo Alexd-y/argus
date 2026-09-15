@@ -21,14 +21,12 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import StaticPool
-
 from src.db.session import (
     _build_engine,
     _engine_kwargs_for,
     _is_sqlite_url,
     create_task_engine_and_session,
 )
-
 
 # ---------------------------------------------------------------------------
 # _is_sqlite_url — dialect detector

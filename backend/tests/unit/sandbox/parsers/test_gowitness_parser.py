@@ -100,9 +100,7 @@ def test_screenshots_envelope_supported(tmp_path: Path) -> None:
     artifact_dir = tmp_path / "screens"
     artifact_dir.mkdir()
     payload = {"screenshots": [{"url": "https://x.example/", "filename": "x.png"}]}
-    (artifact_dir / "screenshots.json").write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+    (artifact_dir / "screenshots.json").write_text(json.dumps(payload), encoding="utf-8")
     findings = parse_gowitness(b"", b"", tmp_path, "gowitness")
     assert len(findings) == 1
 

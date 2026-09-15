@@ -23,9 +23,7 @@ async def list_findings(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """List normalized findings for an engagement."""
-    base = select(NormalizedFinding).where(
-        NormalizedFinding.engagement_id == engagement_id
-    )
+    base = select(NormalizedFinding).where(NormalizedFinding.engagement_id == engagement_id)
     if finding_type:
         base = base.where(NormalizedFinding.finding_type == finding_type)
     if is_verified is not None:
@@ -59,13 +57,9 @@ async def list_findings(
 
 
 @router.get("/recon/findings/{finding_id}")
-async def get_finding(
-    finding_id: str, db: AsyncSession = Depends(get_db)
-) -> dict:
+async def get_finding(finding_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     """Get single finding detail."""
-    result = await db.execute(
-        select(NormalizedFinding).where(NormalizedFinding.id == finding_id)
-    )
+    result = await db.execute(select(NormalizedFinding).where(NormalizedFinding.id == finding_id))
     finding = result.scalar_one_or_none()
     if not finding:
         raise HTTPException(status_code=404, detail="Finding not found")

@@ -89,7 +89,7 @@ class TriggerBody(BaseModel):
 async def create_run(
     engagement_id: str,
     body: CreateRunBody | None = None,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Create ThreatModelRun (pending, not executed)."""
     tenant_id = _get_tenant_id()
@@ -121,7 +121,7 @@ async def create_run(
 async def execute_run(
     engagement_id: str,
     run_id: str,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Execute threat modeling pipeline for existing run."""
     tenant_id = _get_tenant_id()
@@ -176,7 +176,7 @@ async def execute_run(
 async def trigger(
     engagement_id: str,
     body: TriggerBody | None = None,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Create run + execute in one call (Stage 2 trigger)."""
     tenant_id = _get_tenant_id()
@@ -244,7 +244,7 @@ async def trigger(
 async def get_input_bundle(
     engagement_id: str,
     run_id: str,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Inspect input bundle (from recon artifacts) for this run."""
     tenant_id = _get_tenant_id()
@@ -279,7 +279,7 @@ async def get_input_bundle(
 async def get_ai_traces(
     engagement_id: str,
     run_id: str,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get AI reasoning traces for run."""
     artifact = await _get_trace_artifact(
@@ -294,12 +294,10 @@ async def get_ai_traces(
 async def get_mcp_traces(
     engagement_id: str,
     run_id: str,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get MCP traces for run."""
-    artifact = await _get_trace_artifact(
-        db, engagement_id, run_id, "mcp_trace.json", "MCP traces"
-    )
+    artifact = await _get_trace_artifact(db, engagement_id, run_id, "mcp_trace.json", "MCP traces")
     return artifact
 
 
@@ -316,9 +314,7 @@ async def _get_trace_artifact(
     if not run:
         raise HTTPException(status_code=404, detail="Threat model run not found")
 
-    art = await get_artifact_by_engagement_job_filename(
-        db, engagement_id, run.job_id, filename
-    )
+    art = await get_artifact_by_engagement_job_filename(db, engagement_id, run.job_id, filename)
     if not art:
         raise HTTPException(status_code=404, detail=f"{label} not found for this run")
 
@@ -343,7 +339,7 @@ async def download_artifact_by_type(
     engagement_id: str,
     run_id: str,
     artifact_type: str,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Download artifact by type (threat_model, critical_assets, ai_reasoning_traces, etc.)."""
     tenant_id = _get_tenant_id()
@@ -352,9 +348,7 @@ async def download_artifact_by_type(
         raise HTTPException(status_code=404, detail="Threat model run not found")
 
     filename = ARTIFACT_TYPE_TO_FILENAME.get(artifact_type) or artifact_type
-    art = await get_artifact_by_engagement_job_filename(
-        db, engagement_id, run.job_id, filename
-    )
+    art = await get_artifact_by_engagement_job_filename(db, engagement_id, run.job_id, filename)
     if not art:
         raise HTTPException(
             status_code=404,

@@ -7,9 +7,9 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from src.tools.guardrails import validate_target_for_tool
-from src.tools.guardrails.domain_validator import DomainValidator
-from src.tools.guardrails.ip_validator import IPValidator
+from src.tools.guardrails import validate_target_for_tool  # noqa: E402
+from src.tools.guardrails.domain_validator import DomainValidator  # noqa: E402
+from src.tools.guardrails.ip_validator import IPValidator  # noqa: E402
 
 
 class TestIPValidator:

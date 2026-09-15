@@ -20,7 +20,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -56,7 +56,7 @@ _OPEN_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-_DedupKey: TypeAlias = tuple[str, int, str]
+type _DedupKey = tuple[str, int, str]
 
 
 def parse_unicornscan(

@@ -137,8 +137,15 @@ class TestReportGenerators:
             report_id="r-empty",
             target="https://empty.example.com",
             summary=ReportSummary(
-                critical=0, high=0, medium=0, low=0, info=0,
-                technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+                critical=0,
+                high=0,
+                medium=0,
+                low=0,
+                info=0,
+                technologies=[],
+                sslIssues=0,
+                headerIssues=0,
+                leaksFound=False,
             ),
             findings=[],
             technologies=[],
@@ -158,8 +165,15 @@ class TestReportGenerators:
             report_id="r-empty",
             target="https://empty.example.com",
             summary=ReportSummary(
-                critical=0, high=0, medium=0, low=0, info=0,
-                technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+                critical=0,
+                high=0,
+                medium=0,
+                low=0,
+                info=0,
+                technologies=[],
+                sslIssues=0,
+                headerIssues=0,
+                leaksFound=False,
             ),
             findings=[],
             technologies=[],
@@ -177,8 +191,15 @@ class TestReportGenerators:
             report_id="r-empty",
             target="https://empty.example.com",
             summary=ReportSummary(
-                critical=0, high=0, medium=0, low=0, info=0,
-                technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+                critical=0,
+                high=0,
+                medium=0,
+                low=0,
+                info=0,
+                technologies=[],
+                sslIssues=0,
+                headerIssues=0,
+                leaksFound=False,
             ),
             findings=[],
             technologies=[],
@@ -240,8 +261,15 @@ class TestReportGenerators:
             report_id="r-large",
             target="https://large.example.com",
             summary=ReportSummary(
-                critical=0, high=0, medium=0, low=0, info=500,
-                technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+                critical=0,
+                high=0,
+                medium=0,
+                low=0,
+                info=500,
+                technologies=[],
+                sslIssues=0,
+                headerIssues=0,
+                leaksFound=False,
             ),
             findings=findings,
             technologies=[],
@@ -294,8 +322,8 @@ class TestReportStorage:
 
     def test_upload_returns_key(self, mock_s3_client) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            import src.reports.storage as storage
             from src.core.config import settings
+            from src.reports import storage
 
             key = storage.upload(
                 "tenant-1",
@@ -325,7 +353,9 @@ class TestReportStorage:
                 b"x",
                 content_type="application/pdf",
             )
-            assert key == "tenant-1/scan-1/reports/valhalla/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf"
+            assert (
+                key == "tenant-1/scan-1/reports/valhalla/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf"
+            )
             mock_s3_client.put_object.assert_called_once()
             assert (
                 mock_s3_client.put_object.call_args.kwargs.get("Bucket")
@@ -355,10 +385,7 @@ class TestReportStorage:
             )
             assert key == f"tenant-1/scan-1/{object_type}/artifact.bin"
             mock_s3_client.put_object.assert_called_once()
-            assert (
-                mock_s3_client.put_object.call_args.kwargs.get("Bucket")
-                == settings.minio_bucket
-            )
+            assert mock_s3_client.put_object.call_args.kwargs.get("Bucket") == settings.minio_bucket
 
     def test_download_by_key_uses_reports_bucket_when_path_segment_reports(
         self, mock_s3_client
@@ -396,9 +423,7 @@ class TestReportStorage:
                 Key=key,
             )
 
-    def test_download_by_key_uses_minio_bucket_for_raw_segment(
-        self, mock_s3_client
-    ) -> None:
+    def test_download_by_key_uses_minio_bucket_for_raw_segment(self, mock_s3_client) -> None:
         body = MagicMock()
         body.read.return_value = b"raw-bytes"
         mock_s3_client.get_object = MagicMock(return_value={"Body": body})
@@ -428,7 +453,7 @@ class TestReportStorage:
 
     def test_download_returns_none_when_not_found(self, mock_s3_client) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            import src.reports.storage as storage
+            from src.reports import storage
 
             data = storage.download("tenant-1", "scan-1", "reports", "report.pdf")
             assert data is None
@@ -441,7 +466,7 @@ class TestReportStorage:
         err.response = {"Error": {"Code": "404"}}
         mock_s3_client.head_object = MagicMock(side_effect=err)
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            import src.reports.storage as storage
+            from src.reports import storage
 
             ok = storage.exists("tenant-1", "scan-1", "reports", "report.pdf")
             assert ok is False
@@ -495,6 +520,7 @@ class TestReportsRouter:
     @pytest.fixture
     def mock_db_reports(self, mock_report_and_findings):
         report, findings = mock_report_and_findings
+
         async def execute(query, *args, **kwargs):
             result = MagicMock()
             qstr = str(query).lower()
@@ -590,13 +616,17 @@ class TestReportsRouter:
             resp = client.get("/api/v1/reports/rep-001/download?format=xml")
         assert resp.status_code == 400
 
-    def test_download_report_invalid_format_empty(self, client: TestClient, mock_db_reports) -> None:
+    def test_download_report_invalid_format_empty(
+        self, client: TestClient, mock_db_reports
+    ) -> None:
         """Empty format string returns 400."""
         with patch("src.api.routers.reports.async_session_factory", mock_db_reports):
             resp = client.get("/api/v1/reports/rep-001/download?format=")
         assert resp.status_code == 400
 
-    def test_download_report_invalid_format_unknown(self, client: TestClient, mock_db_reports) -> None:
+    def test_download_report_invalid_format_unknown(
+        self, client: TestClient, mock_db_reports
+    ) -> None:
         """Unknown format (docx) returns 400."""
         with patch("src.api.routers.reports.async_session_factory", mock_db_reports):
             resp = client.get("/api/v1/reports/rep-001/download?format=docx")

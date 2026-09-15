@@ -24,10 +24,10 @@ Tests:
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import FrozenInstanceError
 from itertools import product
 
 import pytest
-
 from src.findings.ssvc import (
     DECISION_MATRIX,
     Automatable,
@@ -36,9 +36,9 @@ from src.findings.ssvc import (
     SSVCDecision,
     SSVCExploitation,
     SSVCExposure,
+    SsvcInputs,
     SSVCMissionImpact,
     SSVCTechnicalImpact,
-    SsvcInputs,
     TechnicalImpact,
     derive_ssvc_inputs,
     evaluate_ssvc,
@@ -58,44 +58,224 @@ _REFERENCE_MATRIX: dict[
     SSVCDecision,
 ] = {
     # === Exploitation: NONE ===
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.TRACK_STAR,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.ATTEND,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK_STAR,
-    (Exploitation.NONE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.ATTEND,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.NONE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ATTEND,
     # === Exploitation: POC ===
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK,
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.TRACK_STAR,
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK_STAR,
-    (Exploitation.POC, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.ATTEND,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK_STAR,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.ATTEND,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.TRACK_STAR,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.ATTEND,
-    (Exploitation.POC, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.ACT,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.POC,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.POC,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ACT,
     # === Exploitation: ACTIVE ===
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.TRACK,
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.TRACK_STAR,
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.ATTEND,
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.TRACK_STAR,
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.ATTEND,
-    (Exploitation.ACTIVE, Automatable.NO, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.ACT,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.LOW): SSVCDecision.ATTEND,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.MEDIUM): SSVCDecision.ATTEND,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.PARTIAL, MissionWellbeing.HIGH): SSVCDecision.ACT,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.LOW): SSVCDecision.ATTEND,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.MEDIUM): SSVCDecision.ACT,
-    (Exploitation.ACTIVE, Automatable.YES, TechnicalImpact.TOTAL, MissionWellbeing.HIGH): SSVCDecision.ACT,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.TRACK_STAR,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.ACTIVE,
+        Automatable.NO,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ACT,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.PARTIAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ACT,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.LOW,
+    ): SSVCDecision.ATTEND,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.MEDIUM,
+    ): SSVCDecision.ACT,
+    (
+        Exploitation.ACTIVE,
+        Automatable.YES,
+        TechnicalImpact.TOTAL,
+        MissionWellbeing.HIGH,
+    ): SSVCDecision.ACT,
 }
 
 
@@ -109,18 +289,20 @@ def _id(e: Exploitation, a: Automatable, t: TechnicalImpact, m: MissionWellbeing
 
 
 @pytest.mark.parametrize(
-    ("exploitation", "automatable", "technical_impact", "mission_wellbeing", "expected"),
+    (
+        "exploitation",
+        "automatable",
+        "technical_impact",
+        "mission_wellbeing",
+        "expected",
+    ),
     [
         (e, a, t, m, _REFERENCE_MATRIX[(e, a, t, m)])
-        for e, a, t, m in product(
-            Exploitation, Automatable, TechnicalImpact, MissionWellbeing
-        )
+        for e, a, t, m in product(Exploitation, Automatable, TechnicalImpact, MissionWellbeing)
     ],
     ids=[
         _id(e, a, t, m)
-        for e, a, t, m in product(
-            Exploitation, Automatable, TechnicalImpact, MissionWellbeing
-        )
+        for e, a, t, m in product(Exploitation, Automatable, TechnicalImpact, MissionWellbeing)
     ],
 )
 def test_decision_matrix_leaf(
@@ -153,9 +335,7 @@ def test_decision_matrix_size() -> None:
 
 def test_evaluate_ssvc_is_total() -> None:
     """Every closed-enum input combination returns a valid SSVCDecision."""
-    for e, a, t, m in product(
-        Exploitation, Automatable, TechnicalImpact, MissionWellbeing
-    ):
+    for e, a, t, m in product(Exploitation, Automatable, TechnicalImpact, MissionWellbeing):
         out = evaluate_ssvc(
             exploitation=e,
             automatable=a,
@@ -272,9 +452,7 @@ def test_monotonic_in_mission_wellbeing() -> None:
 def test_every_outcome_is_reachable() -> None:
     """Every SSVCDecision label appears at least once in the matrix."""
     seen: set[SSVCDecision] = set()
-    for e, a, t, m in product(
-        Exploitation, Automatable, TechnicalImpact, MissionWellbeing
-    ):
+    for e, a, t, m in product(Exploitation, Automatable, TechnicalImpact, MissionWellbeing):
         seen.add(
             evaluate_ssvc(
                 exploitation=e,
@@ -397,7 +575,7 @@ def test_ssvc_inputs_dataclass_is_frozen() -> None:
         technical_impact=TechnicalImpact.PARTIAL,
         mission_wellbeing=MissionWellbeing.LOW,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         inp.exploitation = Exploitation.ACTIVE  # type: ignore[misc]
 
 

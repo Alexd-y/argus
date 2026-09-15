@@ -241,7 +241,10 @@ class K8sLifecycleSandboxAdapter:
                             "capabilities": {"drop": ["ALL"]},
                         },
                         "resources": {
-                            "limits": {"cpu": self._cpu_limit, "memory": self._mem_limit},
+                            "limits": {
+                                "cpu": self._cpu_limit,
+                                "memory": self._mem_limit,
+                            },
                             "requests": {"cpu": "100m", "memory": "128Mi"},
                         },
                         "volumeMounts": [
@@ -253,7 +256,10 @@ class K8sLifecycleSandboxAdapter:
                 "volumes": [
                     {
                         "name": "workspace",
-                        "emptyDir": {"medium": "Memory", "sizeLimit": self._workspace_size},
+                        "emptyDir": {
+                            "medium": "Memory",
+                            "sizeLimit": self._workspace_size,
+                        },
                     },
                     {
                         "name": "tmp",
@@ -282,7 +288,7 @@ class K8sLifecycleSandboxAdapter:
         except SandboxCreateError:
             await self._safe_delete(pod_name)
             raise
-        except Exception as exc:  # noqa: BLE001 — every create failure fails closed
+        except Exception as exc:
             SANDBOX_FAILURES.labels(**metric_labels(reason="create_failed")).inc()
             logger.warning(
                 "k8s_sandbox_create_failed",
@@ -373,9 +379,7 @@ class K8sLifecycleSandboxAdapter:
         def _list() -> list[tuple[str, float]]:
             core = self._get_core_v1()
             selector = ",".join(f"{k}={v}" for k, v in owner_labels.items())
-            resp = core.list_namespaced_pod(
-                namespace=self._namespace, label_selector=selector
-            )
+            resp = core.list_namespaced_pod(namespace=self._namespace, label_selector=selector)
             now = datetime.now(UTC)
             owned: list[tuple[str, float]] = []
             for pod in getattr(resp, "items", []) or []:
@@ -383,7 +387,12 @@ class K8sLifecycleSandboxAdapter:
                 name = getattr(meta, "name", None)
                 if not name:
                     continue
-                owned.append((str(name), _age_seconds(getattr(meta, "creation_timestamp", None), now)))
+                owned.append(
+                    (
+                        str(name),
+                        _age_seconds(getattr(meta, "creation_timestamp", None), now),
+                    )
+                )
             return owned
 
         return await asyncio.to_thread(_list)

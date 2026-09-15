@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.llm_orchestrator.prompt_registry import PromptRegistry, PromptRegistryError
 from src.orchestration.prompt_registry import QUICK_PROMPT_IDS
 

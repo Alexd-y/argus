@@ -120,19 +120,14 @@ def _sanitize_metadata(metadata: dict[str, str]) -> dict[str, str]:
     fail on.
     """
     if len(metadata) > _MAX_METADATA_KEYS:
-        raise ValueError(
-            f"metadata has {len(metadata)} keys; max is {_MAX_METADATA_KEYS}"
-        )
+        raise ValueError(f"metadata has {len(metadata)} keys; max is {_MAX_METADATA_KEYS}")
     cleaned: dict[str, str] = {}
     for key, value in metadata.items():
         if not isinstance(key, str) or not _METADATA_KEY_RE.fullmatch(key):
-            raise ValueError(
-                f"metadata key {key!r} must match ^[a-z][a-z0-9_]{{0,31}}$"
-            )
+            raise ValueError(f"metadata key {key!r} must match ^[a-z][a-z0-9_]{{0,31}}$")
         if not isinstance(value, str):
             raise ValueError(
-                f"metadata value for key {key!r} must be a str, got "
-                f"{type(value).__name__}"
+                f"metadata value for key {key!r} must be a str, got {type(value).__name__}"
             )
         scrubbed = _CTRL_CHAR_RE.sub("", value)
         if len(scrubbed) > _MAX_METADATA_VALUE_LEN:
@@ -535,9 +530,7 @@ class OASTCorrelator:
                     continue
 
                 bucket = self._interactions[token_id]
-                kept = [
-                    item for item in bucket if item.received_at >= interaction_threshold
-                ]
+                kept = [item for item in bucket if item.received_at >= interaction_threshold]
                 evicted += len(bucket) - len(kept)
                 if kept:
                     self._interactions[token_id] = kept

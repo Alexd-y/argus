@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from src.recon.vulnerability_analysis.finding_normalizer import normalize_active_scan_intel_findings
+from src.recon.vulnerability_analysis.finding_normalizer import (
+    normalize_active_scan_intel_findings,
+)
 from src.recon.vulnerability_analysis.owasp_category_map import (
     apply_owasp_category_to_intel_row,
     resolve_owasp_category,
@@ -22,7 +24,9 @@ def test_resolve_source_tool_sqlmap_without_cwe() -> None:
 
 
 def test_resolve_unknown_returns_none() -> None:
-    assert resolve_owasp_category(cwe="UNKNOWN", finding_type_key="nope", source_tool="wfuzz") is None
+    assert (
+        resolve_owasp_category(cwe="UNKNOWN", finding_type_key="nope", source_tool="wfuzz") is None
+    )
 
 
 def test_apply_intel_row_sets_category() -> None:
@@ -40,7 +44,11 @@ def test_apply_intel_row_preserves_explicit_owasp_category() -> None:
         "finding_type": "vulnerability",
         "source_tool": "web_vuln_heuristics",
         "owasp_category": "A08",
-        "data": {"type": "Insecure deserialization", "cwe": "CWE-502", "url": "https://x.test/"},
+        "data": {
+            "type": "Insecure deserialization",
+            "cwe": "CWE-502",
+            "url": "https://x.test/",
+        },
     }
     apply_owasp_category_to_intel_row(row)
     assert row["owasp_category"] == "A08"

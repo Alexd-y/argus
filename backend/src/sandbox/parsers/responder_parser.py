@@ -27,7 +27,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -62,12 +62,10 @@ _HEADER_RE: Final[re.Pattern[str]] = re.compile(
     r"\s+(?P<key>Client|Username|Hash)\s*:\s*"
     r"(?P<value>.+?)\s*$",
 )
-_USER_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?:(?P<domain>[^\\:\s]+)\\)?(?P<user>[^\\:\s]+)$"
-)
+_USER_RE: Final[re.Pattern[str]] = re.compile(r"^(?:(?P<domain>[^\\:\s]+)\\)?(?P<user>[^\\:\s]+)$")
 
 
-_DedupKey: TypeAlias = tuple[str, str, str, str, str]
+type _DedupKey = tuple[str, str, str, str, str]
 
 
 def parse_responder(

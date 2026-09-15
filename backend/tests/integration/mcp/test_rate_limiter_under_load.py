@@ -15,7 +15,6 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
-
 from src.mcp.runtime.rate_limiter import (
     JSONRPC_RATE_LIMIT_CODE,
     BucketBudget,
@@ -45,12 +44,8 @@ def _make_limiter(
     per_tenant: dict[str, BucketBudget] | None = None,
 ) -> InMemoryTokenBucket:
     return InMemoryTokenBucket(
-        default_client_budget=BucketBudget(
-            rate_per_second=client_rate, burst=client_burst
-        ),
-        default_tenant_budget=BucketBudget(
-            rate_per_second=tenant_rate, burst=tenant_burst
-        ),
+        default_client_budget=BucketBudget(rate_per_second=client_rate, burst=client_burst),
+        default_tenant_budget=BucketBudget(rate_per_second=tenant_rate, burst=tenant_burst),
         per_client_budgets=per_client,
         per_tenant_budgets=per_tenant,
         clock=lambda: ts[0],
@@ -58,9 +53,7 @@ def _make_limiter(
 
 
 class TestConcurrentBurst:
-    async def test_500_concurrent_requests_respect_burst(
-        self, time_source: list[float]
-    ) -> None:
+    async def test_500_concurrent_requests_respect_burst(self, time_source: list[float]) -> None:
         limiter = _make_limiter(ts=time_source, client_burst=10, tenant_burst=10_000)
 
         async def _try_acquire() -> bool:
@@ -95,9 +88,7 @@ class TestConcurrentBurst:
         coros = [_try_acquire(f"c{i % 50}") for i in range(500)]
         outcomes = await asyncio.gather(*coros)
         allowed = sum(1 for ok in outcomes if ok)
-        assert allowed == 20, (
-            "tenant burst should cap concurrent allowed across clients"
-        )
+        assert allowed == 20, "tenant burst should cap concurrent allowed across clients"
 
 
 class TestRefillProgression:
@@ -115,9 +106,7 @@ class TestRefillProgression:
         with pytest.raises(RateLimitedDecision):
             await limiter.acquire(client_id="c1", tenant_id="t1")
 
-    async def test_retry_after_decreases_with_time(
-        self, time_source: list[float]
-    ) -> None:
+    async def test_retry_after_decreases_with_time(self, time_source: list[float]) -> None:
         limiter = _make_limiter(ts=time_source, client_burst=2, client_rate=1.0)
         await limiter.acquire(client_id="c1", tenant_id="t1")
         await limiter.acquire(client_id="c1", tenant_id="t1")
@@ -144,9 +133,7 @@ class TestJsonRpcContract:
         assert isinstance(payload["data"]["retry_after"], float)
         assert payload["data"]["retry_after"] > 0
 
-    async def test_tenant_deficit_reports_tenant_scope(
-        self, time_source: list[float]
-    ) -> None:
+    async def test_tenant_deficit_reports_tenant_scope(self, time_source: list[float]) -> None:
         limiter = _make_limiter(
             ts=time_source,
             client_rate=1_000.0,

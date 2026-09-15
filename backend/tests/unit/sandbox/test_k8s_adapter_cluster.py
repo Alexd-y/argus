@@ -25,7 +25,6 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -42,7 +41,6 @@ from src.sandbox.k8s_adapter import (
     SandboxRunMode,
 )
 
-
 # ---------------------------------------------------------------------------
 # Minimal in-process fake of the kubernetes Python SDK.
 # ---------------------------------------------------------------------------
@@ -57,9 +55,7 @@ class _FakeApiException(Exception):
     body / status / reason into ``SandboxRunResult.failure_reason``.
     """
 
-    def __init__(
-        self, *, status: int, reason: str = "fake", body: str | None = None
-    ) -> None:
+    def __init__(self, *, status: int, reason: str = "fake", body: str | None = None) -> None:
         rendered = f"ApiException(status={status}, reason={reason!r}"
         if body is not None:
             rendered += f", body={body!r}"
@@ -85,9 +81,7 @@ class _FakeContainerStatus:
 
 
 class _FakePodStatus:
-    def __init__(
-        self, exit_code: int | None, *, terminated_reason: str | None = None
-    ) -> None:
+    def __init__(self, exit_code: int | None, *, terminated_reason: str | None = None) -> None:
         if exit_code is None and terminated_reason is None:
             self.container_statuses: list[_FakeContainerStatus] = []
         else:
@@ -159,9 +153,7 @@ class _FakeBatchV1Api:
         cls.status_sequence = []
         cls.status_should_raise = None
 
-    def create_namespaced_job(
-        self, *, namespace: str, body: dict[str, Any]
-    ) -> dict[str, Any]:
+    def create_namespaced_job(self, *, namespace: str, body: dict[str, Any]) -> dict[str, Any]:
         if self.create_should_raise is not None:
             raise self.create_should_raise
         self.create_calls.append({"namespace": namespace, "body": body})
@@ -226,9 +218,7 @@ class _FakeCoreV1Api:
         cls.log_should_raise = None
         cls.log_text = ""
 
-    def list_namespaced_pod(
-        self, *, namespace: str, label_selector: str
-    ) -> _FakePodList:
+    def list_namespaced_pod(self, *, namespace: str, label_selector: str) -> _FakePodList:
         del namespace, label_selector
         if self.pod_list_should_raise is not None:
             raise self.pod_list_should_raise
@@ -373,9 +363,7 @@ def passive_job() -> ToolJob:
 
 
 @pytest.fixture()
-def cluster_adapter(
-    tmp_path: Path, passive_descriptor: ToolDescriptor
-) -> KubernetesSandboxAdapter:
+def cluster_adapter(tmp_path: Path, passive_descriptor: ToolDescriptor) -> KubernetesSandboxAdapter:
     """CLUSTER-mode adapter with a tiny default deadline so polls stay quick."""
     registry = _FakeRegistry([passive_descriptor])
     return KubernetesSandboxAdapter(
@@ -392,9 +380,7 @@ def cluster_adapter(
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_mode_type_raises(
-    tmp_path: Path, passive_descriptor: ToolDescriptor
-) -> None:
+def test_invalid_mode_type_raises(tmp_path: Path, passive_descriptor: ToolDescriptor) -> None:
     registry = _FakeRegistry([passive_descriptor])
     with pytest.raises(SandboxConfigError, match="mode must be"):
         KubernetesSandboxAdapter(
@@ -488,11 +474,7 @@ def test_assert_no_dangerous_volumes_rejects_docker_sock_mount(
                 "spec": {
                     "volumes": [],
                     "containers": [
-                        {
-                            "volumeMounts": [
-                                {"name": "x", "mountPath": "/var/run/docker.sock"}
-                            ]
-                        }
+                        {"volumeMounts": [{"name": "x", "mountPath": "/var/run/docker.sock"}]}
                     ],
                 }
             }
@@ -753,9 +735,7 @@ def test_run_in_cluster_wraps_apply_networkpolicy_failure(
     fake_kube_modules: dict[str, ModuleType],
 ) -> None:
     _patch_sleep(monkeypatch)
-    _FakeNetworkingV1Api.create_should_raise = _FakeApiException(
-        status=500, reason="api down"
-    )
+    _FakeNetworkingV1Api.create_should_raise = _FakeApiException(status=500, reason="api down")
 
     result = asyncio.run(cluster_adapter.run(passive_job, passive_descriptor))
     assert result.completed is False
@@ -772,9 +752,7 @@ def test_run_in_cluster_wraps_apply_job_failure(
     fake_kube_modules: dict[str, ModuleType],
 ) -> None:
     _patch_sleep(monkeypatch)
-    _FakeBatchV1Api.create_should_raise = _FakeApiException(
-        status=409, reason="already exists"
-    )
+    _FakeBatchV1Api.create_should_raise = _FakeApiException(status=409, reason="already exists")
 
     result = asyncio.run(cluster_adapter.run(passive_job, passive_descriptor))
     assert result.completed is False
@@ -1016,9 +994,7 @@ def test_run_in_cluster_cleans_up_networkpolicy_when_status_read_fails(
     """MED-1: NP cleanup must also fire when Job-create succeeds but the
     subsequent status-read loop raises (e.g. API server flake)."""
     _patch_sleep(monkeypatch)
-    _FakeBatchV1Api.status_should_raise = _FakeApiException(
-        status=500, body="status-503"
-    )
+    _FakeBatchV1Api.status_should_raise = _FakeApiException(status=500, body="status-503")
 
     result = asyncio.run(cluster_adapter.run(passive_job, passive_descriptor))
 
@@ -1082,8 +1058,7 @@ def test_run_in_cluster_cleanup_failure_does_not_mask_original_error(
     cleanup_logs = [
         rec
         for rec in caplog.records
-        if "networkpolicy" in rec.getMessage().lower()
-        and "cleanup" in rec.getMessage().lower()
+        if "networkpolicy" in rec.getMessage().lower() and "cleanup" in rec.getMessage().lower()
     ]
     assert cleanup_logs, "MED-1 cleanup failure must be logged for SRE visibility"
 

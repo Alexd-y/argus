@@ -68,7 +68,7 @@ import types
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import parse_qs, urlparse
@@ -88,31 +88,30 @@ os.environ.setdefault(
     "test-pepper-iss-t20-003-not-for-prod-32chars-min",
 )
 
-import pyotp  # noqa: E402  # pyotp has no PEP-561 stubs; mypy --ignore-missing-imports handles it
-import pytest  # noqa: E402
-from alembic.migration import MigrationContext  # noqa: E402
-from alembic.operations import Operations  # noqa: E402
-from cryptography.fernet import Fernet  # noqa: E402
-from fastapi import APIRouter, Depends, FastAPI  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy import event, select, update  # noqa: E402
-from sqlalchemy.ext.asyncio import (  # noqa: E402
+import pyotp  # pyotp has no PEP-561 stubs; mypy --ignore-missing-imports handles it
+import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from cryptography.fernet import Fernet
+from fastapi import APIRouter, Depends, FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event, select, update
+from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-from src.api.admin import mfa as mfa_router  # noqa: E402
-from src.api.routers import admin_auth as admin_auth_router  # noqa: E402
-from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE  # noqa: E402
-from src.auth import admin_mfa as mfa_dao  # noqa: E402
-from src.auth.admin_dependencies import require_admin_mfa_passed  # noqa: E402
-from src.auth.admin_users import hash_password  # noqa: E402
-from src.core.config import settings  # noqa: E402
-from src.db.models import AdminSession, AdminUser  # noqa: E402
-from src.db.session import get_db  # noqa: E402
+from sqlalchemy.pool import StaticPool
+from src.api.admin import mfa as mfa_router
+from src.api.routers import admin_auth as admin_auth_router
+from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
+from src.auth import admin_mfa as mfa_dao
+from src.auth.admin_dependencies import require_admin_mfa_passed
+from src.auth.admin_users import hash_password
+from src.core.config import settings
+from src.db.models import AdminSession, AdminUser
+from src.db.session import get_db
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -143,9 +142,7 @@ _OTPAUTH_SECRET_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z2-7]{16,}$")
 def _load_revision_module(revision: str) -> Any:
     matches = list(_VERSIONS_DIR.glob(f"{revision}_*.py"))
     assert matches, f"alembic revision {revision} not found under {_VERSIONS_DIR}"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_c7t03_{revision}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_c7t03_{revision}", matches[0])
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -314,14 +311,12 @@ def mfa_keyring(monkeypatch: pytest.MonkeyPatch) -> _MfaKeyringSnapshot:
 @pytest.fixture
 async def mfa_app(
     session_factory: Any,
-    mfa_keyring: _MfaKeyringSnapshot,  # noqa: ARG001 — pin keyring on settings
+    mfa_keyring: _MfaKeyringSnapshot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[FastAPI]:
     """Self-contained app: admin_auth + MFA router + a synthetic gated route."""
     monkeypatch.setattr("src.auth.admin_users.async_session_factory", session_factory)
-    monkeypatch.setattr(
-        "src.auth.admin_dependencies.async_session_factory", session_factory
-    )
+    monkeypatch.setattr("src.auth.admin_dependencies.async_session_factory", session_factory)
 
     app = FastAPI()
     app.include_router(admin_auth_router.router, prefix="/api/v1")
@@ -396,7 +391,7 @@ async def _seed_admin(
                 password_hash=hash_password(password),
                 role=role,
                 tenant_id=None,
-                created_at=datetime.now(tz=timezone.utc),
+                created_at=datetime.now(tz=UTC),
                 disabled_at=None,
             )
         )
@@ -495,9 +490,7 @@ class TestMFAEnroll:
         assert response.status_code == 409
         assert response.json()["detail"] == "mfa_already_enabled"
 
-    async def test_enroll_unauthenticated_returns_401(
-        self, mfa_client: AsyncClient
-    ) -> None:
+    async def test_enroll_unauthenticated_returns_401(self, mfa_client: AsyncClient) -> None:
         """A3 — no session cookie → underlying session resolver 401s."""
         response = await mfa_client.post(_MFA_PREFIX + "/enroll", json={})
         assert response.status_code == 401
@@ -552,17 +545,13 @@ class TestMFAConfirm:
         assert body["enabled_at"]  # ISO 8601 UTC
         async with session_factory() as s:
             row = (
-                await s.execute(
-                    select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN)
-                )
+                await s.execute(select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN))
             ).scalar_one()
             assert row.mfa_enabled is True
             sessions = (
                 (
                     await s.execute(
-                        select(AdminSession).where(
-                            AdminSession.subject == _SUBJECT_ADMIN
-                        )
+                        select(AdminSession).where(AdminSession.subject == _SUBJECT_ADMIN)
                     )
                 )
                 .scalars()
@@ -578,9 +567,7 @@ class TestMFAConfirm:
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
         await mfa_client.post(_MFA_PREFIX + "/enroll", json={})
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/confirm", json={"totp_code": "000000"}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "000000"})
 
         assert response.status_code == 400
         assert response.json()["detail"] == "invalid_totp"
@@ -592,9 +579,7 @@ class TestMFAConfirm:
         await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/confirm", json={"totp_code": "123456"}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": "123456"})
 
         assert response.status_code == 400
         assert response.json()["detail"] == "no_pending_enrollment"
@@ -628,9 +613,7 @@ class TestMFAConfirm:
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
         for bad in ("12345", "1234567", "abcdef", ""):
-            response = await mfa_client.post(
-                _MFA_PREFIX + "/confirm", json={"totp_code": bad}
-            )
+            response = await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": bad})
             assert response.status_code == 422, (bad, response.text)
 
 
@@ -664,9 +647,7 @@ class TestMFAVerify:
             sessions = (
                 (
                     await s.execute(
-                        select(AdminSession).where(
-                            AdminSession.subject == _SUBJECT_ADMIN
-                        )
+                        select(AdminSession).where(AdminSession.subject == _SUBJECT_ADMIN)
                     )
                 )
                 .scalars()
@@ -700,12 +681,8 @@ class TestMFAVerify:
         enrolled = await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
         code = enrolled["backup_codes"][0]
 
-        first = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"backup_code": code}
-        )
-        second = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"backup_code": code}
-        )
+        first = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
+        second = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": code})
 
         assert first.status_code == 200
         assert second.status_code == 401
@@ -744,9 +721,7 @@ class TestMFAVerify:
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
         await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"totp_code": "000000"}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
 
         assert response.status_code == 401
         assert response.json()["detail"] == "mfa_verify_failed"
@@ -764,9 +739,7 @@ class TestMFAVerify:
         await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"totp_code": "123456"}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "123456"})
 
         assert response.status_code == 409
         assert response.json()["detail"] == "mfa_not_enabled"
@@ -800,9 +773,7 @@ class TestMFADisable:
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
         await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/disable", json={"totp_code": "000000"}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/disable", json={"totp_code": "000000"})
 
         assert response.status_code == 401
         assert response.json()["detail"] == "mfa_verify_failed"
@@ -824,9 +795,7 @@ class TestMFADisable:
         assert response.json()["disabled"] is True
         async with session_factory() as s:
             row = (
-                await s.execute(
-                    select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN)
-                )
+                await s.execute(select(AdminUser).where(AdminUser.subject == _SUBJECT_ADMIN))
             ).scalar_one()
             assert row.mfa_enabled is False
             assert row.mfa_secret_encrypted is None
@@ -895,7 +864,7 @@ class TestMFAStatus:
         await _force_mfa_passed_at(
             session_factory,
             subject=_SUBJECT_ADMIN,
-            when=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+            when=datetime.now(tz=UTC) - timedelta(hours=1),
         )
 
         response = await mfa_client.get(_MFA_PREFIX + "/status")
@@ -920,9 +889,7 @@ class TestMFARegenerateBackupCodes:
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
         await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
 
-        response = await mfa_client.post(
-            _MFA_PREFIX + "/backup-codes/regenerate", json={}
-        )
+        response = await mfa_client.post(_MFA_PREFIX + "/backup-codes/regenerate", json={})
 
         assert response.status_code == 422
 
@@ -960,9 +927,7 @@ class TestMFARegenerateBackupCodes:
         new_codes = regen.json()["backup_codes"]
         assert len(new_codes) >= 8
         assert set(new_codes).isdisjoint(set(old_codes))
-        replay = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"backup_code": old_codes[0]}
-        )
+        replay = await mfa_client.post(_MFA_PREFIX + "/verify", json={"backup_code": old_codes[0]})
         assert replay.status_code == 401
 
 
@@ -1018,12 +983,8 @@ class TestMFAVerifyRateLimit:
         for _ in range(6):
             await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
 
-        b_resp = await second_mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"totp_code": "000000"}
-        )
-        assert b_resp.status_code == 401, (
-            b_resp.text
-        )  # NOT 429 — A's bucket is unrelated
+        b_resp = await second_mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
+        assert b_resp.status_code == 401, b_resp.text  # NOT 429 — A's bucket is unrelated
 
     async def test_rate_limit_resets_after_window_via_monotonic_advance(
         self,
@@ -1053,9 +1014,7 @@ class TestMFAVerifyRateLimit:
             await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
 
         clock["t"] = 1_000.0 + 90.0  # well past the 60-s refill window
-        after = await mfa_client.post(
-            _MFA_PREFIX + "/verify", json={"totp_code": "000000"}
-        )
+        after = await mfa_client.post(_MFA_PREFIX + "/verify", json={"totp_code": "000000"})
         assert after.status_code == 401, after.text  # bucket refilled → 401, not 429
 
     async def test_confirm_rate_limited_after_5_attempts(
@@ -1129,18 +1088,12 @@ class TestMFAVerifyRateLimit:
 
         body = {"totp_code": "000000"}
         statuses = [
-            (
-                await mfa_client.post(
-                    _MFA_PREFIX + "/backup-codes/regenerate", json=body
-                )
-            ).status_code
+            (await mfa_client.post(_MFA_PREFIX + "/backup-codes/regenerate", json=body)).status_code
             for _ in range(5)
         ]
         assert statuses == [401] * 5, statuses
 
-        sixth = await mfa_client.post(
-            _MFA_PREFIX + "/backup-codes/regenerate", json=body
-        )
+        sixth = await mfa_client.post(_MFA_PREFIX + "/backup-codes/regenerate", json=body)
         assert sixth.status_code == 429, sixth.text
         assert sixth.headers.get("Retry-After") is not None
         assert int(sixth.headers["Retry-After"]) >= 1
@@ -1151,9 +1104,7 @@ class TestMFAVerifyRateLimit:
 # ===========================================================================
 
 
-def _records_for_event(
-    caplog: pytest.LogCaptureFixture, event: str
-) -> list[logging.LogRecord]:
+def _records_for_event(caplog: pytest.LogCaptureFixture, event: str) -> list[logging.LogRecord]:
     return [r for r in caplog.records if getattr(r, "event", None) == event]
 
 
@@ -1233,9 +1184,7 @@ class TestMFAAuditLogs:
         secret = _extract_totp_secret(enroll.json()["secret_uri"])
         confirm_code = pyotp.TOTP(secret).now()
 
-        await mfa_client.post(
-            _MFA_PREFIX + "/confirm", json={"totp_code": confirm_code}
-        )
+        await mfa_client.post(_MFA_PREFIX + "/confirm", json={"totp_code": confirm_code})
 
         records = _records_for_event(caplog, "argus.auth.admin_mfa.confirm")
         assert records, "expected one argus.auth.admin_mfa.confirm record"
@@ -1260,9 +1209,7 @@ class TestMFAAuditLogs:
         assert records, "expected one argus.auth.admin_mfa.disable record"
         rec = records[-1]
         assert getattr(rec, "subject", None) == _SUBJECT_ADMIN
-        _assert_no_secret_material(
-            rec, {enrolled["secret"], proof, *enrolled["backup_codes"]}
-        )
+        _assert_no_secret_material(rec, {enrolled["secret"], proof, *enrolled["backup_codes"]})
 
 
 # ===========================================================================
@@ -1300,7 +1247,7 @@ class TestSuperAdminEnforcement:
         await _force_mfa_passed_at(
             session_factory,
             subject=_SUBJECT_SUPER,
-            when=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+            when=datetime.now(tz=UTC) - timedelta(hours=1),
         )
 
         response = await mfa_client.get(_GATED_PATH)
@@ -1347,9 +1294,7 @@ class TestSuperAdminEnforcement:
             for r in caplog.records
             if getattr(r, "event", None) == "argus.auth.admin_mfa.enforcement_disabled"
         ]
-        assert warned, (
-            "expected one enforcement_disabled WARNING from the startup helper"
-        )
+        assert warned, "expected one enforcement_disabled WARNING from the startup helper"
 
     async def test_non_enforced_role_bypasses_gate(
         self, mfa_client: AsyncClient, session_factory: Any

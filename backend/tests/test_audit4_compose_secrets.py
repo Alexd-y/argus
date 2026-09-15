@@ -16,12 +16,16 @@ class TestComposeSecrets:
     def test_compose_requires_postgres_password(self) -> None:
         content = COMPOSE_FILE.read_text(encoding="utf-8")
         assert "${POSTGRES_PASSWORD:?" in content, "POSTGRES_PASSWORD must be required"
-        assert "${POSTGRES_PASSWORD:-argus}" not in content, "POSTGRES_PASSWORD must not have fallback"
+        assert "${POSTGRES_PASSWORD:-argus}" not in content, (
+            "POSTGRES_PASSWORD must not have fallback"
+        )
 
     def test_compose_requires_minio_secret(self) -> None:
         content = COMPOSE_FILE.read_text(encoding="utf-8")
         assert "${MINIO_SECRET_KEY:?" in content, "MINIO_SECRET_KEY must be required"
-        assert "${MINIO_SECRET_KEY:-argussecret}" not in content, "MINIO_SECRET_KEY must not have fallback"
+        assert "${MINIO_SECRET_KEY:-argussecret}" not in content, (
+            "MINIO_SECRET_KEY must not have fallback"
+        )
 
     def test_compose_requires_jwt_secret(self) -> None:
         content = COMPOSE_FILE.read_text(encoding="utf-8")

@@ -70,7 +70,11 @@ class TestCeleryTaskRouting:
         assert routes["argus.scan_phase"]["queue"] == "argus.scans"
 
     def test_report_tasks_route_to_reports_queue(self, routes) -> None:
-        for task_name in ("argus.generate_report", "argus.report_generation", "argus.ai_text_generation"):
+        for task_name in (
+            "argus.generate_report",
+            "argus.report_generation",
+            "argus.ai_text_generation",
+        ):
             assert routes[task_name]["queue"] == "argus.reports", f"{task_name} bad queue"
 
     def test_tool_tasks_route_to_tools_queue(self, routes) -> None:
@@ -145,8 +149,9 @@ class TestCeleryBeatSchedule:
 
     def test_beat_schedule_apply_does_not_raise(self) -> None:
         try:
-            from celery import Celery
             from src.celery.beat_schedule import apply_beat_schedule
+
+            from celery import Celery
         except ImportError:
             pytest.skip("Celery not installed — skipping beat schedule tests")
 

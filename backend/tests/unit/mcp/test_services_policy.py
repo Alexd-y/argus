@@ -22,7 +22,6 @@ from collections.abc import Iterator
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.mcp.exceptions import ValidationError
 from src.mcp.schemas.policy import (
     PolicyEvaluateInput,
@@ -41,7 +40,6 @@ from src.mcp.services.policy_service import (
 from src.pipeline.contracts.tool_job import TargetKind
 from src.policy.policy_engine import PlanTier, PolicyEngine, TenantPolicy
 from src.policy.scope import ScopeEngine, ScopeKind, ScopeRule
-
 
 # ---------------------------------------------------------------------------
 # Engine factories used by the tests
@@ -165,9 +163,7 @@ class TestVerifyScope:
         assert result.allowed is False
         assert result.failure_summary is not None
 
-    def test_explicit_deny_overrides_allow(
-        self, tenant_id: str, deny_admin_scope: None
-    ) -> None:
+    def test_explicit_deny_overrides_allow(self, tenant_id: str, deny_admin_scope: None) -> None:
         result = verify_scope(
             tenant_id=tenant_id,
             payload=ScopeVerifyInput(target="admin.example.com"),

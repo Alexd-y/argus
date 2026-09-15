@@ -35,8 +35,11 @@ async def _run_dispatch(n_tasks: int, n_workers: int):
 
     for i in range(n_tasks):
         spec = AgentTaskSpec(
-            tenant_id="t1", scan_id="s1", phase="vuln",
-            agent_role="injection", idempotency_key=f"task-{i}",
+            tenant_id="t1",
+            scan_id="s1",
+            phase="vuln",
+            agent_role="injection",
+            idempotency_key=f"task-{i}",
         )
         await store.enqueue(spec)
 
@@ -55,7 +58,10 @@ async def _run_dispatch(n_tasks: int, n_workers: int):
                 await asyncio.sleep(0)
                 run.record_usage(AgentUsage(input_tokens=40, output_tokens=40))
             ok = await store.complete(
-                claimed.task_id, claimed.fencing_token, AgentTaskState.SUCCEEDED, "result-ref"
+                claimed.task_id,
+                claimed.fencing_token,
+                AgentTaskState.SUCCEEDED,
+                "result-ref",
             )
             if ok:
                 async with completed_lock:
@@ -93,7 +99,10 @@ async def test_dispatch_scales_without_loss_or_double_accept(n_workers):
 async def test_worker_crash_mid_task_is_recovered():
     store = InMemoryAgentTaskStore()
     spec = AgentTaskSpec(
-        tenant_id="t1", scan_id="s1", phase="vuln", agent_role="injection",
+        tenant_id="t1",
+        scan_id="s1",
+        phase="vuln",
+        agent_role="injection",
         idempotency_key="crashy",
     )
     tid = await store.enqueue(spec)
@@ -117,7 +126,10 @@ async def test_budget_denial_does_not_become_empty_success():
     ledger = BudgetLedger(InMemoryBudgetStore())
     await ledger._store.set_limits("scan:s1", max_tokens=50)  # too small for a 100-token reserve
     spec = AgentTaskSpec(
-        tenant_id="t1", scan_id="s1", phase="vuln", agent_role="injection",
+        tenant_id="t1",
+        scan_id="s1",
+        phase="vuln",
+        agent_role="injection",
         idempotency_key="poor",
     )
     await store.enqueue(spec)

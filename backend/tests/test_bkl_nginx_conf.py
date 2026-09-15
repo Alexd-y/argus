@@ -36,13 +36,13 @@ class TestNginxApiConfStructure:
 
     def test_has_upstream_block(self, nginx_content: str) -> None:
         assert "upstream" in nginx_content
-        assert re.search(r"upstream\s+\w+\s*\{", nginx_content), (
-            "Must have a named upstream block"
-        )
+        assert re.search(r"upstream\s+\w+\s*\{", nginx_content), "Must have a named upstream block"
 
     def test_upstream_has_server(self, nginx_content: str) -> None:
         upstream_match = re.search(
-            r"upstream\s+\w+\s*\{(.*?)\}", nginx_content, re.DOTALL,
+            r"upstream\s+\w+\s*\{(.*?)\}",
+            nginx_content,
+            re.DOTALL,
         )
         assert upstream_match, "upstream block not found"
         assert "server" in upstream_match.group(1)

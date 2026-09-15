@@ -9,7 +9,6 @@ import hmac
 import json
 
 import pytest
-
 from src.web_workbench.decoder.engine import (
     DecoderError,
     TransformContext,
@@ -29,7 +28,7 @@ def test_empty_pipeline_is_byte_exact_identity() -> None:
 
 
 def test_url_round_trip() -> None:
-    data = "a b&c=+%".encode()
+    data = b"a b&c=+%"
     encoded = run_pipeline(data, [_step("url_encode")])
     assert b" " not in encoded
     assert run_pipeline(encoded, [_step("url_decode")]) == data

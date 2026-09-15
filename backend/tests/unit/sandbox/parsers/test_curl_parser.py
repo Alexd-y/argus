@@ -139,9 +139,7 @@ def test_evidence_records_header_and_value(tmp_path: Path) -> None:
 
 
 def test_canonical_file_preferred_over_stdout(tmp_path: Path) -> None:
-    (tmp_path / "curl_headers.txt").write_bytes(
-        _headers("HTTP/2 200", "Server: canonical-nginx")
-    )
+    (tmp_path / "curl_headers.txt").write_bytes(_headers("HTTP/2 200", "Server: canonical-nginx"))
     decoy = _headers("HTTP/2 200", "Server: stdout-apache")
     parse_curl(decoy, b"", tmp_path, "curl")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())

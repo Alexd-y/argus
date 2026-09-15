@@ -134,7 +134,9 @@ class InMemoryAgentTaskStore:
             }
             self._by_idem[spec.idempotency_key or spec.task_id] = spec.task_id
             self._outbox[uuid.uuid4().hex] = {
-                "task_id": spec.task_id, "dispatched": False, "created_at": now
+                "task_id": spec.task_id,
+                "dispatched": False,
+                "created_at": now,
             }
             return spec.task_id
 
@@ -176,7 +178,11 @@ class InMemoryAgentTaskStore:
             return True
 
     async def complete(
-        self, task_id: str, fencing_token: int, state: AgentTaskState, result_ref: str = ""
+        self,
+        task_id: str,
+        fencing_token: int,
+        state: AgentTaskState,
+        result_ref: str = "",
     ) -> bool:
         async with self._lock:
             row = self._rows.get(task_id)
@@ -202,7 +208,9 @@ class InMemoryAgentTaskStore:
                 row["state"] = AgentTaskState.RETRY_WAIT.value
                 row["lease_expires_at"] = None
                 self._outbox[uuid.uuid4().hex] = {
-                    "task_id": task_id, "dispatched": False, "created_at": utcnow()
+                    "task_id": task_id,
+                    "dispatched": False,
+                    "created_at": utcnow(),
                 }
             else:
                 row["state"] = AgentTaskState.FAILED.value
@@ -226,11 +234,9 @@ class InMemoryAgentTaskStore:
 
     async def fetch_outbox(self, limit: int = 100) -> list[tuple[str, str]]:
         async with self._lock:
-            return [
-                (oid, o["task_id"])
-                for oid, o in self._outbox.items()
-                if not o["dispatched"]
-            ][:limit]
+            return [(oid, o["task_id"]) for oid, o in self._outbox.items() if not o["dispatched"]][
+                :limit
+            ]
 
     async def mark_dispatched(self, outbox_id: str) -> None:
         async with self._lock:
@@ -252,21 +258,25 @@ class PostgresAgentTaskStore:
     async def enqueue(self, spec: AgentTaskSpec, payload: dict | None = None) -> str:
         now = utcnow()
         async with self._sf() as session, session.begin():
-            ins = pg_insert(agent_task).values(
-                task_id=spec.task_id,
-                tenant_id=spec.tenant_id,
-                scan_id=spec.scan_id,
-                phase=spec.phase,
-                agent_role=spec.agent_role,
-                idempotency_key=spec.idempotency_key or spec.task_id,
-                state=AgentTaskState.QUEUED.value,
-                attempts=0,
-                max_attempts=3,
-                fencing_token=0,
-                payload=json.dumps(payload or {}),
-                created_at=now,
-                updated_at=now,
-            ).on_conflict_do_nothing(index_elements=["idempotency_key"])
+            ins = (
+                pg_insert(agent_task)
+                .values(
+                    task_id=spec.task_id,
+                    tenant_id=spec.tenant_id,
+                    scan_id=spec.scan_id,
+                    phase=spec.phase,
+                    agent_role=spec.agent_role,
+                    idempotency_key=spec.idempotency_key or spec.task_id,
+                    state=AgentTaskState.QUEUED.value,
+                    attempts=0,
+                    max_attempts=3,
+                    fencing_token=0,
+                    payload=json.dumps(payload or {}),
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            )
             await session.execute(ins)
             existing = (
                 await session.execute(
@@ -278,7 +288,10 @@ class PostgresAgentTaskStore:
             # Transactional outbox in the SAME transaction as the task row.
             await session.execute(
                 insert(agent_task_outbox).values(
-                    id=uuid.uuid4().hex, task_id=existing, dispatched=False, created_at=now
+                    id=uuid.uuid4().hex,
+                    task_id=existing,
+                    dispatched=False,
+                    created_at=now,
                 )
             )
             return existing
@@ -341,7 +354,11 @@ class PostgresAgentTaskStore:
             return result.rowcount == 1
 
     async def complete(
-        self, task_id: str, fencing_token: int, state: AgentTaskState, result_ref: str = ""
+        self,
+        task_id: str,
+        fencing_token: int,
+        state: AgentTaskState,
+        result_ref: str = "",
     ) -> bool:
         async with self._sf() as session, session.begin():
             result = await session.execute(
@@ -362,19 +379,23 @@ class PostgresAgentTaskStore:
     ) -> str:
         async with self._sf() as session, session.begin():
             row = (
-                await session.execute(
-                    select(agent_task)
-                    .where(agent_task.c.task_id == task_id)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_task).where(agent_task.c.task_id == task_id).with_for_update()
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None or row["fencing_token"] != fencing_token:
                 return ""
             if retryable and row["attempts"] < row["max_attempts"]:
                 new_state = AgentTaskState.RETRY_WAIT.value
                 await session.execute(
                     insert(agent_task_outbox).values(
-                        id=uuid.uuid4().hex, task_id=task_id, dispatched=False,
+                        id=uuid.uuid4().hex,
+                        task_id=task_id,
+                        dispatched=False,
                         created_at=utcnow(),
                     )
                 )
@@ -384,7 +405,9 @@ class PostgresAgentTaskStore:
                 update(agent_task)
                 .where(agent_task.c.task_id == task_id)
                 .values(
-                    state=new_state, last_error=error, lease_expires_at=None,
+                    state=new_state,
+                    last_error=error,
+                    lease_expires_at=None,
                     updated_at=utcnow(),
                 )
             )
@@ -429,10 +452,10 @@ class PostgresAgentTaskStore:
     async def get(self, task_id: str) -> dict | None:
         async with self._sf() as session, session.begin():
             row = (
-                await session.execute(
-                    select(agent_task).where(agent_task.c.task_id == task_id)
-                )
-            ).mappings().first()
+                (await session.execute(select(agent_task).where(agent_task.c.task_id == task_id)))
+                .mappings()
+                .first()
+            )
             return dict(row) if row else None
 
 

@@ -21,9 +21,7 @@ def _isolate(monkeypatch):
         return {"findings": [], "fuzz_results": [], "candidates": []}
 
     # run_quick_fuzz imports the fuzzer lazily from this module path.
-    monkeypatch.setattr(
-        "src.recon.quick_fuzz.quick_fuzzer.run_quick_fuzz", _fake_qf, raising=False
-    )
+    monkeypatch.setattr("src.recon.quick_fuzz.quick_fuzzer.run_quick_fuzz", _fake_qf, raising=False)
 
 
 @pytest.mark.asyncio

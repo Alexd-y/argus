@@ -22,6 +22,7 @@ applicable_contexts: [web, api, e-commerce]
 import asyncio
 import aiohttp
 
+
 async def race_test(url: str, payload: dict, n: int = 20):
     async with aiohttp.ClientSession() as session:
         tasks = [
@@ -29,7 +30,7 @@ async def race_test(url: str, payload: dict, n: int = 20):
             for _ in range(n)
         ]
         responses = await asyncio.gather(*tasks, return_exceptions=True)
-        successes = sum(1 for r in responses if hasattr(r, 'status') and r.status == 200)
+        successes = sum(1 for r in responses if hasattr(r, "status") and r.status == 200)
         return successes > 1  # multiple successes = race condition
 ```
 

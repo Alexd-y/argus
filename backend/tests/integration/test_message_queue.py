@@ -4,11 +4,10 @@ Requires live NATS or RabbitMQ instances. Skipped by default.
 """
 
 import pytest
-
 from src.integrations.message_queue import (
     VALID_TOPICS,
-    RabbitMQBackend,
     NatsJetStreamBackend,
+    RabbitMQBackend,
     _NoopBackend,
     get_message_queue,
 )

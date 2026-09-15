@@ -1,7 +1,5 @@
 """Tests for the LLM-based deduplication module (ENH-V3)."""
 
-import pytest
-
 from src.dedup.llm_dedup import (
     DedupResult,
     _build_existing_xml,
@@ -73,8 +71,22 @@ class TestParseDedupResponse:
 class TestBuildExistingXml:
     def test_formats_findings(self):
         findings = [
-            {"id": "f1", "title": "SQLi in login", "cwe": "CWE-89", "owasp_category": "A03", "url": "/login", "description": "SQL injection"},
-            {"id": "f2", "title": "XSS in search", "cwe": "CWE-79", "owasp_category": "A07", "url": "/search", "description": "Reflected XSS"},
+            {
+                "id": "f1",
+                "title": "SQLi in login",
+                "cwe": "CWE-89",
+                "owasp_category": "A03",
+                "url": "/login",
+                "description": "SQL injection",
+            },
+            {
+                "id": "f2",
+                "title": "XSS in search",
+                "cwe": "CWE-79",
+                "owasp_category": "A07",
+                "url": "/search",
+                "description": "Reflected XSS",
+            },
         ]
         xml = _build_existing_xml(findings)
         assert '<report id="f1">' in xml
@@ -83,7 +95,9 @@ class TestBuildExistingXml:
         assert "XSS in search" in xml
 
     def test_limits_to_20_findings(self):
-        findings = [{"id": f"f{i}", "title": f"Finding {i}", "description": "desc"} for i in range(30)]
+        findings = [
+            {"id": f"f{i}", "title": f"Finding {i}", "description": "desc"} for i in range(30)
+        ]
         xml = _build_existing_xml(findings)
         assert '<report id="f10">' in xml
         assert '<report id="f29">' in xml

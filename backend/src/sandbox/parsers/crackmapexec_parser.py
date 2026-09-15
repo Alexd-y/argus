@@ -26,7 +26,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.parsers._credential_base import (
@@ -63,7 +63,7 @@ _CRED_RE: Final[re.Pattern[str]] = re.compile(
 _NTLM_PAIR_RE: Final[re.Pattern[str]] = re.compile(r"^[a-fA-F0-9]{32}:[a-fA-F0-9]{32}$")
 
 
-_DedupKey: TypeAlias = tuple[str, str, str, str, str]
+type _DedupKey = tuple[str, str, str, str, str]
 
 
 def parse_crackmapexec(

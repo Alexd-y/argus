@@ -28,7 +28,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory, FindingDTO
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import (
@@ -41,7 +40,6 @@ from src.sandbox.parsers import (
 )
 from src.sandbox.parsers._base import make_finding_dto
 from src.sandbox.parsers.httpx_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -336,9 +334,7 @@ def test_double_override_keeps_last_writer_wins(tmp_path: Path) -> None:
         category=FindingCategory.INFO, cwe=[201], owasp_wstg=["WSTG-INFO-08"]
     )
 
-    def _first(
-        stdout: bytes, stderr: bytes, artifacts_dir: Path, tool_id: str
-    ) -> list[FindingDTO]:
+    def _first(stdout: bytes, stderr: bytes, artifacts_dir: Path, tool_id: str) -> list[FindingDTO]:
         return [sentinel_first]
 
     def _second(
@@ -408,9 +404,7 @@ def test_concurrent_registration_smoke(tmp_path: Path) -> None:
     import threading
 
     targets = [s for s in ParseStrategy if s is not ParseStrategy.JSON_LINES]
-    assert len(targets) >= 9, (
-        f"expected at least 9 non-default strategies, got {len(targets)}"
-    )
+    assert len(targets) >= 9, f"expected at least 9 non-default strategies, got {len(targets)}"
 
     def _make_handler(tag: str) -> ParserHandler:
         sentinel = make_finding_dto(
@@ -434,8 +428,7 @@ def test_concurrent_registration_smoke(tmp_path: Path) -> None:
         register_parser(strategy, _make_handler(strategy.value), override=True)
 
     threads = [
-        threading.Thread(target=_register, args=(s,), name=f"reg-{s.value}")
-        for s in targets
+        threading.Thread(target=_register, args=(s,), name=f"reg-{s.value}") for s in targets
     ]
     for thread in threads:
         thread.start()

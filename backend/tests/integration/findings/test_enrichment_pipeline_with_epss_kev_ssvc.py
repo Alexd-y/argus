@@ -22,7 +22,6 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from src.findings.enrichment import FindingEnricher
 from src.findings.epss_persistence import (
     EpssScore,
@@ -43,7 +42,6 @@ from src.pipeline.contracts.finding_dto import (
     FindingStatus,
     SSVCDecision,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -231,9 +229,7 @@ async def test_multi_cve_finding_uses_worst_signal(session: AsyncSession) -> Non
     finding = _finding()
     enriched = await enricher.enrich(
         [finding],
-        cve_ids_by_finding={
-            str(finding.id): ["CVE-2024-22221", "CVE-2024-33332"]
-        },
+        cve_ids_by_finding={str(finding.id): ["CVE-2024-22221", "CVE-2024-33332"]},
     )
     out = enriched[0]
     assert out.epss_score == pytest.approx(0.95)
@@ -416,12 +412,8 @@ async def test_mission_wellbeing_high_lifts_ssvc_outcome(
     enricher = FindingEnricher(epss_repo=epss_repo, kev_repo=kev_repo)
     finding = _finding(category=FindingCategory.RCE, cvss_v3_score=9.5)
 
-    low = await enricher.enrich(
-        [finding], mission_wellbeing=MissionWellbeing.LOW
-    )
-    high = await enricher.enrich(
-        [finding], mission_wellbeing=MissionWellbeing.HIGH
-    )
+    low = await enricher.enrich([finding], mission_wellbeing=MissionWellbeing.LOW)
+    high = await enricher.enrich([finding], mission_wellbeing=MissionWellbeing.HIGH)
     # Higher mission_wellbeing must not yield a *less* urgent decision.
     weight = {
         SSVCDecision.TRACK: 1,
@@ -456,9 +448,7 @@ async def test_enrichment_is_idempotent(session: AsyncSession) -> None:
     once = await enricher.enrich(
         [finding], cve_ids_by_finding={str(finding.id): ["CVE-2024-77771"]}
     )
-    twice = await enricher.enrich(
-        once, cve_ids_by_finding={str(finding.id): ["CVE-2024-77771"]}
-    )
+    twice = await enricher.enrich(once, cve_ids_by_finding={str(finding.id): ["CVE-2024-77771"]})
     assert once[0].epss_score == twice[0].epss_score
     assert once[0].epss_percentile == twice[0].epss_percentile
     assert once[0].kev_listed == twice[0].kev_listed

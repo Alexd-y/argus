@@ -22,18 +22,12 @@ import pytest
 
 opentelemetry = pytest.importorskip("opentelemetry")
 sdk_trace = pytest.importorskip("opentelemetry.sdk.trace")
-in_memory_exporter = pytest.importorskip(
-    "opentelemetry.sdk.trace.export.in_memory_span_exporter"
-)
-SimpleSpanProcessor = pytest.importorskip(
-    "opentelemetry.sdk.trace.export"
-).SimpleSpanProcessor
+in_memory_exporter = pytest.importorskip("opentelemetry.sdk.trace.export.in_memory_span_exporter")
+SimpleSpanProcessor = pytest.importorskip("opentelemetry.sdk.trace.export").SimpleSpanProcessor
 
-from opentelemetry import trace as otel_trace  # noqa: E402
-from opentelemetry.sdk.resources import Resource  # noqa: E402
-
-from src.core.logging_config import OTelTraceContextFilter  # noqa: E402
-from src.core.observability import (  # noqa: E402
+from opentelemetry.sdk.resources import Resource  # noqa: E402 — after importorskip guards
+from src.core.logging_config import OTelTraceContextFilter  # noqa: E402 — after importorskip guards
+from src.core.observability import (  # noqa: E402 — after importorskip guards
     safe_set_span_attribute,
     tenant_hash,
 )
@@ -90,8 +84,13 @@ def test_log_record_carries_trace_context(trace_capture: Any) -> None:
     _provider, _exporter, tracer = trace_capture
     fltr = OTelTraceContextFilter()
     record = logging.LogRecord(
-        name="argus", level=logging.INFO, pathname=__file__, lineno=1,
-        msg="hi", args=(), exc_info=None,
+        name="argus",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="hi",
+        args=(),
+        exc_info=None,
     )
     with tracer.start_as_current_span("ctx-bind"):
         fltr.filter(record)
@@ -104,8 +103,13 @@ def test_log_record_carries_trace_context(trace_capture: Any) -> None:
 def test_log_record_without_active_span_keeps_no_trace_fields() -> None:
     fltr = OTelTraceContextFilter()
     record = logging.LogRecord(
-        name="argus", level=logging.INFO, pathname=__file__, lineno=1,
-        msg="hi", args=(), exc_info=None,
+        name="argus",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="hi",
+        args=(),
+        exc_info=None,
     )
     fltr.filter(record)
     if hasattr(record, "trace_id"):
@@ -114,12 +118,11 @@ def test_log_record_without_active_span_keeps_no_trace_fields() -> None:
 
 def test_nested_span_shares_trace_id(trace_capture: Any) -> None:
     _provider, exporter, tracer = trace_capture
-    with tracer.start_as_current_span("parent") as parent:
-        with tracer.start_as_current_span("child") as child:
-            assert (
-                parent.get_span_context().trace_id
-                == child.get_span_context().trace_id
-            )
+    with (
+        tracer.start_as_current_span("parent") as parent,
+        tracer.start_as_current_span("child") as child,
+    ):
+        assert parent.get_span_context().trace_id == child.get_span_context().trace_id
     spans = exporter.get_finished_spans()
     parent_span = next(s for s in spans if s.name == "parent")
     child_span = next(s for s in spans if s.name == "child")

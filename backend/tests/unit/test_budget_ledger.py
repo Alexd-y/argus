@@ -95,9 +95,7 @@ async def test_release_only_when_not_started():
 
 async def test_multi_scope_limits_enforced_simultaneously():
     # Task limit is generous but the tenant limit is the binding constraint.
-    ledger, store = await _make_ledger(
-        **{"tenant:t1": (150, None), "task:tk": (100000, None)}
-    )
+    ledger, store = await _make_ledger(**{"tenant:t1": (150, None), "task:tk": (100000, None)})
     scope = BudgetScope(tenant_id="t1", task_id="tk")
     await ledger.reserve(scope, tokens=100)
     with pytest.raises(BudgetDeniedError):

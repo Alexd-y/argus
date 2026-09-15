@@ -67,9 +67,7 @@ async def generate_all_reports(
 ) -> list[Artifact]:
     """Generate all recon reports and upload as derived artifacts."""
     findings_result = await db.execute(
-        select(NormalizedFinding).where(
-            NormalizedFinding.engagement_id == engagement_id
-        )
+        select(NormalizedFinding).where(NormalizedFinding.engagement_id == engagement_id)
     )
     findings = list(findings_result.scalars().all())
 
@@ -83,17 +81,21 @@ async def generate_all_reports(
     )
     target_domains = [r[0] for r in targets_result.all()]
 
-    jobs_count = (await db.execute(
-        select(func.count()).select_from(
-            select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+    jobs_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
-    artifacts_count = (await db.execute(
-        select(func.count()).select_from(
-            select(Artifact.id).where(Artifact.engagement_id == engagement_id).subquery()
+    artifacts_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(Artifact.id).where(Artifact.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     findings_by_type: dict[str, int] = {}
     for f in findings:
@@ -103,31 +105,61 @@ async def generate_all_reports(
     stage = 18  # REPORTING
 
     reports = [
-        ("recon_summary.md", "text/markdown", build_recon_summary(
-            engagement_name, target_domains, findings_by_type,
-            jobs_count, artifacts_count, len(hypotheses),
-        )),
+        (
+            "recon_summary.md",
+            "text/markdown",
+            build_recon_summary(
+                engagement_name,
+                target_domains,
+                findings_by_type,
+                jobs_count,
+                artifacts_count,
+                len(hypotheses),
+            ),
+        ),
         ("asset_inventory.csv", "text/csv", build_asset_inventory(findings)),
         ("service_inventory.csv", "text/csv", build_service_inventory(findings)),
         ("api_inventory.csv", "text/csv", build_api_inventory(findings)),
         ("param_inventory.csv", "text/csv", build_param_inventory(findings)),
         ("hypotheses.md", "text/markdown", build_hypotheses_report(hypotheses)),
-        ("attack_surface.md", "text/markdown", build_attack_surface_map(findings, hypotheses)),
+        (
+            "attack_surface.md",
+            "text/markdown",
+            build_attack_surface_map(findings, hypotheses),
+        ),
         ("host_groups.md", "text/markdown", build_host_groups(findings)),
-        ("priorities.md", "text/markdown", build_priorities_report(hypotheses, findings_by_type)),
-        ("js_findings.md", "text/markdown", build_js_findings(
-            live_urls=[f.value for f in findings if f.finding_type == "url"],
-            html_path=None,
-        )),
+        (
+            "priorities.md",
+            "text/markdown",
+            build_priorities_report(hypotheses, findings_by_type),
+        ),
+        (
+            "js_findings.md",
+            "text/markdown",
+            build_js_findings(
+                live_urls=[f.value for f in findings if f.finding_type == "url"],
+                html_path=None,
+            ),
+        ),
     ]
 
     live_hosts = _extract_live_host_base_urls(findings)
     if live_hosts:
-        reports.extend([
-            ("headers_summary.md", "text/markdown", build_headers_summary(live_hosts)),
-            ("tls_summary.md", "text/markdown", build_tls_summary(live_hosts)),
-            ("endpoint_inventory.csv", "text/csv", build_endpoint_inventory(live_hosts)),
-        ])
+        reports.extend(
+            [
+                (
+                    "headers_summary.md",
+                    "text/markdown",
+                    build_headers_summary(live_hosts),
+                ),
+                ("tls_summary.md", "text/markdown", build_tls_summary(live_hosts)),
+                (
+                    "endpoint_inventory.csv",
+                    "text/csv",
+                    build_endpoint_inventory(live_hosts),
+                ),
+            ]
+        )
 
     for filename, content_type, content in reports:
         artifact = await create_artifact(

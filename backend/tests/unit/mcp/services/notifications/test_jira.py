@@ -10,19 +10,19 @@ from typing import Any
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications import (
-    AdapterResult,
     DEFAULT_FINDING_FIELD_ID,
     JIRA_API_TOKEN_ENV,
     JIRA_FINDING_FIELD_ENV,
     JIRA_PROJECT_KEY_ENV,
     JIRA_SITE_URL_ENV,
     JIRA_USER_EMAIL_ENV,
+    AdapterResult,
     JiraAdapter,
     NotificationSeverity,
     build_jira_payload,
 )
+
 from tests.unit.mcp.services.notifications.conftest import (
     collect_responses,
     make_event,
@@ -137,9 +137,7 @@ class TestJiraPayload:
             for mark in elem.get("marks", [])
             if mark.get("type") == "link"
         ]
-        assert any(
-            m["attrs"]["href"] == "https://argus.example/evidence/x" for m in link_marks
-        )
+        assert any(m["attrs"]["href"] == "https://argus.example/evidence/x" for m in link_marks)
 
     def test_extra_tags_become_labels(self) -> None:
         ev = make_event()
@@ -166,9 +164,7 @@ class TestJiraPayload:
 
 class TestJiraHappyPath:
     def test_critical_event_delivered(self) -> None:
-        adapter = _jira(
-            handler=collect_responses((201, {"key": "SEC-1", "id": "10001"}))
-        )
+        adapter = _jira(handler=collect_responses((201, {"key": "SEC-1", "id": "10001"})))
         ev = make_event(severity=NotificationSeverity.CRITICAL)
         result = asyncio.run(adapter.send_with_retry(ev, tenant_id=ev.tenant_id))
         assert isinstance(result, AdapterResult)

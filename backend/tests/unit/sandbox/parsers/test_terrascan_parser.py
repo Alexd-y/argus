@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -167,9 +166,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     assert [r["rule_id"] for r in rows] == ["rule-high", "rule-medium", "rule-low"]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_terrascan_json(b"[]", b"", tmp_path, "terrascan")
     assert findings == []
@@ -179,9 +176,7 @@ def test_envelope_not_dict_returns_empty(
     )
 
 
-def test_missing_rule_id_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_rule_id_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _violation()
     bad.pop("rule_id")
     payload = _payload(bad, _violation(rule_id="AC_OK"))
@@ -189,8 +184,7 @@ def test_missing_rule_id_emits_warning(
         findings = parse_terrascan_json(payload, b"", tmp_path, "terrascan")
     assert len(findings) == 1
     assert any(
-        "terrascan_parser_violation_missing_field"
-        in (record.__dict__.get("event") or "")
+        "terrascan_parser_violation_missing_field" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -200,9 +194,7 @@ def test_malformed_json_returns_empty(tmp_path: Path) -> None:
 
 
 def test_no_violations_returns_empty(tmp_path: Path) -> None:
-    payload = json.dumps(
-        {"results": {"violations": [], "skipped_violations": []}}
-    ).encode("utf-8")
+    payload = json.dumps({"results": {"violations": [], "skipped_violations": []}}).encode("utf-8")
     assert parse_terrascan_json(payload, b"", tmp_path, "terrascan") == []
 
 

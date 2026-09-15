@@ -54,8 +54,13 @@ class BurpConfig(BaseModel):
 
 _CATEGORY_PAYLOAD_MAP: dict[str, list[str]] = {
     "sqli": [
-        "'", "''", "`", "1' OR '1'='1", "1 OR 1=1--",
-        "' UNION SELECT NULL--", "1; DROP TABLE users--",
+        "'",
+        "''",
+        "`",
+        "1' OR '1'='1",
+        "1 OR 1=1--",
+        "' UNION SELECT NULL--",
+        "1; DROP TABLE users--",
         "'; WAITFOR DELAY '0:0:3'--",
     ],
     "xss": [
@@ -66,23 +71,34 @@ _CATEGORY_PAYLOAD_MAP: dict[str, list[str]] = {
         "javascript:alert(1)",
     ],
     "ssti": [
-        "{{7*7}}", "${7*7}", "#{7*7}",
-        "<%= 7*7 %>", "{{config}}",
+        "{{7*7}}",
+        "${7*7}",
+        "#{7*7}",
+        "<%= 7*7 %>",
+        "{{config}}",
     ],
     "path_traversal": [
-        "../../../etc/passwd", "..\\..\\..\\windows\\win.ini",
-        "/etc/passwd", "/proc/self/environ",
+        "../../../etc/passwd",
+        "..\\..\\..\\windows\\win.ini",
+        "/etc/passwd",
+        "/proc/self/environ",
     ],
     "command_injection": [
-        "; id", "| id", "`id`", "$(id)", "| whoami",
+        "; id",
+        "| id",
+        "`id`",
+        "$(id)",
+        "| whoami",
     ],
     "ssrf": [
         "http://169.254.169.254/latest/meta-data/",
-        "http://127.0.0.1:80/", "http://localhost/",
+        "http://127.0.0.1:80/",
+        "http://localhost/",
         "http://metadata.google.internal/",
     ],
     "nosql": [
-        '{"$gt": ""}', '{"$ne": "invalid"}',
+        '{"$gt": ""}',
+        '{"$ne": "invalid"}',
         '{"$where": "1==1"}',
     ],
     "xxe": [
@@ -103,7 +119,9 @@ _SEVERITY_TO_BURP_COLOR: dict[str, str] = {
 }
 
 
-def _scope_config_to_burp(scope_config: ScopeConfig | None, target: str) -> tuple[list[BurpScopeItem], list[BurpScopeItem]]:
+def _scope_config_to_burp(
+    scope_config: ScopeConfig | None, target: str
+) -> tuple[list[BurpScopeItem], list[BurpScopeItem]]:
     include_items: list[BurpScopeItem] = []
     exclude_items: list[BurpScopeItem] = []
 
@@ -130,6 +148,7 @@ def _scope_config_to_burp(scope_config: ScopeConfig | None, target: str) -> tupl
 
     if not include_items and target:
         from urllib.parse import urlparse
+
         try:
             parsed = urlparse(target)
             protocol = parsed.scheme or "https"
@@ -152,7 +171,9 @@ def _findings_to_payload_lists(findings: list[dict[str, Any]]) -> list[BurpPaylo
         for key in _CATEGORY_PAYLOAD_MAP:
             if key in cat and key not in categories_seen:
                 categories_seen.add(key)
-                result.append(BurpPayloadList(name=key.upper(), payloads=_CATEGORY_PAYLOAD_MAP[key]))
+                result.append(
+                    BurpPayloadList(name=key.upper(), payloads=_CATEGORY_PAYLOAD_MAP[key])
+                )
 
     if not categories_seen:
         for key in ("sqli", "xss", "ssrf", "path_traversal"):
@@ -176,7 +197,9 @@ def _findings_to_repeater_tabs(findings: list[dict[str, Any]]) -> list[BurpRepea
         body = ""
 
         if isinstance(poc, dict):
-            url = str(poc.get("url", "") or poc.get("affected_url", "") or poc.get("request_url", ""))
+            url = str(
+                poc.get("url", "") or poc.get("affected_url", "") or poc.get("request_url", "")
+            )
             method = str(poc.get("method", "GET")).upper()
             request_template = str(poc.get("request_template", "") or poc.get("curl_command", ""))
             if request_template:
@@ -190,13 +213,15 @@ def _findings_to_repeater_tabs(findings: list[dict[str, Any]]) -> list[BurpRepea
         title = str(finding.get("title", "Security Finding"))[:200]
         note = f"[{severity.upper()}] {title}\n{str(finding.get('description', ''))[:500]}"
 
-        tabs.append(BurpRepeaterTab(
-            method=method,
-            url=url[:2048],
-            headers=headers,
-            body=body[:8000],
-            note=note,
-        ))
+        tabs.append(
+            BurpRepeaterTab(
+                method=method,
+                url=url[:2048],
+                headers=headers,
+                body=body[:8000],
+                note=note,
+            )
+        )
 
     return tabs[:30]
 
@@ -256,9 +281,9 @@ def burp_config_to_json(config: BurpConfig) -> str:
 
 __all__ = [
     "BurpConfig",
-    "BurpScopeItem",
     "BurpPayloadList",
     "BurpRepeaterTab",
-    "generate_burp_config",
+    "BurpScopeItem",
     "burp_config_to_json",
+    "generate_burp_config",
 ]

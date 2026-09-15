@@ -8,15 +8,14 @@ construction (without rendering), and active web scan context assembly.
 from __future__ import annotations
 
 import pytest
-
 from src.services.reporting import (
-    REPORT_TIERS,
-    TIER_METADATA,
     _ACTIVE_WEB_SCAN_AI_KEYS_ORDERED,
     _ACTIVE_WEB_SCAN_AI_LABELS,
     _SECTIONS_ASGARD,
     _SECTIONS_MIDGARD,
     _SECTIONS_VALHALLA,
+    REPORT_TIERS,
+    TIER_METADATA,
     build_active_web_scan_section_context,
     normalize_report_tier,
     report_tier_sections,
@@ -86,7 +85,7 @@ class TestTierMetadata:
             assert tier in TIER_METADATA, f"Missing metadata for {tier}"
 
     def test_each_metadata_has_label(self) -> None:
-        for tier, meta in TIER_METADATA.items():
+        for _tier, meta in TIER_METADATA.items():
             assert isinstance(meta.get("label"), str)
             assert len(meta["label"]) > 0
 
@@ -144,7 +143,9 @@ class TestActiveWebScanSections:
                     "phase_key": "vuln_analysis",
                     "rows": [
                         {"file_name": "20250512T120000_abcdef123456_tool_nuclei_scan_results.json"},
-                        {"file_name": "20250512T120001_abcdef789abc_tool_sqlmap_celery_results.txt"},
+                        {
+                            "file_name": "20250512T120001_abcdef789abc_tool_sqlmap_celery_results.txt"
+                        },
                     ],
                 },
             ]
@@ -158,11 +159,11 @@ class TestActiveWebScanSections:
         assert "sqlmap" in ctx["tools_run"]
 
     def test_ai_summary_rows_skip_placeholder_texts(self) -> None:
-        from src.reports.ai_text_generation import (
-            REPORT_AI_SKIPPED_NO_LLM,
-        )
         from src.orchestration.prompt_registry import (
             REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
+        )
+        from src.reports.ai_text_generation import (
+            REPORT_AI_SKIPPED_NO_LLM,
         )
 
         ai_texts = {REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: REPORT_AI_SKIPPED_NO_LLM}

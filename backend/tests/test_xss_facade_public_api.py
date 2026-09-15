@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import inspect
 
-import src.recon.vulnerability_analysis.context_detector as ctx_facade
-import src.recon.vulnerability_analysis.xss_payload_manager as pm_facade
-import src.recon.vulnerability_analysis.xss_verifier as ver_facade
 import src.recon.vulnerability_analysis.active_scan.context_detector as ctx_impl
 import src.recon.vulnerability_analysis.active_scan.xss_payload_manager as pm_impl
 import src.recon.vulnerability_analysis.active_scan.xss_verifier as ver_impl
+import src.recon.vulnerability_analysis.context_detector as ctx_facade
+import src.recon.vulnerability_analysis.xss_payload_manager as pm_facade
+import src.recon.vulnerability_analysis.xss_verifier as ver_facade
 
 
 def test_context_detector_facade_matches_active_scan() -> None:

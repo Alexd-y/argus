@@ -183,6 +183,7 @@ Hard isolation rules (do NOT relax):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -197,7 +198,6 @@ from typing import Any, Final
 import pytest
 import yaml
 from packaging.version import InvalidVersion, Version
-
 from src.evidence.redaction import Redactor
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.tool_job import RiskLevel
@@ -362,12 +362,8 @@ _TOOL_TO_PACKAGE_PATH: Final[Path] = (
     _REPO_ROOT / "infra" / "sandbox" / "images" / "tool_to_package.json"
 )
 
-_INTEGRATION_SANDBOX_DIR: Final[Path] = (
-    _BACKEND_DIR / "tests" / "integration" / "sandbox"
-)
-_INTEGRATION_LOAD_TEST: Final[Path] = (
-    _INTEGRATION_SANDBOX_DIR / "test_tool_catalog_load.py"
-)
+_INTEGRATION_SANDBOX_DIR: Final[Path] = _BACKEND_DIR / "tests" / "integration" / "sandbox"
+_INTEGRATION_LOAD_TEST: Final[Path] = _INTEGRATION_SANDBOX_DIR / "test_tool_catalog_load.py"
 _INTEGRATION_FIXTURES_DIR: Final[Path] = _INTEGRATION_SANDBOX_DIR / "fixtures"
 
 # Allow-list of file extensions that are scanned for tool_id references in the
@@ -622,9 +618,7 @@ def test_tool_yaml_descriptor_exists(tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", sorted(_TOOL_IDS))
-def test_tool_signature_verifies_via_registry(
-    tool_id: str, loaded_registry: ToolRegistry
-) -> None:
+def test_tool_signature_verifies_via_registry(tool_id: str, loaded_registry: ToolRegistry) -> None:
     """Contract 2: signature verifies via :class:`ToolRegistry`.
 
     Two facts together prove this:
@@ -778,8 +772,7 @@ def test_tool_parser_dispatch_reachable(
     # against a future "return strings on the heartbeat path" regression.
     for finding in findings:
         assert isinstance(finding, FindingDTO), (
-            f"{tool_id!r}: dispatch_parse returned a non-FindingDTO "
-            f"({type(finding).__name__})"
+            f"{tool_id!r}: dispatch_parse returned a non-FindingDTO ({type(finding).__name__})"
         )
 
 
@@ -806,9 +799,7 @@ def test_tool_network_policy_in_template_allowlist(
 
 
 @pytest.mark.parametrize("tool_id", sorted(_TOOL_IDS))
-def test_tool_image_label_in_argus_kali_family(
-    tool_id: str, loaded_registry: ToolRegistry
-) -> None:
+def test_tool_image_label_in_argus_kali_family(tool_id: str, loaded_registry: ToolRegistry) -> None:
     """Contract 9: image is in the ``argus-kali-*`` family + resolves cleanly.
 
     Two facts together prove the contract:
@@ -823,9 +814,7 @@ def test_tool_image_label_in_argus_kali_family(
     """
     descriptor = loaded_registry.get(tool_id)
     assert descriptor is not None, f"{tool_id!r} missing from registry"
-    assert any(
-        descriptor.image.startswith(prefix) for prefix in _ALLOWED_IMAGE_PREFIXES
-    ), (
+    assert any(descriptor.image.startswith(prefix) for prefix in _ALLOWED_IMAGE_PREFIXES), (
         f"{tool_id!r}: image={descriptor.image!r} is not in the allowed "
         f"family {sorted(_ALLOWED_IMAGE_PREFIXES)!r}; new image families "
         f"require an explicit allow-list update + supply-chain review."
@@ -856,8 +845,7 @@ def test_tool_approval_implies_medium_risk_floor(
     if not descriptor.requires_approval:
         return
     assert (
-        _RISK_LEVEL_ORDINAL[descriptor.risk_level]
-        >= _RISK_LEVEL_ORDINAL[_APPROVAL_RISK_FLOOR]
+        _RISK_LEVEL_ORDINAL[descriptor.risk_level] >= _RISK_LEVEL_ORDINAL[_APPROVAL_RISK_FLOOR]
     ), (
         f"{tool_id!r}: requires_approval=True but risk_level="
         f"{descriptor.risk_level.value!r} (< {_APPROVAL_RISK_FLOOR.value!r}); "
@@ -895,9 +883,7 @@ def test_tool_approval_implies_medium_risk_floor(
 # so C11 strips them before equality-checking; the persistence layer
 # rewrites them in real runs (Backlog/dev1_md §10).  Keep this set
 # *minimal* — every entry weakens the determinism contract.
-_C11_NON_DETERMINISTIC_FIELDS: Final[frozenset[str]] = frozenset(
-    {"first_seen", "last_seen"}
-)
+_C11_NON_DETERMINISTIC_FIELDS: Final[frozenset[str]] = frozenset({"first_seen", "last_seen"})
 
 
 # C11 fixtures — one minimal happy-path stdin per strategy.  Picked to be
@@ -1031,12 +1017,8 @@ def test_tool_parser_determinism(
     artifacts_a = tmp_path_factory.mktemp(f"c11-{tool_id}-a")
     artifacts_b = tmp_path_factory.mktemp(f"c11-{tool_id}-b")
 
-    run_a = dispatch_parse(
-        descriptor.parse_strategy, stdout, stderr, artifacts_a, tool_id=tool_id
-    )
-    run_b = dispatch_parse(
-        descriptor.parse_strategy, stdout, stderr, artifacts_b, tool_id=tool_id
-    )
+    run_a = dispatch_parse(descriptor.parse_strategy, stdout, stderr, artifacts_a, tool_id=tool_id)
+    run_b = dispatch_parse(descriptor.parse_strategy, stdout, stderr, artifacts_b, tool_id=tool_id)
 
     assert isinstance(run_a, list) and isinstance(run_b, list), (
         f"{tool_id!r}: dispatch_parse returned non-list "
@@ -1243,9 +1225,7 @@ def test_signature_mtime_stability(
     if os.name == "nt":
         yaml_path.chmod(stat.S_IREAD | stat.S_IWRITE)
     else:
-        yaml_path.chmod(
-            stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
-        )
+        yaml_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
 
     try:
         # Step 3: bump mtime by 1 second.
@@ -1274,12 +1254,10 @@ def test_signature_mtime_stability(
         try:
             os.utime(yaml_path, ns=(original_mtime_ns, original_mtime_ns))
         finally:
-            try:
+            # Mode restore best-effort — surface to stderr but never
+            # mask the assertion result.
+            with contextlib.suppress(OSError):
                 yaml_path.chmod(original_mode)
-            except OSError:
-                # Mode restore best-effort — surface to stderr but never
-                # mask the assertion result.
-                pass
 
 
 @pytest.mark.parametrize("tool_id", sorted(_TOOL_IDS))
@@ -1318,7 +1296,7 @@ def test_tool_yaml_has_version_field(tool_id: str) -> None:
     raw_version = parsed.get("version")
     assert raw_version is not None, (
         f"{tool_id!r}: tool YAML missing top-level ``version: <semver>`` field. "
-        f"Add a one-liner ``version: \"1.0.0\"`` directly under ``tool_id`` "
+        f'Add a one-liner ``version: "1.0.0"`` directly under ``tool_id`` '
         f"and re-sign via "
         f"``python -m scripts.tools_sign sign --key config/tools/_keys/dev_signing.ed25519.priv "
         f"--tools-dir config/tools --out config/tools/SIGNATURES``."
@@ -1327,7 +1305,7 @@ def test_tool_yaml_has_version_field(tool_id: str) -> None:
     assert isinstance(raw_version, str), (
         f"{tool_id!r}: ``version`` must be a string, got "
         f"{type(raw_version).__name__} ({raw_version!r}); quote it as "
-        f"``\"1.0.0\"`` so YAML preserves leading zeros and the semver shape."
+        f'``"1.0.0"`` so YAML preserves leading zeros and the semver shape.'
     )
 
     assert _SEMVER_RE.match(raw_version), (
@@ -1601,7 +1579,7 @@ def test_tool_yaml_version_monotonic(tool_id: str) -> None:
         f"{tool_id!r}: no baseline entry in "
         f"{_TOOL_VERSIONS_BASELINE_PATH.relative_to(_BACKEND_DIR)}; "
         f"a new descriptor MUST be added to the snapshot in the same "
-        f"PR (one-line ``\"{tool_id}\": \"1.0.0\"`` under ``tools``). "
+        f'PR (one-line ``"{tool_id}": "1.0.0"`` under ``tools``). '
         f"DO NOT auto-regenerate the snapshot — the baseline is the "
         f"frozen reference for ratcheting."
     )
@@ -1674,7 +1652,7 @@ def test_tool_versions_baseline_matches_catalog() -> None:
         f"{len(in_catalog_only)} catalog tool(s) missing from the C15 "
         f"baseline: {in_catalog_only!r}. Extend "
         f"{_TOOL_VERSIONS_BASELINE_PATH.relative_to(_BACKEND_DIR)} with one "
-        f"line per new descriptor (default to ``\"1.0.0\"``)."
+        f'line per new descriptor (default to ``"1.0.0"``).'
     )
     assert not in_baseline_only, (
         f"{len(in_baseline_only)} baseline entry/entries no longer have a "
@@ -1936,9 +1914,7 @@ def test_parser_coverage_counts_match_arg032_ratchet(
         f"(T05 ratchet), got {counts['heartbeat']}. New mapped parsers "
         f"must drop heartbeat 1-for-1; rebalance the ratchet."
     )
-    assert counts["mapped"] + counts["heartbeat"] + counts["binary_blob"] == len(
-        descriptors
-    ), (
+    assert counts["mapped"] + counts["heartbeat"] + counts["binary_blob"] == len(descriptors), (
         f"bucket holes: {sum(counts.values())} buckets vs "
         f"{len(descriptors)} descriptors — a tool was silently dropped"
     )
@@ -1957,9 +1933,7 @@ def test_arg029_newly_mapped_tools_have_first_class_parsers(
     too — but with a generic "off by one" message that doesn't name
     the offender).
     """
-    catalog_ids = {
-        descriptor.tool_id for descriptor in loaded_registry.all_descriptors()
-    }
+    catalog_ids = {descriptor.tool_id for descriptor in loaded_registry.all_descriptors()}
     missing_from_catalog = sorted(_ARG029_NEWLY_MAPPED - catalog_ids)
     assert not missing_from_catalog, (
         f"ARG-029 names {missing_from_catalog!r} but the catalog has no "
@@ -1988,9 +1962,7 @@ def test_arg032_newly_mapped_tools_have_first_class_parsers(
     to fail too — but with a generic "off by one" message that doesn't
     name the offender).
     """
-    catalog_ids = {
-        descriptor.tool_id for descriptor in loaded_registry.all_descriptors()
-    }
+    catalog_ids = {descriptor.tool_id for descriptor in loaded_registry.all_descriptors()}
     missing_from_catalog = sorted(_ARG032_NEWLY_MAPPED - catalog_ids)
     assert not missing_from_catalog, (
         f"ARG-032 names {missing_from_catalog!r} but the catalog has no "
@@ -2010,13 +1982,9 @@ def test_t05_newly_mapped_tools_have_first_class_parsers(
     loaded_registry: ToolRegistry,
 ) -> None:
     """Every Cycle 6 T05 tool remains registered after the heartbeat batch."""
-    catalog_ids = {
-        descriptor.tool_id for descriptor in loaded_registry.all_descriptors()
-    }
+    catalog_ids = {descriptor.tool_id for descriptor in loaded_registry.all_descriptors()}
     missing = sorted(_T05_NEWLY_MAPPED - catalog_ids)
-    assert not missing, (
-        f"T05 names {missing!r} but the catalog has no matching descriptor."
-    )
+    assert not missing, f"T05 names {missing!r} but the catalog has no matching descriptor."
     mapped_tools = get_registered_tool_parsers()
     unmapped = sorted(_T05_NEWLY_MAPPED - mapped_tools)
     assert not unmapped, (
@@ -2036,13 +2004,9 @@ def test_arg050_newly_mapped_tools_have_first_class_parsers(
     :data:`src.sandbox.parsers._DEFAULT_TOOL_PARSERS` — the generic
     ratchet would flag the count drift, but this test names the offender.
     """
-    catalog_ids = {
-        descriptor.tool_id for descriptor in loaded_registry.all_descriptors()
-    }
+    catalog_ids = {descriptor.tool_id for descriptor in loaded_registry.all_descriptors()}
     missing = sorted(_ARG050_NEWLY_MAPPED - catalog_ids)
-    assert not missing, (
-        f"ARG-050 names {missing!r} but the catalog has no matching descriptor."
-    )
+    assert not missing, f"ARG-050 names {missing!r} but the catalog has no matching descriptor."
     mapped_tools = get_registered_tool_parsers()
     unmapped = sorted(_ARG050_NEWLY_MAPPED - mapped_tools)
     assert not unmapped, (
@@ -2086,12 +2050,8 @@ _HELM_PROD_COSIGN_BASELINE_PATH: Final[Path] = (
 _NETWORK_POLICY_SKIP_BASELINE_PATH: Final[Path] = (
     _BACKEND_DIR / "tests" / "snapshots" / "network_policy_skip_baseline.json"
 )
-_STATIC_NETPOL_DIR: Final[Path] = (
-    _REPO_ROOT / "infra" / "k8s" / "networkpolicies"
-)
-_HELM_TEMPLATES_DIR: Final[Path] = (
-    _REPO_ROOT / "infra" / "helm" / "argus" / "templates"
-)
+_STATIC_NETPOL_DIR: Final[Path] = _REPO_ROOT / "infra" / "k8s" / "networkpolicies"
+_HELM_TEMPLATES_DIR: Final[Path] = _REPO_ROOT / "infra" / "helm" / "argus" / "templates"
 _NETWORK_POLICY_KIND_MARKER: Final[str] = "kind: NetworkPolicy"
 
 # Identifier-edge regex for C18 token matching.  We treat ``[A-Za-z0-9_-]``
@@ -2137,9 +2097,7 @@ def _load_network_policy_skip_baseline() -> dict[str, Any]:
             f"the snapshot is committed under tests/snapshots/. Restore it "
             f"from a clean checkout."
         )
-    raw = json.loads(
-        _NETWORK_POLICY_SKIP_BASELINE_PATH.read_text(encoding="utf-8")
-    )
+    raw = json.loads(_NETWORK_POLICY_SKIP_BASELINE_PATH.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(
             f"C18 skip baseline at {_NETWORK_POLICY_SKIP_BASELINE_PATH} did "
@@ -2154,21 +2112,17 @@ def _load_network_policy_skip_baseline() -> dict[str, Any]:
     skips = raw.get("skips")
     if not isinstance(skips, list):
         raise ValueError(
-            f"C18 skip baseline ``skips`` field is not a list "
-            f"(got {type(skips).__name__})."
+            f"C18 skip baseline ``skips`` field is not a list (got {type(skips).__name__})."
         )
     seen_ids: set[str] = set()
     for entry in skips:
         if not isinstance(entry, dict):
-            raise ValueError(
-                f"C18 skip baseline contains a non-dict entry: {entry!r}"
-            )
+            raise ValueError(f"C18 skip baseline contains a non-dict entry: {entry!r}")
         for required in ("tool_id", "reason", "approved_in"):
             value = entry.get(required)
             if not isinstance(value, str) or not value:
                 raise ValueError(
-                    f"C18 skip baseline entry missing required string "
-                    f"field {required!r}: {entry!r}"
+                    f"C18 skip baseline entry missing required string field {required!r}: {entry!r}"
                 )
         if entry["tool_id"] in seen_ids:
             raise ValueError(
@@ -2179,9 +2133,7 @@ def _load_network_policy_skip_baseline() -> dict[str, Any]:
     return raw
 
 
-_NETWORK_POLICY_SKIP_BASELINE: Final[dict[str, Any]] = (
-    _load_network_policy_skip_baseline()
-)
+_NETWORK_POLICY_SKIP_BASELINE: Final[dict[str, Any]] = _load_network_policy_skip_baseline()
 _NETWORK_POLICY_SKIPPED_TOOL_IDS: Final[frozenset[str]] = frozenset(
     entry["tool_id"]
     for entry in _NETWORK_POLICY_SKIP_BASELINE["skips"]
@@ -2216,9 +2168,7 @@ def _load_tool_id_to_network_policy_name() -> dict[str, str]:
     return mapping
 
 
-_TOOL_ID_TO_NETWORK_POLICY_NAME: Final[dict[str, str]] = (
-    _load_tool_id_to_network_policy_name()
-)
+_TOOL_ID_TO_NETWORK_POLICY_NAME: Final[dict[str, str]] = _load_tool_id_to_network_policy_name()
 
 
 def _build_network_policy_corpus() -> str:
@@ -2306,8 +2256,7 @@ def helm_prod_render() -> str | None:
     fake_digest = str(
         _HELM_PROD_COSIGN_BASELINE.get(
             "fake_digest_used_for_render",
-            "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
-            "abcd1234abcd1234",
+            "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
         )
     )
     cmd: list[str] = [
@@ -2327,7 +2276,7 @@ def helm_prod_render() -> str | None:
         f"image.mcp.digest={fake_digest}",
     ]
     try:
-        completed = subprocess.run(  # noqa: S603 — helm binary, no shell, fixed args
+        completed = subprocess.run(
             cmd,
             cwd=str(_REPO_ROOT),
             capture_output=True,
@@ -2372,9 +2321,7 @@ def _iter_pod_documents(rendered: str) -> Iterator[dict[str, Any]]:
             continue
         containers = template_spec.get("containers")
         init_containers = template_spec.get("initContainers")
-        if not isinstance(containers, list) and not isinstance(
-            init_containers, list
-        ):
+        if not isinstance(containers, list) and not isinstance(init_containers, list):
             continue
         yield document
 
@@ -2415,9 +2362,7 @@ def _extract_argus_image_refs(
     return images
 
 
-def _has_cosign_verify_init(
-    document: dict[str, Any], cosign_repository: str
-) -> bool:
+def _has_cosign_verify_init(document: dict[str, Any], cosign_repository: str) -> bool:
     """True if any initContainer image starts with ``cosign_repository``."""
     spec = document.get("spec", {}) if isinstance(document.get("spec"), dict) else {}
     template = spec.get("template")
@@ -2438,9 +2383,7 @@ def _has_cosign_verify_init(
     return False
 
 
-def _has_cosign_pin_annotation(
-    document: dict[str, Any], annotation_prefix: str
-) -> bool:
+def _has_cosign_pin_annotation(document: dict[str, Any], annotation_prefix: str) -> bool:
     """True if the Pod template has a ``<annotation_prefix>*`` annotation."""
     spec = document.get("spec", {}) if isinstance(document.get("spec"), dict) else {}
     template = spec.get("template")
@@ -2452,10 +2395,7 @@ def _has_cosign_pin_annotation(
     annotations = metadata.get("annotations")
     if not isinstance(annotations, dict):
         return False
-    return any(
-        isinstance(key, str) and key.startswith(annotation_prefix)
-        for key in annotations
-    )
+    return any(isinstance(key, str) and key.startswith(annotation_prefix) for key in annotations)
 
 
 class TestC17HelmCosignAsserts:
@@ -2494,9 +2434,7 @@ class TestC17HelmCosignAsserts:
             "list of Deployment names."
         )
 
-    def test_helm_prod_overlay_cosign_invariants(
-        self, helm_prod_render: str | None
-    ) -> None:
+    def test_helm_prod_overlay_cosign_invariants(self, helm_prod_render: str | None) -> None:
         """Render prod overlay and enforce every supply-chain assertion.
 
         Three checks run together so a single failure named the offending
@@ -2524,13 +2462,10 @@ class TestC17HelmCosignAsserts:
         cosign_repo = str(baseline["cosign_verify_init_image_repository"])
         annotation_prefix = str(baseline["cosign_pin_annotation_prefix"])
         placeholder_digest = (
-            "sha256:0000000000000000000000000000000000000000"
-            "000000000000000000000000"
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         )
         min_images = int(baseline["expected_argus_image_count_min"])
-        min_cosign_inits = int(
-            baseline["expected_cosign_verify_init_count_min"]
-        )
+        min_cosign_inits = int(baseline["expected_cosign_verify_init_count_min"])
 
         argus_image_refs: list[tuple[str, str, str]] = []
         cosign_init_count = 0
@@ -2540,39 +2475,34 @@ class TestC17HelmCosignAsserts:
         for document in _iter_pod_documents(helm_prod_render):
             kind = document.get("kind")
             metadata = (
-                document.get("metadata")
-                if isinstance(document.get("metadata"), dict)
-                else {}
+                document.get("metadata") if isinstance(document.get("metadata"), dict) else {}
             )
-            doc_name = (
-                metadata.get("name") if isinstance(metadata, dict) else None
-            )
+            doc_name = metadata.get("name") if isinstance(metadata, dict) else None
             if not isinstance(doc_name, str):
                 doc_name = "<unnamed>"
 
-            for container_name, image in _extract_argus_image_refs(
-                document, argus_prefixes
-            ):
+            for container_name, image in _extract_argus_image_refs(document, argus_prefixes):
                 argus_image_refs.append((doc_name, container_name, image))
 
             if _has_cosign_verify_init(document, cosign_repo):
                 cosign_init_count += 1
 
-            if kind == "Deployment" and isinstance(doc_name, str):
-                if doc_name in expected_deployments:
-                    seen_argus_deployments.add(doc_name)
-                    has_init = _has_cosign_verify_init(document, cosign_repo)
-                    has_annot = _has_cosign_pin_annotation(
-                        document, annotation_prefix
-                    )
-                    if not (has_init or has_annot):
-                        cosign_protection_failures.append(
-                            (
-                                doc_name,
-                                "neither cosign verify init container nor "
-                                f"annotation prefixed with {annotation_prefix!r}",
-                            )
+            if (
+                kind == "Deployment"
+                and isinstance(doc_name, str)
+                and doc_name in expected_deployments
+            ):
+                seen_argus_deployments.add(doc_name)
+                has_init = _has_cosign_verify_init(document, cosign_repo)
+                has_annot = _has_cosign_pin_annotation(document, annotation_prefix)
+                if not (has_init or has_annot):
+                    cosign_protection_failures.append(
+                        (
+                            doc_name,
+                            "neither cosign verify init container nor "
+                            f"annotation prefixed with {annotation_prefix!r}",
                         )
+                    )
 
         assert seen_argus_deployments == expected_deployments, (
             f"C17: rendered prod overlay is missing ARGUS Deployment(s) "
@@ -2587,9 +2517,7 @@ class TestC17HelmCosignAsserts:
         bad_image_refs: list[tuple[str, str, str, str]] = []
         for doc_name, container_name, image in argus_image_refs:
             if "@sha256:" not in image:
-                bad_image_refs.append(
-                    (doc_name, container_name, image, "no @sha256: digest")
-                )
+                bad_image_refs.append((doc_name, container_name, image, "no @sha256: digest"))
                 continue
             digest = image.split("@", 1)[1]
             if digest == placeholder_digest:

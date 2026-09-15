@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from src.recon.reporting.stage1_contract import STAGE1_BASELINE_ARTIFACTS
 from src.schemas.ai.common import ReconAiTask, ReportSectionId, build_task_metadata
 from src.schemas.ai.schema_export import (
     RECON_AI_TASKS,
@@ -11,11 +12,12 @@ from src.schemas.ai.schema_export import (
     to_report_notes,
     validate_recon_ai_payload,
 )
-from src.recon.reporting.stage1_contract import STAGE1_BASELINE_ARTIFACTS
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 NON_HYPOTHESIS_TASKS = tuple(
-    task_name for task_name in RECON_AI_TASKS if task_name != ReconAiTask.ANOMALY_INTERPRETATION.value
+    task_name
+    for task_name in RECON_AI_TASKS
+    if task_name != ReconAiTask.ANOMALY_INTERPRETATION.value
 )
 TASK_EXPECTED_STATEMENT_TYPE: dict[str, str] = {
     ReconAiTask.JS_FINDINGS_ANALYSIS.value: "observation",
@@ -271,7 +273,11 @@ def _build_report_output(task_name: str) -> dict[str, Any]:
     if task_name == ReconAiTask.PARAMETER_INPUT_ANALYSIS.value:
         return {
             "params": [
-                {"name": "redirect", "category": "redirect", "context_url": "https://example.com"}
+                {
+                    "name": "redirect",
+                    "category": "redirect",
+                    "context_url": "https://example.com",
+                }
             ]
         }
     if task_name == ReconAiTask.API_SURFACE_INFERENCE.value:
@@ -325,7 +331,9 @@ def _schema_has_statement_type_const(schema: Any, expected_value: str) -> bool:
             ):
                 return True
 
-        return any(_schema_has_statement_type_const(value, expected_value) for value in schema.values())
+        return any(
+            _schema_has_statement_type_const(value, expected_value) for value in schema.values()
+        )
 
     if isinstance(schema, list):
         return any(_schema_has_statement_type_const(item, expected_value) for item in schema)
@@ -372,7 +380,9 @@ def test_schema_export_contains_all_8_tasks_with_required_keys(tmp_path: Path) -
 
 
 @pytest.mark.parametrize("task_name", RECON_AI_TASKS)
-def test_schema_export_includes_full_ai_persistence_bundle_mapping(task_name: str) -> None:
+def test_schema_export_includes_full_ai_persistence_bundle_mapping(
+    task_name: str,
+) -> None:
     registry = get_recon_ai_task_definitions()
     persistence = registry[task_name]["persistence_mapping"]
     assert set(persistence.keys()) == {
@@ -396,7 +406,9 @@ def test_schema_export_persistence_mapping_is_in_sync_with_stage1_contract_artif
     for task_name in RECON_AI_TASKS:
         persistence = registry[task_name]["persistence_mapping"]
         for artifact_name in persistence.values():
-            assert artifact_name in baseline, f"{artifact_name} must be declared in Stage1 baseline contract"
+            assert artifact_name in baseline, (
+                f"{artifact_name} must be declared in Stage1 baseline contract"
+            )
 
 
 @pytest.mark.parametrize("task_name", RECON_AI_TASKS)
@@ -475,7 +487,9 @@ def test_output_rejects_type_coercion_for_all_tasks(task_name: str) -> None:
 
 
 @pytest.mark.parametrize("task_name", NON_HYPOTHESIS_TASKS)
-def test_output_requires_evidence_refs_for_non_hypothesis_all_tasks(task_name: str) -> None:
+def test_output_requires_evidence_refs_for_non_hypothesis_all_tasks(
+    task_name: str,
+) -> None:
     payload = _build_non_hypothesis_output(task_name)
     _first_output_collection(payload)[0]["evidence_refs"] = []
 
@@ -489,7 +503,9 @@ def test_output_requires_evidence_refs_for_non_hypothesis_all_tasks(task_name: s
 
 
 @pytest.mark.parametrize("task_name", RECON_AI_TASKS)
-def test_output_rejects_blank_or_whitespace_evidence_refs_for_all_tasks(task_name: str) -> None:
+def test_output_rejects_blank_or_whitespace_evidence_refs_for_all_tasks(
+    task_name: str,
+) -> None:
     payload = _build_non_hypothesis_output(task_name)
     _first_output_collection(payload)[0]["evidence_refs"] = ["   "]
 
@@ -522,7 +538,9 @@ def test_to_report_notes_maps_all_8_tasks(task_name: str) -> None:
     notes = to_report_notes(task_name, _build_report_output(task_name))
 
     assert notes
-    assert all(note["section_id"] == registry[task_name]["report_section_mapping"][0] for note in notes)
+    assert all(
+        note["section_id"] == registry[task_name]["report_section_mapping"][0] for note in notes
+    )
     assert all(note["note"] for note in notes)
 
 
@@ -544,7 +562,9 @@ def test_output_rejects_wrong_statement_type_for_each_task(task_name: str) -> No
 
 
 @pytest.mark.parametrize("task_name", RECON_AI_TASKS)
-def test_schema_export_contains_fixed_statement_type_for_each_output(task_name: str) -> None:
+def test_schema_export_contains_fixed_statement_type_for_each_output(
+    task_name: str,
+) -> None:
     registry = get_recon_ai_task_definitions()
     output_schema = registry[task_name]["expected_output_schema"]
     expected_statement_type = TASK_EXPECTED_STATEMENT_TYPE[task_name]
@@ -647,7 +667,9 @@ def test_schema_export_contains_fixed_statement_type_for_each_output(task_name: 
         ),
     ),
 )
-def test_to_report_notes_redacts_sensitive_query_values(task_name: str, payload: dict[str, Any]) -> None:
+def test_to_report_notes_redacts_sensitive_query_values(
+    task_name: str, payload: dict[str, Any]
+) -> None:
     notes = to_report_notes(task_name, payload)
     assert notes
     serialized = json.dumps(notes)

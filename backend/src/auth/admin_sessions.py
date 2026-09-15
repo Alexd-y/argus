@@ -70,9 +70,7 @@ _SESSION_ID_BYTES: Final[int] = 48
 
 #: Closed taxonomy for the role column — mirrored in ``admin_users.role``
 #: and the ``X-Admin-Role`` header on legacy admin routes.
-ALLOWED_ROLES: Final[frozenset[str]] = frozenset(
-    {"operator", "admin", "super-admin"}
-)
+ALLOWED_ROLES: Final[frozenset[str]] = frozenset({"operator", "admin", "super-admin"})
 
 #: Number of leading chars retained when redacting a session id for logs.
 _REDACT_PREFIX_LEN: Final[int] = 6
@@ -297,8 +295,8 @@ async def resolve_session(
     db: AsyncSession,
     *,
     session_id: str | None,
-    ip: str | None = None,
-    user_agent: str | None = None,
+    ip: str | None = None,  # noqa: ARG001 - retained for signature/API compatibility
+    user_agent: str | None = None,  # noqa: ARG001 - retained for signature/API compatibility
     ttl_seconds: int | None = None,
 ) -> SessionPrincipal | None:
     """Look up *session_id*, validate, and (on hit) slide the TTL forward.
@@ -386,9 +384,7 @@ async def resolve_session(
     )
 
 
-async def _lookup_session_row(
-    db: AsyncSession, session_id: str
-) -> AdminSession | None:
+async def _lookup_session_row(db: AsyncSession, session_id: str) -> AdminSession | None:
     """Return the session row matching *session_id*, or ``None``.
 
     Lookup is by ``session_token_hash`` only — the legacy raw ``session_id``
@@ -406,15 +402,11 @@ async def _lookup_session_row(
         token_hash = hash_session_token(session_id)
     except ValueError:
         return None
-    stmt = select(AdminSession).where(
-        AdminSession.session_token_hash == token_hash
-    )
+    stmt = select(AdminSession).where(AdminSession.session_token_hash == token_hash)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
         return None
-    if row.session_token_hash and hmac.compare_digest(
-        row.session_token_hash, token_hash
-    ):
+    if row.session_token_hash and hmac.compare_digest(row.session_token_hash, token_hash):
         return row
     logger.warning(
         "admin_session_resolve_mismatch",

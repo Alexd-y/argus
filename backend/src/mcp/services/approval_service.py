@@ -129,9 +129,9 @@ class InMemoryApprovalRepository:
         request_id: str,
         new_status: str,
         signature_b64: str | None,
-        public_key_id: str | None,
-        justification: str | None,
-        actor: str,
+        public_key_id: str | None,  # noqa: ARG002 - approval-service interface signature
+        justification: str | None,  # noqa: ARG002 - approval-service interface signature
+        actor: str,  # noqa: ARG002 - approval-service interface signature
     ) -> str:
         with self._lock:
             row = self._rows.get(request_id)
@@ -217,9 +217,7 @@ def decide_approval(
     """
     if payload.decision is ApprovalDecisionAction.GRANT:
         if not payload.signature_b64 or not payload.public_key_id:
-            raise ValidationError(
-                "GRANT decisions require both signature_b64 and public_key_id."
-            )
+            raise ValidationError("GRANT decisions require both signature_b64 and public_key_id.")
     else:
         if not payload.justification or len(payload.justification.strip()) < 10:
             raise ValidationError(

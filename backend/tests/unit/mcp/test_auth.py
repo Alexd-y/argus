@@ -24,7 +24,6 @@ from collections.abc import Iterator
 
 import pytest
 from jose import jwt
-
 from src.core.config import settings
 from src.mcp.auth import MCPAuthContext, authenticate
 from src.mcp.exceptions import AuthenticationError, TenantMismatchError
@@ -120,9 +119,7 @@ class TestHttpAuthRequired:
 
     def test_empty_bearer_rejected(self) -> None:
         with pytest.raises(AuthenticationError):
-            authenticate(
-                headers={"Authorization": "Bearer "}, transport="streamable-http"
-            )
+            authenticate(headers={"Authorization": "Bearer "}, transport="streamable-http")
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +197,7 @@ class TestJwtBearer:
         assert ctx.user_id == sub
         assert ctx.tenant_id == tenant
 
-    def test_matching_x_tenant_header_accepted(
-        self, jwt_token: tuple[str, str, str]
-    ) -> None:
+    def test_matching_x_tenant_header_accepted(self, jwt_token: tuple[str, str, str]) -> None:
         token, _sub, tenant = jwt_token
         ctx = authenticate(
             headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant},
@@ -210,9 +205,7 @@ class TestJwtBearer:
         )
         assert ctx.tenant_id == tenant
 
-    def test_foreign_x_tenant_header_rejected(
-        self, jwt_token: tuple[str, str, str]
-    ) -> None:
+    def test_foreign_x_tenant_header_rejected(self, jwt_token: tuple[str, str, str]) -> None:
         """The claim wins; the header cannot redirect the session to another tenant."""
         token, _sub, _tenant = jwt_token
         with pytest.raises(TenantMismatchError):
@@ -309,9 +302,7 @@ class TestApiKeyTenantBinding:
         )
         assert ctx.tenant_id == settings.mcp_stdio_tenant_id
 
-    def test_scoped_key_binds_to_its_tenant(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_scoped_key_binds_to_its_tenant(self, monkeypatch: pytest.MonkeyPatch) -> None:
         tenant = str(uuid.uuid4())
         monkeypatch.setenv("ARGUS_API_KEYS", f"scoped-key-1:{tenant}")
 
@@ -322,9 +313,7 @@ class TestApiKeyTenantBinding:
 
         assert ctx.tenant_id == tenant
 
-    def test_plain_key_cannot_reach_another_tenant(
-        self, regular_api_keys: list[str]
-    ) -> None:
+    def test_plain_key_cannot_reach_another_tenant(self, regular_api_keys: list[str]) -> None:
         with pytest.raises(TenantMismatchError):
             authenticate(
                 headers={
@@ -334,9 +323,7 @@ class TestApiKeyTenantBinding:
                 transport="streamable-http",
             )
 
-    def test_scoped_key_cannot_be_repointed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_scoped_key_cannot_be_repointed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         tenant = str(uuid.uuid4())
         monkeypatch.setenv("ARGUS_API_KEYS", f"scoped-key-1:{tenant}")
 
@@ -386,7 +373,7 @@ class TestAuthContextInvariants:
             method="static_token",
             is_admin=False,
         )
-        with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
+        with pytest.raises(AttributeError):  # FrozenInstanceError subclasses AttributeError
             ctx.tenant_id = "z"  # type: ignore[misc]
 
     def test_method_is_closed_string(self) -> None:
@@ -406,9 +393,7 @@ class TestAuthContextInvariants:
 
 
 class TestChannelPrecedence:
-    def test_bearer_wins_over_api_key(
-        self, static_token: str, admin_api_key: str
-    ) -> None:
+    def test_bearer_wins_over_api_key(self, static_token: str, admin_api_key: str) -> None:
         ctx = authenticate(
             headers={
                 "Authorization": f"Bearer {static_token}",

@@ -37,7 +37,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from scripts._pdfa_fixtures import (
     PNG_TOKEN_1,
     PNG_TOKEN_2,
@@ -65,9 +64,7 @@ from scripts.render_pdfa_sample import (
 # (b) the renderer's basic-variant code path stopped being byte-identical
 #     to the pre-C7-T02 output (regression — investigate before merge).
 # Computed against tier='midgard', scan_completed_at='2024-01-01T00:00:00+00:00'.
-_BASIC_LATEX_SHA256 = (
-    "046ed76fe84e70bd43d064c5186a33b5049db05cc2fe09893017d6fc1509f67e"
-)
+_BASIC_LATEX_SHA256 = "046ed76fe84e70bd43d064c5186a33b5049db05cc2fe09893017d6fc1509f67e"
 
 _DETERMINISTIC_TIMESTAMP = "2024-01-01T00:00:00+00:00"
 
@@ -131,12 +128,7 @@ def _fake_backend(
             "check _build_latex_source_for_variant routing"
         )
         assert PNG_TOKEN_2 not in latex
-        paths = [
-            Path(m)
-            for m in re.findall(
-                r"\\includegraphics\[[^\]]*\]\{([^}]+)\}", latex
-            )
-        ]
+        paths = [Path(m) for m in re.findall(r"\\includegraphics\[[^\]]*\]\{([^}]+)\}", latex)]
         capture.png_paths_at_render = paths
         capture.png_existed_at_render = bool(paths) and all(
             p.exists() and p.stat().st_size > 0 for p in paths
@@ -189,9 +181,7 @@ class TestArgparseRouting:
 
     @pytest.mark.parametrize("name", sorted(VARIANTS))
     def test_each_variant_name_is_selectable(self, name: str) -> None:
-        args = _parse_args(
-            ["--fixture-variant", name, "--output", "x.pdf"]
-        )
+        args = _parse_args(["--fixture-variant", name, "--output", "x.pdf"])
         assert args.fixture_variant == name
 
     def test_unknown_variant_exits_with_code_2(self) -> None:
@@ -214,9 +204,7 @@ class TestArgparseRouting:
 
     def test_legacy_tier_flag_still_supported(self) -> None:
         """``--tier`` must still parse for backwards-compat with B6-T01 callers."""
-        args = _parse_args(
-            ["--tier", "asgard", "--output", "x.pdf"]
-        )
+        args = _parse_args(["--tier", "asgard", "--output", "x.pdf"])
         assert args.tier == "asgard"
 
 
@@ -325,9 +313,7 @@ class TestNonBasicVariantComposition:
                 image_paths=None,
             )
 
-    def test_images_variant_substitutes_png_sentinels(
-        self, tmp_path: Path
-    ) -> None:
+    def test_images_variant_substitutes_png_sentinels(self, tmp_path: Path) -> None:
         png1 = tmp_path / "p1.png"
         png2 = tmp_path / "p2.png"
         png1.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -384,12 +370,13 @@ class TestPerTenantResolver:
             # ``resolve_tenant_pdf_archival_format(session, tenant_id)`` —
             # second positional is the tenant id.
             assert call.args[1] == "acme", (
-                f"resolver was called with the wrong tenant id: "
-                f"args={call.args!r}"
+                f"resolver was called with the wrong tenant id: args={call.args!r}"
             )
 
     def test_per_tenant_resolver_return_value_lands_in_latex_preamble(
-        self, patched_backend: MagicMock, backend_capture: _BackendCapture,
+        self,
+        patched_backend: MagicMock,
+        backend_capture: _BackendCapture,
         tmp_path: Path,
     ) -> None:
         del patched_backend
@@ -495,15 +482,12 @@ class TestImagesTempdirLifecycle:
     ) -> None:
         del patched_backend
         output = tmp_path / "images.pdf"
-        rc = main(
-            ["--fixture-variant", "images", "--output", str(output)]
-        )
+        rc = main(["--fixture-variant", "images", "--output", str(output)])
         assert rc == 0, f"main() returned non-zero: {rc}"
         # Backend was called once with both PNGs present on disk.
         assert backend_capture.render_calls, "render was never called"
         assert len(backend_capture.png_paths_at_render) == 2, (
-            f"expected exactly 2 PNG paths; got "
-            f"{backend_capture.png_paths_at_render}"
+            f"expected exactly 2 PNG paths; got {backend_capture.png_paths_at_render}"
         )
         assert backend_capture.png_existed_at_render, (
             "PNGs should exist on disk at the moment LaTeX is invoked"
@@ -517,21 +501,17 @@ class TestImagesTempdirLifecycle:
     ) -> None:
         del patched_backend
         output = tmp_path / "images.pdf"
-        rc = main(
-            ["--fixture-variant", "images", "--output", str(output)]
-        )
+        rc = main(["--fixture-variant", "images", "--output", str(output)])
         assert rc == 0
         assert backend_capture.png_paths_at_render
         for png in backend_capture.png_paths_at_render:
             assert not png.exists(), (
-                f"tempdir PNG {png} should be cleaned up after main() "
-                "returns successfully"
+                f"tempdir PNG {png} should be cleaned up after main() returns successfully"
             )
         # Parent directory (the TemporaryDirectory itself) is also gone.
         for png in backend_capture.png_paths_at_render:
             assert not png.parent.exists(), (
-                f"tempdir parent {png.parent} should be cleaned up after "
-                "successful run"
+                f"tempdir parent {png.parent} should be cleaned up after successful run"
             )
 
     def test_images_tempdir_is_cleaned_up_after_failure(
@@ -545,14 +525,14 @@ class TestImagesTempdirLifecycle:
             raise_inside_render=RuntimeError("simulated latexmk crash"),
         )
         output = tmp_path / "images.pdf"
-        with patch(
-            "scripts.render_pdfa_sample.LatexBackend",
-            return_value=backend,
+        with (
+            patch(
+                "scripts.render_pdfa_sample.LatexBackend",
+                return_value=backend,
+            ),
+            pytest.raises(RuntimeError, match="simulated latexmk crash"),
         ):
-            with pytest.raises(RuntimeError, match="simulated latexmk crash"):
-                main(
-                    ["--fixture-variant", "images", "--output", str(output)]
-                )
+            main(["--fixture-variant", "images", "--output", str(output)])
         # Render still got the PNG paths before crashing.
         assert backend_capture.png_paths_at_render, (
             "expected PNG paths to be captured even on failure path"
@@ -603,9 +583,10 @@ class TestPngGenerator:
         # Data: 4-byte width | 4-byte height | 1-byte bit-depth | 1-byte
         # colour-type | 1-byte compression | 1-byte filter | 1-byte interlace.
         ihdr_offset = 8 + 4 + 4  # past signature + length + "IHDR" type
-        width = int.from_bytes(data[ihdr_offset:ihdr_offset + 4], "big")
+        width = int.from_bytes(data[ihdr_offset : ihdr_offset + 4], "big")
         height = int.from_bytes(
-            data[ihdr_offset + 4:ihdr_offset + 8], "big",
+            data[ihdr_offset + 4 : ihdr_offset + 8],
+            "big",
         )
         bit_depth = data[ihdr_offset + 8]
         colour_type = data[ihdr_offset + 9]
@@ -620,19 +601,13 @@ class TestPngGenerator:
         data = path.read_bytes()
         # Chunk types appear as ASCII bytes in the file body.
         for chunk_type in (b"IHDR", b"sRGB", b"IDAT", b"IEND"):
-            assert chunk_type in data, (
-                f"PNG missing required chunk: {chunk_type!r}"
-            )
+            assert chunk_type in data, f"PNG missing required chunk: {chunk_type!r}"
 
     def test_rejects_out_of_range_samples(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="0..255"):
-            _write_deterministic_png(
-                tmp_path / "bad.png", red=300, green=0, blue=0
-            )
+            _write_deterministic_png(tmp_path / "bad.png", red=300, green=0, blue=0)
         with pytest.raises(ValueError, match="0..255"):
-            _write_deterministic_png(
-                tmp_path / "bad.png", red=0, green=-1, blue=0
-            )
+            _write_deterministic_png(tmp_path / "bad.png", red=0, green=-1, blue=0)
 
     def test_chunk_crc_matches_zlib_crc32(self) -> None:
         """``_png_chunk`` CRC must equal ``zlib.crc32(type + data)``."""
@@ -642,9 +617,7 @@ class TestPngGenerator:
         chunk = _png_chunk(b"IHDR", data)
         # Layout: 4-byte length || 4-byte type || data || 4-byte CRC.
         crc_bytes = chunk[-4:]
-        expected = (zlib.crc32(b"IHDR" + data) & 0xFFFFFFFF).to_bytes(
-            4, "big"
-        )
+        expected = (zlib.crc32(b"IHDR" + data) & 0xFFFFFFFF).to_bytes(4, "big")
         assert crc_bytes == expected
 
 
@@ -672,9 +645,7 @@ class TestLatexMutationHelpers:
 
     def test_inject_resolved_format_lands_in_preamble(self) -> None:
         latex = (
-            "\\documentclass{article}\n"
-            "\\usepackage{lmodern}\n"
-            "\\begin{document}body\\end{document}"
+            "\\documentclass{article}\n\\usepackage{lmodern}\n\\begin{document}body\\end{document}"
         )
         out = _inject_resolved_format(latex, "acme", "pdfa-2u")
         # The injected line lives BEFORE \begin{document}.

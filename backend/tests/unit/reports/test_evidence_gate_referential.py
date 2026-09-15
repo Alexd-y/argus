@@ -51,8 +51,14 @@ def test_opaque_unresolvable_ref_is_downgraded():
 
 def test_raw_artifact_ref_counts_as_verifiable_evidence():
     gated, _ = apply_evidence_gate(
-        [_confirmed("f3", evidence_ids=["finding-3"], raw_artifact_ref="argus/raw/f3.txt",
-                    validator_id="sqlmap")],
+        [
+            _confirmed(
+                "f3",
+                evidence_ids=["finding-3"],
+                raw_artifact_ref="argus/raw/f3.txt",
+                validator_id="sqlmap",
+            )
+        ],
         known_evidence_ids=set(),
         known_tool_run_ids=set(),
     )
@@ -87,7 +93,9 @@ def test_backward_compatible_without_known_sets():
 
 def test_build_report_document_enforces_referential_integrity():
     doc = build_report_document(
-        scan_id="s", tenant_id="t", target="example.com",
+        scan_id="s",
+        tenant_id="t",
+        target="example.com",
         evidence_references=[ReportEvidenceRef(evidence_id="E-1", object_key="argus/poc/f1.json")],
         tool_runs=[ReportToolRun(tool_run_id="TR-1", tool_name="dalfox", status="ok")],
         findings=[

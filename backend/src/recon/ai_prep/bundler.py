@@ -20,9 +20,7 @@ from src.recon.services.artifact_service import create_artifact
 logger = logging.getLogger(__name__)
 
 
-async def prepare_ai_bundle(
-    db: AsyncSession, engagement_id: str
-) -> dict[str, Any]:
+async def prepare_ai_bundle(db: AsyncSession, engagement_id: str) -> dict[str, Any]:
     """Build a sanitized AI-consumable data bundle from recon findings.
 
     The bundle is structured for safe LLM consumption:
@@ -30,9 +28,7 @@ async def prepare_ai_bundle(
     - Summarized and categorized findings
     - Structured for prompt injection
     """
-    eng_result = await db.execute(
-        select(Engagement).where(Engagement.id == engagement_id)
-    )
+    eng_result = await db.execute(select(Engagement).where(Engagement.id == engagement_id))
     engagement = eng_result.scalar_one_or_none()
     if not engagement:
         return {"error": f"Engagement {engagement_id} not found"}
@@ -43,9 +39,7 @@ async def prepare_ai_bundle(
     targets = list(targets_result.scalars().all())
 
     findings_result = await db.execute(
-        select(NormalizedFinding).where(
-            NormalizedFinding.engagement_id == engagement_id
-        )
+        select(NormalizedFinding).where(NormalizedFinding.engagement_id == engagement_id)
     )
     findings = list(findings_result.scalars().all())
 
@@ -54,11 +48,13 @@ async def prepare_ai_bundle(
     )
     hypotheses = list(hypotheses_result.scalars().all())
 
-    jobs_count = (await db.execute(
-        select(func.count()).select_from(
-            select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+    jobs_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(ScanJob.id).where(ScanJob.engagement_id == engagement_id).subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     findings_by_type: dict[str, list[dict]] = {}
 
@@ -79,20 +75,14 @@ async def prepare_ai_bundle(
             "status": engagement.status,
             "environment": engagement.environment,
             "target_count": len(targets),
-            "targets": [
-                {"domain": t.domain, "type": t.target_type}
-                for t in targets
-            ],
+            "targets": [{"domain": t.domain, "type": t.target_type} for t in targets],
         },
         "findings_summary": {
             "total": len(findings),
             "by_type": {k: len(v) for k, v in findings_by_type.items()},
             "jobs_executed": jobs_count,
         },
-        "findings_detail": {
-            ftype: entries[:100]
-            for ftype, entries in findings_by_type.items()
-        },
+        "findings_detail": {ftype: entries[:100] for ftype, entries in findings_by_type.items()},
         "hypotheses": [
             {
                 "title": h.title,
@@ -104,21 +94,11 @@ async def prepare_ai_bundle(
             for h in hypotheses
         ],
         "attack_surface": {
-            "subdomains": [
-                f["value"] for f in findings_by_type.get("subdomain", [])[:200]
-            ],
-            "urls": [
-                f["value"] for f in findings_by_type.get("url", [])[:200]
-            ],
-            "services": [
-                f["value"] for f in findings_by_type.get("service", [])[:100]
-            ],
-            "technologies": list(set(
-                f["value"] for f in findings_by_type.get("technology", [])
-            ))[:50],
-            "api_endpoints": [
-                f["value"] for f in findings_by_type.get("api_endpoint", [])[:100]
-            ],
+            "subdomains": [f["value"] for f in findings_by_type.get("subdomain", [])[:200]],
+            "urls": [f["value"] for f in findings_by_type.get("url", [])[:200]],
+            "services": [f["value"] for f in findings_by_type.get("service", [])[:100]],
+            "technologies": list({f["value"] for f in findings_by_type.get("technology", [])})[:50],
+            "api_endpoints": [f["value"] for f in findings_by_type.get("api_endpoint", [])[:100]],
         },
     }
 
@@ -165,15 +145,17 @@ def export_ai_bundle_markdown(bundle: dict[str, Any]) -> str:
         lines.append(f"- {t['domain']} ({t['type']})")
 
     summary = bundle.get("findings_summary", {})
-    lines.extend([
-        "",
-        "## Findings Summary",
-        "",
-        f"Total findings: {summary.get('total', 0)}",
-        "",
-        "| Type | Count |",
-        "|------|-------|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Findings Summary",
+            "",
+            f"Total findings: {summary.get('total', 0)}",
+            "",
+            "| Type | Count |",
+            "|------|-------|",
+        ]
+    )
     for ftype, count in sorted(summary.get("by_type", {}).items(), key=lambda x: -x[1]):
         lines.append(f"| {ftype} | {count} |")
 
@@ -183,12 +165,14 @@ def export_ai_bundle_markdown(bundle: dict[str, Any]) -> str:
         for h in hypotheses:
             lines.append(f"- **[{h['priority'].upper()}]** {h['title']}: {h['description']}")
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        "*Data from authorized reconnaissance. Analyze within approved scope only.*",
-    ])
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "*Data from authorized reconnaissance. Analyze within approved scope only.*",
+        ]
+    )
     return "\n".join(lines)
 
 

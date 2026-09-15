@@ -89,19 +89,17 @@ class DiscordNotifier(NotifierBase):
         env_value = os.environ.get(DISCORD_WEBHOOK_URL_ENV, "").strip()
         return env_value
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:
+    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
         url = self._resolve_url()
         if not url:
-            raise _AdapterDisabled(
-                reason="missing_secret", target_redacted=hash_target("")
-            )
+            raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))
         return url
 
     async def _attempt_send(
         self,
         *,
         event: NotificationEvent,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
         target: str,
     ) -> httpx.Response:
         if not self._should_send(event):
@@ -153,13 +151,9 @@ def build_discord_payload(event: NotificationEvent) -> dict[str, Any]:
     ]
 
     if event.scan_id:
-        fields.append(
-            {"name": "Scan", "value": f"`{event.scan_id}`", "inline": True}
-        )
+        fields.append({"name": "Scan", "value": f"`{event.scan_id}`", "inline": True})
     if event.finding_id:
-        fields.append(
-            {"name": "Finding", "value": f"`{event.finding_id}`", "inline": True}
-        )
+        fields.append({"name": "Finding", "value": f"`{event.finding_id}`", "inline": True})
 
     embed: dict[str, Any] = {
         "title": f"{emoji} {event.severity.value.upper()} \u2014 {event.title}"[:256],
@@ -167,7 +161,10 @@ def build_discord_payload(event: NotificationEvent) -> dict[str, Any]:
         "fields": fields,
         "description": event.summary[:4_096],
         "footer": {"text": "ARGUS Security Platform"},
-        "timestamp": (event.occurred_at or __import__("datetime").datetime.now(__import__("datetime").timezone.utc)).isoformat(),
+        "timestamp": (
+            event.occurred_at
+            or __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        ).isoformat(),
     }
 
     if event.evidence_url:
@@ -176,4 +173,9 @@ def build_discord_payload(event: NotificationEvent) -> dict[str, Any]:
     return {"embeds": [embed]}
 
 
-__all__ = ["DISCORD_WEBHOOK_URL_ENV", "DISCORD_MIN_SEVERITY_ENV", "DiscordNotifier", "build_discord_payload"]
+__all__ = [
+    "DISCORD_MIN_SEVERITY_ENV",
+    "DISCORD_WEBHOOK_URL_ENV",
+    "DiscordNotifier",
+    "build_discord_payload",
+]

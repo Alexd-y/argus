@@ -14,11 +14,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-but-required-by-settings")
 os.environ.setdefault("ARGUS_TEST_MODE", "1")
 
-import pytest  # noqa: E402
-
-from src.api.routers.scans import cancel_scan  # noqa: E402
-from src.quick import cancellation as cancel_mod  # noqa: E402
-from src.quick.schemas import QuickTaskStatus  # noqa: E402
+import pytest
+from src.api.routers.scans import cancel_scan
+from src.quick import cancellation as cancel_mod
+from src.quick.schemas import QuickTaskStatus
 
 _SCAN_ID = "abcdabcd-abcd-4000-8000-abcdabcdabcd"
 _TENANT_ID = "tenant-1"

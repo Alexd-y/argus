@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.recon.vulnerability_analysis.context_detector import (
     ReflectionContext,
     ReflectionContextKey,
@@ -27,7 +25,7 @@ class TestReflectionContextReportStrings:
         assert ctx.reflection_context == ReflectionContextKey.ATTRIBUTE_VALUE.value
 
     def test_dom_event_handler(self) -> None:
-        html = f'<button onclick="void(\'{MARKER}\')">x</button>'
+        html = f"<button onclick=\"void('{MARKER}')\">x</button>"
         ctx = detect_reflection_context(html, MARKER)
         assert ctx.reflection_context == ReflectionContextKey.DOM_EVENT_HANDLER.value
 

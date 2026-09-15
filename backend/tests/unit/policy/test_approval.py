@@ -8,7 +8,7 @@ audit trail emitted on every verification path.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -17,7 +17,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from pydantic import ValidationError
-
 from src.policy.approval import (
     APPROVAL_FAILURE_REASONS,
     ApprovalAction,
@@ -28,7 +27,6 @@ from src.policy.approval import (
     ApprovalStatus,
 )
 from src.policy.audit import AuditEventType, InMemoryAuditSink
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -44,7 +42,7 @@ def _make_request(
     created_at: datetime | None = None,
     tool_id: str = "burp_active",
 ) -> ApprovalRequest:
-    now = created_at or datetime.now(tz=timezone.utc)
+    now = created_at or datetime.now(tz=UTC)
     expires = expires_at or (now + timedelta(hours=1))
     return ApprovalRequest(
         tenant_id=tenant_id,
@@ -75,7 +73,7 @@ class TestPolicyApprovalRequest:
         assert req.canonical_bytes() == req.canonical_bytes()
 
     def test_canonical_bytes_does_not_include_created_at(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         req1 = _make_request(
             tenant_id=tenant_id,
             created_at=now,
@@ -96,7 +94,7 @@ class TestPolicyApprovalRequest:
         assert req1.canonical_bytes() == req2.canonical_bytes()
 
     def test_expires_before_created_rejected(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         with pytest.raises(ValidationError):
             ApprovalRequest(
                 tenant_id=tenant_id,
@@ -122,7 +120,7 @@ class TestPolicyApprovalRequest:
             )
 
     def test_short_justification_rejected(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         with pytest.raises(ValidationError):
             ApprovalRequest(
                 tenant_id=tenant_id,
@@ -135,7 +133,7 @@ class TestPolicyApprovalRequest:
             )
 
     def test_extra_fields_forbidden(self, tenant_id: UUID) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         with pytest.raises(ValidationError):
             ApprovalRequest.model_validate(
                 {
@@ -338,7 +336,7 @@ class TestFailureCases:
 
         assert isinstance(key_manager, KeyManager)
         priv, _, _ = ed25519_keypair
-        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         request = _make_request(
             tenant_id=tenant_id,
             created_at=now,

@@ -112,9 +112,7 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
         [{"target": "http://canonical.example", "plugins": {"X": {"version": ["1"]}}}]
     )
     (tmp_path / "whatweb.json").write_bytes(canonical)
-    decoy = _payload(
-        [{"target": "http://decoy.example", "plugins": {"Y": {"version": ["1"]}}}]
-    )
+    decoy = _payload([{"target": "http://decoy.example", "plugins": {"Y": {"version": ["1"]}}}])
     parse_whatweb(decoy, b"", tmp_path, "whatweb")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     assert "canonical.example" in sidecar

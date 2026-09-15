@@ -22,7 +22,9 @@ def _csv_rows(content: str) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(content)))
 
 
-def test_stage1_enrichment_generates_expected_artifacts_and_content(tmp_path: Path) -> None:
+def test_stage1_enrichment_generates_expected_artifacts_and_content(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "acme-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -106,7 +108,13 @@ def test_stage1_enrichment_generates_expected_artifacts_and_content(tmp_path: Pa
 
     route_classification_rows = _csv_rows(outputs["route_classification.csv"])
     assert route_classification_rows
-    expected_cols = {"route", "host", "classification", "discovery_source", "evidence_ref"}
+    expected_cols = {
+        "route",
+        "host",
+        "classification",
+        "discovery_source",
+        "evidence_ref",
+    }
     assert all(expected_cols.issubset(row.keys()) for row in route_classification_rows)
     assert all(row["route"] for row in route_classification_rows)
     assert all(row["host"] for row in route_classification_rows)
@@ -115,7 +123,9 @@ def test_stage1_enrichment_generates_expected_artifacts_and_content(tmp_path: Pa
     public_rows = _csv_rows(outputs["public_pages.csv"])
     assert public_rows
     assert all(row["evidence_ref"] for row in public_rows)
-    assert all(row["fetch_backend"] == "custom_fetch" for row in public_rows if row["fetch_backend"])
+    assert all(
+        row["fetch_backend"] == "custom_fetch" for row in public_rows if row["fetch_backend"]
+    )
 
     forms_rows = _csv_rows(outputs["forms_inventory.csv"])
     assert forms_rows
@@ -133,7 +143,9 @@ def test_stage1_enrichment_generates_expected_artifacts_and_content(tmp_path: Pa
     js_bundle_rows = _csv_rows(outputs["js_bundle_inventory.csv"])
     assert js_bundle_rows
     assert all(row["evidence_ref"] for row in js_bundle_rows)
-    assert all(row["fetch_backend"] == "custom_fetch" for row in js_bundle_rows if row["fetch_backend"])
+    assert all(
+        row["fetch_backend"] == "custom_fetch" for row in js_bundle_rows if row["fetch_backend"]
+    )
 
     api_rows = _csv_rows(outputs["api_surface.csv"])
     assert api_rows
@@ -228,7 +240,9 @@ def test_stage1_enrichment_persists_ai_raw_and_normalized_outputs_with_valid_sch
         assert normalized_doc["validation"]["errors"] == []
 
 
-def test_stage1_enrichment_ai_tasks_5_8_include_links_and_evidence_refs(tmp_path: Path) -> None:
+def test_stage1_enrichment_ai_tasks_5_8_include_links_and_evidence_refs(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "links-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -239,8 +253,7 @@ def test_stage1_enrichment_ai_tasks_5_8_include_links_and_evidence_refs(tmp_path
         newline="",
     )
     (recon_dir / "headers_detailed.csv").write_text(
-        "host_url,security_header_score,cookie_count,cookies_secure\n"
-        "https://example.io,5,1,1\n",
+        "host_url,security_header_score,cookie_count,cookies_secure\nhttps://example.io,5,1,1\n",
         encoding="utf-8",
         newline="",
     )
@@ -299,7 +312,10 @@ def test_stage1_enrichment_ai_tasks_5_8_include_links_and_evidence_refs(tmp_path
     controls = headers_norm["output"]["controls"]
     assert controls
     assert all(item["evidence_refs"] for item in controls)
-    assert all(any(ref.startswith("headers_detailed.csv:") for ref in item["evidence_refs"]) for item in controls)
+    assert all(
+        any(ref.startswith("headers_detailed.csv:") for ref in item["evidence_refs"])
+        for item in controls
+    )
 
     content_norm = json.loads(outputs["ai_content_similarity_interpretation_normalized.json"])
     clusters = content_norm["output"]["clusters"]
@@ -315,16 +331,24 @@ def test_stage1_enrichment_ai_tasks_5_8_include_links_and_evidence_refs(tmp_path
     next_steps = stage2_norm["output"]["next_steps"]
     assert next_steps
     assert all(step["evidence_refs"] for step in next_steps)
-    assert any("anomaly_validation.md" in ref for step in next_steps for ref in step["evidence_refs"])
+    assert any(
+        "anomaly_validation.md" in ref for step in next_steps for ref in step["evidence_refs"]
+    )
 
     stage3_norm = json.loads(outputs["ai_stage3_preparation_summary_normalized.json"])
     stage3_next_steps = stage3_norm["output"]["next_steps"]
     assert stage3_next_steps
     assert all(step["evidence_refs"] for step in stage3_next_steps)
-    assert any("stage3_readiness.json" in ref for step in stage3_next_steps for ref in step["evidence_refs"])
+    assert any(
+        "stage3_readiness.json" in ref
+        for step in stage3_next_steps
+        for ref in step["evidence_refs"]
+    )
 
 
-def test_stage2_preparation_source_artifacts_exclude_missing_stage2_inputs(tmp_path: Path) -> None:
+def test_stage2_preparation_source_artifacts_exclude_missing_stage2_inputs(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "stage2-artifacts-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -360,7 +384,9 @@ def test_stage2_preparation_source_artifacts_exclude_missing_stage2_inputs(tmp_p
     assert "stage2_inputs.md" not in input_bundle_doc["source_artifacts"]
 
 
-def test_stage1_enrichment_skips_out_of_scope_script_fetch_and_marks_reason(tmp_path: Path) -> None:
+def test_stage1_enrichment_skips_out_of_scope_script_fetch_and_marks_reason(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "scope-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -412,7 +438,9 @@ def test_stage1_enrichment_skips_out_of_scope_script_fetch_and_marks_reason(tmp_
     assert not any("cdn.evil.test/malicious.js" in url for url in fetched_urls)
 
 
-def test_stage1_enrichment_updates_js_bundle_rows_with_sanitized_urls(tmp_path: Path) -> None:
+def test_stage1_enrichment_updates_js_bundle_rows_with_sanitized_urls(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "js-sanitize-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -459,20 +487,26 @@ def test_stage1_enrichment_updates_js_bundle_rows_with_sanitized_urls(tmp_path: 
     js_bundle_rows = _csv_rows(outputs["js_bundle_inventory.csv"])
     assert js_bundle_rows
 
-    same_origin_rows = [row for row in js_bundle_rows if "example.net/assets/app.js" in row["script_url"]]
+    same_origin_rows = [
+        row for row in js_bundle_rows if "example.net/assets/app.js" in row["script_url"]
+    ]
     assert same_origin_rows
     assert all("%5BREDACTED%5D" in row["script_url"] for row in same_origin_rows)
     assert all(row["fetch_status"] == "200" for row in same_origin_rows)
     assert all(row["skipped_reason"] == "" for row in same_origin_rows)
 
-    out_scope_rows = [row for row in js_bundle_rows if "cdn.evil.test/malicious.js" in row["script_url"]]
+    out_scope_rows = [
+        row for row in js_bundle_rows if "cdn.evil.test/malicious.js" in row["script_url"]
+    ]
     assert out_scope_rows
     assert all(row["skipped_reason"] == "out_of_scope" for row in out_scope_rows)
     assert all(row["fetch_status"] == "0" for row in out_scope_rows)
     assert not any("cdn.evil.test/malicious.js" in url for url in fetched_urls)
 
 
-def test_stage1_enrichment_skips_out_of_scope_crawl_targets_before_fetch(tmp_path: Path) -> None:
+def test_stage1_enrichment_skips_out_of_scope_crawl_targets_before_fetch(
+    tmp_path: Path,
+) -> None:
     recon_dir = tmp_path / "crawl-scope-stage1"
     live_dir = recon_dir / "04_live_hosts"
     live_dir.mkdir(parents=True)
@@ -496,7 +530,11 @@ def test_stage1_enrichment_skips_out_of_scope_crawl_targets_before_fetch(tmp_pat
         fetched_urls.append(url)
         normalized = url.rstrip("/")
         if normalized == "https://example.net":
-            return {"status": 200, "content_type": "text/html", "body": "<html><body>ok</body></html>"}
+            return {
+                "status": 200,
+                "content_type": "text/html",
+                "body": "<html><body>ok</body></html>",
+            }
         if normalized == "https://evil.test/admin":
             raise AssertionError("Out-of-scope crawl target must not be fetched")
         return {"status": 404, "content_type": "text/plain", "body": ""}
@@ -618,7 +656,9 @@ def test_build_stage3_readiness_status_not_ready() -> None:
 
 def test_build_stage3_readiness_content_score_uses_redirect_when_content_empty() -> None:
     """Unit test: content_anomaly score uses redirect_clusters when content_clusters empty."""
-    redirect_rows = [{"redirect_cluster_id": "r1", "host": f"host{i}.example.com"} for i in range(12)]
+    redirect_rows = [
+        {"redirect_cluster_id": "r1", "host": f"host{i}.example.com"} for i in range(12)
+    ]
     result = _build_stage3_readiness(
         route_classification_rows=[{"route": "/", "host": "example.com"}],
         params_rows=[],
@@ -752,8 +792,18 @@ def test_stage1_enrichment_fallback_when_content_clusters_empty(tmp_path: Path) 
 
 def test_redirect_clusters_skip_rows_without_valid_redirect_target() -> None:
     rows = [
-        {"host": "app.example.com", "url": "https://app.example.com/", "status": "301", "redirect": ""},
-        {"host": "api.example.com", "url": "https://api.example.com/", "status": "302", "redirect": "/signin"},
+        {
+            "host": "app.example.com",
+            "url": "https://app.example.com/",
+            "status": "301",
+            "redirect": "",
+        },
+        {
+            "host": "api.example.com",
+            "url": "https://api.example.com/",
+            "status": "302",
+            "redirect": "/signin",
+        },
         {
             "host": "www.example.com",
             "url": "https://www.example.com/",
@@ -984,7 +1034,11 @@ def test_stage1_enrichment_logs_redacted_url_in_structured_extra(
     ]
     assert records
     redacted_record = next(
-        (record for record in records if hasattr(record, "url") and "token=%5BREDACTED%5D" in record.url),
+        (
+            record
+            for record in records
+            if hasattr(record, "url") and "token=%5BREDACTED%5D" in record.url
+        ),
         None,
     )
     assert redacted_record is not None
@@ -1119,13 +1173,19 @@ def test_rec004_route_params_map_includes_candidate_hints(tmp_path: Path) -> Non
     )
 
     route_params = _csv_rows(outputs["route_params_map.csv"])
-    login_rows = [r for r in route_params if "/login" in r.get("route_path", "") or "/login" in r.get("context_url", "")]
+    login_rows = [
+        r
+        for r in route_params
+        if "/login" in r.get("route_path", "") or "/login" in r.get("context_url", "")
+    ]
     assert login_rows
     assert any("redirect" in r.get("param_names", "") for r in login_rows)
     assert any("route_candidate_hint" in r.get("sources", "") for r in route_params)
 
 
-def test_rec004_http_probe_url_params_extracted_when_not_crawled(tmp_path: Path) -> None:
+def test_rec004_http_probe_url_params_extracted_when_not_crawled(
+    tmp_path: Path,
+) -> None:
     """REC-004: params from http_probe URL query strings when URL not in crawl_targets."""
     recon_dir = tmp_path / "rec004-probe-stage1"
     live_dir = recon_dir / "04_live_hosts"
@@ -1133,7 +1193,11 @@ def test_rec004_http_probe_url_params_extracted_when_not_crawled(tmp_path: Path)
     lines = ["host,url,scheme,status,title,server,redirect"]
     for i in range(125):
         host = f"host{i}.example.com"
-        url = f"https://{host}/" if i != 121 else f"https://{host}/login?redirect=/dashboard&next=/home"
+        url = (
+            f"https://{host}/"
+            if i != 121
+            else f"https://{host}/login?redirect=/dashboard&next=/home"
+        )
         lines.append(f"{host},{url},https,200,,nginx,")
     (live_dir / "http_probe.csv").write_text("\n".join(lines), encoding="utf-8", newline="")
 
@@ -1155,7 +1219,9 @@ def test_rec004_http_probe_url_params_extracted_when_not_crawled(tmp_path: Path)
     assert "next" in param_names
 
 
-def test_stage1_enrichment_inline_script_extraction_populates_js_artifacts(tmp_path: Path) -> None:
+def test_stage1_enrichment_inline_script_extraction_populates_js_artifacts(
+    tmp_path: Path,
+) -> None:
     """REC-003: Inline scripts populate js_routes, js_api_refs, js_integrations, js_config_hints."""
     recon_dir = tmp_path / "inline-js-stage1"
     live_dir = recon_dir / "04_live_hosts"
@@ -1175,7 +1241,7 @@ def test_stage1_enrichment_inline_script_extraction_populates_js_artifacts(tmp_p
                 "content_type": "text/html",
                 "body": (
                     "<html><head><title>SPA</title></head><body>"
-                    '<script>'
+                    "<script>"
                     "fetch('/api/v1/users');"
                     "axios.get('/graphql');"
                     "const route = '/account/settings';"
@@ -1199,7 +1265,7 @@ def test_stage1_enrichment_inline_script_extraction_populates_js_artifacts(tmp_p
 
     js_routes = _csv_rows(outputs["js_routes.csv"])
     js_api_refs = _csv_rows(outputs["js_api_refs.csv"])
-    js_integrations = _csv_rows(outputs["js_integrations.csv"])
+    _csv_rows(outputs["js_integrations.csv"])
     js_config_hints = _csv_rows(outputs["js_config_hints.csv"])
     js_bundle_rows = _csv_rows(outputs["js_bundle_inventory.csv"])
     js_findings = outputs["js_findings.md"]
@@ -1224,7 +1290,9 @@ def test_stage1_enrichment_inline_script_extraction_populates_js_artifacts(tmp_p
     assert "api" in js_findings.lower() or "graphql" in js_findings.lower()
 
 
-def test_stage1_enrichment_js_findings_graceful_fallback_when_bundles_zero(tmp_path: Path) -> None:
+def test_stage1_enrichment_js_findings_graceful_fallback_when_bundles_zero(
+    tmp_path: Path,
+) -> None:
     """REC-003: js_findings.md has content when bundles=0, extracted from inline scripts."""
     recon_dir = tmp_path / "bundles-zero-stage1"
     live_dir = recon_dir / "04_live_hosts"
@@ -1244,7 +1312,7 @@ def test_stage1_enrichment_js_findings_graceful_fallback_when_bundles_zero(tmp_p
                 "content_type": "text/html",
                 "body": (
                     "<html><body>"
-                    '<script>'
+                    "<script>"
                     "fetch('/api/v2/data');"
                     "const path = '/dashboard/admin';"
                     "process.env.NEXT_PUBLIC_API_URL = '/api';"

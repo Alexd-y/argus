@@ -16,18 +16,65 @@ logger = logging.getLogger(__name__)
 
 PHASE_TOOL_ALLOWLIST: dict[str, set[str]] = {
     "source_analysis": {"git_clone", "tree_sitter_parse", "file_read"},
-    "recon": {"nmap", "nuclei", "ffuf", "subfinder", "httpx", "whatweb", "dnsx", "crtsh", "shodan", "amass", "gowitness"},
+    "recon": {
+        "nmap",
+        "nuclei",
+        "ffuf",
+        "subfinder",
+        "httpx",
+        "whatweb",
+        "dnsx",
+        "crtsh",
+        "shodan",
+        "amass",
+        "gowitness",
+    },
     "threat_modeling": set(),
-    "vuln_analysis": {"nuclei", "dalfox", "ffuf", "nikto", "sqlmap_detect", "wpscan", "dirsearch"},
-    "exploitation": {"sqlmap", "commix", "xsstrike", "ssrfmap", "hydra", "john", "hashcat", "browser_navigate", "browser_click", "browser_type", "browser_screenshot", "browser_intercept"},
-    "post_exploitation": {"linpeas", "winpeas", "ldapsearch", "enum4linux", "crackmapexec", "browser_navigate"},
+    "vuln_analysis": {
+        "nuclei",
+        "dalfox",
+        "ffuf",
+        "nikto",
+        "sqlmap_detect",
+        "wpscan",
+        "dirsearch",
+    },
+    "exploitation": {
+        "sqlmap",
+        "commix",
+        "xsstrike",
+        "ssrfmap",
+        "hydra",
+        "john",
+        "hashcat",
+        "browser_navigate",
+        "browser_click",
+        "browser_type",
+        "browser_screenshot",
+        "browser_intercept",
+    },
+    "post_exploitation": {
+        "linpeas",
+        "winpeas",
+        "ldapsearch",
+        "enum4linux",
+        "crackmapexec",
+        "browser_navigate",
+    },
     "reporting": set(),
 }
 
 VULN_DOMAIN_TOOL_ALLOWLIST: dict[str, set[str]] = {
     "injection": {"sqlmap", "commix", "nosqlmap", "sqlmap_detect"},
     "xss": {"dalfox", "xsstrike", "browser_navigate", "browser_screenshot"},
-    "auth": {"hydra", "john", "hashcat", "browser_navigate", "browser_type", "browser_click"},
+    "auth": {
+        "hydra",
+        "john",
+        "hashcat",
+        "browser_navigate",
+        "browser_type",
+        "browser_click",
+    },
     "authz": {"burp_suite", "authmatrix"},
     "ssrf": {"ssrfmap", "gf_ssrf"},
 }
@@ -48,7 +95,9 @@ class MCPAllowlist:
             domain_tools = VULN_DOMAIN_TOOL_ALLOWLIST.get(vuln_domain, set())
         return phase_tools | domain_tools
 
-    def guard_tool_call(self, tool_name: str, phase: str, vuln_domain: str | None = None) -> ToolAccessDenied | None:
+    def guard_tool_call(
+        self, tool_name: str, phase: str, vuln_domain: str | None = None
+    ) -> ToolAccessDenied | None:
         allowed = self.get_allowed_tools(phase, vuln_domain)
         if not allowed:
             return ToolAccessDenied(
@@ -66,8 +115,8 @@ class MCPAllowlist:
 
 
 __all__ = [
-    "MCPAllowlist",
     "PHASE_TOOL_ALLOWLIST",
     "VULN_DOMAIN_TOOL_ALLOWLIST",
+    "MCPAllowlist",
     "ToolAccessDenied",
 ]

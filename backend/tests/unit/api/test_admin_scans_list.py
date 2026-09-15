@@ -8,12 +8,11 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.core.config import settings
 from src.db.models import Scan, ScanEvent, Tenant, ToolRun
 from src.db.session import get_db
+from starlette.testclient import TestClient
 
 _ADMIN_KEY = "secret-admin-key"
 _ADMIN_HEADERS = {"X-Admin-Key": _ADMIN_KEY}
@@ -113,13 +112,15 @@ class TestAdminScansList:
         session.execute = AsyncMock(side_effect=[r_set, r_tenant, r_count, r_list])
         factory = _session_factory(session)
 
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"tenant_id": tid, "limit": 10, "offset": 0},
-                )
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"tenant_id": tid, "limit": 10, "offset": 0},
+            )
         assert r.status_code == 200
         body = r.json()
         assert body["total"] == 0
@@ -144,13 +145,15 @@ class TestAdminScansList:
         session.execute = AsyncMock(side_effect=[r_set, r_tenant, r_count, r_list])
         factory = _session_factory(session)
 
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"tenant_id": tid, "limit": 2, "offset": 0},
-                )
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"tenant_id": tid, "limit": 2, "offset": 0},
+            )
         assert r.status_code == 200
         body = r.json()
         assert body["total"] == 42
@@ -169,9 +172,11 @@ class TestAdminScansList:
         session.execute = AsyncMock(side_effect=[r_set, r_tenant])
         factory = _session_factory(session)
 
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(LIST, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
         assert r.status_code == 404
         assert r.json()["detail"] == "Tenant not found"
 
@@ -187,9 +192,11 @@ class TestAdminScanDetail:
         session.execute = AsyncMock(side_effect=[r_set, r_tenant])
         factory = _session_factory(session)
         path = f"/api/v1/admin/scans/{scan_id}"
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(path, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(path, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
         assert r.status_code == 404
         assert r.json()["detail"] == "Tenant not found"
 
@@ -210,9 +217,11 @@ class TestAdminScanDetail:
         session.execute = AsyncMock(side_effect=[r_set, r_tenant, r_scan])
         factory = _session_factory(session)
         path = f"/api/v1/admin/scans/{scan_id}"
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(path, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(path, headers=_ADMIN_HEADERS, params={"tenant_id": tid})
         assert r.status_code == 404
         assert r.json()["detail"] == "Scan not found"
 
@@ -247,7 +256,7 @@ class TestAdminScanDetail:
             event="error",
             phase="vuln_analysis",
             progress=None,
-            message="Traceback (most recent call last):\n  File \"x.py\"",
+            message='Traceback (most recent call last):\n  File "x.py"',
             data=None,
             duration_sec=None,
             created_at=datetime(2026, 1, 2, 3, 4, 50, tzinfo=UTC),
@@ -265,13 +274,15 @@ class TestAdminScanDetail:
         factory = _session_factory(session)
 
         path = f"/api/v1/admin/scans/{scan_id}"
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(
-                    path,
-                    headers=_ADMIN_HEADERS,
-                    params={"tenant_id": tid},
-                )
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(
+                path,
+                headers=_ADMIN_HEADERS,
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         data = r.json()
         assert data["id"] == scan_id
@@ -332,12 +343,14 @@ class TestAdminScanDetail:
         factory = _session_factory(session)
 
         path = f"/api/v1/admin/scans/{scan_id}"
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch("src.api.routers.admin_scans.async_session_factory", factory):
-                r = client.get(
-                    path,
-                    headers=_ADMIN_HEADERS,
-                    params={"tenant_id": tid},
-                )
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_scans.async_session_factory", factory),
+        ):
+            r = client.get(
+                path,
+                headers=_ADMIN_HEADERS,
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         assert r.json()["error_summary"][0]["message"] == "An error occurred."

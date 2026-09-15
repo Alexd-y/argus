@@ -9,7 +9,6 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.llm_orchestrator.agents import (
     AgentConfigError,
     AgentContext,
@@ -26,6 +25,7 @@ from src.llm_orchestrator.llm_provider import EchoLLMProvider, ResponseFormat
 from src.llm_orchestrator.prompt_registry import PromptRegistry
 from src.llm_orchestrator.schemas.loader import ValidationPlanV1
 from src.pipeline.contracts.finding_dto import FindingDTO
+
 from tests.unit.orchestrator_runtime.conftest import canned_finding
 
 # ---------------------------------------------------------------------------
@@ -146,9 +146,7 @@ class TestCriticAgent:
         canned_validation_plan: Callable[[], dict[str, Any]],
     ) -> None:
         registry, _, _ = full_signed_registry
-        provider = echo_provider_factory(
-            {"critic_v1": canned_critic_verdict(approved=True)}
-        )
+        provider = echo_provider_factory({"critic_v1": canned_critic_verdict(approved=True)})
         agent = CriticAgent(provider, registry, prompt_id="critic_v1")
         plan = ValidationPlanV1.model_validate(canned_validation_plan())
         verdict = await agent.run(agent_context, plan_json=plan, policy={"k": "v"})
@@ -165,9 +163,7 @@ class TestCriticAgent:
         canned_validation_plan: Callable[[], dict[str, Any]],
     ) -> None:
         registry, _, _ = full_signed_registry
-        provider = echo_provider_factory(
-            {"critic_v1": canned_critic_verdict(approved=False)}
-        )
+        provider = echo_provider_factory({"critic_v1": canned_critic_verdict(approved=False)})
         agent = CriticAgent(provider, registry, prompt_id="critic_v1")
         verdict = await agent.run(
             agent_context,
@@ -213,9 +209,7 @@ class TestCriticAgent:
         canned_validation_plan: Callable[[], dict[str, Any]],
     ) -> None:
         registry, _, _ = full_signed_registry
-        provider = echo_provider_factory(
-            {"critic_v1": canned_critic_verdict(approved=True)}
-        )
+        provider = echo_provider_factory({"critic_v1": canned_critic_verdict(approved=True)})
         agent = CriticAgent(provider, registry, prompt_id="critic_v1")
         verdict = await agent.run(
             agent_context,
@@ -233,9 +227,7 @@ class TestCriticAgent:
         canned_validation_plan: Callable[[], dict[str, Any]],
     ) -> None:
         registry, _, _ = full_signed_registry
-        provider = echo_provider_factory(
-            {"critic_v1": {"approved": "yes"}}
-        )  # str instead of bool
+        provider = echo_provider_factory({"critic_v1": {"approved": "yes"}})  # str instead of bool
         agent = CriticAgent(provider, registry, prompt_id="critic_v1")
         with pytest.raises(AgentParseError) as exc_info:
             await agent.run(agent_context, plan_json=canned_validation_plan())
@@ -321,10 +313,7 @@ class TestVerifierAgent:
         agent_context: AgentContext,
     ) -> None:
         registry, _, _ = full_signed_registry
-        many = [
-            canned_finding(agent_context.scan_id, agent_context.tenant_id)
-            for _ in range(33)
-        ]
+        many = [canned_finding(agent_context.scan_id, agent_context.tenant_id) for _ in range(33)]
         provider = echo_provider_factory({"verifier_v1": {"findings": many}})
         agent = VerifierAgent(provider, registry, prompt_id="verifier_v1")
         with pytest.raises(AgentParseError) as exc_info:
@@ -339,13 +328,11 @@ class TestVerifierAgent:
         agent_context: AgentContext,
     ) -> None:
         registry, _, _ = full_signed_registry
-        provider = echo_provider_factory(
-            {"verifier_v1": {"findings": ["not an object"]}}
-        )
+        provider = echo_provider_factory({"verifier_v1": {"findings": ["not an object"]}})
         agent = VerifierAgent(provider, registry, prompt_id="verifier_v1")
         with pytest.raises(AgentParseError) as exc_info:
             await agent.run(agent_context, tool_output={"x": 1})
-        assert "findings[0]" == exc_info.value.field_path
+        assert exc_info.value.field_path == "findings[0]"
 
     @pytest.mark.asyncio
     async def test_invalid_finding_field_raises_parse_error(
@@ -469,9 +456,7 @@ class TestFixerAgent:
         assert result == {"fixed": True}
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "missing", ["original_content", "schema_errors", "schema_ref"]
-    )
+    @pytest.mark.parametrize("missing", ["original_content", "schema_errors", "schema_ref"])
     async def test_missing_required_kwarg_raises_config_error(
         self,
         full_signed_registry: tuple[PromptRegistry, Any, Any],

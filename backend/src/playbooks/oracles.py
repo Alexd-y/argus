@@ -232,8 +232,7 @@ def validate_params(oracle_type: OracleType, params: Mapping[str, object]) -> Ba
     if model_cls is None:
         if params:
             raise ValueError(
-                f"oracle {oracle_type.value!r} accepts no params until its P4 "
-                "implementation lands"
+                f"oracle {oracle_type.value!r} accepts no params until its P4 implementation lands"
             )
         return _EmptyParams()
     return model_cls.model_validate(dict(params))
@@ -275,7 +274,7 @@ def _diff_paths(left: object, right: object, prefix: str = "") -> set[str]:
         if len(left) != len(right):
             return {here}
         paths = set()
-        for index, (lft, rgt) in enumerate(zip(left, right)):
+        for index, (lft, rgt) in enumerate(zip(left, right, strict=False)):
             paths |= _diff_paths(lft, rgt, f"{prefix}{index}.")
         return paths
     return set() if left == right else {here}
@@ -527,7 +526,7 @@ class RateLimitOracle(Oracle):
 
     def evaluate(
         self,
-        baseline: HttpExchange,
+        baseline: HttpExchange,  # noqa: ARG002 - oracle interface signature
         mutated: HttpExchange,
         params: Mapping[str, object],
     ) -> OracleResult:
@@ -698,7 +697,7 @@ class FileUploadOracle(Oracle):
 
     def evaluate(
         self,
-        baseline: HttpExchange,
+        baseline: HttpExchange,  # noqa: ARG002 - oracle interface signature
         mutated: HttpExchange,
         params: Mapping[str, object],
     ) -> OracleResult:
@@ -803,9 +802,15 @@ class BusinessLogicOracle(Oracle):
         if before_num is None or after_num is None:
             # Non-numeric values cannot satisfy an ordering invariant
             # deterministically; treat as unchecked (not a finding).
-            return (False, f"non-numeric before/after ({before!r}/{after!r}); ordering unchecked")
+            return (
+                False,
+                f"non-numeric before/after ({before!r}/{after!r}); ordering unchecked",
+            )
         if relation is BusinessLogicRelation.NON_DECREASING:
-            return (after_num < before_num, f"before={before_num:g} after={after_num:g}")
+            return (
+                after_num < before_num,
+                f"before={before_num:g} after={after_num:g}",
+            )
         # NON_INCREASING
         return (after_num > before_num, f"before={before_num:g} after={after_num:g}")
 

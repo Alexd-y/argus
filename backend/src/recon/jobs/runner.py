@@ -65,9 +65,7 @@ async def _run_job(job_id: str) -> dict[str, Any]:
                     artifact_type="raw",
                 )
 
-            findings = await normalize_tool_output(
-                job.tool_name, raw_output, scope_validator
-            )
+            findings = await normalize_tool_output(job.tool_name, raw_output, scope_validator)
 
             counts = await save_findings(
                 db,
@@ -98,9 +96,7 @@ async def _run_job(job_id: str) -> dict[str, Any]:
                 "items_added": counts["added"],
                 "items_skipped": counts["skipped"],
             }
-            await update_job_status(
-                db, job_id, "completed", result_summary=summary
-            )
+            await update_job_status(db, job_id, "completed", result_summary=summary)
             await db.commit()
 
             logger.info("Recon job completed", extra={"job_id": job_id, **summary})
@@ -120,7 +116,7 @@ async def _run_job(job_id: str) -> dict[str, Any]:
 
 
 @app.task(name="argus.recon_job", bind=True, max_retries=3)
-def run_recon_job(self, job_id: str) -> dict:
+def run_recon_job(self, job_id: str) -> dict:  # noqa: ARG001 - Celery bound-task signature (bind=True)
     """Celery task entry point for recon job execution."""
     logger.info("Recon job task received", extra={"job_id": job_id})
     return asyncio.run(_run_job(job_id))

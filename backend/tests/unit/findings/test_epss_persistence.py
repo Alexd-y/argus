@@ -10,11 +10,10 @@ caller's perspective.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from src.findings.epss_persistence import (
     EpssScore,
     EpssScoreRecord,
@@ -53,7 +52,7 @@ def _rec(
         epss_score=epss_score,
         epss_percentile=epss_percentile,
         model_date=model_date or date(2026, 4, 15),
-        updated_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 16, tzinfo=UTC),
     )
 
 
@@ -152,9 +151,7 @@ async def test_get_normalises_case(session: AsyncSession) -> None:
 
 async def test_get_many_skips_invalid_and_missing(session: AsyncSession) -> None:
     repo = EpssScoreRepository(session)
-    await repo.upsert_batch(
-        [_rec(cve_id="CVE-2024-0001"), _rec(cve_id="CVE-2024-0002")]
-    )
+    await repo.upsert_batch([_rec(cve_id="CVE-2024-0001"), _rec(cve_id="CVE-2024-0002")])
     await session.commit()
     out = await repo.get_many(["CVE-2024-0001", "bogus", "CVE-1999-9999"])
     assert set(out.keys()) == {"CVE-2024-0001"}
@@ -205,8 +202,6 @@ async def test_count_starts_at_zero(session: AsyncSession) -> None:
 
 async def test_count_reflects_upserts(session: AsyncSession) -> None:
     repo = EpssScoreRepository(session)
-    await repo.upsert_batch(
-        [_rec(cve_id=f"CVE-2024-{i:05d}") for i in range(1, 6)]
-    )
+    await repo.upsert_batch([_rec(cve_id=f"CVE-2024-{i:05d}") for i in range(1, 6)])
     await session.commit()
     assert await repo.count() == 5

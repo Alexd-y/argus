@@ -35,7 +35,10 @@ def _require_dsn():
 
 def _spec(scan, role="injection", phase="vuln"):
     return AgentTaskSpec(
-        tenant_id="t1", scan_id=scan, phase=phase, agent_role=role,
+        tenant_id="t1",
+        scan_id=scan,
+        phase=phase,
+        agent_role=role,
         idempotency_key=uuid.uuid4().hex,
     )
 

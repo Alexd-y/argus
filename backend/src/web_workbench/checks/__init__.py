@@ -37,20 +37,24 @@ from src.web_workbench.checks.jwt_editor import (
 )
 from src.web_workbench.checks.nosqli import (
     NosqlFinding,
-    analyze as analyze_nosql,
     detect_error_signature,
     detect_operator_injection,
     nosql_finding_to_dto,
     nosql_findings_to_dtos,
 )
+from src.web_workbench.checks.nosqli import (
+    analyze as analyze_nosql,
+)
 from src.web_workbench.checks.severity import CheckSeverity, cvss_for
 from src.web_workbench.checks.wordpress import (
     WordpressFinding,
-    analyze as analyze_wordpress,
     detect_fingerprint,
     detect_version,
     wordpress_finding_to_dto,
     wordpress_findings_to_dtos,
+)
+from src.web_workbench.checks.wordpress import (
+    analyze as analyze_wordpress,
 )
 
 __all__ = [

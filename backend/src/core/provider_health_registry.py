@@ -75,7 +75,9 @@ class ProviderState:
     error_rate_5xx: float = 0.0
     error_count_60s: int = 0
     request_count_60s: int = 0
-    records: deque[_CallRecord] = field(default_factory=lambda: deque(maxlen=_MAX_RECORDS_PER_PROVIDER))
+    records: deque[_CallRecord] = field(
+        default_factory=lambda: deque(maxlen=_MAX_RECORDS_PER_PROVIDER)
+    )
 
 
 class ProviderHealthRegistry:

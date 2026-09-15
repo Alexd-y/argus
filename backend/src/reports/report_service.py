@@ -128,9 +128,7 @@ class ReportService:
         # in-memory SQLite engine via their own fixture) free to swap the
         # database URL without touching ``ReportService`` symbols.
         self._session_factory_override = session_factory
-        self._tool_version = (
-            tool_version or DEFAULT_TOOL_VERSION
-        ).strip() or DEFAULT_TOOL_VERSION
+        self._tool_version = (tool_version or DEFAULT_TOOL_VERSION).strip() or DEFAULT_TOOL_VERSION
 
     @property
     def _session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -164,9 +162,7 @@ class ReportService:
             if report_id is not None:
                 safe_set_span_attribute(span, "argus.report_id", report_id)
 
-            self._validate_inputs(
-                tenant_id=tenant_id, scan_id=scan_id, report_id=report_id
-            )
+            self._validate_inputs(tenant_id=tenant_id, scan_id=scan_id, report_id=report_id)
             normalized_tier = self._coerce_tier(tier)
             normalized_fmt = self._coerce_format(fmt)
 
@@ -182,9 +178,7 @@ class ReportService:
                     scan_id=scan_id,
                     report_id=report_id,
                 )
-                pdf_archival_format = await resolve_tenant_pdf_archival_format(
-                    session, tenant_id
-                )
+                pdf_archival_format = await resolve_tenant_pdf_archival_format(session, tenant_id)
 
             return self.render_bundle(
                 data,
@@ -281,9 +275,7 @@ class ReportService:
         if not tenant_id or tenant_id == _EMPTY_TENANT:
             raise ValueError("ReportService.generate requires a non-empty tenant_id")
         if not scan_id and not report_id:
-            raise ValueError(
-                "ReportService.generate requires at least one of scan_id or report_id"
-            )
+            raise ValueError("ReportService.generate requires at least one of scan_id or report_id")
 
     @staticmethod
     def _coerce_tier(tier: ReportTier | str) -> ReportTier:
@@ -304,8 +296,7 @@ class ReportService:
             return ReportFormat(str(fmt).strip().lower())
         except ValueError as exc:
             raise ValueError(
-                f"Unknown ReportFormat {fmt!r}; expected one of "
-                f"{[f.value for f in ReportFormat]}"
+                f"Unknown ReportFormat {fmt!r}; expected one of {[f.value for f in ReportFormat]}"
             ) from exc
 
     # ------------------------------------------------------------------
@@ -471,9 +462,7 @@ class ReportService:
             )
 
             base = offline_minimal_jinja_context_from_report_data(data, tier.value)
-            return valhalla_assembly_to_jinja_context(
-                valhalla_assembly, base_context=base
-            )
+            return valhalla_assembly_to_jinja_context(valhalla_assembly, base_context=base)
         return None
 
 

@@ -39,12 +39,11 @@ import re
 from typing import Final
 
 import pytest
-
 from scripts._pdfa_fixtures import (
-    PDFAVariant,
     PNG_TOKEN_1,
     PNG_TOKEN_2,
     VARIANTS,
+    PDFAVariant,
     get_variant,
 )
 from src.db.models import PDF_ARCHIVAL_FORMAT_VALUES
@@ -250,17 +249,10 @@ class TestPerTenantWiring:
         assert VARIANTS["per_tenant"].tenant_format_override == "pdfa-2u"
         # Also assert the override is one of the closed-taxonomy values
         # — guards against the literal slipping out of the union.
-        assert (
-            VARIANTS["per_tenant"].tenant_format_override
-            in PDF_ARCHIVAL_FORMAT_VALUES
-        )
+        assert VARIANTS["per_tenant"].tenant_format_override in PDF_ARCHIVAL_FORMAT_VALUES
 
-    @pytest.mark.parametrize(
-        "name", sorted(_EXPECTED_VARIANT_NAMES - {"per_tenant"})
-    )
-    def test_non_per_tenant_variants_have_null_resolver_fields(
-        self, name: str
-    ) -> None:
+    @pytest.mark.parametrize("name", sorted(_EXPECTED_VARIANT_NAMES - {"per_tenant"}))
+    def test_non_per_tenant_variants_have_null_resolver_fields(self, name: str) -> None:
         """Only ``per_tenant`` may carry tenant_id / tenant_format_override."""
         variant = VARIANTS[name]
         assert variant.tenant_id is None, (
@@ -289,6 +281,5 @@ class TestDescriptions:
         # 30 chars is the minimum to convey what the variant exercises;
         # shorter descriptions historically read like placeholder text.
         assert len(desc) >= 30, (
-            f"variant {name!r} description suspiciously short ({len(desc)} "
-            f"chars): {desc!r}"
+            f"variant {name!r} description suspiciously short ({len(desc)} chars): {desc!r}"
         )

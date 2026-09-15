@@ -13,7 +13,6 @@ from __future__ import annotations
 import importlib
 
 import pytest
-
 from src.reports.wstg_coverage import (
     WSTG_VERSION,
     WstgCoverageResult,

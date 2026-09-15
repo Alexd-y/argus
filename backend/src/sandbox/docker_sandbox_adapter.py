@@ -60,8 +60,7 @@ def _age_seconds(created: str | None, now: float) -> float:
         return 0.0
     text = created.strip()
     # Docker emits nanosecond precision + trailing 'Z'; trim to microseconds.
-    if text.endswith("Z"):
-        text = text[:-1]
+    text = text.removesuffix("Z")
     if "." in text:
         head, frac = text.split(".", 1)
         text = f"{head}.{frac[:6]}"
@@ -136,7 +135,10 @@ class DockerLifecycleSandboxAdapter:
                 mem_limit=self._mem_limit,
                 nano_cpus=self._nano_cpus,
                 pids_limit=self._pids_limit,
-                tmpfs={"/workspace": f"size={self._workspace_size}", "/tmp": "size=256m"},
+                tmpfs={
+                    "/workspace": f"size={self._workspace_size}",
+                    "/tmp": "size=256m",
+                },
                 network=self._network or None,
             )
             return str(container.id)
@@ -145,7 +147,7 @@ class DockerLifecycleSandboxAdapter:
             return await asyncio.to_thread(_run)
         except SandboxCreateError:
             raise
-        except Exception as exc:  # noqa: BLE001 — every create failure fails closed
+        except Exception as exc:
             SANDBOX_FAILURES.labels(**metric_labels(reason="create_failed")).inc()
             logger.warning(
                 "docker_sandbox_create_failed",
@@ -192,8 +194,7 @@ class DockerLifecycleSandboxAdapter:
             with tempfile.TemporaryDirectory(prefix="argus_sbx_art_") as tmp:
                 tar_path = os.path.join(tmp, "artifacts.tar")
                 with open(tar_path, "wb") as fh:
-                    for chunk in bits:
-                        fh.write(chunk)
+                    fh.writelines(bits)
                 with tarfile.open(tar_path) as tar:
                     for member in tar.getmembers():
                         if member.isfile():
@@ -235,7 +236,9 @@ class DockerLifecycleSandboxAdapter:
         return await asyncio.to_thread(_list)
 
 
-def build_docker_lifecycle_adapter(**overrides: object) -> DockerLifecycleSandboxAdapter:
+def build_docker_lifecycle_adapter(
+    **overrides: object,
+) -> DockerLifecycleSandboxAdapter:
     """Construct a :class:`DockerLifecycleSandboxAdapter` with catalog defaults."""
     return DockerLifecycleSandboxAdapter(**overrides)  # type: ignore[arg-type]
 

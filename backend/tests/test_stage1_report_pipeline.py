@@ -15,7 +15,10 @@ from src.recon.reporting.html_report_builder import (
     _render_anomalies_from_structured,
     _render_stage2_from_structured,
 )
-from src.recon.reporting.stage1_contract import STAGE1_BASELINE_ARTIFACTS, STAGE1_REPORT_SECTIONS
+from src.recon.reporting.stage1_contract import (
+    STAGE1_BASELINE_ARTIFACTS,
+    STAGE1_REPORT_SECTIONS,
+)
 from src.recon.reporting.stage1_report_generator import (
     STAGE1_OUTPUTS,
     _run_intel_adapters,
@@ -44,6 +47,7 @@ KNOWN_SAFE_BASELINE_OUTPUTS = {
 
 def test_stage1_outputs_list_is_synchronized_with_stage1_contract() -> None:
     assert set(STAGE1_OUTPUTS) == set(STAGE1_BASELINE_ARTIFACTS)
+
 
 # --- Fixtures ---
 
@@ -295,14 +299,18 @@ class TestGenerateStage1ReportFull:
         h2_numbers = re.findall(r"<h2>(\d+)\.", content)
         assert h2_numbers
         assert len(h2_numbers) == len(set(h2_numbers))
-        assert h2_numbers == [str(i) for i in range(1, 19)], "REC-010: 18 sections (17 Stage3 Readiness, 18 Route Classification)"
+        assert h2_numbers == [str(i) for i in range(1, 19)], (
+            "REC-010: 18 sections (17 Stage3 Readiness, 18 Route Classification)"
+        )
 
         assert "badge-evidence" in content_lower
         assert "badge-observation" in content_lower
         assert "badge-inference" in content_lower
         assert "badge-hypothesis" in content_lower
 
-    def test_stage1_report_section_ids_follow_contract(self, recon_dir_full: Path, mock_endpoint_fetch, mock_headers_fetch) -> None:
+    def test_stage1_report_section_ids_follow_contract(
+        self, recon_dir_full: Path, mock_endpoint_fetch, mock_headers_fetch
+    ) -> None:
         generate_stage1_report(
             recon_dir_full,
             use_mcp=False,
@@ -341,9 +349,9 @@ class TestGenerateStage1ReportFull:
             assert text.strip()
 
         tls_summary = (recon_dir_full / "tls_summary.md").read_text(encoding="utf-8").lower()
-        anomaly_validation = (recon_dir_full / "anomaly_validation.md").read_text(
-            encoding="utf-8"
-        ).lower()
+        anomaly_validation = (
+            (recon_dir_full / "anomaly_validation.md").read_text(encoding="utf-8").lower()
+        )
 
         assert "tls handshake metadata" in tls_summary
         assert "authorized safe recon only" in anomaly_validation
@@ -407,7 +415,12 @@ class TestGenerateStage1ReportMockedFetch:
 
         def tracking_fetch(url: str) -> dict:
             seen_urls.append(url)
-            return {"status": 200, "content_type": "text/plain", "exists": True, "notes": ""}
+            return {
+                "status": 200,
+                "content_type": "text/plain",
+                "exists": True,
+                "notes": "",
+            }
 
         generate_stage1_report(
             recon_dir_full,
@@ -522,7 +535,9 @@ class TestGenerateStage1ReportMockedFetch:
         expected_job_link = f"recon://jobs/{job_id}"
         expected_trace_prefix = f"{run_id}-{job_id}-mcp"
 
-        manifest = json.loads((recon_dir_full / "ai_persistence_manifest.json").read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (recon_dir_full / "ai_persistence_manifest.json").read_text(encoding="utf-8")
+        )
         assert manifest["run_id"] == run_id
         assert manifest["job_id"] == job_id
         assert manifest["run_link"] == expected_run_link
@@ -552,9 +567,15 @@ class TestGenerateStage1ReportMockedFetch:
                 assert filename in manifest["ai_artifacts"]
 
             raw_doc = json.loads((recon_dir_full / raw_name).read_text(encoding="utf-8"))
-            normalized_doc = json.loads((recon_dir_full / normalized_name).read_text(encoding="utf-8"))
-            input_bundle_doc = json.loads((recon_dir_full / input_bundle_name).read_text(encoding="utf-8"))
-            validation_doc = json.loads((recon_dir_full / validation_name).read_text(encoding="utf-8"))
+            normalized_doc = json.loads(
+                (recon_dir_full / normalized_name).read_text(encoding="utf-8")
+            )
+            input_bundle_doc = json.loads(
+                (recon_dir_full / input_bundle_name).read_text(encoding="utf-8")
+            )
+            validation_doc = json.loads(
+                (recon_dir_full / validation_name).read_text(encoding="utf-8")
+            )
             rendered_prompt = (recon_dir_full / rendered_prompt_name).read_text(encoding="utf-8")
 
             for doc in (raw_doc, normalized_doc, input_bundle_doc, validation_doc):
@@ -577,8 +598,13 @@ class TestGenerateStage1ReportMockedFetch:
             assert "mcp_invocation_audit_meta.json" in raw_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit.jsonl" in raw_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_trace.jsonl" in raw_doc["evidence_trace"]["mcp_trace_refs"]
-            assert "mcp_invocation_audit_meta.json" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
-            assert "mcp_invocation_audit.jsonl" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
+            assert (
+                "mcp_invocation_audit_meta.json"
+                in normalized_doc["evidence_trace"]["mcp_trace_refs"]
+            )
+            assert (
+                "mcp_invocation_audit.jsonl" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
+            )
             assert "mcp_trace.jsonl" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit_meta.json" in input_bundle_doc["mcp_trace_refs"]
             assert "mcp_invocation_audit.jsonl" in input_bundle_doc["mcp_trace_refs"]
@@ -646,7 +672,7 @@ class TestGenerateStage1ReportMockedFetch:
             match = re.search(
                 rf'<section id="{section_id}" class="section">(.+?)</section>',
                 content_lower,
-                flags=re.S,
+                flags=re.DOTALL,
             )
             assert match is not None, f"Missing section {section_id}"
             section_html = match.group(1)
@@ -672,14 +698,22 @@ class TestGenerateStage1ReportMockedFetch:
         section_expectations = [
             ("section-15-tools-and-ai-used", "15. tools", ("badge-evidence",)),
             ("section-16-intel-osint-enrichment", "16. intel", ("badge-observation",)),
-            ("section-17-stage-3-readiness", "17. stage 3 readiness", ("badge-inference",)),
-            ("section-18-route-classification", "18. route classification", ("badge-evidence", "badge-observation")),
+            (
+                "section-17-stage-3-readiness",
+                "17. stage 3 readiness",
+                ("badge-inference",),
+            ),
+            (
+                "section-18-route-classification",
+                "18. route classification",
+                ("badge-evidence", "badge-observation"),
+            ),
         ]
         for section_id, heading, badges in section_expectations:
             match = re.search(
                 rf'<section id="{section_id}" class="section">(.+?)</section>',
                 content_lower,
-                flags=re.S,
+                flags=re.DOTALL,
             )
             assert match is not None, f"Missing section {section_id}"
             section_html = match.group(1)
@@ -687,7 +721,10 @@ class TestGenerateStage1ReportMockedFetch:
             for badge in badges:
                 assert badge in section_html, f"Missing {badge} in {section_id}"
 
-def test_run_intel_adapters_sanitizes_exception_details(monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_run_intel_adapters_sanitizes_exception_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class _FailingAdapter:
         name = "failing_source"
 
@@ -748,7 +785,7 @@ def test_anomalies_structured_type_is_whitelisted_for_css_classes() -> None:
             ],
             "hypotheses": [
                 {
-                    "type": 'hypothesis<script>alert(1)</script>',
+                    "type": "hypothesis<script>alert(1)</script>",
                     "source": "ai",
                     "text": "text",
                 }

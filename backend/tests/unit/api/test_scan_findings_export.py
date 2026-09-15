@@ -10,9 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 from xml.etree import ElementTree as ET
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 
 def _scalar_result(val: object) -> MagicMock:

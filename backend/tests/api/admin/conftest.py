@@ -74,25 +74,25 @@ os.environ.setdefault("ARGUS_TEST_MODE", "1")
 # Layer 2 — heavy `src.*` imports (settings + ORM + Alembic helpers).
 # ---------------------------------------------------------------------------
 
-from alembic.migration import MigrationContext  # noqa: E402
-from alembic.operations import Operations  # noqa: E402
-from sqlalchemy import event, text  # noqa: E402
-from sqlalchemy.ext.asyncio import (  # noqa: E402
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-from src.core.config import settings  # noqa: E402
-from src.db.models import WebhookDlqEntry  # noqa: E402
-from src.mcp.services.notifications import webhook_dlq_persistence as dlq_dao  # noqa: E402
-from src.mcp.services.notifications.schemas import (  # noqa: E402
+from sqlalchemy.pool import StaticPool
+from src.core.config import settings
+from src.db.models import WebhookDlqEntry
+from src.mcp.services.notifications import (
+    webhook_dlq_persistence as dlq_dao,
+)
+from src.mcp.services.notifications.schemas import (
     NotificationEvent,
     NotificationSeverity,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants — every magic value lives here so a future schema bump is a
@@ -177,9 +177,7 @@ def _load_revision_module() -> Any:
     """Import revision 027 as a standalone module (no full chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{_REVISION}_*.py"))
     assert matches, f"revision {_REVISION} not found under {_VERSIONS_DIR}"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{_REVISION}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{_REVISION}", matches[0])
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -189,12 +187,7 @@ def _load_revision_module() -> Any:
 def _bootstrap_schema_sync(conn: Any) -> None:
     """Create minimal ``tenants`` table + apply revision 027."""
     conn.execute(
-        text(
-            "CREATE TABLE tenants ("
-            "id VARCHAR(36) PRIMARY KEY, "
-            "name VARCHAR(255) NOT NULL"
-            ")"
-        )
+        text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL)")
     )
     module = _load_revision_module()
     ctx = MigrationContext.configure(conn)
@@ -267,9 +260,7 @@ def session_factory_patch(engine: AsyncEngine):
 
 
 @pytest.fixture(autouse=True)
-def _patch_router_session(
-    session_factory_patch, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _patch_router_session(session_factory_patch, monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-route the router's `async_session_factory` to the in-memory SQLite engine."""
     monkeypatch.setattr(
         "src.api.routers.admin_webhook_dlq.async_session_factory",
@@ -360,13 +351,10 @@ def override_auth() -> Iterator[None]:
 async def api_client():
     """Async HTTP client wired directly to the FastAPI ASGI app."""
     from httpx import ASGITransport, AsyncClient
-
     from main import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport, base_url="http://testserver"
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
 
 
@@ -448,9 +436,7 @@ async def force_terminal_replayed(
     """Force a row to terminal `replayed` state without HTTP plumbing."""
     moment = when or datetime.now(UTC)
     await session.execute(
-        text(
-            "UPDATE webhook_dlq_entries SET replayed_at = :ts WHERE id = :id"
-        ),
+        text("UPDATE webhook_dlq_entries SET replayed_at = :ts WHERE id = :id"),
         {"ts": moment.replace(tzinfo=None), "id": entry_id},
     )
     await session.commit()
@@ -490,7 +476,6 @@ def random_uuid() -> str:
 
 __all__ = [
     "ADMIN_API_KEY",
-    "AuditEmitter",
     "DEFAULT_REASON",
     "EVENT_DLQ_ABANDON",
     "EVENT_DLQ_REPLAY",
@@ -498,10 +483,11 @@ __all__ = [
     "TENANT_A",
     "TENANT_B",
     "TENANT_C",
-    "audit_emitter",
+    "AuditEmitter",
     "api_client",
-    "enqueue_dlq_entry",
+    "audit_emitter",
     "engine",
+    "enqueue_dlq_entry",
     "force_terminal_abandoned",
     "force_terminal_replayed",
     "headers_admin",

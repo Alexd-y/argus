@@ -64,7 +64,6 @@ from src.oast.provisioner import (
 )
 from src.oast.redis_stream import OASTRedisStreamBridge
 
-
 __all__ = [
     # canary
     "Canary",

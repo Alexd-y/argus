@@ -11,7 +11,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from src.mcp.auth import MCPAuthContext
 from src.mcp.exceptions import TenantMismatchError, ValidationError
 from src.mcp.tenancy import assert_tenant_match, assert_tenant_owns_resource
@@ -73,9 +72,7 @@ class TestAssertTenantMatch:
 class TestAssertTenantOwnsResource:
     def test_matching_owner_passes(self) -> None:
         tenant = str(uuid.uuid4())
-        assert_tenant_owns_resource(
-            _ctx(tenant), resource_kind="scan", resource_tenant_id=tenant
-        )
+        assert_tenant_owns_resource(_ctx(tenant), resource_kind="scan", resource_tenant_id=tenant)
 
     def test_mismatched_owner_raises(self) -> None:
         tenant = str(uuid.uuid4())
@@ -89,9 +86,7 @@ class TestAssertTenantOwnsResource:
     def test_missing_resource_tenant_raises(self) -> None:
         tenant = str(uuid.uuid4())
         with pytest.raises(TenantMismatchError):
-            assert_tenant_owns_resource(
-                _ctx(tenant), resource_kind="scan", resource_tenant_id=None
-            )
+            assert_tenant_owns_resource(_ctx(tenant), resource_kind="scan", resource_tenant_id=None)
 
     def test_missing_auth_tenant_raises(self) -> None:
         ctx = MCPAuthContext(

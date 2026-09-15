@@ -96,17 +96,12 @@ def _claims_provable(finding: dict[str, Any]) -> bool:
 
 
 def _asserts_cve(finding: dict[str, Any]) -> bool:
-    blob = " ".join(
-        str(finding.get(k, "")) for k in ("title", "description", "cve", "summary")
-    )
+    blob = " ".join(str(finding.get(k, "")) for k in ("title", "description", "cve", "summary"))
     return bool(_CVE_RE.search(blob))
 
 
 def _has_evidence_ext(finding: dict[str, Any], extra_keys: tuple[str, ...]) -> bool:
-    for key in (*_EVIDENCE_KEYS, *extra_keys):
-        if finding.get(key):
-            return True
-    return False
+    return any(finding.get(key) for key in (*_EVIDENCE_KEYS, *extra_keys))
 
 
 def enforce_finding_evidence(

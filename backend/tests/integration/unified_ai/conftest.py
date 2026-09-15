@@ -103,8 +103,18 @@ def mock_llm() -> AsyncMock:
     mock = AsyncMock()
     mock.return_value = {
         "steps": [
-            {"id": "s1", "tool": "nuclei", "action": "scan", "requires_approval": False},
-            {"id": "s2", "tool": "sqlmap", "action": "exploit", "requires_approval": False},
+            {
+                "id": "s1",
+                "tool": "nuclei",
+                "action": "scan",
+                "requires_approval": False,
+            },
+            {
+                "id": "s2",
+                "tool": "sqlmap",
+                "action": "exploit",
+                "requires_approval": False,
+            },
         ]
     }
     return mock
@@ -166,7 +176,11 @@ def run_production_path(
 
     policy = resolve_tool_policy_from_options(
         "sqlmap",
-        {"execution_mode": "production", "tenant_id": tenant_id, "engagement_id": engagement_id},
+        {
+            "execution_mode": "production",
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+        },
         target=target,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
@@ -281,7 +295,12 @@ def run_lab_path(
 
     llm_out = {
         "steps": [
-            {"id": "l1", "tool": "nuclei", "profile": "lab_unrestricted", "requires_approval": False},
+            {
+                "id": "l1",
+                "tool": "nuclei",
+                "profile": "lab_unrestricted",
+                "requires_approval": False,
+            },
             {"id": "l2", "tool": "sqlmap", "requires_approval": False},
         ]
     }
@@ -333,8 +352,6 @@ def run_lab_path(
         ],
         scan_options=options,
     )
-    trace.coverage_status = (
-        coverage_rows[0]["status"] if coverage_rows else "covered_with_finding"
-    )
+    trace.coverage_status = coverage_rows[0]["status"] if coverage_rows else "covered_with_finding"
     trace.finding_key = "b" * 64
     return trace

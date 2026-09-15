@@ -60,9 +60,7 @@ def isolated_registry() -> UnifiedRegistry:
         ModelRecord(
             provider_id="local_qwythos",
             model="qwythos-9b-claude-mythos-5-1m",
-            capabilities=ProviderCapability(
-                json_schema=True, tool_calling=True, max_context=65536
-            ),
+            capabilities=ProviderCapability(json_schema=True, tool_calling=True, max_context=65536),
             base_url="http://qwythos:8000/v1",
             adapter_kind="openai_compatible",
         )

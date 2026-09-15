@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from src.llm_orchestrator.intent_compiler import (
     CompiledToolJob,
     IntentCompileError,
@@ -96,7 +95,8 @@ def test_composed_context_drives_intent_compiler():
     # A destructive tool is rejected via the composed allow-list.
     with pytest.raises(IntentCompileError) as exc:
         compile_intent(
-            {"phase": "exploitation", "scope_refs": ["scope-1"], "tool_id": "sqlmap"}, ctx
+            {"phase": "exploitation", "scope_refs": ["scope-1"], "tool_id": "sqlmap"},
+            ctx,
         )
     assert exc.value.code == "profile_capability_denied"
 

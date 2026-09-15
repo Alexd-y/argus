@@ -7,11 +7,10 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from src.recon.vulnerability_analysis.context_detector import detect_reflection_context
 from src.recon.vulnerability_analysis.active_scan.payload_generator import (
     AdaptivePayloadGenerator,
 )
+from src.recon.vulnerability_analysis.context_detector import detect_reflection_context
 from src.recon.vulnerability_analysis.xss_payload_manager import XSSPayloadManager
 from src.recon.vulnerability_analysis.xss_verifier import verify_xss_with_browser
 
@@ -108,11 +107,17 @@ class TestXssFullPipeline:
         fake_module.sync_playwright = MagicMock(return_value=mock_pw)
 
         with (
-            patch.dict(sys.modules, {
-                "playwright": ModuleType("playwright"),
-                "playwright.sync_api": fake_module,
-            }),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", settings_mock),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                settings_mock,
+            ),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
                 return_value=None,
@@ -155,11 +160,17 @@ class TestXssFullPipeline:
         settings_mock = _mock_settings()
 
         with (
-            patch.dict(sys.modules, {
-                "playwright": ModuleType("playwright"),
-                "playwright.sync_api": fake_module,
-            }),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", settings_mock),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                settings_mock,
+            ),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
                 return_value=None,
@@ -181,8 +192,12 @@ async def test_xss_engine_enrich_playwright_unavailable_sets_http_reflection_poc
     """T5: при недоступном Playwright PoC остаётся http_reflection и verified_via_browser=false."""
     from urllib.parse import parse_qs, urlparse
 
-    from src.recon.vulnerability_analysis.active_scan import va_active_scan_phase as vmod
-    from src.recon.vulnerability_analysis.active_scan.xss_verifier import XSSVerificationResult
+    from src.recon.vulnerability_analysis.active_scan import (
+        va_active_scan_phase as vmod,
+    )
+    from src.recon.vulnerability_analysis.active_scan.xss_verifier import (
+        XSSVerificationResult,
+    )
 
     async def fake_verify(*_a, **_k):
         return XSSVerificationResult(verified=False, error="playwright not available")
@@ -243,7 +258,9 @@ async def test_xss_engine_enrich_verification_disabled_http_reflection_poc() -> 
     """T5: XSS_VERIFICATION выключен — только HTTP-отражение, без вызова браузера."""
     from urllib.parse import parse_qs, urlparse
 
-    from src.recon.vulnerability_analysis.active_scan import va_active_scan_phase as vmod
+    from src.recon.vulnerability_analysis.active_scan import (
+        va_active_scan_phase as vmod,
+    )
 
     class FakeHttpxClient:
         def __init__(self, *a, **kw):
@@ -302,7 +319,9 @@ async def test_xss_engine_enrich_verification_disabled_http_reflection_poc() -> 
 @pytest.mark.asyncio
 async def test_xss_engine_enrich_no_reflection_verification_method_none() -> None:
     """T5: нет отражения в ответе — verification_method=none, verified_via_browser=false."""
-    from src.recon.vulnerability_analysis.active_scan import va_active_scan_phase as vmod
+    from src.recon.vulnerability_analysis.active_scan import (
+        va_active_scan_phase as vmod,
+    )
 
     class FakeHttpxClient:
         def __init__(self, *a, **kw):
@@ -354,8 +373,12 @@ async def test_xss_engine_enrich_reflection_payload_manager_verifier_mocked_brow
     """T10: HTTP-отражение (canary + payload) → менеджер пейлоадов → verify_xss_with_browser_async замокан → browser."""
     from urllib.parse import parse_qs, unquote, urlparse
 
-    from src.recon.vulnerability_analysis.active_scan import va_active_scan_phase as vmod
-    from src.recon.vulnerability_analysis.active_scan.xss_verifier import XSSVerificationResult
+    from src.recon.vulnerability_analysis.active_scan import (
+        va_active_scan_phase as vmod,
+    )
+    from src.recon.vulnerability_analysis.active_scan.xss_verifier import (
+        XSSVerificationResult,
+    )
 
     async def fake_verify(*_a, **_k):
         return XSSVerificationResult(

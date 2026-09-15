@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import yaml
-
 from src.mcp.openapi_emitter import (
     GLOBAL_DEFS_PREFIX,
     LOCAL_DEFS_PREFIX,
@@ -97,8 +96,8 @@ def test_spec_declares_openapi_3_1_metadata() -> None:
     spec = _build_spec()
     assert spec["openapi"] == OPENAPI_VERSION
     info = spec["info"]
-    assert "title" in info and info["title"]
-    assert "version" in info and info["version"]
+    assert info.get("title")
+    assert info.get("version")
     components = spec.get("components", {})
     assert "schemas" in components, "Expected components.schemas in spec"
     assert components["schemas"], "components.schemas should be non-empty"
@@ -187,9 +186,7 @@ def test_tool_operations_have_request_response_bodies() -> None:
 def test_prompt_operations_have_synthetic_argument_schemas() -> None:
     """Each /prompts/* path body must reference a generated arguments schema."""
     spec = _build_spec()
-    prompt_paths = {
-        p: ops for p, ops in spec["paths"].items() if p.startswith("/prompts/")
-    }
+    prompt_paths = {p: ops for p, ops in spec["paths"].items() if p.startswith("/prompts/")}
     assert prompt_paths, "No /prompts/* paths found — prompt surface is empty"
     schemas = spec["components"]["schemas"]
     for path, operations in prompt_paths.items():

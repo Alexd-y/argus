@@ -294,7 +294,11 @@ async def run_signed_tool(
     except (SandboxConfigError, ApprovalRequiredError, TemplateRenderError) as exc:
         logger.info(
             "signed_tool_runner_skipped",
-            extra={"event": "signed_tool_runner_skipped", "tool": tool, "reason": str(exc)},
+            extra={
+                "event": "signed_tool_runner_skipped",
+                "tool": tool,
+                "reason": str(exc),
+            },
         )
         return None
     exit_code = (

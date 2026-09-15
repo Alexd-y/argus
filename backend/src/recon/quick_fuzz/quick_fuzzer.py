@@ -80,10 +80,15 @@ async def fuzz_url(
                 r = await client.get(fuzzed_url, timeout=_HTTP_TIMEOUT, follow_redirects=True)
                 body = r.text
                 body_lower = body.lower()
-                size_diff = abs(len(r.content) - len(baseline_body.encode("utf-8", errors="replace")))
+                size_diff = abs(
+                    len(r.content) - len(baseline_body.encode("utf-8", errors="replace"))
+                )
 
                 same_response = is_same_response(
-                    body, baseline_body, r.status_code, baseline_status,
+                    body,
+                    baseline_body,
+                    r.status_code,
+                    baseline_status,
                 )
                 if baseline_is_spa and same_response:
                     await asyncio.sleep(delay)
@@ -102,16 +107,18 @@ async def fuzz_url(
                 status_changed = r.status_code != baseline_status
 
                 if triggered or (size_diff > 500 and status_changed):
-                    findings.append({
-                        "url": fuzzed_url,
-                        "param": param,
-                        "payload": payload[:80],
-                        "category": category,
-                        "status": r.status_code,
-                        "size_diff": size_diff,
-                        "triggered": triggered,
-                        "response_snippet": body[:200],
-                    })
+                    findings.append(
+                        {
+                            "url": fuzzed_url,
+                            "param": param,
+                            "payload": payload[:80],
+                            "category": category,
+                            "status": r.status_code,
+                            "size_diff": size_diff,
+                            "triggered": triggered,
+                            "response_snippet": body[:200],
+                        }
+                    )
 
                 await asyncio.sleep(delay)
 
@@ -140,16 +147,18 @@ async def fuzz_post_json(
                 r = await client.post(url, json=body_data, timeout=_HTTP_TIMEOUT)
                 resp_lower = r.text.lower()
                 if any(s.lower() in resp_lower for s in sigs):
-                    findings.append({
-                        "url": url,
-                        "param": field,
-                        "payload": payload[:80],
-                        "category": category,
-                        "method": "POST/JSON",
-                        "status": r.status_code,
-                        "response_snippet": r.text[:200],
-                        "triggered": True,
-                    })
+                    findings.append(
+                        {
+                            "url": url,
+                            "param": field,
+                            "payload": payload[:80],
+                            "category": category,
+                            "method": "POST/JSON",
+                            "status": r.status_code,
+                            "response_snippet": r.text[:200],
+                            "triggered": True,
+                        }
+                    )
                 await asyncio.sleep(delay)
             except httpx.HTTPError:
                 continue
@@ -230,8 +239,14 @@ async def run_quick_fuzz(
                     console.print(f"[bold]Fuzzing {scan_url}: {category.upper()}[/bold]")
 
                 results = await fuzz_url(
-                    client, scan_url, payloads, category,
-                    baseline_body, baseline_status, baseline_is_spa, delay,
+                    client,
+                    scan_url,
+                    payloads,
+                    category,
+                    baseline_body,
+                    baseline_status,
+                    baseline_is_spa,
+                    delay,
                 )
                 all_fuzz_results.extend(results)
 
@@ -253,24 +268,28 @@ async def run_quick_fuzz(
         for result in all_fuzz_results:
             if result.get("triggered"):
                 category = result.get("category", "").lower()
-                severity = "high" if category in ("sqli", "ssti", "command_injection", "xxe") else "medium"
-                all_findings.append({
-                    "module": "quick_fuzz",
-                    "category": f"Injection ({category.upper()})",
-                    "owasp_id": "A05",
-                    "owasp_name": "Injection",
-                    "severity": severity,
-                    "title": f"{category.upper()} confirmed — param '{result.get('param', '')}'",
-                    "description": f"Payload produced a distinctive response indicating {category.upper()} vulnerability.",
-                    "evidence": (
-                        f"URL: {result.get('url', '')}\n"
-                        f"Param: {result.get('param', '')}\n"
-                        f"Payload: {result.get('payload', '')}\n"
-                        f"Response: {result.get('response_snippet', '')[:200]}"
-                    ),
-                    "fix": "Parameterize queries, validate/sanitize all inputs, use allowlists.",
-                    "url": result.get("url", target),
-                })
+                severity = (
+                    "high" if category in ("sqli", "ssti", "command_injection", "xxe") else "medium"
+                )
+                all_findings.append(
+                    {
+                        "module": "quick_fuzz",
+                        "category": f"Injection ({category.upper()})",
+                        "owasp_id": "A05",
+                        "owasp_name": "Injection",
+                        "severity": severity,
+                        "title": f"{category.upper()} confirmed — param '{result.get('param', '')}'",
+                        "description": f"Payload produced a distinctive response indicating {category.upper()} vulnerability.",
+                        "evidence": (
+                            f"URL: {result.get('url', '')}\n"
+                            f"Param: {result.get('param', '')}\n"
+                            f"Payload: {result.get('payload', '')}\n"
+                            f"Response: {result.get('response_snippet', '')[:200]}"
+                        ),
+                        "fix": "Parameterize queries, validate/sanitize all inputs, use allowlists.",
+                        "url": result.get("url", target),
+                    }
+                )
 
         candidates = build_candidates_from_fuzz_results(all_fuzz_results)
 

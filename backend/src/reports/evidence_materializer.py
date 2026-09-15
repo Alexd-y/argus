@@ -113,7 +113,10 @@ def build_observation_poc(
     steps = (reproducible_steps or "").strip()
     if not refs or (not observation and not steps):
         return None
-    poc: dict[str, Any] = {"kind": "observation", "evidence_refs": refs[:_MAX_OBSERVATION_REFS]}
+    poc: dict[str, Any] = {
+        "kind": "observation",
+        "evidence_refs": refs[:_MAX_OBSERVATION_REFS],
+    }
     if observation:
         poc["observation"] = observation[:_MAX_OBSERVATION_LEN]
     if steps:

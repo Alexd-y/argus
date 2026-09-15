@@ -45,7 +45,12 @@ def test_legacy_path_buffers_tool_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ke,
         "run_argv_simple_sync",
-        lambda *_a, **_k: {"success": True, "stdout": "scan-out", "stderr": "", "return_code": 0},
+        lambda *_a, **_k: {
+            "success": True,
+            "stdout": "scan-out",
+            "stderr": "",
+            "return_code": 0,
+        },
     )
     scan_id = "scan-kal-legacy-1"
     drain_pending_tool_runs(scan_id)  # ensure clean slate
@@ -92,7 +97,12 @@ def test_failed_execution_buffers_error_status(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         ke,
         "run_argv_simple_sync",
-        lambda *_a, **_k: {"success": False, "stdout": "", "stderr": "boom", "return_code": 1},
+        lambda *_a, **_k: {
+            "success": False,
+            "stdout": "",
+            "stderr": "boom",
+            "return_code": 1,
+        },
     )
     scan_id = "scan-kal-legacy-fail-1"
     drain_pending_tool_runs(scan_id)
@@ -109,7 +119,12 @@ def test_missing_scan_context_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ke,
         "run_argv_simple_sync",
-        lambda *_a, **_k: {"success": True, "stdout": "out", "stderr": "", "return_code": 0},
+        lambda *_a, **_k: {
+            "success": True,
+            "stdout": "out",
+            "stderr": "",
+            "return_code": 0,
+        },
     )
     _run(monkeypatch, scan_id=None)
     # No scan_id → nothing buffered under empty/None key.

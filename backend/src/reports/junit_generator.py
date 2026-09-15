@@ -45,10 +45,10 @@ Security
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET  # noqa: S405  # nosec B405 — emission-only; tests parse via defusedxml
+import xml.etree.ElementTree as ET  # nosec B405 — emission-only; tests parse via defusedxml
 from typing import Final
 from xml.dom import (
-    minidom,  # noqa: S408  # nosec B408 — pretty-print only; never parses external input
+    minidom,  # nosec B408 — pretty-print only; never parses external input
 )
 
 from src.api.schemas import Finding
@@ -83,9 +83,7 @@ _MAX_BODY_LEN: Final[int] = 8192
 # Strip control characters that are illegal in XML 1.0 (per spec §2.2).
 # Allowed: TAB (0x09), LF (0x0A), CR (0x0D), and 0x20+; everything else is
 # scrubbed to ``?`` so consumers don't reject the document.
-_XML_INVALID_CHAR = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]"
-)
+_XML_INVALID_CHAR = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def _xml_safe(value: str | None, *, limit: int) -> str:
@@ -244,7 +242,7 @@ def _suite_properties(data: ReportData) -> ET.Element | None:
 
 def build_junit_tree(data: ReportData) -> ET.ElementTree:
     """Build a ``<testsuites>`` ElementTree from ``data`` (no I/O)."""
-    findings_sorted = sorted(list(data.findings or []), key=_finding_priority_key)
+    findings_sorted = sorted(data.findings or [], key=_finding_priority_key)
 
     failures = sum(1 for f in findings_sorted if _is_failing(f.severity))
     total = len(findings_sorted) or 1
@@ -260,13 +258,15 @@ def build_junit_tree(data: ReportData) -> ET.ElementTree:
         },
     )
     suite_attrs = _testsuite_metadata(data)
-    suite_attrs.update({
-        "tests": str(total),
-        "failures": str(failures),
-        "errors": "0",
-        "skipped": "0",
-        "time": "0",
-    })
+    suite_attrs.update(
+        {
+            "tests": str(total),
+            "failures": str(failures),
+            "errors": "0",
+            "skipped": "0",
+            "time": "0",
+        }
+    )
     testsuite = ET.SubElement(testsuites, "testsuite", suite_attrs)
 
     properties = _suite_properties(data)
@@ -301,7 +301,7 @@ def generate_junit(data: ReportData) -> bytes:
     # ``minidom.parseString`` here is operating on bytes WE just produced — no
     # external entity surface area exists. Pretty-printing yields stable
     # 2-space indentation that downstream consumers and snapshot tests prefer.
-    pretty = minidom.parseString(raw).toprettyxml(  # noqa: S318  # nosec B318 — input is our own emission, no external XML
+    pretty = minidom.parseString(raw).toprettyxml(  # nosec B318 — input is our own emission, no external XML
         indent="  ", encoding="utf-8"
     )
     return bytes(pretty)

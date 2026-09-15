@@ -58,30 +58,54 @@ def record_usage(
     except RuntimeError:
         loop = None
     if loop is not None:
-        loop.create_task(_persist_to_db(
-            tenant_id=tenant_id, scan_id=scan_id, phase=phase, task=task,
-            alias=alias, provider=provider, model=model,
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-            estimated_cost_usd=entry["estimated_cost_usd"],
-            status=status, error_code=error_code, latency_ms=latency_ms,
-            prompt_hash=prompt_hash, response_hash=response_hash,
-        ))
+        loop.create_task(
+            _persist_to_db(
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                phase=phase,
+                task=task,
+                alias=alias,
+                provider=provider,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                estimated_cost_usd=entry["estimated_cost_usd"],
+                status=status,
+                error_code=error_code,
+                latency_ms=latency_ms,
+                prompt_hash=prompt_hash,
+                response_hash=response_hash,
+            )
+        )
 
 
-def _record_prometheus(provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> None:
+def _record_prometheus(
+    provider: str, model: str, prompt_tokens: int, completion_tokens: int
+) -> None:
     try:
         from src.core.observability import record_llm_tokens
+
         record_llm_tokens(provider, model, prompt_tokens, completion_tokens)
     except Exception:
         pass
 
 
 async def _persist_to_db(
-    tenant_id: str, scan_id: str, phase: str, task: str,
-    alias: str, provider: str, model: str,
-    prompt_tokens: int, completion_tokens: int,
-    estimated_cost_usd: float, status: str, error_code: str,
-    latency_ms: int, prompt_hash: str, response_hash: str,
+    tenant_id: str,
+    scan_id: str,
+    phase: str,
+    task: str,
+    alias: str,
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    estimated_cost_usd: float,
+    status: str,
+    error_code: str,
+    latency_ms: int,
+    prompt_hash: str,
+    response_hash: str,
 ) -> None:
     """Persist invocation record to gateway_invocations table (fire-and-forget)."""
     try:
@@ -115,11 +139,14 @@ async def _persist_to_db(
 
 
 def get_usage_summary(
-    tenant_id: str = "", scan_id: str = "",
+    tenant_id: str = "",
+    scan_id: str = "",
 ) -> dict[str, Any]:
     filtered = [
-        e for e in _ledger
-        if (not tenant_id or e["tenant_id"] == tenant_id) and (not scan_id or e["scan_id"] == scan_id)
+        e
+        for e in _ledger
+        if (not tenant_id or e["tenant_id"] == tenant_id)
+        and (not scan_id or e["scan_id"] == scan_id)
     ]
     total_tokens = sum(e["total_tokens"] for e in filtered)
     total_cost = sum(e["estimated_cost_usd"] for e in filtered)

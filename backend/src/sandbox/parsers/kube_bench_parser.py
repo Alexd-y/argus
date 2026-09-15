@@ -86,7 +86,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -138,7 +138,7 @@ _SEVERITY_TO_CVSS: Final[dict[str, float]] = {
 _RELEVANT_STATUSES: Final[frozenset[str]] = frozenset({"FAIL", "WARN"})
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -344,9 +344,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    raw_controls: list[Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(raw_controls: list[Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for control in raw_controls:
         if not isinstance(control, dict):
             continue

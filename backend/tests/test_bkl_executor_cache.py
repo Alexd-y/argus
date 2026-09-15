@@ -7,7 +7,7 @@ Tests:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,12 +32,14 @@ def _make_tool_cache_mock() -> MagicMock:
 def _executor_patches(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
     """Patch external deps for executor tests."""
     cache_mock = _make_tool_cache_mock()
-    run_mock = MagicMock(return_value={
-        "success": True,
-        "stdout": "PORT   STATE SERVICE\n80/tcp open  http",
-        "stderr": "",
-        "return_code": 0,
-    })
+    run_mock = MagicMock(
+        return_value={
+            "success": True,
+            "stdout": "PORT   STATE SERVICE\n80/tcp open  http",
+            "stderr": "",
+            "return_code": 0,
+        }
+    )
 
     monkeypatch.setattr(
         "src.tools.executor.get_tool_cache",
@@ -83,7 +85,8 @@ class TestExecutorCacheHit:
     """BKL-007: use_cache=True must return cached result on repeated call."""
 
     def test_first_call_runs_command(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         _, run_mock = _executor_patches
         from src.tools.executor import execute_command
@@ -93,7 +96,8 @@ class TestExecutorCacheHit:
         run_mock.assert_called_once()
 
     def test_second_call_returns_cached(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         cache_mock, run_mock = _executor_patches
         from src.tools.executor import execute_command
@@ -107,7 +111,8 @@ class TestExecutorCacheHit:
         run_mock.assert_not_called()
 
     def test_cache_stores_successful_result(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         cache_mock, _ = _executor_patches
         from src.tools.executor import execute_command
@@ -120,7 +125,8 @@ class TestExecutorCacheBypass:
     """BKL-007: use_cache=False must bypass cache entirely."""
 
     def test_bypass_cache_runs_command_every_time(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         _, run_mock = _executor_patches
         from src.tools.executor import execute_command
@@ -131,7 +137,8 @@ class TestExecutorCacheBypass:
         assert run_mock.call_count == 2
 
     def test_bypass_does_not_read_cache(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         cache_mock, _ = _executor_patches
         from src.tools.executor import execute_command
@@ -140,7 +147,8 @@ class TestExecutorCacheBypass:
         cache_mock.get.assert_not_called()
 
     def test_bypass_does_not_write_cache(
-        self, _executor_patches: tuple[MagicMock, MagicMock],
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
     ) -> None:
         cache_mock, _ = _executor_patches
         from src.tools.executor import execute_command
@@ -153,7 +161,9 @@ class TestExecutorNotAllowedTool:
     """BKL-007: disallowed tools are rejected regardless of cache."""
 
     def test_disallowed_tool_returns_failure(
-        self, _executor_patches: tuple[MagicMock, MagicMock], monkeypatch: pytest.MonkeyPatch,
+        self,
+        _executor_patches: tuple[MagicMock, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
             "src.tools.executor.extract_tool_name",

@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from src.recon.reporting.raw_outputs_builder import (
     RAW_OUTPUTS_DIR,
     aggregate_raw_tool_outputs,
@@ -119,7 +117,7 @@ class TestAggregateRawToolOutputs:
             encoding="utf-8",
         )
         (tmp_path / "04_live_hosts" / "nuclei_output_initial.json").write_text(
-            '[]',
+            "[]",
             encoding="utf-8",
         )
         out_dir = tmp_path / "artifacts"
@@ -133,7 +131,9 @@ class TestAggregateRawToolOutputs:
     def test_returns_list_of_paths(self, tmp_path: Path) -> None:
         """Return value is list of Path objects."""
         (tmp_path / "02_subdomains").mkdir()
-        (tmp_path / "02_subdomains" / "subdomains_raw.txt").write_text("x.example.com", encoding="utf-8")
+        (tmp_path / "02_subdomains" / "subdomains_raw.txt").write_text(
+            "x.example.com", encoding="utf-8"
+        )
         result = aggregate_raw_tool_outputs(tmp_path, tmp_path / "out")
         assert isinstance(result, list)
         assert all(isinstance(p, Path) for p in result)

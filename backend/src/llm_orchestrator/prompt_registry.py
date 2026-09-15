@@ -141,18 +141,14 @@ class PromptDefinition(BaseModel):
     @classmethod
     def _check_version(cls, value: str) -> str:
         if not _VERSION_RE.fullmatch(value):
-            raise ValueError(
-                f"version {value!r} must be semver-compatible (\\d+\\.\\d+\\.\\d+)"
-            )
+            raise ValueError(f"version {value!r} must be semver-compatible (\\d+\\.\\d+\\.\\d+)")
         return value
 
     @field_validator("expected_schema_ref", "response_schema_id")
     @classmethod
     def _check_schema_ref(cls, value: str | None) -> str | None:
         if value is not None and not _SCHEMA_REF_RE.fullmatch(value):
-            raise ValueError(
-                f"schema id {value!r} must match ^[a-z][a-z0-9_]{{2,63}}$"
-            )
+            raise ValueError(f"schema id {value!r} must match ^[a-z][a-z0-9_]{{2,63}}$")
         return value
 
     @model_validator(mode="after")
@@ -169,9 +165,7 @@ class PromptDefinition(BaseModel):
     @classmethod
     def _check_model_id(cls, value: str) -> str:
         if not _MODEL_ID_RE.fullmatch(value):
-            raise ValueError(
-                f"default_model_id {value!r} must match ^[a-z][a-z0-9._\\-]{{1,127}}$"
-            )
+            raise ValueError(f"default_model_id {value!r} must match ^[a-z][a-z0-9._\\-]{{1,127}}$")
         return value
 
 
@@ -246,13 +240,9 @@ class PromptRegistry:
         :class:`PromptRegistrySummary` on success.
         """
         if not self._prompts_dir.exists():
-            raise PromptRegistryError(
-                f"prompts directory {self._prompts_dir!s} does not exist"
-            )
+            raise PromptRegistryError(f"prompts directory {self._prompts_dir!s} does not exist")
         if not self._prompts_dir.is_dir():
-            raise PromptRegistryError(
-                f"prompts path {self._prompts_dir!s} is not a directory"
-            )
+            raise PromptRegistryError(f"prompts path {self._prompts_dir!s} is not a directory")
 
         try:
             self._key_manager.load()
@@ -262,26 +252,21 @@ class PromptRegistry:
         signatures = self._load_signatures()
         yaml_paths = sorted(p for p in self._prompts_dir.glob("*.yaml") if p.is_file())
         if not yaml_paths:
-            raise PromptRegistryError(
-                f"no prompt YAMLs found under {self._prompts_dir!s}"
-            )
+            raise PromptRegistryError(f"no prompt YAMLs found under {self._prompts_dir!s}")
 
         registered: dict[str, _RegisteredPrompt] = {}
         for yaml_path in yaml_paths:
             prompt = self._load_and_verify(yaml_path, signatures)
             if prompt.prompt_id in registered:
                 raise PromptRegistryError(
-                    f"duplicate prompt_id {prompt.prompt_id!r} "
-                    f"(already loaded from another YAML)"
+                    f"duplicate prompt_id {prompt.prompt_id!r} (already loaded from another YAML)"
                 )
             if prompt.prompt_id != yaml_path.stem:
                 raise PromptRegistryError(
                     f"prompt_id {prompt.prompt_id!r} does not match filename "
                     f"stem {yaml_path.stem!r}"
                 )
-            registered[prompt.prompt_id] = _RegisteredPrompt(
-                prompt=prompt, yaml_path=yaml_path
-            )
+            registered[prompt.prompt_id] = _RegisteredPrompt(prompt=prompt, yaml_path=yaml_path)
 
         self._registered = registered
         self._rebuild_role_index()
@@ -327,17 +312,13 @@ class PromptRegistry:
 
     def _load_signatures(self) -> SignaturesFile:
         if not self._signatures_path.exists():
-            raise PromptRegistryError(
-                f"SIGNATURES file {self._signatures_path!s} does not exist"
-            )
+            raise PromptRegistryError(f"SIGNATURES file {self._signatures_path!s} does not exist")
         try:
             return SignaturesFile.from_file(self._signatures_path)
         except SignatureError as exc:
             raise PromptRegistryError(f"failed to parse SIGNATURES: {exc}") from exc
 
-    def _load_and_verify(
-        self, yaml_path: Path, signatures: SignaturesFile
-    ) -> PromptDefinition:
+    def _load_and_verify(self, yaml_path: Path, signatures: SignaturesFile) -> PromptDefinition:
         try:
             yaml_bytes = yaml_path.read_bytes()
         except OSError as exc:
@@ -360,21 +341,16 @@ class PromptRegistry:
         try:
             payload = yaml.safe_load(yaml_bytes)
         except yaml.YAMLError as exc:
-            raise PromptRegistryError(
-                f"YAML parse error in {relative_path!r}: {exc}"
-            ) from exc
+            raise PromptRegistryError(f"YAML parse error in {relative_path!r}: {exc}") from exc
 
         if not isinstance(payload, dict):
-            raise PromptRegistryError(
-                f"{relative_path!r} must be a YAML mapping at the top level"
-            )
+            raise PromptRegistryError(f"{relative_path!r} must be a YAML mapping at the top level")
 
         try:
             prompt = PromptDefinition(**payload)
         except ValidationError as exc:
             raise PromptRegistryError(
-                f"schema validation failed for {relative_path!r}: "
-                f"{exc.error_count()} errors"
+                f"schema validation failed for {relative_path!r}: {exc.error_count()} errors"
             ) from exc
 
         return prompt

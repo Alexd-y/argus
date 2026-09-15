@@ -104,7 +104,11 @@ class PostgresBudgetStore:
             await session.execute(stmt)
 
     async def set_limits(
-        self, key: str, *, max_tokens: float | None = None, max_cost_usd: float | None = None
+        self,
+        key: str,
+        *,
+        max_tokens: float | None = None,
+        max_cost_usd: float | None = None,
     ) -> None:
         async with self._sf() as session, session.begin():
             values = {"key": key}
@@ -132,13 +136,17 @@ class PostgresBudgetStore:
             await self._ensure_scope_rows(session, keys)
             # Lock all involved scope rows in a stable order to avoid deadlocks.
             rows = (
-                await session.execute(
-                    select(agent_budget_scope)
-                    .where(agent_budget_scope.c.key.in_(keys))
-                    .order_by(agent_budget_scope.c.key)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_budget_scope)
+                        .where(agent_budget_scope.c.key.in_(keys))
+                        .order_by(agent_budget_scope.c.key)
+                        .with_for_update()
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
             for row in rows:
                 lim_t = _limit(row["limit_tokens"])
@@ -183,12 +191,16 @@ class PostgresBudgetStore:
         actual_cost = float(usage.cost_usd or 0.0)
         async with self._sf() as session, session.begin():
             res = (
-                await session.execute(
-                    select(agent_budget_reservation)
-                    .where(agent_budget_reservation.c.reservation_id == reservation_id)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_budget_reservation)
+                        .where(agent_budget_reservation.c.reservation_id == reservation_id)
+                        .with_for_update()
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if res is None or res["state"] not in (
                 ReservationState.RESERVED.value,
                 ReservationState.UNCERTAIN.value,
@@ -197,13 +209,17 @@ class PostgresBudgetStore:
 
             # Idempotent booking: unique usage-event row. If it already exists,
             # someone else already settled — do not double-charge.
-            ins = pg_insert(agent_budget_usage_event).values(
-                reservation_id=reservation_id,
-                tokens=actual_tokens,
-                cost_usd=actual_cost,
-                estimated=usage.estimated,
-                created_at=utcnow(),
-            ).on_conflict_do_nothing(index_elements=["reservation_id"])
+            ins = (
+                pg_insert(agent_budget_usage_event)
+                .values(
+                    reservation_id=reservation_id,
+                    tokens=actual_tokens,
+                    cost_usd=actual_cost,
+                    estimated=usage.estimated,
+                    created_at=utcnow(),
+                )
+                .on_conflict_do_nothing(index_elements=["reservation_id"])
+            )
             result = await session.execute(ins)
             if result.rowcount == 0:
                 return False
@@ -211,12 +227,16 @@ class PostgresBudgetStore:
             keys = json.loads(res["scope_keys"])
             for key in keys:
                 srow = (
-                    await session.execute(
-                        select(agent_budget_scope)
-                        .where(agent_budget_scope.c.key == key)
-                        .with_for_update()
+                    (
+                        await session.execute(
+                            select(agent_budget_scope)
+                            .where(agent_budget_scope.c.key == key)
+                            .with_for_update()
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
                 if srow is None:
                     continue
                 new_reserved_t = max(0, srow["reserved_tokens"] - res["tokens"])
@@ -241,12 +261,16 @@ class PostgresBudgetStore:
     async def release(self, reservation_id: str) -> bool:
         async with self._sf() as session, session.begin():
             res = (
-                await session.execute(
-                    select(agent_budget_reservation)
-                    .where(agent_budget_reservation.c.reservation_id == reservation_id)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_budget_reservation)
+                        .where(agent_budget_reservation.c.reservation_id == reservation_id)
+                        .with_for_update()
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if res is None or res["state"] != ReservationState.RESERVED.value:
                 return False
             await self._unreserve(session, json.loads(res["scope_keys"]), res)
@@ -260,12 +284,16 @@ class PostgresBudgetStore:
     async def mark_uncertain(self, reservation_id: str) -> bool:
         async with self._sf() as session, session.begin():
             res = (
-                await session.execute(
-                    select(agent_budget_reservation)
-                    .where(agent_budget_reservation.c.reservation_id == reservation_id)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_budget_reservation)
+                        .where(agent_budget_reservation.c.reservation_id == reservation_id)
+                        .with_for_update()
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if res is None or res["state"] != ReservationState.RESERVED.value:
                 return False
             await session.execute(
@@ -296,18 +324,25 @@ class PostgresBudgetStore:
         recovered: list[Reservation] = []
         async with self._sf() as session, session.begin():
             rows = (
-                await session.execute(
-                    select(agent_budget_reservation)
-                    .where(agent_budget_reservation.c.expires_at.is_not(None))
-                    .where(agent_budget_reservation.c.expires_at < cutoff)
-                    .where(
-                        agent_budget_reservation.c.state.in_(
-                            [ReservationState.RESERVED.value, ReservationState.UNCERTAIN.value]
+                (
+                    await session.execute(
+                        select(agent_budget_reservation)
+                        .where(agent_budget_reservation.c.expires_at.is_not(None))
+                        .where(agent_budget_reservation.c.expires_at < cutoff)
+                        .where(
+                            agent_budget_reservation.c.state.in_(
+                                [
+                                    ReservationState.RESERVED.value,
+                                    ReservationState.UNCERTAIN.value,
+                                ]
+                            )
                         )
+                        .with_for_update()
                     )
-                    .with_for_update()
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             for res in rows:
                 rec = Reservation(
                     reservation_id=res["reservation_id"],
@@ -322,9 +357,7 @@ class PostgresBudgetStore:
                     await self._unreserve(session, rec.scope_keys, res)
                     await session.execute(
                         update(agent_budget_reservation)
-                        .where(
-                            agent_budget_reservation.c.reservation_id == res["reservation_id"]
-                        )
+                        .where(agent_budget_reservation.c.reservation_id == res["reservation_id"])
                         .values(state=ReservationState.RELEASED.value)
                     )
                     rec.state = ReservationState.RELEASED
@@ -334,10 +367,14 @@ class PostgresBudgetStore:
     async def snapshot(self, key: str) -> BudgetSnapshot:
         async with self._sf() as session, session.begin():
             row = (
-                await session.execute(
-                    select(agent_budget_scope).where(agent_budget_scope.c.key == key)
+                (
+                    await session.execute(
+                        select(agent_budget_scope).where(agent_budget_scope.c.key == key)
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return BudgetSnapshot(key, _INF, _INF, 0, 0.0, 0, 0.0)
             return BudgetSnapshot(
@@ -353,12 +390,16 @@ class PostgresBudgetStore:
     async def _unreserve(self, session: AsyncSession, keys: list[str], res) -> None:
         for key in keys:
             srow = (
-                await session.execute(
-                    select(agent_budget_scope)
-                    .where(agent_budget_scope.c.key == key)
-                    .with_for_update()
+                (
+                    await session.execute(
+                        select(agent_budget_scope)
+                        .where(agent_budget_scope.c.key == key)
+                        .with_for_update()
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if srow is None:
                 continue
             await session.execute(

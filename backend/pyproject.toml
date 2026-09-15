@@ -145,7 +145,18 @@ select = [
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
 ]
-ignore = ["E501"]  # line length handled by black
+ignore = ["E501"]  # line length handled by the formatter (ruff format)
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI/Typer use framework calls in parameter defaults by design (B008).
+"src/api/**/*.py" = ["B008"]
+"src/recon/cli/**/*.py" = ["B008"]
+# Test doubles, fixtures, monkeypatch replacements and parametrized stubs
+# legitimately accept arguments they never use to satisfy the signature of the
+# real callable they stand in for. Unused-argument (ARG) enforcement there is
+# pure noise, so it is scoped out for the test tree only (production `src/`
+# ARG findings are still enforced).
+"tests/**/*.py" = ["ARG"]
 
 [tool.black]
 line-length = 100

@@ -48,25 +48,16 @@ def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
 
 
 def test_garbage_input_returns_no_findings(tmp_path: Path) -> None:
-    assert (
-        parse_rpcclient_enum(
-            b"random text\nno markers\n", b"", tmp_path, "rpcclient_enum"
-        )
-        == []
-    )
+    assert parse_rpcclient_enum(b"random text\nno markers\n", b"", tmp_path, "rpcclient_enum") == []
 
 
 def test_happy_path_emits_users_plus_null_session_marker(tmp_path: Path) -> None:
-    findings = parse_rpcclient_enum(
-        _rpcclient_output(), b"", tmp_path, "rpcclient_enum"
-    )
+    findings = parse_rpcclient_enum(_rpcclient_output(), b"", tmp_path, "rpcclient_enum")
     assert len(findings) == 4
 
 
 def test_null_session_finding_is_misconfig_medium(tmp_path: Path) -> None:
-    findings = parse_rpcclient_enum(
-        _rpcclient_output(), b"", tmp_path, "rpcclient_enum"
-    )
+    findings = parse_rpcclient_enum(_rpcclient_output(), b"", tmp_path, "rpcclient_enum")
     null_findings = [f for f in findings if f.cvss_v3_score == 5.3]
     assert null_findings
     finding = null_findings[0]
@@ -75,9 +66,7 @@ def test_null_session_finding_is_misconfig_medium(tmp_path: Path) -> None:
 
 
 def test_user_findings_are_info_low(tmp_path: Path) -> None:
-    findings = parse_rpcclient_enum(
-        _rpcclient_output(), b"", tmp_path, "rpcclient_enum"
-    )
+    findings = parse_rpcclient_enum(_rpcclient_output(), b"", tmp_path, "rpcclient_enum")
     user_findings = [f for f in findings if f.cvss_v3_score == 3.1]
     assert user_findings
     for finding in user_findings:
@@ -106,11 +95,7 @@ def test_sidecar_records_domain_info(tmp_path: Path) -> None:
 
 
 def test_dedup_collapses_duplicate_users(tmp_path: Path) -> None:
-    payload = (
-        b"user:[admin] rid:[0x1f4]\n"
-        b"user:[admin] rid:[0x1f4]\n"
-        b"user:[admin] rid:[0x1f4]\n"
-    )
+    payload = b"user:[admin] rid:[0x1f4]\nuser:[admin] rid:[0x1f4]\nuser:[admin] rid:[0x1f4]\n"
     findings = parse_rpcclient_enum(payload, b"", tmp_path, "rpcclient_enum")
     user_findings = [f for f in findings if f.cvss_v3_score == 3.1]
     assert len(user_findings) == 1

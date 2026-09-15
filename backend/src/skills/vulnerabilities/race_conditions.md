@@ -19,8 +19,10 @@ Attack window exists between the check and the action:
 import asyncio
 import aiohttp
 
-async def spray_requests(url: str, method: str, payload: dict,
-                         headers: dict, n_concurrent: int = 50) -> dict:
+
+async def spray_requests(
+    url: str, method: str, payload: dict, headers: dict, n_concurrent: int = 50
+) -> dict:
     """Send N simultaneous requests to trigger race condition."""
     async with aiohttp.ClientSession() as session:
         req = getattr(session, method.lower())

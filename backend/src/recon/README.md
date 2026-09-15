@@ -171,6 +171,7 @@ Example: `engagements/abc123/targets/def456/jobs/ghi789/02_subdomains/subdomains
 ```python
 from src.recon.adapters.base import ToolAdapter
 
+
 class MyToolAdapter(ToolAdapter):
     @property
     def name(self) -> str:
@@ -189,18 +190,22 @@ class MyToolAdapter(ToolAdapter):
 
     async def normalize(self, raw_results):
         # Convert to canonical finding format
-        return [{
-            "finding_type": "subdomain",
-            "value": r["subdomain"],
-            "data": {"subdomain": r["subdomain"], "source": "mytool"},
-            "source_tool": "mytool",
-            "confidence": 0.8,
-        } for r in raw_results]
+        return [
+            {
+                "finding_type": "subdomain",
+                "value": r["subdomain"],
+                "data": {"subdomain": r["subdomain"], "source": "mytool"},
+                "source_tool": "mytool",
+                "confidence": 0.8,
+            }
+            for r in raw_results
+        ]
 ```
 
 2. Register in `src/recon/adapters/registry.py`:
 ```python
 from src.recon.adapters.my_tool_adapter import MyToolAdapter
+
 register(MyToolAdapter())
 ```
 

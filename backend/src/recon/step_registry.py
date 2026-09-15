@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from src.recon.recon_runtime import ReconRuntimeConfig
 
 
-class ReconStepId(str, Enum):
+class ReconStepId(StrEnum):
     """Logical recon steps (expand as tools land)."""
 
     NMAP_PORT_SCAN = "nmap_port_scan"

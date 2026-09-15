@@ -86,9 +86,7 @@ class GitHubIssuesNotifier(NotifierBase):
         if min_severity is not None:
             self._min_severity = min_severity
         else:
-            env_sev = os.environ.get(
-                GITHUB_ISSUES_MIN_SEVERITY_ENV, "high"
-            ).strip().lower()
+            env_sev = os.environ.get(GITHUB_ISSUES_MIN_SEVERITY_ENV, "high").strip().lower()
             self._min_severity = _parse_severity(env_sev)
 
     def _resolve_token(self) -> str:
@@ -101,20 +99,18 @@ class GitHubIssuesNotifier(NotifierBase):
             return self._explicit_repo
         return os.environ.get(GITHUB_REPOSITORY_ENV, "").strip()
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:
+    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
         repo = self._resolve_repo()
         if not repo:
-            raise _AdapterDisabled(
-                reason="missing_secret", target_redacted=hash_target("")
-            )
+            raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))
         return f"{GITHUB_API_BASE}/repos/{repo}/issues"
 
     async def _attempt_send(
         self,
         *,
         event: NotificationEvent,
-        tenant_id: str,
-        target: str,
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
+        target: str,  # noqa: ARG002 - NotificationChannel interface signature
     ) -> httpx.Response:
         if not self._should_send(event):
             raise _AdapterDisabled(
@@ -125,9 +121,7 @@ class GitHubIssuesNotifier(NotifierBase):
         token = self._resolve_token()
         repo = self._resolve_repo()
         if not token or not repo:
-            raise _AdapterDisabled(
-                reason="missing_secret", target_redacted=hash_target("")
-            )
+            raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))
 
         body = build_github_issue_payload(event)
         headers = {
@@ -191,9 +185,9 @@ def build_github_issue_payload(event: NotificationEvent) -> dict[str, Any]:
 
 
 __all__ = [
-    "GITHUB_TOKEN_ENV",
-    "GITHUB_REPOSITORY_ENV",
     "GITHUB_ISSUES_MIN_SEVERITY_ENV",
+    "GITHUB_REPOSITORY_ENV",
+    "GITHUB_TOKEN_ENV",
     "GitHubIssuesNotifier",
     "build_github_issue_payload",
 ]

@@ -274,7 +274,7 @@ class PlaybookRegistry:
             playbook = Playbook(**payload)
         except ValidationError as exc:
             raise RegistryLoadError(
-                f"schema validation failed for {relative_path!r}: " f"{exc.error_count()} error(s)"
+                f"schema validation failed for {relative_path!r}: {exc.error_count()} error(s)"
             ) from exc
 
         self._validate_assertions(playbook, relative_path)

@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from src.profiles.errors import (
     LabEngagementRequiredError,
     LabLeaseExpiredError,
@@ -29,43 +28,43 @@ MANIFEST_ID = "m-1"
 
 
 def _lease(**overrides) -> LeaseView:
-    base = dict(
-        lease_id=LEASE_ID,
-        tenant_id=TENANT,
-        engagement_id=ENGAGEMENT,
-        manifest_id=MANIFEST_ID,
-        status="active",
-        expires_at=datetime.now(UTC) + timedelta(hours=2),
-        revoked_at=None,
-    )
+    base = {
+        "lease_id": LEASE_ID,
+        "tenant_id": TENANT,
+        "engagement_id": ENGAGEMENT,
+        "manifest_id": MANIFEST_ID,
+        "status": "active",
+        "expires_at": datetime.now(UTC) + timedelta(hours=2),
+        "revoked_at": None,
+    }
     base.update(overrides)
     return LeaseView(**base)
 
 
 def _scope(**overrides) -> ScopeView:
-    base = dict(
-        manifest_id=MANIFEST_ID,
-        tenant_id=TENANT,
-        engagement_id=ENGAGEMENT,
-        expires_at=datetime.now(UTC) + timedelta(hours=4),
-        revoked_at=None,
-        asset_ids=(),
-        cidrs=("10.90.0.0/16",),
-        dns_suffixes=("lab.argus",),
-    )
+    base = {
+        "manifest_id": MANIFEST_ID,
+        "tenant_id": TENANT,
+        "engagement_id": ENGAGEMENT,
+        "expires_at": datetime.now(UTC) + timedelta(hours=4),
+        "revoked_at": None,
+        "asset_ids": (),
+        "cidrs": ("10.90.0.0/16",),
+        "dns_suffixes": ("lab.argus",),
+    }
     base.update(overrides)
     return ScopeView(**base)
 
 
 def _evaluate(target="https://app.lab.argus", **kwargs):
-    params = dict(
-        tenant_id=TENANT,
-        engagement_id=ENGAGEMENT,
-        lab_lease_id=LEASE_ID,
-        target=target,
-        lease=_lease(),
-        scope=_scope(),
-    )
+    params = {
+        "tenant_id": TENANT,
+        "engagement_id": ENGAGEMENT,
+        "lab_lease_id": LEASE_ID,
+        "target": target,
+        "lease": _lease(),
+        "scope": _scope(),
+    }
     params.update(kwargs)
     return evaluate_lab_lease(**params)
 

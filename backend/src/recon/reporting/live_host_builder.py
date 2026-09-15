@@ -120,25 +120,31 @@ def build_live_hosts_detailed(
             1
             for r in http_rows
             if _build_cluster_key(
-                {"title": r.get("title"), "server": r.get("server"), "status": r.get("status")}
+                {
+                    "title": r.get("title"),
+                    "server": r.get("server"),
+                    "status": r.get("status"),
+                }
             )
             == cluster_key
         )
         notes = _derive_notes({"redirect": redirect, "url": url, "status": status}, cluster_size)
 
-        writer.writerow([
-            host,
-            ip,
-            cname,
-            final_url,
-            redirect_chain,
-            status,
-            title,
-            server,
-            0,
-            "",
-            cluster_id,
-            notes,
-        ])
+        writer.writerow(
+            [
+                host,
+                ip,
+                cname,
+                final_url,
+                redirect_chain,
+                status,
+                title,
+                server,
+                0,
+                "",
+                cluster_id,
+                notes,
+            ]
+        )
 
     return output.getvalue()

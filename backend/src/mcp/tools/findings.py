@@ -106,9 +106,7 @@ def register(mcp: FastMCP) -> None:
             )
             return FindingMarkResult(
                 finding_id=payload.finding_id,
-                status=(
-                    ToolResultStatus.SUCCESS if updated else ToolResultStatus.UNCHANGED
-                ),
+                status=(ToolResultStatus.SUCCESS if updated else ToolResultStatus.UNCHANGED),
             )
 
         return await run_tool(

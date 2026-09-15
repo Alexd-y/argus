@@ -5,14 +5,14 @@ types so imported requests behave exactly like live-captured ones. The HAR
 importer is pure, offline, fail-closed, and bounded.
 """
 
+from src.web_workbench.imports.graphql import (
+    GraphQLImportError,
+    import_graphql_introspection,
+)
 from src.web_workbench.imports.har import (
     HarImportError,
     ImportedExchange,
     import_har,
-)
-from src.web_workbench.imports.graphql import (
-    GraphQLImportError,
-    import_graphql_introspection,
 )
 from src.web_workbench.imports.openapi import (
     OpenApiImportError,

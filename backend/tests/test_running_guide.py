@@ -69,9 +69,8 @@ class TestRunningGuideSections:
 
     def test_has_docker_section(self, content: str) -> None:
         """Section about Docker / docker compose is present."""
-        has_docker = (
-            "docker" in content.lower()
-            and ("compose" in content.lower() or "docker-compose" in content.lower())
+        has_docker = "docker" in content.lower() and (
+            "compose" in content.lower() or "docker-compose" in content.lower()
         )
         assert has_docker, "RUNNING.md must document Docker/docker compose"
 
@@ -108,6 +107,5 @@ class TestRunningGuideSections:
             or "API ключи" in content
         )
         assert has_table_header, (
-            "RUNNING.md must contain API keys table "
-            "(Файл/место, Переменная, or OPENAI_API_KEY)"
+            "RUNNING.md must contain API keys table (Файл/место, Переменная, or OPENAI_API_KEY)"
         )

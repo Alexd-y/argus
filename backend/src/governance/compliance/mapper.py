@@ -12,13 +12,13 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class Framework(str, Enum):
+class Framework(StrEnum):
     ISO27001 = "iso27001"
     SOC2 = "soc2"
     PCI_DSS = "pci_dss"
@@ -31,7 +31,7 @@ class Framework(str, Enum):
 class ComplianceControl:
     id: str = ""
     framework: str = ""
-    control_id: str = ""         # A.8.1, CC6.1, 6.5.1, Art.32, …
+    control_id: str = ""  # A.8.1, CC6.1, 6.5.1, Art.32, …
     control_name: str = ""
     description: str = ""
     evidence_required: str = ""
@@ -44,7 +44,7 @@ class ComplianceEvidence:
     finding_id: str = ""
     framework: str = ""
     control_id: str = ""
-    evidence_type: str = ""      # patch_applied | validation_passed | risk_accepted | …
+    evidence_type: str = ""  # patch_applied | validation_passed | risk_accepted | …
     evidence_description: str = ""
     evidence_hash: str = ""
     generated_at: str = ""
@@ -53,51 +53,95 @@ class ComplianceEvidence:
 
 # ISO 27001:2022 controls relevant to vulnerability management
 ISO27001_CONTROLS: list[ComplianceControl] = [
-    ComplianceControl(framework="iso27001", control_id="A.8.8", control_name="Technical vulnerability management",
-                      description="Vulnerabilities shall be identified, evaluated and addressed.",
-                      evidence_required="Patch applied or risk accepted"),
-    ComplianceControl(framework="iso27001", control_id="A.8.9", control_name="Configuration management",
-                      description="Hardening and secure configuration.",
-                      evidence_required="Hardening patch applied"),
-    ComplianceControl(framework="iso27001", control_id="A.8.25", control_name="Secure development life cycle",
-                      description="Security in development and maintenance.",
-                      evidence_required="Security fix in code"),
-    ComplianceControl(framework="iso27001", control_id="A.8.26", control_name="Application security requirements",
-                      description="Security requirements for applications.",
-                      evidence_required="Finding validated and patched"),
+    ComplianceControl(
+        framework="iso27001",
+        control_id="A.8.8",
+        control_name="Technical vulnerability management",
+        description="Vulnerabilities shall be identified, evaluated and addressed.",
+        evidence_required="Patch applied or risk accepted",
+    ),
+    ComplianceControl(
+        framework="iso27001",
+        control_id="A.8.9",
+        control_name="Configuration management",
+        description="Hardening and secure configuration.",
+        evidence_required="Hardening patch applied",
+    ),
+    ComplianceControl(
+        framework="iso27001",
+        control_id="A.8.25",
+        control_name="Secure development life cycle",
+        description="Security in development and maintenance.",
+        evidence_required="Security fix in code",
+    ),
+    ComplianceControl(
+        framework="iso27001",
+        control_id="A.8.26",
+        control_name="Application security requirements",
+        description="Security requirements for applications.",
+        evidence_required="Finding validated and patched",
+    ),
 ]
 
 # SOC 2 Trust Services Criteria
 SOC2_CONTROLS: list[ComplianceControl] = [
-    ComplianceControl(framework="soc2", control_id="CC6.1", control_name="Logical and physical access controls",
-                      description="Controls over logical access to systems.",
-                      evidence_required="Auth bypass fixed"),
-    ComplianceControl(framework="soc2", control_id="CC7.1", control_name="System monitoring and alerts",
-                      description="Monitor systems for anomalies.",
-                      evidence_required="Alert correlated with code root cause"),
-    ComplianceControl(framework="soc2", control_id="CC7.2", control_name="Incident detection and response",
-                      description="Detect and respond to security incidents.",
-                      evidence_required="Incident enriched with code context"),
+    ComplianceControl(
+        framework="soc2",
+        control_id="CC6.1",
+        control_name="Logical and physical access controls",
+        description="Controls over logical access to systems.",
+        evidence_required="Auth bypass fixed",
+    ),
+    ComplianceControl(
+        framework="soc2",
+        control_id="CC7.1",
+        control_name="System monitoring and alerts",
+        description="Monitor systems for anomalies.",
+        evidence_required="Alert correlated with code root cause",
+    ),
+    ComplianceControl(
+        framework="soc2",
+        control_id="CC7.2",
+        control_name="Incident detection and response",
+        description="Detect and respond to security incidents.",
+        evidence_required="Incident enriched with code context",
+    ),
 ]
 
 # PCI DSS v4.0
 PCI_DSS_CONTROLS: list[ComplianceControl] = [
-    ComplianceControl(framework="pci_dss", control_id="6.3.1", control_name="Security vulnerabilities identified",
-                      description="Identify security vulnerabilities using appropriate methods.",
-                      evidence_required="Finding identified by semantic SAST"),
-    ComplianceControl(framework="pci_dss", control_id="6.3.2", control_name="Vulnerabilities ranked and fixed",
-                      description="Rank and fix vulnerabilities based on risk.",
-                      evidence_required="Risk score calculated, patch generated"),
+    ComplianceControl(
+        framework="pci_dss",
+        control_id="6.3.1",
+        control_name="Security vulnerabilities identified",
+        description="Identify security vulnerabilities using appropriate methods.",
+        evidence_required="Finding identified by semantic SAST",
+    ),
+    ComplianceControl(
+        framework="pci_dss",
+        control_id="6.3.2",
+        control_name="Vulnerabilities ranked and fixed",
+        description="Rank and fix vulnerabilities based on risk.",
+        evidence_required="Risk score calculated, patch generated",
+    ),
 ]
 
 # GDPR
 GDPR_CONTROLS: list[ComplianceControl] = [
-    ComplianceControl(framework="gdpr", control_id="Art.25", control_name="Data protection by design",
-                      description="Appropriate technical measures for data protection.",
-                      evidence_required="PII-related finding fixed"),
-    ComplianceControl(framework="gdpr", control_id="Art.32", control_name="Security of processing",
-                      description="Ensure ongoing confidentiality, integrity and resilience.",
-                      evidence_required="Critical vulnerability remediated"),
+    ComplianceControl(
+        framework="gdpr",
+        control_id="Art.25",
+        control_name="Data protection by design",
+        description="Appropriate technical measures for data protection.",
+        evidence_required="PII-related finding fixed",
+    ),
+    ComplianceControl(
+        framework="gdpr",
+        control_id="Art.32",
+        control_name="Security of processing",
+        description="Ensure ongoing confidentiality, integrity and resilience.",
+        evidence_required="Critical vulnerability remediated",
+    ),
 ]
 
 FRAMEWORK_CONTROLS: dict[Framework, list[ComplianceControl]] = {
@@ -109,27 +153,43 @@ FRAMEWORK_CONTROLS: dict[Framework, list[ComplianceControl]] = {
 
 
 def _map_finding_to_controls(
-    finding: dict[str, Any], framework: Framework,
+    finding: dict[str, Any],
+    framework: Framework,
 ) -> list[ComplianceControl]:
     """Map a security finding to relevant compliance controls."""
     all_controls = FRAMEWORK_CONTROLS.get(framework, [])
-    cwe = str(finding.get("cwe", "")).upper()
+    str(finding.get("cwe", "")).upper()
     severity = str(finding.get("severity", "info")).lower()
     title = str(finding.get("title", "")).lower()
 
     relevant = []
     for ctrl in all_controls:
         if framework == Framework.ISO27001:
-            if "vulnerability" in ctrl.control_id.lower() and severity in ("critical", "high", "medium") or "development" in ctrl.control_name.lower() and finding.get("file_path"):
+            if (
+                "vulnerability" in ctrl.control_id.lower()
+                and severity in ("critical", "high", "medium")
+                or "development" in ctrl.control_name.lower()
+                and finding.get("file_path")
+            ):
                 relevant.append(ctrl)
         elif framework == Framework.SOC2:
-            if "access" in ctrl.control_name.lower() and any(kw in title for kw in ("auth", "bypass", "privilege")) or "incident" in ctrl.control_id.lower():
+            if (
+                "access" in ctrl.control_name.lower()
+                and any(kw in title for kw in ("auth", "bypass", "privilege"))
+                or "incident" in ctrl.control_id.lower()
+            ):
                 relevant.append(ctrl)
         elif framework == Framework.PCI_DSS:
             relevant.append(ctrl)  # All PCI DSS vuln controls apply
-        elif framework == Framework.GDPR:
-            if any(kw in title for kw in ("pii", "data", "privacy", "personal")) or severity in ("critical", "high"):
-                relevant.append(ctrl)
+        if framework == Framework.GDPR and (
+            any(kw in title for kw in ("pii", "data", "privacy", "personal"))
+            or severity
+            in (
+                "critical",
+                "high",
+            )
+        ):
+            relevant.append(ctrl)
 
     if not relevant:
         relevant = all_controls[:1]
@@ -158,10 +218,17 @@ async def map_finding_to_compliance(
                 control_id=ctrl.control_id,
                 evidence_type=_determine_evidence_type(finding),
                 evidence_description=f"Finding '{finding.get('title', 'N/A')[:100]}' "
-                                     f"({finding.get('severity', 'unknown')}) maps to {ctrl.control_id} — {ctrl.control_name}",
+                f"({finding.get('severity', 'unknown')}) maps to {ctrl.control_id} — {ctrl.control_name}",
                 evidence_hash=hashlib.blake2b(
-                    json.dumps({"finding_id": finding.get("id", ""), "control_id": ctrl.control_id, "fw": fw.value},
-                               sort_keys=True).encode(), digest_size=16,
+                    json.dumps(
+                        {
+                            "finding_id": finding.get("id", ""),
+                            "control_id": ctrl.control_id,
+                            "fw": fw.value,
+                        },
+                        sort_keys=True,
+                    ).encode(),
+                    digest_size=16,
                 ).hexdigest(),
                 generated_at=datetime.now(UTC).isoformat(),
             )
@@ -191,12 +258,14 @@ def build_audit_report(
     async def _collect():
         all_evidence = []
         for f in findings:
-            evidence = await map_finding_to_compliance(f, tenant_id=tenant_id, frameworks=frameworks)
+            evidence = await map_finding_to_compliance(
+                f, tenant_id=tenant_id, frameworks=frameworks
+            )
             all_evidence.extend(evidence)
         return all_evidence
 
     try:
-        loop = _asyncio.get_running_loop()
+        _asyncio.get_running_loop()
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(_asyncio.run, _collect())
             evidence = future.result(timeout=300)

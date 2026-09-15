@@ -40,19 +40,19 @@ FUZZER_ENGINES = {
 
 HARNESS_TEMPLATES = {
     "c": (
-        '#include <stdint.h>\n#include <stddef.h>\n'
-        'int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {{\n'
-        '    // TODO: LLM-generated target-specific harness\n'
-        '    return 0;\n'
-        '}}\n'
+        "#include <stdint.h>\n#include <stddef.h>\n"
+        "int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {{\n"
+        "    // TODO: LLM-generated target-specific harness\n"
+        "    return 0;\n"
+        "}}\n"
     ),
     "java": (
-        'import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n'
-        'public class FuzzTarget {{\n'
-        '    public static void fuzzerTestOneInput(FuzzedDataProvider data) {{\n'
-        '        // TODO: LLM-generated target-specific harness\n'
-        '    }}\n'
-        '}}\n'
+        "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n"
+        "public class FuzzTarget {{\n"
+        "    public static void fuzzerTestOneInput(FuzzedDataProvider data) {{\n"
+        "        // TODO: LLM-generated target-specific harness\n"
+        "    }}\n"
+        "}}\n"
     ),
 }
 
@@ -108,7 +108,10 @@ def generate_harness_stub(language: str, target_function: str = "") -> str:
     """Generate a fuzzing harness template for the given language."""
     template = HARNESS_TEMPLATES.get(language.lower(), HARNESS_TEMPLATES["c"])
     if target_function:
-        template = template.replace("// TODO: LLM-generated target-specific harness", f"// Target: {target_function}")
+        template = template.replace(
+            "// TODO: LLM-generated target-specific harness",
+            f"// Target: {target_function}",
+        )
     return template
 
 
@@ -136,12 +139,16 @@ def build_fuzz_harness_prompt(
 ) -> tuple[str, str]:
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
                 system, user = loader.render_extended_system_user(
-                    "fuzzing", language=language, target=target,
-                    framework=framework, source_context=source_context[:20000]
+                    "fuzzing",
+                    language=language,
+                    target=target,
+                    framework=framework,
+                    source_context=source_context[:20000],
                 )
                 if system.strip() and user.strip():
                     return system, user
@@ -173,11 +180,13 @@ def _parse_crashes_from_output(output_dir_listing: str, stderr: str) -> list[Fuz
             elif "timeout" in lower or "hang" in lower:
                 crash_type = "timeout"
             filename = line.split("/")[-1] if "/" in line else line.split("\\")[-1]
-            crashes.append(FuzzCrash(
-                crash_id=filename[:64],
-                crash_file=line,
-                crash_type=crash_type,
-            ))
+            crashes.append(
+                FuzzCrash(
+                    crash_id=filename[:64],
+                    crash_file=line,
+                    crash_type=crash_type,
+                )
+            )
     for line in stderr.splitlines():
         stripped = line.strip()
         if "CRASH" in stripped.upper() or "SUMMARY:" in stripped.upper():
@@ -199,7 +208,9 @@ async def run_fuzzing_campaign(
     """
     start = time.monotonic()
     engine_config = FUZZER_ENGINES.get(request.engine, FUZZER_ENGINES["afl_plus_plus"])
-    harness = request.harness_source or generate_harness_stub(request.language, request.target_binary)
+    harness = request.harness_source or generate_harness_stub(
+        request.language, request.target_binary
+    )
 
     from src.tools.executor import execute_command
 
@@ -281,6 +292,6 @@ __all__ = [
     "FuzzingResult",
     "build_fuzz_harness_prompt",
     "generate_harness_stub",
-    "select_engine",
     "run_fuzzing_campaign",
+    "select_engine",
 ]

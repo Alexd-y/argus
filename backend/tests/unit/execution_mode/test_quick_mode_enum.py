@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.execution_mode import (
     ALLOWED_EXECUTION_MODES,
     ExecutionMode,
@@ -23,9 +22,7 @@ def test_quick_value_is_quick() -> None:
 
 
 def test_allowed_execution_modes_has_exactly_three_values() -> None:
-    assert ALLOWED_EXECUTION_MODES == frozenset(
-        {"production", "lab_unrestricted", "quick"}
-    )
+    assert frozenset({"production", "lab_unrestricted", "quick"}) == ALLOWED_EXECUTION_MODES
     assert len(ALLOWED_EXECUTION_MODES) == 3
     assert len(ExecutionMode) == 3
 
@@ -124,8 +121,7 @@ def test_coerce_legacy_mode_field_accepts_legacy_execution_values() -> None:
     assert coerce_legacy_mode_field("lab_unrestricted") is ExecutionMode.LAB_UNRESTRICTED
     assert coerce_legacy_mode_field(ExecutionMode.PRODUCTION) is ExecutionMode.PRODUCTION
     assert (
-        coerce_legacy_mode_field(ExecutionMode.LAB_UNRESTRICTED)
-        is ExecutionMode.LAB_UNRESTRICTED
+        coerce_legacy_mode_field(ExecutionMode.LAB_UNRESTRICTED) is ExecutionMode.LAB_UNRESTRICTED
     )
 
 

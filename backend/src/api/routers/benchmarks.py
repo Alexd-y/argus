@@ -22,7 +22,10 @@ class BenchRunRequest(BaseModel):
 
 
 @router.post("/run")
-async def run_benchmarks(req: BenchRunRequest, _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> dict[str, Any]:
+async def run_benchmarks(
+    req: BenchRunRequest,
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
     from src.governance.benchmarks.runner import run_benchmark_suite
 
     result = await run_benchmark_suite(model=req.model, profile=req.profile)
@@ -36,25 +39,47 @@ async def run_benchmarks(req: BenchRunRequest, _principal: Annotated[SessionPrin
         "false_positive_rate_post_sandbox": result.false_positive_rate_post_sandbox,
         "validated_finding_rate": result.validated_finding_rate,
         "by_cwe": [
-            {"cwe": c.cwe_id, "f1": c.f1, "tp": c.true_positives, "fp": c.false_positives}
+            {
+                "cwe": c.cwe_id,
+                "f1": c.f1,
+                "tp": c.true_positives,
+                "fp": c.false_positives,
+            }
             for c in result.by_cwe
         ],
     }
 
 
 @router.get("/results")
-async def list_results(model: str = "", _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> list[dict[str, Any]]:
+async def list_results(
+    model: str = "",
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> list[dict[str, Any]]:
     return [
         {"model": model or "WhiteRabbitNeo-7B", "profile": "standard", "f1": 0.90},
     ]
 
 
 @router.get("/compare")
-async def compare_models(_principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> dict[str, Any]:
+async def compare_models(
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
     from src.workers.research.assistant import compare_models
 
     results = {
-        "WhiteRabbitNeo-7B": {"overall_precision": 0.92, "overall_recall": 0.88, "overall_f1": 0.90, "false_positive_rate": 0.15, "patch_acceptance_rate": 0.85},
-        "DeepSeek-V4-Pro": {"overall_precision": 0.89, "overall_recall": 0.85, "overall_f1": 0.87, "false_positive_rate": 0.18, "patch_acceptance_rate": 0.80},
+        "WhiteRabbitNeo-7B": {
+            "overall_precision": 0.92,
+            "overall_recall": 0.88,
+            "overall_f1": 0.90,
+            "false_positive_rate": 0.15,
+            "patch_acceptance_rate": 0.85,
+        },
+        "DeepSeek-V4-Pro": {
+            "overall_precision": 0.89,
+            "overall_recall": 0.85,
+            "overall_f1": 0.87,
+            "false_positive_rate": 0.18,
+            "patch_acceptance_rate": 0.80,
+        },
     }
     return compare_models(["WhiteRabbitNeo-7B", "DeepSeek-V4-Pro"], results)

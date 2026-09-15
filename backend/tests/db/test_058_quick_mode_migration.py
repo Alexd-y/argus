@@ -17,7 +17,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
-
 from src.db.models import Scan
 from src.quick.models import (
     QuickBudgetLeaseRow,
@@ -47,9 +46,7 @@ _EXPECTED_INDEXES: dict[str, frozenset[str]] = {
         {"ix_quick_scan_configs_tenant_scan", "ix_quick_scan_configs_deadline"}
     ),
     "quick_scan_plans": frozenset({"ix_quick_scan_plans_tenant_scan"}),
-    "quick_tasks": frozenset(
-        {"ix_quick_tasks_tenant_scan", "ix_quick_tasks_plan_status"}
-    ),
+    "quick_tasks": frozenset({"ix_quick_tasks_tenant_scan", "ix_quick_tasks_plan_status"}),
     "quick_budget_leases": frozenset(
         {
             "ix_quick_budget_leases_tenant_scan",
@@ -76,12 +73,7 @@ def _make_sqlite_engine() -> Engine:
     )
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "CREATE TABLE tenants ("
-                "id VARCHAR(36) PRIMARY KEY, "
-                "name VARCHAR(255) NOT NULL"
-                ")"
-            )
+            text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL)")
         )
         conn.execute(
             text(
@@ -130,15 +122,11 @@ def test_058_upgrade_creates_quick_tables_and_scan_columns_sqlite() -> None:
         missing = set(_SCAN_COLUMNS) - scan_cols
         assert not missing, f"scans missing columns after upgrade: {sorted(missing)}"
 
-        execution_mode = next(
-            c for c in insp.get_columns("scans") if c["name"] == "execution_mode"
-        )
+        execution_mode = next(c for c in insp.get_columns("scans") if c["name"] == "execution_mode")
         assert execution_mode["nullable"] is False
 
         for table, expected in _EXPECTED_INDEXES.items():
-            present = {
-                ix["name"] for ix in insp.get_indexes(table) if ix["name"] is not None
-            }
+            present = {ix["name"] for ix in insp.get_indexes(table) if ix["name"] is not None}
             absent = expected - present
             assert not absent, f"{table} missing indexes: {sorted(absent)}"
     finally:

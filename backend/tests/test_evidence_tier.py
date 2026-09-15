@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
 from uuid import uuid4
 
 import pytest
-
+from pydantic import ValidationError
 from src.orchestration.evidence_tier import (
     EVIDENCE_TIER_DESCRIPTIONS,
     EVIDENCE_TIER_LABELS,
@@ -18,7 +17,6 @@ from src.pipeline.contracts.finding_dto import (
     FindingCategory,
     FindingDTO,
     FindingStatus,
-    SSVCDecision,
 )
 
 
@@ -49,45 +47,31 @@ class TestEvidenceTier:
 
 class TestClassifyFinding:
     def test_exploitable_with_payload_is_exploited(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.EXPLOITABLE, has_payload=True, has_evidence=True
-        )
+        result = classify_finding(ConfidenceLevel.EXPLOITABLE, has_payload=True, has_evidence=True)
         assert result == EvidenceTier.EXPLOITED
 
     def test_exploitable_without_payload_is_confirmed(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.EXPLOITABLE, has_payload=False, has_evidence=True
-        )
+        result = classify_finding(ConfidenceLevel.EXPLOITABLE, has_payload=False, has_evidence=True)
         assert result == EvidenceTier.CONFIRMED
 
     def test_confirmed_always_confirmed(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.CONFIRMED, has_payload=False, has_evidence=True
-        )
+        result = classify_finding(ConfidenceLevel.CONFIRMED, has_payload=False, has_evidence=True)
         assert result == EvidenceTier.CONFIRMED
 
     def test_likely_with_evidence_is_suspected(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.LIKELY, has_payload=False, has_evidence=True
-        )
+        result = classify_finding(ConfidenceLevel.LIKELY, has_payload=False, has_evidence=True)
         assert result == EvidenceTier.SUSPECTED
 
     def test_likely_without_evidence_is_informational(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.LIKELY, has_payload=False, has_evidence=False
-        )
+        result = classify_finding(ConfidenceLevel.LIKELY, has_payload=False, has_evidence=False)
         assert result == EvidenceTier.INFORMATIONAL
 
     def test_suspected_is_informational(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.SUSPECTED, has_payload=False, has_evidence=False
-        )
+        result = classify_finding(ConfidenceLevel.SUSPECTED, has_payload=False, has_evidence=False)
         assert result == EvidenceTier.INFORMATIONAL
 
     def test_suspected_with_evidence_still_informational(self) -> None:
-        result = classify_finding(
-            ConfidenceLevel.SUSPECTED, has_payload=False, has_evidence=True
-        )
+        result = classify_finding(ConfidenceLevel.SUSPECTED, has_payload=False, has_evidence=True)
         assert result == EvidenceTier.INFORMATIONAL
 
     def test_exploitable_no_payload_no_evidence(self) -> None:
@@ -98,19 +82,19 @@ class TestClassifyFinding:
 
 
 def _make_finding(**overrides) -> FindingDTO:
-    defaults = dict(
-        id=uuid4(),
-        tenant_id=uuid4(),
-        scan_id=uuid4(),
-        asset_id=uuid4(),
-        tool_run_id=uuid4(),
-        category=FindingCategory.SQLI,
-        cwe=[89],
-        cvss_v3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-        cvss_v3_score=9.8,
-        confidence=ConfidenceLevel.EXPLOITABLE,
-        status=FindingStatus.NEW,
-    )
+    defaults = {
+        "id": uuid4(),
+        "tenant_id": uuid4(),
+        "scan_id": uuid4(),
+        "asset_id": uuid4(),
+        "tool_run_id": uuid4(),
+        "category": FindingCategory.SQLI,
+        "cwe": [89],
+        "cvss_v3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "cvss_v3_score": 9.8,
+        "confidence": ConfidenceLevel.EXPLOITABLE,
+        "status": FindingStatus.NEW,
+    }
     defaults.update(overrides)
     return FindingDTO(**defaults)
 
@@ -174,5 +158,5 @@ class TestFindingDTONewFields:
 
     def test_frozen_model_allows_construction(self) -> None:
         finding = _make_finding(evidence_tier=EvidenceTier.CONFIRMED)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             finding.evidence_tier = EvidenceTier.EXPLOITED

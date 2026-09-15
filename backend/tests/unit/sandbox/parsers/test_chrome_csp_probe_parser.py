@@ -37,9 +37,7 @@ def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
 
 def test_unsafe_inline_escalates_to_high(tmp_path: Path) -> None:
     payload = _payload(
-        violations=[
-            {"directive": "script-src", "value": "'unsafe-inline'", "where": "header"}
-        ]
+        violations=[{"directive": "script-src", "value": "'unsafe-inline'", "where": "header"}]
     )
     findings = parse_chrome_csp_probe(payload, b"", tmp_path, "chrome_csp_probe")
     assert len(findings) == 1
@@ -74,9 +72,7 @@ def test_dedup_on_directive_value_where(tmp_path: Path) -> None:
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    canonical = _payload(
-        violations=[{"directive": "x", "value": "'self'", "where": "header"}]
-    )
+    canonical = _payload(violations=[{"directive": "x", "value": "'self'", "where": "header"}])
     (tmp_path / "csp.json").write_bytes(canonical)
     decoy = _payload(violations=[{"directive": "y", "value": "'self'", "where": "dom"}])
     parse_chrome_csp_probe(decoy, b"", tmp_path, "chrome_csp_probe")
@@ -86,9 +82,7 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 
 def test_sidecar_records_severity(tmp_path: Path) -> None:
-    payload = _payload(
-        violations=[{"directive": "script-src", "value": "*", "where": "header"}]
-    )
+    payload = _payload(violations=[{"directive": "script-src", "value": "*", "where": "header"}])
     parse_chrome_csp_probe(payload, b"", tmp_path, "chrome_csp_probe")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     record = json.loads(sidecar.splitlines()[0])

@@ -38,11 +38,11 @@ class WebAppHarness(BaseHarness):
     async def execute(
         self,
         reproducer: dict[str, Any],
-        environment: dict[str, Any],
+        environment: dict[str, Any],  # noqa: ARG002 - ValidationProfile.execute interface signature
         *,
         timeout: int = 300,
-        capture_syscalls: bool = True,
-        capture_network: bool = False,
+        capture_syscalls: bool = True,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_network: bool = False,  # noqa: ARG002 - ValidationProfile.execute interface signature
     ) -> dict[str, Any]:
         import httpx
 
@@ -53,7 +53,13 @@ class WebAppHarness(BaseHarness):
         param = reproducer.get("param", "")
 
         logs: list[str] = []
-        result = {"stdout": "", "stderr": "", "exit_code": -1, "logs": logs, "syscalls": []}
+        result = {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": -1,
+            "logs": logs,
+            "syscalls": [],
+        }
 
         if not url:
             result["stderr"] = "No target URL"
@@ -81,13 +87,31 @@ class WebAppHarness(BaseHarness):
                 if method == "GET":
                     resp = await client.get(effective_url, params=request_params, headers=headers)
                 elif method == "POST":
-                    resp = await client.post(effective_url, params=request_params, data=request_data, headers=headers)
+                    resp = await client.post(
+                        effective_url,
+                        params=request_params,
+                        data=request_data,
+                        headers=headers,
+                    )
                 elif method == "PUT":
-                    resp = await client.put(effective_url, params=request_params, json=request_data, headers=headers)
+                    resp = await client.put(
+                        effective_url,
+                        params=request_params,
+                        json=request_data,
+                        headers=headers,
+                    )
                 elif method == "DELETE":
-                    resp = await client.delete(effective_url, params=request_params, headers=headers)
+                    resp = await client.delete(
+                        effective_url, params=request_params, headers=headers
+                    )
                 else:
-                    resp = await client.request(method, effective_url, params=request_params, data=request_data, headers=headers)
+                    resp = await client.request(
+                        method,
+                        effective_url,
+                        params=request_params,
+                        data=request_data,
+                        headers=headers,
+                    )
 
                 result["exit_code"] = 0 if resp.status_code < 500 else 1
                 body_preview = resp.text[:10000]
@@ -95,7 +119,13 @@ class WebAppHarness(BaseHarness):
                 logs.append(f"[{resp.status_code}] {method} {resp.url}")
                 logs.append(f"Content-Length: {len(resp.content)}")
                 for k, v in resp.headers.items():
-                    if k.lower() in ("content-type", "server", "x-powered-by", "set-cookie", "location"):
+                    if k.lower() in (
+                        "content-type",
+                        "server",
+                        "x-powered-by",
+                        "set-cookie",
+                        "location",
+                    ):
                         logs.append(f"{k}: {v[:200]}")
         except httpx.TimeoutException:
             result["exit_code"] = 124
@@ -118,8 +148,8 @@ class ApiHarness(BaseHarness):
         environment: dict[str, Any],
         *,
         timeout: int = 300,
-        capture_syscalls: bool = True,
-        capture_network: bool = False,
+        capture_syscalls: bool = True,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_network: bool = False,  # noqa: ARG002 - ValidationProfile.execute interface signature
     ) -> dict[str, Any]:
         # API harness uses same HTTP logic as WebApp
         web = WebAppHarness()
@@ -134,11 +164,11 @@ class CliHarness(BaseHarness):
     async def execute(
         self,
         reproducer: dict[str, Any],
-        environment: dict[str, Any],
+        environment: dict[str, Any],  # noqa: ARG002 - ValidationProfile.execute interface signature
         *,
         timeout: int = 300,
-        capture_syscalls: bool = True,
-        capture_network: bool = False,
+        capture_syscalls: bool = True,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_network: bool = False,  # noqa: ARG002 - ValidationProfile.execute interface signature
     ) -> dict[str, Any]:
         command = reproducer.get("payload", "")
         logs: list[str] = []
@@ -152,9 +182,7 @@ class CliHarness(BaseHarness):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=min(timeout, 120)
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=min(timeout, 120))
             return {
                 "stdout": (stdout or b"").decode("utf-8", errors="replace")[:50000],
                 "stderr": (stderr or b"").decode("utf-8", errors="replace")[:10000],
@@ -163,9 +191,19 @@ class CliHarness(BaseHarness):
                 "syscalls": [],
             }
         except TimeoutError:
-            return {"stdout": "", "stderr": "Command timeout", "exit_code": 124, "logs": ["TIMEOUT"]}
+            return {
+                "stdout": "",
+                "stderr": "Command timeout",
+                "exit_code": 124,
+                "logs": ["TIMEOUT"],
+            }
         except Exception as exc:
-            return {"stdout": "", "stderr": str(exc), "exit_code": 1, "logs": [f"ERROR: {exc}"]}
+            return {
+                "stdout": "",
+                "stderr": str(exc),
+                "exit_code": 1,
+                "logs": [f"ERROR: {exc}"],
+            }
 
 
 class LibraryHarness(BaseHarness):
@@ -174,22 +212,28 @@ class LibraryHarness(BaseHarness):
     async def execute(
         self,
         reproducer: dict[str, Any],
-        environment: dict[str, Any],
+        environment: dict[str, Any],  # noqa: ARG002 - ValidationProfile.execute interface signature
         *,
         timeout: int = 300,
-        capture_syscalls: bool = True,
-        capture_network: bool = False,
+        capture_syscalls: bool = True,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_network: bool = False,  # noqa: ARG002 - ValidationProfile.execute interface signature
     ) -> dict[str, Any]:
         code = reproducer.get("payload", "")
         if not code:
-            return {"stdout": "", "stderr": "No code to execute", "exit_code": -1, "logs": []}
+            return {
+                "stdout": "",
+                "stderr": "No code to execute",
+                "exit_code": -1,
+                "logs": [],
+            }
 
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "test_harness.py"
             script.write_text(code, encoding="utf-8")
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "python3", str(script),
+                    "python3",
+                    str(script),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -204,9 +248,19 @@ class LibraryHarness(BaseHarness):
                     "syscalls": [],
                 }
             except TimeoutError:
-                return {"stdout": "", "stderr": "Library execution timeout", "exit_code": 124, "logs": []}
+                return {
+                    "stdout": "",
+                    "stderr": "Library execution timeout",
+                    "exit_code": 124,
+                    "logs": [],
+                }
             except Exception as exc:
-                return {"stdout": "", "stderr": str(exc), "exit_code": 1, "logs": [f"ERROR: {exc}"]}
+                return {
+                    "stdout": "",
+                    "stderr": str(exc),
+                    "exit_code": 1,
+                    "logs": [f"ERROR: {exc}"],
+                }
 
 
 class BinaryHarness(BaseHarness):
@@ -215,21 +269,26 @@ class BinaryHarness(BaseHarness):
     async def execute(
         self,
         reproducer: dict[str, Any],
-        environment: dict[str, Any],
+        environment: dict[str, Any],  # noqa: ARG002 - ValidationProfile.execute interface signature
         *,
-        timeout: int = 300,
-        capture_syscalls: bool = True,
-        capture_network: bool = False,
+        timeout: int = 300,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_syscalls: bool = True,  # noqa: ARG002 - ValidationProfile.execute interface signature
+        capture_network: bool = False,  # noqa: ARG002 - ValidationProfile.execute interface signature
     ) -> dict[str, Any]:
         sample_path = reproducer.get("payload", "")
         logs: list[str] = []
-        result = {"stdout": "", "stderr": "", "exit_code": -1, "logs": logs, "syscalls": []}
+        result = {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": -1,
+            "logs": logs,
+            "syscalls": [],
+        }
 
         if not sample_path:
             result["stderr"] = "No binary sample path"
             return result
 
-        commands = []
         if not Path(sample_path).exists():
             logs.append(f"[BIN] Sample not found: {sample_path}")
             return result
@@ -242,7 +301,9 @@ class BinaryHarness(BaseHarness):
         for label, cmd in checks:
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
                 output = (out or b"").decode("utf-8", errors="replace")[:5000]

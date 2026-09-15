@@ -173,9 +173,7 @@ class EphemeralWorkerPool:
 
         async with self._lock:
             if len(self._active) >= self._max_containers:
-                raise RuntimeError(
-                    f"Max concurrent containers ({self._max_containers}) reached"
-                )
+                raise RuntimeError(f"Max concurrent containers ({self._max_containers}) reached")
 
         logger.info(
             "Creating ephemeral container %s (image=%s, timeout=%ds)",
@@ -188,6 +186,7 @@ class EphemeralWorkerPool:
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.run(
                 image=spec.image,
@@ -235,6 +234,7 @@ class EphemeralWorkerPool:
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.get(container_id)
             container.stop(timeout=10)
@@ -274,6 +274,7 @@ class EphemeralWorkerPool:
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.get(container_id)
 
@@ -281,9 +282,9 @@ class EphemeralWorkerPool:
             with tempfile.TemporaryDirectory(prefix="argus_artifacts_") as tmpdir:
                 archive_path = os.path.join(tmpdir, "artifacts.tar")
                 with open(archive_path, "wb") as f:
-                    for chunk in bits:
-                        f.write(chunk)
+                    f.writelines(bits)
                 import tarfile
+
                 with tarfile.open(archive_path) as tar:
                     tar.extractall(path=os.path.join(tmpdir, "extracted"), filter="data")
 
@@ -295,6 +296,7 @@ class EphemeralWorkerPool:
 
                 try:
                     from src.storage.s3 import upload_finding_poc_json
+
                     for root, _dirs, files in os.walk(artifacts_dir):
                         for fname in files:
                             fpath = os.path.join(root, fname)
@@ -306,7 +308,9 @@ class EphemeralWorkerPool:
                                 if content:
                                     await asyncio.to_thread(
                                         upload_finding_poc_json,
-                                        scan_id, key, {"artifact": fname, "data": content},
+                                        scan_id,
+                                        key,
+                                        {"artifact": fname, "data": content},
                                     )
                                     artifact_keys.append(key)
                             except Exception as fexc:
@@ -325,9 +329,7 @@ class EphemeralWorkerPool:
         """Remove containers that have been active too long."""
         now = time.monotonic()
         stale_ids = [
-            cid
-            for cid, created_at in self._active.items()
-            if (now - created_at) > max_age_seconds
+            cid for cid, created_at in self._active.items() if (now - created_at) > max_age_seconds
         ]
         for cid in stale_ids:
             logger.warning("Pruning stale container %s (age > %ds)", cid, max_age_seconds)

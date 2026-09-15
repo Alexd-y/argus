@@ -87,7 +87,12 @@ class UrlScanIntelAdapter(IntelAdapter):
                     _finding(
                         FindingType.URL,
                         url,
-                        {"domain": domain, "server": server, "ip": ip, "source": self.name},
+                        {
+                            "domain": domain,
+                            "server": server,
+                            "ip": ip,
+                            "source": self.name,
+                        },
                         self.name,
                         0.75,
                     )

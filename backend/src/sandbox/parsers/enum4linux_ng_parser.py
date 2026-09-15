@@ -45,7 +45,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -111,7 +111,7 @@ _FOUND_USER_RE: Final[re.Pattern[str]] = re.compile(
 # ---------------------------------------------------------------------------
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +274,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "members": list(record.get("members") or []),
         "null_session": bool(record.get("null_session")),
         "synthetic_id": stable_hash_12(
-            f"{record.get('section', '').lower()}::"
-            f"{int(bool(record.get('null_session')))}"
+            f"{record.get('section', '').lower()}::{int(bool(record.get('null_session')))}"
         ),
     }
     cleaned: dict[str, Any] = {}

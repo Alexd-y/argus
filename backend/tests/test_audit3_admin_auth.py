@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestAdminDefaultDeny:
     """H-8: Admin router returns 503 when ADMIN_API_KEY is not set."""
@@ -20,7 +18,9 @@ class TestAdminDefaultDeny:
         from src.core.config import Settings
 
         s = Settings(
-            _env_file=None, jwt_secret="test", admin_api_key="my-secret",
+            _env_file=None,
+            jwt_secret="test",
+            admin_api_key="my-secret",
             database_url="postgresql+asyncpg://test:test@localhost/test",
             minio_secret_key="test-secret",
         )
@@ -32,7 +32,9 @@ class TestAdminDefaultDeny:
         from src.core.config import Settings
 
         s = Settings(
-            _env_file=None, jwt_secret="test", admin_api_key="super-secret-key",
+            _env_file=None,
+            jwt_secret="test",
+            admin_api_key="super-secret-key",
             database_url="postgresql+asyncpg://test:test@localhost/test",
             minio_secret_key="test-secret",
         )
@@ -43,13 +45,7 @@ class TestAdminDefaultDeny:
         """require_admin dependency must raise 503 when ADMIN_API_KEY is unset."""
         from pathlib import Path
 
-        admin_src = (
-            Path(__file__).resolve().parent.parent
-            / "src"
-            / "api"
-            / "routers"
-            / "admin.py"
-        )
+        admin_src = Path(__file__).resolve().parent.parent / "src" / "api" / "routers" / "admin.py"
         text = admin_src.read_text(encoding="utf-8")
         assert "503" in text or "HTTP_503_SERVICE_UNAVAILABLE" in text
         assert "Admin API disabled" in text
@@ -68,7 +64,9 @@ class TestMetricsAuth:
         from src.core.config import Settings
 
         s = Settings(
-            _env_file=None, jwt_secret="test", metrics_token="prom-token-123",
+            _env_file=None,
+            jwt_secret="test",
+            metrics_token="prom-token-123",
             database_url="postgresql+asyncpg://test:test@localhost/test",
             minio_secret_key="test-secret",
         )
@@ -78,10 +76,6 @@ class TestMetricsAuth:
         """METRICS_TOKEN should be documented in .env.example."""
         from pathlib import Path
 
-        env = (
-            Path(__file__).resolve().parent.parent.parent
-            / "infra"
-            / ".env.example"
-        )
+        env = Path(__file__).resolve().parent.parent.parent / "infra" / ".env.example"
         text = env.read_text(encoding="utf-8")
         assert "METRICS_TOKEN" in text

@@ -41,7 +41,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -53,7 +52,6 @@ from src.sandbox.parsers.trivy_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_trivy_json,
 )
-
 
 # ---------------------------------------------------------------------------
 # Builders for canonical fixture shapes
@@ -391,9 +389,7 @@ def test_critical_vuln_maps_to_supply_chain_likely(
     artifacts_dir: Path,
 ) -> None:
     """CRITICAL vulnerability → SUPPLY_CHAIN / LIKELY."""
-    payload = _envelope(
-        vulnerabilities=[_vuln(severity="CRITICAL", vid="CVE-2024-99999")]
-    )
+    payload = _envelope(vulnerabilities=[_vuln(severity="CRITICAL", vid="CVE-2024-99999")])
     findings = parse_trivy_json(
         stdout=json.dumps(payload).encode("utf-8"),
         stderr=b"",
@@ -410,9 +406,7 @@ def test_medium_vuln_with_cve_escalates_to_likely(
     artifacts_dir: Path,
 ) -> None:
     """MEDIUM with a CVE id present → LIKELY (NVD-confirmed)."""
-    payload = _envelope(
-        vulnerabilities=[_vuln(severity="MEDIUM", vid="CVE-2023-12345")]
-    )
+    payload = _envelope(vulnerabilities=[_vuln(severity="MEDIUM", vid="CVE-2023-12345")])
     findings = parse_trivy_json(
         stdout=json.dumps(payload).encode("utf-8"),
         stderr=b"",
@@ -491,9 +485,7 @@ def test_cvss_absent_block_uses_severity_anchor(
 
 def test_cwe_extracted_from_string_and_int_forms(artifacts_dir: Path) -> None:
     """Trivy CWE list accepts ``CWE-79`` strings and bare integers."""
-    payload = _envelope(
-        vulnerabilities=[_vuln(severity="HIGH", cwes=["CWE-310", 327, "CWE-79"])]
-    )
+    payload = _envelope(vulnerabilities=[_vuln(severity="HIGH", cwes=["CWE-310", 327, "CWE-79"])])
     findings = parse_trivy_json(
         stdout=json.dumps(payload).encode("utf-8"),
         stderr=b"",

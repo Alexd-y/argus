@@ -379,10 +379,7 @@ async def sqlite_mode_env() -> AsyncIterator[
             {"id": tenant_id, "name": "persist-mode-test"},
         )
         await session.execute(
-            text(
-                "INSERT INTO engagements (id, tenant_id, name) "
-                "VALUES (:id, :tenant_id, :name)"
-            ),
+            text("INSERT INTO engagements (id, tenant_id, name) VALUES (:id, :tenant_id, :name)"),
             {"id": engagement_id, "tenant_id": tenant_id, "name": "persist-eng"},
         )
         await session.commit()
@@ -469,9 +466,7 @@ async def test_sqlalchemy_mode_lease_survives_new_app_instance(
         assert r_idem.json()["lease_id"] == lease_id
         assert "_idempotency_key" not in r_idem.json()
 
-    reloaded = await restarted.get_execution_mode(
-        tenant_id=tenant_id, engagement_id=engagement_id
-    )
+    reloaded = await restarted.get_execution_mode(tenant_id=tenant_id, engagement_id=engagement_id)
     assert reloaded is not None
     assert reloaded["mode"] == ExecutionMode.LAB_UNRESTRICTED.value
 

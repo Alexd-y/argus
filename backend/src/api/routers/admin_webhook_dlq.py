@@ -271,7 +271,8 @@ async def list_webhook_dlq(
         ),
     ),
     adapter_name: str | None = Query(
-        default=None, description="Optional exact-match adapter filter (slack/linear/jira)."
+        default=None,
+        description="Optional exact-match adapter filter (slack/linear/jira).",
     ),
     created_after: datetime | None = Query(
         default=None, description="Lower-bound on ``created_at`` (inclusive)."
@@ -313,9 +314,7 @@ async def list_webhook_dlq(
             "event": "argus.admin.webhook_dlq.list",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_id_hash": (
-                tenant_hash(effective_tenant) if effective_tenant else None
-            ),
+            "tenant_id_hash": (tenant_hash(effective_tenant) if effective_tenant else None),
             "status_filter": status_filter,
             "adapter_name": adapter_name,
             "total": total,
@@ -324,9 +323,7 @@ async def list_webhook_dlq(
             "offset": offset,
         },
     )
-    return WebhookDlqListResponse(
-        items=items, total=total, limit=limit, offset=offset
-    )
+    return WebhookDlqListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 # ---------------------------------------------------------------------------
@@ -375,9 +372,7 @@ async def replay_webhook_dlq(
     entry_id_str = str(entry_id)
 
     async with async_session_factory() as session:
-        entry = await dlq_dao.get_by_id(
-            session, entry_id=entry_id_str, tenant_id=effective_tenant
-        )
+        entry = await dlq_dao.get_by_id(session, entry_id=entry_id_str, tenant_id=effective_tenant)
         if entry is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -396,9 +391,7 @@ async def replay_webhook_dlq(
         event = _reconstruct_event(entry)
         adapter = _build_adapter(captured_adapter_name)
         try:
-            result = await adapter.send_with_retry(
-                event, tenant_id=captured_tenant_id
-            )
+            result = await adapter.send_with_retry(event, tenant_id=captured_tenant_id)
         finally:
             await adapter.aclose()
 
@@ -411,16 +404,12 @@ async def replay_webhook_dlq(
                     tenant_id=effective_tenant,
                 )
                 new_status: Literal["replayed", "pending"] = "replayed"
-                message_code: Literal[
-                    "replay_succeeded", "replay_failed"
-                ] = "replay_succeeded"
+                message_code: Literal["replay_succeeded", "replay_failed"] = "replay_succeeded"
             else:
                 updated = await dlq_dao.increment_attempt(
                     session,
                     entry_id=entry_id_str,
-                    last_error_code=(
-                        result.error_code or result.skipped_reason or "unknown_error"
-                    ),
+                    last_error_code=(result.error_code or result.skipped_reason or "unknown_error"),
                     last_status_code=result.status_code,
                 )
                 new_status = "pending"
@@ -524,9 +513,7 @@ async def abandon_webhook_dlq(
     entry_id_str = str(entry_id)
 
     async with async_session_factory() as session:
-        entry = await dlq_dao.get_by_id(
-            session, entry_id=entry_id_str, tenant_id=effective_tenant
-        )
+        entry = await dlq_dao.get_by_id(session, entry_id=entry_id_str, tenant_id=effective_tenant)
         if entry is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

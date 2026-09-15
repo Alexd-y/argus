@@ -151,7 +151,11 @@ async def check_duplicate(
         return _parse_dedupe_response(response.text)
     except Exception as exc:
         logger.warning("Dedup check failed for %s: %s", candidate.get("id"), exc)
-        return DedupResult(is_duplicate=False, confidence=0.0, reason=f"LLM call failed: {type(exc).__name__}")
+        return DedupResult(
+            is_duplicate=False,
+            confidence=0.0,
+            reason=f"LLM call failed: {type(exc).__name__}",
+        )
 
 
 async def check_duplicates_batch(

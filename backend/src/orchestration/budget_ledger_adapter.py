@@ -62,7 +62,9 @@ class LedgerBackedCostTracker(CostTracker):
         max_total_tokens: int = 2_000_000,
     ) -> None:
         super().__init__(
-            scan_id=scan_id, max_cost_usd=max_cost_usd, max_total_tokens=max_total_tokens
+            scan_id=scan_id,
+            max_cost_usd=max_cost_usd,
+            max_total_tokens=max_total_tokens,
         )
         self._sink = sink
 

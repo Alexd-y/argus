@@ -19,15 +19,12 @@ without spinning up a real Postgres or HTTP client.
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
 import pytest
-
 from src.celery.tasks import intel_refresh as intel
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -117,7 +114,9 @@ def _failing_runner() -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_epss_task_airgap_returns_airgap_status(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_epss_task_airgap_returns_airgap_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fake = FakeRedisLock()
     monkeypatch.setattr(intel, "_safe_get_redis", lambda: fake)
     monkeypatch.setattr(intel, "_run_epss_refresh", _stub_runner({"status": "ok"}))
@@ -150,9 +149,7 @@ def test_epss_task_acquires_and_releases_lock(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         intel,
         "_run_epss_refresh",
-        _stub_runner(
-            {"status": "ok", "cves_requested": 1, "cves_returned": 1, "rows_written": 1}
-        ),
+        _stub_runner({"status": "ok", "cves_requested": 1, "cves_returned": 1, "rows_written": 1}),
     )
     with _patch_settings_airgap(monkeypatch, enabled=False):
         result = intel.epss_batch_refresh_task()

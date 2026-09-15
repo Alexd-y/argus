@@ -65,10 +65,12 @@ class EpisodicMemory:
         _persist = persist_dir or ""
         try:
             import chromadb
+
             if _persist:
                 self._vector_client = chromadb.PersistentClient(path=_persist)
             else:
                 import os
+
                 _default_path = os.environ.get("ARGUS_EPISODIC_DIR", "")
                 if _default_path:
                     self._vector_client = chromadb.PersistentClient(path=_default_path)
@@ -76,17 +78,23 @@ class EpisodicMemory:
                     self._vector_client = chromadb.Client()
             self._collection = self._vector_client.get_or_create_collection("argus_episodic")
             self._backend = "chromadb"
-            logger.info("ChromaDB episodic memory initialized (persist=%s)", bool(_persist or os.environ.get("ARGUS_EPISODIC_DIR")))
+            logger.info(
+                "ChromaDB episodic memory initialized (persist=%s)",
+                bool(_persist or os.environ.get("ARGUS_EPISODIC_DIR")),
+            )
         except ImportError:
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.models import PointStruct, VectorParams
+                from qdrant_client.models import VectorParams
+
                 _qdrant_host = os.environ.get("ARGUS_QDRANT_HOST", "")
                 _qdrant_port = int(os.environ.get("ARGUS_QDRANT_PORT", "6333"))
                 if _qdrant_host:
                     self._vector_client = QdrantClient(host=_qdrant_host, port=_qdrant_port)
                 else:
-                    self._vector_client = QdrantClient(path=os.environ.get("ARGUS_QDRANT_PATH", ":memory:"))
+                    self._vector_client = QdrantClient(
+                        path=os.environ.get("ARGUS_QDRANT_PATH", ":memory:")
+                    )
                 _collection_name = "argus_episodic"
                 _collections = [c.name for c in self._vector_client.get_collections().collections]
                 if _collection_name not in _collections:
@@ -106,13 +114,16 @@ class EpisodicMemory:
         if self._backend == "qdrant" and self._vector_client is not None:
             try:
                 from qdrant_client.models import PointStruct
+
                 self._vector_client.upsert(
                     collection_name=self._collection,
-                    points=[PointStruct(
-                        id=entry.entry_id,
-                        vector=self._compute_vector(entry.to_vector_text()),
-                        payload=entry.to_dict(),
-                    )],
+                    points=[
+                        PointStruct(
+                            id=entry.entry_id,
+                            vector=self._compute_vector(entry.to_vector_text()),
+                            payload=entry.to_dict(),
+                        )
+                    ],
                 )
                 return
             except Exception as exc:
@@ -141,16 +152,18 @@ class EpisodicMemory:
                 entries = []
                 for hit in hits:
                     payload = hit.payload or {}
-                    entries.append(EpisodicEntry(
-                        entry_id=payload.get("entry_id", str(hit.id)),
-                        scan_id=payload.get("scan_id", ""),
-                        tenant_id="",
-                        finding_type=payload.get("finding_type", ""),
-                        cwe=payload.get("cwe", ""),
-                        title=payload.get("title", ""),
-                        technique=payload.get("technique", ""),
-                        framework=payload.get("framework", ""),
-                    ))
+                    entries.append(
+                        EpisodicEntry(
+                            entry_id=payload.get("entry_id", str(hit.id)),
+                            scan_id=payload.get("scan_id", ""),
+                            tenant_id="",
+                            finding_type=payload.get("finding_type", ""),
+                            cwe=payload.get("cwe", ""),
+                            title=payload.get("title", ""),
+                            technique=payload.get("technique", ""),
+                            framework=payload.get("framework", ""),
+                        )
+                    )
                 return entries
             except Exception as exc:
                 logger.debug("Qdrant query failed: %s", exc)
@@ -159,16 +172,18 @@ class EpisodicMemory:
                 results = self._collection.query(query_texts=[query], n_results=n)
                 entries = []
                 for metadata in results.get("metadatas", [[]])[0]:
-                    entries.append(EpisodicEntry(
-                        entry_id=metadata.get("entry_id", ""),
-                        scan_id=metadata.get("scan_id", ""),
-                        tenant_id="",
-                        finding_type=metadata.get("finding_type", ""),
-                        cwe=metadata.get("cwe", ""),
-                        title=metadata.get("title", ""),
-                        technique=metadata.get("technique", ""),
-                        framework=metadata.get("framework", ""),
-                    ))
+                    entries.append(
+                        EpisodicEntry(
+                            entry_id=metadata.get("entry_id", ""),
+                            scan_id=metadata.get("scan_id", ""),
+                            tenant_id="",
+                            finding_type=metadata.get("finding_type", ""),
+                            cwe=metadata.get("cwe", ""),
+                            title=metadata.get("title", ""),
+                            technique=metadata.get("technique", ""),
+                            framework=metadata.get("framework", ""),
+                        )
+                    )
                 return entries
             except Exception as exc:
                 logger.debug("Vector DB query failed: %s", exc)
@@ -176,10 +191,7 @@ class EpisodicMemory:
         query_lower = query.lower()
         scored = []
         for entry in self._entries:
-            score = sum(
-                1 for term in query_lower.split()
-                if term in entry.to_vector_text().lower()
-            )
+            score = sum(1 for term in query_lower.split() if term in entry.to_vector_text().lower())
             if score > 0:
                 scored.append((score, entry))
         scored.sort(key=lambda x: x[0], reverse=True)

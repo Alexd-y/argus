@@ -53,7 +53,7 @@ _T = TypeVar("_T")
 TASK_NAME = "argus.wb.intruder.run"
 
 
-def _run_coro_in_thread(coro: Coroutine[Any, Any, _T]) -> _T:
+def _run_coro_in_thread[T](coro: Coroutine[Any, Any, _T]) -> _T:
     """Run ``coro`` to completion on a fresh event loop in a worker thread.
 
     The Intruder control hook is a *sync* callable invoked from inside the
@@ -189,9 +189,7 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
 
 
 @app.task(name=TASK_NAME, bind=True, max_retries=0)
-def run_intruder_attack(
-    self: Any, tenant_id: str, attack_id: str
-) -> dict[str, Any]:  # noqa: ARG001
+def run_intruder_attack(self: Any, tenant_id: str, attack_id: str) -> dict[str, Any]:  # noqa: ARG001 - Celery bound-task signature (bind=True)
     """Celery entrypoint — execute (or resume) an attack. See module docstring."""
     try:
         return asyncio.run(_execute(tenant_id, attack_id))

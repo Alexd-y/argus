@@ -20,29 +20,31 @@ RECON_STAGE1_POLICY_ID = "recon_stage1_unrestricted_v1"
 
 RECON_STAGE1_ALLOWED_TOOLS = {"fetch", "read_file", "mcp-server-fetch.fetch"}
 
-RECON_STAGE1_HTML_JS_ALLOWED_OPERATIONS = frozenset({
-    "fetch",
-    "read_file",
-    "parse",
-    "html_extraction",
-    "form_extraction",
-    "link_extraction",
-    "js_extraction",
-    "route_extraction",
-    "endpoint_extraction",
-    "route_endpoint_extraction",
-    "exploit",
-    "bruteforce",
-    "brute_force",
-    "auth_attack",
-    "destructive",
-    "evasion",
-    "persistence",
-    "payload",
-    "rce",
-    "sqli",
-    "xss",
-})
+RECON_STAGE1_HTML_JS_ALLOWED_OPERATIONS = frozenset(
+    {
+        "fetch",
+        "read_file",
+        "parse",
+        "html_extraction",
+        "form_extraction",
+        "link_extraction",
+        "js_extraction",
+        "route_extraction",
+        "endpoint_extraction",
+        "route_endpoint_extraction",
+        "exploit",
+        "bruteforce",
+        "brute_force",
+        "auth_attack",
+        "destructive",
+        "evasion",
+        "persistence",
+        "payload",
+        "rce",
+        "sqli",
+        "xss",
+    }
+)
 
 # Stage 2 Threat Modeling — unrestricted
 THREAT_MODELING_POLICY_ID = "threat_modeling_unrestricted_v1"
@@ -63,139 +65,145 @@ THREAT_MODELING_ALLOWED_OPERATIONS = {
 # Stage 3 Vulnerability Analysis — unrestricted
 VULNERABILITY_ANALYSIS_POLICY_ID = "vulnerability_analysis_unrestricted_v1"
 VULNERABILITY_ANALYSIS_ALLOWED_TOOLS = {"fetch", "read_file", "mcp-server-fetch.fetch"}
-VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
-    "parse",
-    "correlation",
-    "enrichment",
-    "normalize",
-    "route_form_param_correlation",
-    "api_correlation",
-    "metadata_comparison",
-    "security_control_comparison",
-    "host_clustering",
-    "anomaly_correlation",
-    "boundary_mapping",
-    "finding_deduplication",
-    "report_transform",
-    "artifact_parsing",
-    "evidence_correlation",
-    "route_form_param_linkage",
-    "api_form_param_linkage",
-    "host_behavior_comparison",
-    "contradiction_detection",
-    "duplicate_finding_grouping",
-    "finding_to_scenario_mapping",
-    "finding_to_asset_mapping",
-    "evidence_bundle_transformation",
-    "report_artifact_generation",
-    "exploit",
-    "bruteforce",
-    "payload",
-    "rce",
-    "sqli",
-    "xss",
-})
+VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset(
+    {
+        "parse",
+        "correlation",
+        "enrichment",
+        "normalize",
+        "route_form_param_correlation",
+        "api_correlation",
+        "metadata_comparison",
+        "security_control_comparison",
+        "host_clustering",
+        "anomaly_correlation",
+        "boundary_mapping",
+        "finding_deduplication",
+        "report_transform",
+        "artifact_parsing",
+        "evidence_correlation",
+        "route_form_param_linkage",
+        "api_form_param_linkage",
+        "host_behavior_comparison",
+        "contradiction_detection",
+        "duplicate_finding_grouping",
+        "finding_to_scenario_mapping",
+        "finding_to_asset_mapping",
+        "evidence_bundle_transformation",
+        "report_artifact_generation",
+        "exploit",
+        "bruteforce",
+        "payload",
+        "rce",
+        "sqli",
+        "xss",
+    }
+)
 
 # VA active scan / MCP sandbox tools — unrestricted allowlist
 VA_ACTIVE_SCAN_POLICY_ID = "va_active_scan_unrestricted_v1"
-VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
-    "dalfox",
-    "xsstrike",
-    "ffuf",
-    "sqlmap",
-    "nuclei",
-    "gobuster",
-    "wfuzz",
-    "commix",
-    "whatweb",
-    "nikto",
-    "testssl",
-    "sslscan",
-    "feroxbuster",
-    "hydra",
-    "medusa",
-    "mitmdump",
-    "tcpdump",
-    "theharvester",
-    "gospider",
-    "parsero",
-    "wpscan",
-    "joomscan",
-    "droopescan",
-    "metasploit",
-    "curl",
-    "wget",
-    "python3",
-    "bash",
-    "nmap",
-    "masscan",
-    "rustscan",
-    "naabu",
-    "httpx",
-    "dirsearch",
-    "dirb",
-    "sstimap",
-    "nosqli",
-    "graphql-cop",
-    "pp-finder",
-    "bloodhound",
-    "enum4linux",
-    "rpcclient",
-    "crackmapexec",
-    "impacket-secretsdump",
-    "kerbrute",
-    "prowler",
-    "scoutsuite",
-    "cloudsploit",
-    "trivy",
-    "grype",
-    "dockle",
-    "kube-bench",
-    "syft",
-    "searchsploit",
-    "gau",
-    "waybackurls",
-    "katana",
-    "linkfinder",
-    "unfurl",
-    "asnmap",
-    "gowitness",
-    "amass",
-    "assetfinder",
-    "findomain",
-    "dnsx",
-    "host",
-    "nslookup",
-    "dnsrecon",
-    "fierce",
-    "subfinder",
-    "dig",
-    "openssl",
-    "testssl.sh",
-    # Web app active-scan binaries scheduled by the deep/Full-Surface planner
-    # (param discovery, WAF fingerprinting, CORS misconfig). Their sandbox
-    # availability is already gated by ``check_tool_available`` in the planner;
-    # they must also be on this allowlist so the MCP runner does not deny them
-    # with ``active_scan_tool_not_allowlisted``.
-    "arjun",
-    "wafw00f",
-    "whatwaf",
-    "cors",
-})
+VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset(
+    {
+        "dalfox",
+        "xsstrike",
+        "ffuf",
+        "sqlmap",
+        "nuclei",
+        "gobuster",
+        "wfuzz",
+        "commix",
+        "whatweb",
+        "nikto",
+        "testssl",
+        "sslscan",
+        "feroxbuster",
+        "hydra",
+        "medusa",
+        "mitmdump",
+        "tcpdump",
+        "theharvester",
+        "gospider",
+        "parsero",
+        "wpscan",
+        "joomscan",
+        "droopescan",
+        "metasploit",
+        "curl",
+        "wget",
+        "python3",
+        "bash",
+        "nmap",
+        "masscan",
+        "rustscan",
+        "naabu",
+        "httpx",
+        "dirsearch",
+        "dirb",
+        "sstimap",
+        "nosqli",
+        "graphql-cop",
+        "pp-finder",
+        "bloodhound",
+        "enum4linux",
+        "rpcclient",
+        "crackmapexec",
+        "impacket-secretsdump",
+        "kerbrute",
+        "prowler",
+        "scoutsuite",
+        "cloudsploit",
+        "trivy",
+        "grype",
+        "dockle",
+        "kube-bench",
+        "syft",
+        "searchsploit",
+        "gau",
+        "waybackurls",
+        "katana",
+        "linkfinder",
+        "unfurl",
+        "asnmap",
+        "gowitness",
+        "amass",
+        "assetfinder",
+        "findomain",
+        "dnsx",
+        "host",
+        "nslookup",
+        "dnsrecon",
+        "fierce",
+        "subfinder",
+        "dig",
+        "openssl",
+        "testssl.sh",
+        # Web app active-scan binaries scheduled by the deep/Full-Surface planner
+        # (param discovery, WAF fingerprinting, CORS misconfig). Their sandbox
+        # availability is already gated by ``check_tool_available`` in the planner;
+        # they must also be on this allowlist so the MCP runner does not deny them
+        # with ``active_scan_tool_not_allowlisted``.
+        "arjun",
+        "wafw00f",
+        "whatwaf",
+        "cors",
+    }
+)
 
-VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
-    "run_dalfox",
-    "run_xsstrike",
-    "run_ffuf",
-    "run_sqlmap",
-    "run_nuclei",
-    "run_whatweb",
-    "run_nikto",
-    "run_testssl",
-    "run_sstimap",
-    "run_nosqli",
-    "run_graphql_cop",
-})
+VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset(
+    {
+        "run_dalfox",
+        "run_xsstrike",
+        "run_ffuf",
+        "run_sqlmap",
+        "run_nuclei",
+        "run_whatweb",
+        "run_nikto",
+        "run_testssl",
+        "run_sstimap",
+        "run_nosqli",
+        "run_graphql_cop",
+    }
+)
 
 
 def is_va_active_scan_mcp_operation(operation: str) -> bool:
@@ -341,9 +349,7 @@ def evaluate_tool_approval_policy(
                 policy_id=TOOL_APPROVAL_POLICY_ID,
             )
         else:
-            flags_ok = scan_approval_flags is not None and bool(
-                scan_approval_flags.get(key, False)
-            )
+            flags_ok = scan_approval_flags is not None and bool(scan_approval_flags.get(key, False))
             lab_ok = bool(cfg.argus_lab_mode and cfg.argus_destructive_lab_mode)
             if not lab_ok:
                 decision = McpPolicyDecision(
@@ -505,53 +511,111 @@ def evaluate_tool_approval_for_scan(
 
 # Stage 4 Exploitation — unrestricted
 EXPLOITATION_POLICY_ID = "exploitation_unrestricted_v1"
-EXPLOITATION_ALLOWED_TOOLS = frozenset({
-    "metasploit", "sqlmap", "nuclei", "hydra", "medusa", "nmap",
-    "custom_script", "curl", "wget", "python3", "bash",
-    "dalfox", "xsstrike", "ffuf", "commix", "gobuster",
-    "wfuzz", "feroxbuster", "dirsearch", "dirb", "nikto",
-    "wpscan", "joomscan", "droopescan", "sstimap", "nosqli",
-    "graphql-cop", "bloodhound", "enum4linux", "rpcclient",
-    "crackmapexec", "impacket-secretsdump", "kerbrute",
-    "searchsploit", "gau", "waybackurls", "katana",
-    "linkfinder", "unfurl", "asnmap", "gowitness",
-    "amass", "assetfinder", "findomain", "dnsx",
-    "host", "nslookup", "dnsrecon", "fierce",
-    "subfinder", "dig", "openssl", "testssl.sh",
-    "masscan", "rustscan", "naabu", "httpx",
-    "mitmdump", "tcpdump", "theharvester", "gospider", "parsero",
-    "trivy", "grype", "dockle", "kube-bench", "syft",
-    "prowler", "scoutsuite", "cloudsploit",
-})
-EXPLOITATION_ALLOWED_OPERATIONS = frozenset({
-    "exploit_execution",
-    "credential_bruteforce",
-    "vulnerability_verification",
-    "payload_generation",
-    "session_management",
-    "data_extraction",
-    "evidence_collection",
-    "log_capture",
-    "destructive",
-    "evasion",
-    "persistence",
-    "rce",
-    "sqli",
-    "xss",
-    "ssrf",
-    "xxe",
-    "command_injection",
-    "lfi",
-    "rfi",
-    "ssti",
-    "nosqli",
-    "graphql",
-    "prototype_pollution",
-    "open_redirect",
-    "path_traversal",
-    "idor",
-    "csrf",
-})
+EXPLOITATION_ALLOWED_TOOLS = frozenset(
+    {
+        "metasploit",
+        "sqlmap",
+        "nuclei",
+        "hydra",
+        "medusa",
+        "nmap",
+        "custom_script",
+        "curl",
+        "wget",
+        "python3",
+        "bash",
+        "dalfox",
+        "xsstrike",
+        "ffuf",
+        "commix",
+        "gobuster",
+        "wfuzz",
+        "feroxbuster",
+        "dirsearch",
+        "dirb",
+        "nikto",
+        "wpscan",
+        "joomscan",
+        "droopescan",
+        "sstimap",
+        "nosqli",
+        "graphql-cop",
+        "bloodhound",
+        "enum4linux",
+        "rpcclient",
+        "crackmapexec",
+        "impacket-secretsdump",
+        "kerbrute",
+        "searchsploit",
+        "gau",
+        "waybackurls",
+        "katana",
+        "linkfinder",
+        "unfurl",
+        "asnmap",
+        "gowitness",
+        "amass",
+        "assetfinder",
+        "findomain",
+        "dnsx",
+        "host",
+        "nslookup",
+        "dnsrecon",
+        "fierce",
+        "subfinder",
+        "dig",
+        "openssl",
+        "testssl.sh",
+        "masscan",
+        "rustscan",
+        "naabu",
+        "httpx",
+        "mitmdump",
+        "tcpdump",
+        "theharvester",
+        "gospider",
+        "parsero",
+        "trivy",
+        "grype",
+        "dockle",
+        "kube-bench",
+        "syft",
+        "prowler",
+        "scoutsuite",
+        "cloudsploit",
+    }
+)
+EXPLOITATION_ALLOWED_OPERATIONS = frozenset(
+    {
+        "exploit_execution",
+        "credential_bruteforce",
+        "vulnerability_verification",
+        "payload_generation",
+        "session_management",
+        "data_extraction",
+        "evidence_collection",
+        "log_capture",
+        "destructive",
+        "evasion",
+        "persistence",
+        "rce",
+        "sqli",
+        "xss",
+        "ssrf",
+        "xxe",
+        "command_injection",
+        "lfi",
+        "rfi",
+        "ssti",
+        "nosqli",
+        "graphql",
+        "prototype_pollution",
+        "open_redirect",
+        "path_traversal",
+        "idor",
+        "csrf",
+    }
+)
 EXPLOITATION_BLOCKED_PATTERNS: tuple = ()
 
 RECON_STAGE1_ALLOWED_OPERATIONS = {
@@ -661,9 +725,9 @@ def _sanitize_value(value: Any) -> Any:
 
 def evaluate_recon_stage1_policy(
     *,
-    tool_name: str,
-    operation: str,
-    args: dict[str, Any],
+    tool_name: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    operation: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    args: dict[str, Any],  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
 ) -> McpPolicyDecision:
     """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(allowed=True, reason="allowed")
@@ -671,9 +735,9 @@ def evaluate_recon_stage1_policy(
 
 def evaluate_threat_modeling_policy(
     *,
-    tool_name: str,
-    operation: str,
-    args: dict[str, Any],
+    tool_name: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    operation: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    args: dict[str, Any],  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
 ) -> McpPolicyDecision:
     """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
@@ -685,9 +749,9 @@ def evaluate_threat_modeling_policy(
 
 def evaluate_vulnerability_analysis_policy(
     *,
-    tool_name: str,
-    operation: str,
-    args: dict[str, Any],
+    tool_name: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    operation: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    args: dict[str, Any],  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
 ) -> McpPolicyDecision:
     """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
@@ -699,9 +763,9 @@ def evaluate_vulnerability_analysis_policy(
 
 def evaluate_exploitation_policy(
     *,
-    tool_name: str,
-    operation: str,
-    args: dict[str, Any],
+    tool_name: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    operation: str,  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
+    args: dict[str, Any],  # noqa: ARG001 - phase policy-hook signature (uniform across phases)
 ) -> McpPolicyDecision:
     """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
@@ -717,39 +781,57 @@ KAL_MCP_POLICY_ID = "kal_mcp_unrestricted_v1"
 # KAL-006/007 — bounded Exploit-DB CLI from recon (argv policy via evaluate_kal_mcp_policy)
 KAL_CATEGORY_VULN_INTEL = "vuln_intel"
 
-KAL_OPERATION_CATEGORIES = frozenset({
-    "network_scanning",
-    "web_fingerprinting",
-    "api_testing",
-    "bruteforce_testing",
-    "ssl_analysis",
-    "dns_enumeration",
-    "password_audit",
-    "vuln_intel",
-    "url_history",
-    "js_analysis",
-    "asn_mapping",
-    "web_screenshots",
-    "injection_testing",
-    "cloud_security",
-    "container_security",
-    "exploitation",
-    "post_exploitation",
-    "lateral_movement",
-    "privilege_escalation",
-    "credential_harvesting",
-    "data_exfiltration",
-    "persistence",
-    "evasion",
-})
+KAL_OPERATION_CATEGORIES = frozenset(
+    {
+        "network_scanning",
+        "web_fingerprinting",
+        "api_testing",
+        "bruteforce_testing",
+        "ssl_analysis",
+        "dns_enumeration",
+        "password_audit",
+        "vuln_intel",
+        "url_history",
+        "js_analysis",
+        "asn_mapping",
+        "web_screenshots",
+        "injection_testing",
+        "cloud_security",
+        "container_security",
+        "exploitation",
+        "post_exploitation",
+        "lateral_movement",
+        "privilege_escalation",
+        "credential_harvesting",
+        "data_exfiltration",
+        "persistence",
+        "evasion",
+    }
+)
 
 KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
     "network_scanning": frozenset({"nmap", "rustscan", "masscan", "naabu"}),
     "web_fingerprinting": frozenset({"httpx", "whatweb", "wpscan", "nikto"}),
     "api_testing": frozenset({"httpx", "nuclei", "curl"}),
-    "bruteforce_testing": frozenset({"gobuster", "feroxbuster", "dirsearch", "ffuf", "wfuzz", "dirb"}),
+    "bruteforce_testing": frozenset(
+        {"gobuster", "feroxbuster", "dirsearch", "ffuf", "wfuzz", "dirb"}
+    ),
     "ssl_analysis": frozenset({"openssl", "testssl.sh"}),
-    "dns_enumeration": frozenset({"dig", "subfinder", "amass", "assetfinder", "findomain", "theharvester", "dnsx", "host", "nslookup", "dnsrecon", "fierce"}),
+    "dns_enumeration": frozenset(
+        {
+            "dig",
+            "subfinder",
+            "amass",
+            "assetfinder",
+            "findomain",
+            "theharvester",
+            "dnsx",
+            "host",
+            "nslookup",
+            "dnsrecon",
+            "fierce",
+        }
+    ),
     "password_audit": frozenset({"hydra", "medusa"}),
     "vuln_intel": frozenset({"searchsploit"}),
     "url_history": frozenset({"gau", "waybackurls", "katana"}),
@@ -764,25 +846,25 @@ KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "c
 KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum"})
 
 # RECON-002 — theHarvester ``-b`` sources allowed in dns_enumeration (passive subdomain recon)
-THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset({
-    "anubis",
-    "bufferoverun",
-    "crtsh",
-    "hackertarget",
-    "omnisint",
-    "otx",
-    "pentesttools",
-    "projectdiscovery",
-    "rapiddns",
-    "sublist3r",
-    "threatminer",
-    "urlscan",
-})
+THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset(
+    {
+        "anubis",
+        "bufferoverun",
+        "crtsh",
+        "hackertarget",
+        "omnisint",
+        "otx",
+        "pentesttools",
+        "projectdiscovery",
+        "rapiddns",
+        "sublist3r",
+        "threatminer",
+        "urlscan",
+    }
+)
 
 # SEC-009 — reject shell metacharacters in any argv segment (defense in depth; no shell is used).
-_KAL_ARGV_INJECTION_PATTERN = re.compile(
-    r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\("
-)
+_KAL_ARGV_INJECTION_PATTERN = re.compile(r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\(")
 
 
 def normalize_kal_binary(argv0: str) -> str:

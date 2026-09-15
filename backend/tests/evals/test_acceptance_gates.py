@@ -134,19 +134,25 @@ def test_finding_diff_accuracy_is_perfect(finding_diff_fixtures: list[dict]) -> 
         assert not violations, violations
 
 
-def test_template_author_fixtures_are_valid(template_author_fixtures: list[dict]) -> None:
+def test_template_author_fixtures_are_valid(
+    template_author_fixtures: list[dict],
+) -> None:
     for fixture in template_author_fixtures:
         violations = check_template_author_fixture(fixture)
         assert not violations, violations
 
 
-def test_evidence_triage_fixtures_are_valid(evidence_triage_fixtures: list[dict]) -> None:
+def test_evidence_triage_fixtures_are_valid(
+    evidence_triage_fixtures: list[dict],
+) -> None:
     for fixture in evidence_triage_fixtures:
         violations = check_evidence_triage_fixture(fixture)
         assert not violations, violations
 
 
-def test_prompt_injection_fixtures_are_valid(prompt_injection_fixtures: list[dict]) -> None:
+def test_prompt_injection_fixtures_are_valid(
+    prompt_injection_fixtures: list[dict],
+) -> None:
     for fixture in prompt_injection_fixtures:
         violations = check_prompt_injection_fixture(fixture)
         assert not violations, violations

@@ -202,9 +202,7 @@ def _raise_internal() -> None:
 async def require_admin_session_principal(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=_ADMIN_SESSION_COOKIE)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=_ADMIN_SESSION_COOKIE)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> _MfaSession:
     """FastAPI dependency — resolve the calling session or raise 401.
@@ -237,7 +235,7 @@ async def require_admin_session_principal(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     if principal is None:
         _raise_unauthorized()
@@ -294,9 +292,7 @@ class _VerifyRateLimiter:
 
             if tokens < 1.0:
                 deficit = 1.0 - tokens
-                retry_after = (
-                    deficit / rate_per_second if rate_per_second > 0 else 60.0
-                )
+                retry_after = deficit / rate_per_second if rate_per_second > 0 else 60.0
                 self._state[key] = (tokens, last_ts)
                 self._state.move_to_end(key)
                 return False, retry_after
@@ -380,9 +376,7 @@ class _AdminMfaSnapshot:
     backup_codes_count: int
 
 
-async def _load_admin_mfa_snapshot(
-    db: AsyncSession, *, subject: str
-) -> _AdminMfaSnapshot | None:
+async def _load_admin_mfa_snapshot(db: AsyncSession, *, subject: str) -> _AdminMfaSnapshot | None:
     """Return the MFA snapshot for *subject* or ``None`` if the user is gone."""
     stmt = select(
         AdminUser.mfa_enabled,
@@ -400,9 +394,7 @@ async def _load_admin_mfa_snapshot(
     )
 
 
-async def _load_session_mfa_passed_at(
-    db: AsyncSession, *, raw_session_id: str
-) -> datetime | None:
+async def _load_session_mfa_passed_at(db: AsyncSession, *, raw_session_id: str) -> datetime | None:
     """Return ``mfa_passed_at`` on the session row keyed by raw token.
 
     Returns ``None`` when the session is unknown OR when the pepper is
@@ -456,11 +448,7 @@ def _build_otpauth_uri(*, subject: str, secret_b32: str) -> str:
     subject correctly; we wrap it for type clarity and a single point
     where the issuer string is set.
     """
-    return str(
-        pyotp.TOTP(secret_b32).provisioning_uri(
-            name=subject, issuer_name=_TOTP_ISSUER
-        )
-    )
+    return str(pyotp.TOTP(secret_b32).provisioning_uri(name=subject, issuer_name=_TOTP_ISSUER))
 
 
 @router.post(
@@ -472,7 +460,7 @@ def _build_otpauth_uri(*, subject: str, secret_b32: str) -> str:
     },
 )
 async def admin_mfa_enroll(
-    body: MFAEnrollRequest,  # noqa: ARG001 — empty body validated for extra=forbid
+    body: MFAEnrollRequest,  # noqa: ARG001 - FastAPI route signature; param bound by the framework
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFAEnrollResponse:
@@ -528,7 +516,7 @@ async def admin_mfa_enroll(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from exc  # pragma: no cover
     except SQLAlchemyError:
         await db.rollback()
         logger.exception(
@@ -539,7 +527,7 @@ async def admin_mfa_enroll(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     secret_uri = _build_otpauth_uri(subject=subject, secret_b32=secret_b32)
 
@@ -648,12 +636,10 @@ async def admin_mfa_confirm(
         }:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_DETAIL_INVALID_TOTP
-                if str(exc) == "totp_invalid"
-                else _DETAIL_NO_PENDING,
+                detail=_DETAIL_INVALID_TOTP if str(exc) == "totp_invalid" else _DETAIL_NO_PENDING,
             ) from None
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from exc  # pragma: no cover
     except (SQLAlchemyError, ValueError):
         await db.rollback()
         logger.exception(
@@ -664,7 +650,7 @@ async def admin_mfa_confirm(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     now = datetime.now(tz=UTC)
     logger.info(
@@ -691,14 +677,10 @@ async def _verify_one_credential(
 ) -> tuple[bool, Literal["totp", "backup"]]:
     """Dispatch to the matching DAO call. Returns ``(verified, path)``."""
     if totp_code is not None:
-        verified = await mfa_dao.verify_totp(
-            db, subject=subject, totp_code=totp_code
-        )
+        verified = await mfa_dao.verify_totp(db, subject=subject, totp_code=totp_code)
         return verified, "totp"
     assert backup_code is not None  # XOR enforced by Pydantic validator
-    verified = await mfa_dao.consume_backup_code(
-        db, subject=subject, code=backup_code
-    )
+    verified = await mfa_dao.consume_backup_code(db, subject=subject, code=backup_code)
     return verified, "backup"
 
 
@@ -766,7 +748,7 @@ async def admin_mfa_verify(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     if not verified:
         logger.info(
@@ -801,7 +783,7 @@ async def admin_mfa_verify(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     remaining: int | None = None
     if path == "backup":
@@ -862,7 +844,7 @@ async def _verify_fresh_proof_or_401(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     if not verified:
         logger.info(
@@ -938,7 +920,7 @@ async def admin_mfa_disable(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from exc  # pragma: no cover
     except SQLAlchemyError:
         await db.rollback()
         logger.exception(
@@ -949,7 +931,7 @@ async def admin_mfa_disable(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     now = datetime.now(tz=UTC)
     logger.info(
@@ -1018,7 +1000,7 @@ async def admin_mfa_regenerate_backup_codes(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from exc  # pragma: no cover
     except SQLAlchemyError:
         await db.rollback()
         logger.exception(
@@ -1029,7 +1011,7 @@ async def admin_mfa_regenerate_backup_codes(
             },
         )
         _raise_internal()
-        raise AssertionError("unreachable")  # pragma: no cover
+        raise AssertionError("unreachable") from None  # pragma: no cover
 
     now = datetime.now(tz=UTC)
     logger.info(
@@ -1040,9 +1022,7 @@ async def admin_mfa_regenerate_backup_codes(
             "backup_codes_count": len(plaintext),
         },
     )
-    return BackupCodesRegenerateResponse(
-        backup_codes=plaintext, generated_at=now
-    )
+    return BackupCodesRegenerateResponse(backup_codes=plaintext, generated_at=now)
 
 
 # ---------------------------------------------------------------------------
@@ -1067,14 +1047,10 @@ async def admin_mfa_status(
         _raise_unauthorized()
         raise AssertionError("unreachable")  # pragma: no cover
 
-    passed_at = await _load_session_mfa_passed_at(
-        db, raw_session_id=session.raw_session_id
-    )
+    passed_at = await _load_session_mfa_passed_at(db, raw_session_id=session.raw_session_id)
     fresh = _is_session_mfa_fresh(passed_at)
 
-    remaining: int | None = (
-        snapshot.backup_codes_count if snapshot.enabled else None
-    )
+    remaining: int | None = snapshot.backup_codes_count if snapshot.enabled else None
 
     # Audit-log the read so the SOC can correlate `/status` polls with
     # `/verify` / `/disable` traffic. Carries no secret material; counts

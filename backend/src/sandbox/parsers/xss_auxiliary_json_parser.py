@@ -183,4 +183,4 @@ def _walk(node: Any, acc: list[dict[str, str]]) -> None:
             _walk(v, acc)
 
 
-__all__ = ["parse_xss_auxiliary_json", "EVIDENCE_SIDECAR"]
+__all__ = ["EVIDENCE_SIDECAR", "parse_xss_auxiliary_json"]

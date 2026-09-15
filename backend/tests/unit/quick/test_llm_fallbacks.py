@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.core.config import settings
 from src.llm import facade, phase_routing
 from src.llm.facade import (
@@ -144,9 +143,7 @@ def _request(*, enable_ai: bool = True) -> QuickPlannerRequest:
                 protocol=FingerprintFact(value="https", confidence=1.0),
             ),
         ),
-        targets=(
-            QuickPlannerTarget(target_ref=_TARGET, asset_id=_ASSET_ID, in_scope=True),
-        ),
+        targets=(QuickPlannerTarget(target_ref=_TARGET, asset_id=_ASSET_ID, in_scope=True),),
     )
 
 
@@ -174,9 +171,7 @@ def _valid_plan_json() -> str:
 class TestEnableAiFalseSkipsLlm:
     @pytest.mark.asyncio
     async def test_plan_with_ai_does_not_call_facade(self) -> None:
-        with patch(
-            "src.quick.llm_routes.call_llm_unified", new_callable=AsyncMock
-        ) as mock_llm:
+        with patch("src.quick.llm_routes.call_llm_unified", new_callable=AsyncMock) as mock_llm:
             result = await plan_with_ai(
                 _request(enable_ai=False),
                 planner=_FixedPlanner(),
@@ -190,9 +185,7 @@ class TestEnableAiFalseSkipsLlm:
 
     @pytest.mark.asyncio
     async def test_fingerprint_triage_critic_report_skip_llm(self) -> None:
-        with patch(
-            "src.quick.llm_routes.call_llm_unified", new_callable=AsyncMock
-        ) as mock_llm:
+        with patch("src.quick.llm_routes.call_llm_unified", new_callable=AsyncMock) as mock_llm:
             fp = await classify_fingerprint(
                 {"product": "nginx"}, asset_id=_ASSET_ID, enable_ai=False
             )
@@ -200,9 +193,7 @@ class TestEnableAiFalseSkipsLlm:
                 {"finding_id": _FINDING_ID, "title": "xss"}, enable_ai=False
             )
             critique = await critique_finding(_triage(), enable_ai=False)
-            report = await generate_report(
-                scan_id=_SCAN_ID, config=_config(enable_ai=False)
-            )
+            report = await generate_report(scan_id=_SCAN_ID, config=_config(enable_ai=False))
         mock_llm.assert_not_called()
         assert fp.used_ai is False and fp.model_route == "rules"
         assert triage.used_ai is False and triage.model_route == "rules"
@@ -293,9 +284,7 @@ class TestQwythosWrbSmallFallbacks:
             new_callable=AsyncMock,
             side_effect=RuntimeError("qwythos_unavailable:quick_reporter"),
         ):
-            result = await generate_report(
-                scan_id=_SCAN_ID, config=_config(enable_ai=True)
-            )
+            result = await generate_report(scan_id=_SCAN_ID, config=_config(enable_ai=True))
         assert result.used_ai is False
         assert result.fallback_reason == "qwythos_unavailable"
         assert result.model_route == "template_renderer"
@@ -323,9 +312,7 @@ class TestQwythosWrbSmallFallbacks:
             new_callable=AsyncMock,
             side_effect=RuntimeError("small_model_unavailable:quick_fingerprint"),
         ):
-            result = await classify_fingerprint(
-                observations, asset_id=_ASSET_ID, enable_ai=True
-            )
+            result = await classify_fingerprint(observations, asset_id=_ASSET_ID, enable_ai=True)
         assert result.used_ai is False
         assert result.fallback_reason == "small_model_unavailable"
         assert result.model_route == "rules"
@@ -441,20 +428,24 @@ class TestFacadeQuickRoutingNoLiveModels:
     ) -> None:
         monkeypatch.setenv("QWYTHOS_URL", "http://qwythos.invalid/v1")
         monkeypatch.setattr(facade, "_any_cloud_key_configured", lambda: True)
-        with patch.object(
-            facade, "_call_via_local_openai", new_callable=AsyncMock, side_effect=OSError
-        ), patch.object(
-            facade, "_call_via_task_router", new_callable=AsyncMock
-        ) as cloud:
-            with pytest.raises(RuntimeError, match="qwythos_unavailable"):
-                await _execute_quick_route(
-                    "sys",
-                    "user",
-                    LLMTask.QUICK_PLANNER,
-                    scan_id=_SCAN_ID,
-                    phase="quick_planner",
-                    scan_options={"cloud_llm_allowed": True},
-                )
+        with (
+            patch.object(
+                facade,
+                "_call_via_local_openai",
+                new_callable=AsyncMock,
+                side_effect=OSError,
+            ),
+            patch.object(facade, "_call_via_task_router", new_callable=AsyncMock) as cloud,
+            pytest.raises(RuntimeError, match="qwythos_unavailable"),
+        ):
+            await _execute_quick_route(
+                "sys",
+                "user",
+                LLMTask.QUICK_PLANNER,
+                scan_id=_SCAN_ID,
+                phase="quick_planner",
+                scan_options={"cloud_llm_allowed": True},
+            )
         cloud.assert_not_called()
 
     @pytest.mark.asyncio

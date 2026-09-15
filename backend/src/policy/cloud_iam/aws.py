@@ -299,7 +299,7 @@ class AwsStsVerifier:
             )
         except OwnershipTimeoutError:
             self._emit(challenge, descriptor, allowed=False, summary=REASON_AWS_STS_TIMEOUT)
-            raise OwnershipVerificationError(REASON_AWS_STS_TIMEOUT)
+            raise OwnershipVerificationError(REASON_AWS_STS_TIMEOUT) from None
         except OwnershipVerificationError as exc:
             self._emit(challenge, descriptor, allowed=False, summary=exc.summary)
             raise
@@ -370,7 +370,7 @@ class AwsStsVerifier:
             try:
                 actual_role = parse_role_arn(_role_arn_from_assumed(returned_arn))
             except OwnershipVerificationError:
-                raise OwnershipVerificationError(REASON_AWS_STS_INVALID_ARN)
+                raise OwnershipVerificationError(REASON_AWS_STS_INVALID_ARN) from None
             if actual_role["account_id"] != parsed["account_id"]:
                 raise OwnershipVerificationError(REASON_AWS_STS_REGION_MISMATCH)
             if actual_role["role_name"] != parsed["role_name"]:

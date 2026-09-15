@@ -100,7 +100,11 @@ class LLMTaskResponse:
 _OVERRIDE_MAP: dict[str, tuple[str, str, str]] = {
     "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com", "deepseek-chat"),
     "openai": ("OPENAI_API_KEY", "https://api.openai.com", "gpt-4o-mini"),
-    "openrouter": ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "openai/gpt-4o-mini"),
+    "openrouter": (
+        "OPENROUTER_API_KEY",
+        "https://openrouter.ai/api",
+        "openai/gpt-4o-mini",
+    ),
     "kimi": ("KIMI_API_KEY", "https://api.moonshot.cn", "moonshot-v1-8k"),
     "perplexity": ("PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
 }
@@ -120,7 +124,9 @@ _GLOBAL_LLM_FALLBACK_CHAIN: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _merge_route_with_global_chain(route_attempts: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+def _merge_route_with_global_chain(
+    route_attempts: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
     """Append universal fallbacks without duplicating env keys already used by the route.
 
     Route-defined attempts may include the same env key twice (e.g. Perplexity sonar-pro → sonar);
@@ -135,6 +141,7 @@ def _merge_route_with_global_chain(route_attempts: list[tuple[str, str, str]]) -
         keys_in_route.add(env_key)
         out.append(entry)
     return out
+
 
 ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
     LLMTask.EXECUTIVE_SUMMARY: LLMRoute(
@@ -437,9 +444,7 @@ def _build_attempts(route: LLMRoute) -> list[tuple[str, str, str]]:
     attempts.append((route.provider_env_key, route.base_url, route.model))
 
     if route.fallback_env_key and route.fallback_base_url and route.fallback_model:
-        attempts.append(
-            (route.fallback_env_key, route.fallback_base_url, route.fallback_model)
-        )
+        attempts.append((route.fallback_env_key, route.fallback_base_url, route.fallback_model))
 
     return attempts
 
@@ -530,7 +535,13 @@ def get_model_for_tier(tier: LLMTier, provider: str | None = None) -> dict[str, 
 class LLMTierEscalationResult:
     """Result of tier-based LLM escalation check."""
 
-    __slots__ = ("escalated", "original_tier", "escalated_tier", "confidence", "threshold")
+    __slots__ = (
+        "confidence",
+        "escalated",
+        "escalated_tier",
+        "original_tier",
+        "threshold",
+    )
 
     def __init__(
         self,

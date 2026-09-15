@@ -27,6 +27,7 @@ import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -34,9 +35,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
-from cryptography.fernet import Fernet
-
+from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.contracts.project import WorkbenchProjectCreate
 from src.web_workbench.contracts.proxy import ProxyListenerCreate, ProxyListenerUpdate
 from src.web_workbench.projects.repository import WorkbenchProjectRepository
@@ -51,7 +50,6 @@ from src.web_workbench.proxy.repository import (
     OptimisticLockError,
     ProxyRepository,
 )
-from src.policy.scope import ScopeKind, ScopeRule
 
 _BACKEND_ROOT: Path = Path(__file__).resolve().parents[2]
 

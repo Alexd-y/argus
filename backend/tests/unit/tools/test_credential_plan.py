@@ -42,7 +42,9 @@ def test_enabled_without_usable_source_fails_closed():
 
 def test_remote_password_list_needs_fetch():
     cfg = CredentialTestConfig(
-        enabled=True, password_wordlist="seclists-passwords-top1000", usernames=["admin"]
+        enabled=True,
+        password_wordlist="seclists-passwords-top1000",
+        usernames=["admin"],
     )
     with pytest.raises(WordlistError, match="not cached"):
         build_credential_test_plan(cfg, _reg(), allow_fetch=False)

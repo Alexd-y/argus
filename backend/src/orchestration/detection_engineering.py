@@ -72,6 +72,7 @@ def build_detection_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
     findings_json = json.dumps(findings, default=str, ensure_ascii=False)
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
@@ -88,18 +89,22 @@ def build_detection_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
     return DE_SYSTEM_PROMPT, user
 
 
-def parse_detection_response(response_data: dict[str, Any]) -> DetectionEngineeringResult:
+def parse_detection_response(
+    response_data: dict[str, Any],
+) -> DetectionEngineeringResult:
     """Parse the LLM response from the detection engineering co-pilot."""
     rules = []
     for item in response_data.get("rules", []):
-        rules.append(DetectionRule(
-            rule_type=item.get("rule_type", "sigma"),
-            title=item.get("title", ""),
-            rule_content=item.get("rule_content", ""),
-            finding_id=item.get("finding_id", ""),
-            severity=item.get("severity", "medium"),
-            references=item.get("references", []),
-        ))
+        rules.append(
+            DetectionRule(
+                rule_type=item.get("rule_type", "sigma"),
+                title=item.get("title", ""),
+                rule_content=item.get("rule_content", ""),
+                finding_id=item.get("finding_id", ""),
+                severity=item.get("severity", "medium"),
+                references=item.get("references", []),
+            )
+        )
     return DetectionEngineeringResult(
         rules=rules,
         total_findings_processed=0,

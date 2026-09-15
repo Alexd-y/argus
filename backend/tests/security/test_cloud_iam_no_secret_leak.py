@@ -30,7 +30,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from src.policy.audit import AuditEvent, AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam import (
     AzureCredentialProtocol,
@@ -57,7 +56,6 @@ from src.policy.ownership import (
     OwnershipVerificationError,
     hash_identifier,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test fixtures (raw secrets the verifiers must NEVER echo back)
@@ -213,9 +211,7 @@ class _StubAzureCred:
     def __init__(self, *, raise_exc: BaseException | None = None) -> None:
         self.raise_exc = raise_exc
 
-    async def get_token_with_claims(
-        self, *, scope: str, client_request_id: str
-    ) -> dict[str, Any]:
+    async def get_token_with_claims(self, *, scope: str, client_request_id: str) -> dict[str, Any]:
         if self.raise_exc is not None:
             raise self.raise_exc
         now = int(utcnow().timestamp())
@@ -266,9 +262,7 @@ def _gcp_challenge() -> OwnershipChallenge:
 def _azure_challenge() -> OwnershipChallenge:
     issued_at = utcnow()
     target = (
-        f"{SECRETS['azure_tenant_id']}|"
-        f"{SECRETS['azure_object_id']}|"
-        f"{SECRETS['azure_mi_arm_id']}"
+        f"{SECRETS['azure_tenant_id']}|{SECRETS['azure_object_id']}|{SECRETS['azure_mi_arm_id']}"
     )
     return OwnershipChallenge(
         tenant_id=UUID("00000000-0000-4000-8000-000000000052"),
@@ -321,8 +315,7 @@ class TestNoSecretLeaksInAudit:
             def __init__(self) -> None:
                 super().__init__(
                     "User: arn:aws:iam::99:user/attacker is not authorized "
-                    "to perform sts:AssumeRole on resource "
-                    + SECRETS["aws_role_arn"]
+                    "to perform sts:AssumeRole on resource " + SECRETS["aws_role_arn"]
                 )
                 self.__class__.__name__ = "AccessDenied"
 
@@ -461,9 +454,7 @@ class TestConstantTimeAndRedaction:
             ("a", "ab", False),
         ],
     )
-    def test_constant_time_str_equal(
-        self, left: str, right: str, expected: bool
-    ) -> None:
+    def test_constant_time_str_equal(self, left: str, right: str, expected: bool) -> None:
         assert constant_time_str_equal(left, right) is expected
 
     def test_redact_token_keeps_at_most_4_chars(self) -> None:
@@ -485,9 +476,7 @@ class TestConstantTimeAndRedaction:
 # ---------------------------------------------------------------------------
 
 
-_NP_DIR: Path = (
-    Path(__file__).resolve().parents[3] / "infra" / "k8s" / "networkpolicies"
-)
+_NP_DIR: Path = Path(__file__).resolve().parents[3] / "infra" / "k8s" / "networkpolicies"
 """Path to the cloud-IAM NetworkPolicy bundle.
 
 ``parents`` indices (Windows-safe absolute path):
@@ -517,13 +506,10 @@ class TestNetworkPolicyEgressAllowlists:
         # — the manifests legitimately mention "no 0.0.0.0/0" inside
         # explanatory comments to document the intent.
         non_comment = "\n".join(
-            line for line in text.splitlines()
-            if not line.lstrip().startswith("#")
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
         )
         # 0.0.0.0/0 is the canonical "egress-anywhere" wildcard.
-        assert "0.0.0.0/0" not in non_comment, (
-            f"{filename} contains 0.0.0.0/0 wildcard"
-        )
+        assert "0.0.0.0/0" not in non_comment, f"{filename} contains 0.0.0.0/0 wildcard"
         # ``namespaceSelector: {}`` would let pods reach any namespace.
         assert "namespaceSelector: {}" not in non_comment
         # ``- to: []`` opens egress to everywhere; never legal here.
@@ -564,12 +550,15 @@ class TestCacheAndTimeoutInvariants:
         assert CLOUD_SDK_TIMEOUT_S == 5.0
 
     def test_cloud_iam_methods_is_complete(self) -> None:
-        assert CLOUD_IAM_METHODS == frozenset(
-            {
-                OwnershipMethod.AWS_STS_ASSUME_ROLE,
-                OwnershipMethod.GCP_SERVICE_ACCOUNT_JWT,
-                OwnershipMethod.AZURE_MANAGED_IDENTITY,
-            }
+        assert (
+            frozenset(
+                {
+                    OwnershipMethod.AWS_STS_ASSUME_ROLE,
+                    OwnershipMethod.GCP_SERVICE_ACCOUNT_JWT,
+                    OwnershipMethod.AZURE_MANAGED_IDENTITY,
+                }
+            )
+            == CLOUD_IAM_METHODS
         )
 
 
@@ -588,7 +577,7 @@ class TestProtocolConformance:
             """Minimal stand-in for a boto3 STS client (only the
             ``assume_role`` attribute matters for the adapter constructor)."""
 
-            def assume_role(self, **_: Any) -> Mapping[str, Any]:  # noqa: ANN401
+            def assume_role(self, **_: Any) -> Mapping[str, Any]:
                 return {}
 
         # ``runtime_checkable`` Protocol — ``isinstance`` is the runtime

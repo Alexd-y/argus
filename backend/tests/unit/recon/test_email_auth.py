@@ -88,7 +88,12 @@ class TestDKIM:
 
 class TestCombined:
     def test_all_missing_yields_three(self):
-        f = analyze_email_auth(D, txt_records=[], dmarc_txt_records=[], dkim_records_by_selector={"default": [""]})
+        f = analyze_email_auth(
+            D,
+            txt_records=[],
+            dmarc_txt_records=[],
+            dkim_records_by_selector={"default": [""]},
+        )
         titles = _titles(f)
         assert any("SPF record missing" in t for t in titles)
         assert any("DMARC record missing" in t for t in titles)

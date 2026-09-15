@@ -5,14 +5,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from src.llm.errors import LLMAllProvidersFailedError
 from src.llm.task_router import (
-    LLMRoute,
-    LLMTask,
-    ROUTING_TABLE,
     _GLOBAL_LLM_FALLBACK_CHAIN,
     _TASK_TO_ROLE,
+    ROUTING_TABLE,
+    LLMRoute,
+    LLMTask,
     _call_route,
     _merge_route_with_global_chain,
     call_llm_for_task,
@@ -83,9 +82,7 @@ class TestTaskToRoleMapping:
     def test_mapping_is_complete_every_task_has_role(self):
         all_tasks = set(LLMTask)
         mapped_tasks = set(_TASK_TO_ROLE.keys())
-        assert mapped_tasks == all_tasks, (
-            f"Unmapped tasks: {all_tasks - mapped_tasks}"
-        )
+        assert mapped_tasks == all_tasks, f"Unmapped tasks: {all_tasks - mapped_tasks}"
 
     def test_all_roles_are_valid(self):
         roles = set(_TASK_TO_ROLE.values())
@@ -132,15 +129,11 @@ class TestRoutingTable:
     def test_routing_table_covers_all_tasks(self):
         all_tasks = set(LLMTask)
         routed_tasks = set(ROUTING_TABLE.keys())
-        assert routed_tasks == all_tasks, (
-            f"Missing routes: {all_tasks - routed_tasks}"
-        )
+        assert routed_tasks == all_tasks, f"Missing routes: {all_tasks - routed_tasks}"
 
     def test_all_routes_are_llm_route_instances(self):
         for task, route in ROUTING_TABLE.items():
-            assert isinstance(route, LLMRoute), (
-                f"{task.name} route is not an LLMRoute"
-            )
+            assert isinstance(route, LLMRoute), f"{task.name} route is not an LLMRoute"
 
     def test_executive_summary_route(self):
         route = ROUTING_TABLE[LLMTask.EXECUTIVE_SUMMARY]
@@ -189,7 +182,7 @@ class TestGlobalFallbackChain:
             "DEEPSEEK_API_KEY",
             "GOOGLE_API_KEY",
         ]
-        assert keys == expected, f"Fallback chain order mismatch"
+        assert keys == expected, "Fallback chain order mismatch"
 
     def test_global_fallback_chain_all_entries_have_three_elements(self):
         for entry in _GLOBAL_LLM_FALLBACK_CHAIN:
@@ -258,23 +251,25 @@ class TestCallLlmForTaskFallback:
         modified_table = dict(ROUTING_TABLE)
         del modified_table[LLMTask.EXECUTIVE_SUMMARY]
 
-        with patch.object(tr, "ROUTING_TABLE", modified_table):
-            with patch.object(tr, "_get_key", return_value=None):
-                with pytest.raises(LLMAllProvidersFailedError) as exc_info:
-                    await call_llm_for_task(LLMTask.EXECUTIVE_SUMMARY, "test")
-                assert "executive_summary" in str(exc_info.value)
+        with (
+            patch.object(tr, "ROUTING_TABLE", modified_table),
+            patch.object(tr, "_get_key", return_value=None),
+        ):
+            with pytest.raises(LLMAllProvidersFailedError) as exc_info:
+                await call_llm_for_task(LLMTask.EXECUTIVE_SUMMARY, "test")
+            assert "executive_summary" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_call_llm_for_task_raises_all_providers_failed_error(self):
         from src.llm import task_router as tr
 
-        with patch.object(tr, "_get_key", return_value="fake-key"):
-            with patch.object(
-                tr, "_call_route", side_effect=RuntimeError("simulated failure")
-            ):
-                with pytest.raises(LLMAllProvidersFailedError) as exc_info:
-                    await call_llm_for_task(LLMTask.COST_SUMMARY, "test prompt")
-                assert "COST_SUMMARY" in str(exc_info.value) or "cost_summary" in str(exc_info.value)
+        with (
+            patch.object(tr, "_get_key", return_value="fake-key"),
+            patch.object(tr, "_call_route", side_effect=RuntimeError("simulated failure")),
+        ):
+            with pytest.raises(LLMAllProvidersFailedError) as exc_info:
+                await call_llm_for_task(LLMTask.COST_SUMMARY, "test prompt")
+            assert "COST_SUMMARY" in str(exc_info.value) or "cost_summary" in str(exc_info.value)
 
 
 class TestCallRoute:
@@ -282,14 +277,16 @@ class TestCallRoute:
     async def test_call_route_raises_on_missing_api_key(self):
         from src.llm import task_router as tr
 
-        with patch.object(tr, "_get_key", return_value=None):
-            with pytest.raises(RuntimeError, match="Provider not configured"):
-                await _call_route(
-                    route_env_key="NONEXISTENT_KEY",
-                    route_base_url="https://example.com",
-                    model="fake-model",
-                    prompt="test",
-                    system_prompt=None,
-                    max_tokens=100,
-                    temperature=0.3,
-                )
+        with (
+            patch.object(tr, "_get_key", return_value=None),
+            pytest.raises(RuntimeError, match="Provider not configured"),
+        ):
+            await _call_route(
+                route_env_key="NONEXISTENT_KEY",
+                route_base_url="https://example.com",
+                model="fake-model",
+                prompt="test",
+                system_prompt=None,
+                max_tokens=100,
+                temperature=0.3,
+            )

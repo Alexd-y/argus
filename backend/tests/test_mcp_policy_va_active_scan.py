@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.recon.mcp.policy import (
     VA_ACTIVE_SCAN_ALLOWED_TOOLS,
     VA_ACTIVE_SCAN_MCP_OPERATIONS,
@@ -81,29 +80,32 @@ def test_resolve_canonical_unknown_is_none(raw: str) -> None:
 
 
 def test_allowed_tools_frozenset_matches_policy() -> None:
-    assert VA_ACTIVE_SCAN_ALLOWED_TOOLS == frozenset(
-        {
-            "dalfox",
-            "xsstrike",
-            "ffuf",
-            "sqlmap",
-            "nuclei",
-            "gobuster",
-            "wfuzz",
-            "commix",
-            "whatweb",
-            "nikto",
-            "testssl",
-            "sslscan",
-            "feroxbuster",
-            "hydra",
-            "medusa",
-            "mitmdump",
-            "tcpdump",
-            "theharvester",
-            "gospider",
-            "parsero",
-        }
+    assert (
+        frozenset(
+            {
+                "dalfox",
+                "xsstrike",
+                "ffuf",
+                "sqlmap",
+                "nuclei",
+                "gobuster",
+                "wfuzz",
+                "commix",
+                "whatweb",
+                "nikto",
+                "testssl",
+                "sslscan",
+                "feroxbuster",
+                "hydra",
+                "medusa",
+                "mitmdump",
+                "tcpdump",
+                "theharvester",
+                "gospider",
+                "parsero",
+            }
+        )
+        == VA_ACTIVE_SCAN_ALLOWED_TOOLS
     )
 
 
@@ -153,17 +155,20 @@ def test_evaluate_denied_empty_name() -> None:
 
 
 def test_va_active_scan_mcp_operations_frozenset() -> None:
-    assert VA_ACTIVE_SCAN_MCP_OPERATIONS == frozenset(
-        {
-            "run_dalfox",
-            "run_xsstrike",
-            "run_ffuf",
-            "run_sqlmap",
-            "run_nuclei",
-            "run_whatweb",
-            "run_nikto",
-            "run_testssl",
-        }
+    assert (
+        frozenset(
+            {
+                "run_dalfox",
+                "run_xsstrike",
+                "run_ffuf",
+                "run_sqlmap",
+                "run_nuclei",
+                "run_whatweb",
+                "run_nikto",
+                "run_testssl",
+            }
+        )
+        == VA_ACTIVE_SCAN_MCP_OPERATIONS
     )
 
 

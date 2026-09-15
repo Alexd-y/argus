@@ -69,9 +69,7 @@ class ScoutSuiteAdapter(SecurityToolAdapter):
                 flat.append(row)
         return flat
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for item in raw_results:
             flagged = item.get("flagged_items") or item.get("flaggedItems") or 0
@@ -91,17 +89,19 @@ class ScoutSuiteAdapter(SecurityToolAdapter):
             svc = item.get("_service") or ""
             fid = item.get("_finding_id") or ""
             value = f"{svc}:{fid}"
-            findings.append({
-                "finding_type": FindingType.MISCONFIGURATION,
-                "value": value,
-                "data": {
-                    "title": str(desc),
-                    "severity": "high" if n > 5 else "medium",
-                    "flagged_items": n,
-                    "service": svc,
-                    "finding_id": fid,
-                },
-                "source_tool": "scoutsuite",
-                "confidence": 0.8,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.MISCONFIGURATION,
+                    "value": value,
+                    "data": {
+                        "title": str(desc),
+                        "severity": "high" if n > 5 else "medium",
+                        "flagged_items": n,
+                        "service": svc,
+                        "finding_id": fid,
+                    },
+                    "source_tool": "scoutsuite",
+                    "confidence": 0.8,
+                }
+            )
         return findings

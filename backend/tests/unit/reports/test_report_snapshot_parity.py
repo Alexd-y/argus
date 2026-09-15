@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from xml.etree.ElementTree import fromstring
 
 import pytest
-
 from src.reports.renderers import render_html, render_json, render_markdown, render_xml
 from src.reports.report_document import (
     ReportCoverageItem,
@@ -51,8 +50,16 @@ def _sample_doc():
     ]
     coverage = [
         ReportCoverageItem(capability_id="cap.sqli", status="tested", evidence_ids=["E-1"]),
-        ReportCoverageItem(capability_id="cap.xss", status="not_assessed", reason_code="budget_exhausted"),
-        ReportCoverageItem(capability_id="cap.ssrf", status="not_assessed", reason_code="parser_unavailable"),
+        ReportCoverageItem(
+            capability_id="cap.xss",
+            status="not_assessed",
+            reason_code="budget_exhausted",
+        ),
+        ReportCoverageItem(
+            capability_id="cap.ssrf",
+            status="not_assessed",
+            reason_code="parser_unavailable",
+        ),
     ]
     return build_report_document(
         scan_id="scan-123",
@@ -81,7 +88,10 @@ def test_evidence_gate_downgrades_unproven_finding():
     doc = _sample_doc()
     f2 = next(f for f in doc.findings if f.finding_id == "F-2")
     assert f2.verification_status == "insufficient_evidence"
-    assert any(ve.finding_id == "F-2" and ve.code == "insufficient_evidence" for ve in doc.validation_errors)
+    assert any(
+        ve.finding_id == "F-2" and ve.code == "insufficient_evidence"
+        for ve in doc.validation_errors
+    )
 
 
 def test_no_confirmed_finding_without_evidence_in_any_format():
@@ -120,7 +130,9 @@ def test_json_xml_structural_parity():
     root = fromstring(render_xml(doc))
     x_ids = {fe.get("finding_id") for fe in root.iter("finding")}
     x_sev = sorted(fe.get("severity") for fe in root.iter("finding"))
-    x_ev = {e.text for fe in root.iter("finding") for e in fe.find("evidence_ids").iter("evidence_id")}
+    x_ev = {
+        e.text for fe in root.iter("finding") for e in fe.find("evidence_ids").iter("evidence_id")
+    }
     x_cov = {(c.get("capability_id"), c.get("status")) for c in root.iter("capability")}
     x_hash = root.get("snapshot_hash")
 
@@ -142,7 +154,7 @@ def test_markdown_html_contain_all_semantic_tokens():
             assert fid in text
         for eid in j_ev:
             assert eid in text
-        for cap, status in j_cov:
+        for cap, _status in j_cov:
             assert cap in text
         for lim in doc.limitations:
             assert lim in text

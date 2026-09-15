@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-
-import pytest
-
 from dataclasses import dataclass
-from typing import Optional
 from uuid import uuid4
 
+import pytest
+from pydantic import ValidationError
 from src.findings.prioritizer import (
     FindingPrioritizer,
     Prioritizer,
@@ -122,9 +120,7 @@ def test_breakdown_sums_to_score(
     assert score.score == pytest.approx(min(total, 100.0), abs=0.05)
 
 
-def test_idempotent(
-    prioritizer: Prioritizer, make_finding: Callable[..., FindingDTO]
-) -> None:
+def test_idempotent(prioritizer: Prioritizer, make_finding: Callable[..., FindingDTO]) -> None:
     finding = make_finding(
         cvss_v3_score=5.5,
         epss_score=0.42,
@@ -200,9 +196,7 @@ def test_ssvc_component_weights(
     expected_weight: float,
 ) -> None:
     score = prioritizer.prioritize(make_finding(ssvc_decision=decision))
-    assert score.breakdown[PriorityComponent.SSVC] == pytest.approx(
-        expected_weight, abs=0.01
-    )
+    assert score.breakdown[PriorityComponent.SSVC] == pytest.approx(expected_weight, abs=0.01)
 
 
 def test_score_is_clamped_to_100(
@@ -224,7 +218,7 @@ def test_score_dto_is_frozen(
     prioritizer: Prioritizer, make_finding: Callable[..., FindingDTO]
 ) -> None:
     score = prioritizer.prioritize(make_finding())
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         score.score = 0.0  # type: ignore[misc]
 
 
@@ -258,12 +252,8 @@ def test_rank_findings_ssvc_breaks_when_kev_ties(
     make_finding: Callable[..., FindingDTO],
 ) -> None:
     """When both findings share KEV status, SSVC drives ordering."""
-    high_ssvc = make_finding(
-        cvss_v3_score=5.0, kev_listed=False, ssvc_decision=SSVCDecision.ACT
-    )
-    low_ssvc = make_finding(
-        cvss_v3_score=9.0, kev_listed=False, ssvc_decision=SSVCDecision.TRACK
-    )
+    high_ssvc = make_finding(cvss_v3_score=5.0, kev_listed=False, ssvc_decision=SSVCDecision.ACT)
+    low_ssvc = make_finding(cvss_v3_score=9.0, kev_listed=False, ssvc_decision=SSVCDecision.TRACK)
     ranked = FindingPrioritizer.rank_findings([low_ssvc, high_ssvc])
     assert ranked[0].id == high_ssvc.id
 
@@ -355,7 +345,9 @@ def test_top_n_returns_first_n_findings(
 ) -> None:
     findings = [
         make_finding(
-            cvss_v3_score=float(i), kev_listed=(i == 5), ssvc_decision=SSVCDecision.TRACK
+            cvss_v3_score=float(i),
+            kev_listed=(i == 5),
+            ssvc_decision=SSVCDecision.TRACK,
         )
         for i in range(1, 6)
     ]
@@ -398,10 +390,10 @@ class _FakeApiFinding:
     title: str
     cwe: str
     cvss: float
-    epss_score: Optional[float]
-    epss_percentile: Optional[float]
+    epss_score: float | None
+    epss_percentile: float | None
     kev_listed: bool
-    ssvc_decision: Optional[str]
+    ssvc_decision: str | None
 
 
 def test_rank_objects_handles_duck_typed_findings() -> None:
@@ -468,10 +460,10 @@ def test_rank_objects_id_extractor_is_used() -> None:
     class Tied:
         ident: str
         kev_listed: bool = False
-        ssvc_decision: Optional[str] = None
+        ssvc_decision: str | None = None
         cvss_v3_score: float = 0.0
-        epss_score: Optional[float] = None
-        epss_percentile: Optional[float] = None
+        epss_score: float | None = None
+        epss_percentile: float | None = None
 
     a = Tied(ident="alpha")
     b = Tied(ident="bravo")
@@ -496,22 +488,42 @@ def test_rank_findings_descending_full_signal_order(
 ) -> None:
     """A small synthetic batch must come back KEV→SSVC→CVSS→EPSS sorted."""
     everything = [
-        ("kev_act", make_finding(
-            cvss_v3_score=9.5, epss_score=0.95,
-            kev_listed=True, ssvc_decision=SSVCDecision.ACT,
-        )),
-        ("kev_track", make_finding(
-            cvss_v3_score=2.0, epss_score=0.0,
-            kev_listed=True, ssvc_decision=SSVCDecision.TRACK,
-        )),
-        ("nokev_act_high_cvss", make_finding(
-            cvss_v3_score=9.5, epss_score=0.5,
-            kev_listed=False, ssvc_decision=SSVCDecision.ACT,
-        )),
-        ("nokev_track", make_finding(
-            cvss_v3_score=4.0, epss_score=0.1,
-            kev_listed=False, ssvc_decision=SSVCDecision.TRACK,
-        )),
+        (
+            "kev_act",
+            make_finding(
+                cvss_v3_score=9.5,
+                epss_score=0.95,
+                kev_listed=True,
+                ssvc_decision=SSVCDecision.ACT,
+            ),
+        ),
+        (
+            "kev_track",
+            make_finding(
+                cvss_v3_score=2.0,
+                epss_score=0.0,
+                kev_listed=True,
+                ssvc_decision=SSVCDecision.TRACK,
+            ),
+        ),
+        (
+            "nokev_act_high_cvss",
+            make_finding(
+                cvss_v3_score=9.5,
+                epss_score=0.5,
+                kev_listed=False,
+                ssvc_decision=SSVCDecision.ACT,
+            ),
+        ),
+        (
+            "nokev_track",
+            make_finding(
+                cvss_v3_score=4.0,
+                epss_score=0.1,
+                kev_listed=False,
+                ssvc_decision=SSVCDecision.TRACK,
+            ),
+        ),
     ]
     findings = [f for _, f in everything]
     expected_order_ids = [
@@ -528,10 +540,7 @@ def test_rank_findings_is_pure(
     make_finding: Callable[..., FindingDTO],
 ) -> None:
     """Calling rank_findings must not mutate the input collection."""
-    findings = [
-        make_finding(cvss_v3_score=float(i), kev_listed=(i % 2 == 0))
-        for i in range(1, 6)
-    ]
+    findings = [make_finding(cvss_v3_score=float(i), kev_listed=(i % 2 == 0)) for i in range(1, 6)]
     snapshot = list(findings)
     FindingPrioritizer.rank_findings(findings)
     assert findings == snapshot
@@ -573,12 +582,8 @@ def test_rank_ssvc_breaks_ties_within_kev_bucket(
 
 
 def test_rank_cvss_after_ssvc(make_finding: Callable[..., FindingDTO]) -> None:
-    a = make_finding(
-        kev_listed=False, ssvc_decision=SSVCDecision.TRACK, cvss_v3_score=4.0
-    )
-    b = make_finding(
-        kev_listed=False, ssvc_decision=SSVCDecision.TRACK, cvss_v3_score=9.0
-    )
+    a = make_finding(kev_listed=False, ssvc_decision=SSVCDecision.TRACK, cvss_v3_score=4.0)
+    b = make_finding(kev_listed=False, ssvc_decision=SSVCDecision.TRACK, cvss_v3_score=9.0)
     out = FindingPrioritizer.rank_findings([a, b])
     assert out[0] is b
 
@@ -655,18 +660,14 @@ class _ApiFindingLike:
     title: str
     cwe: str
     cvss_v3_score: float
-    epss_percentile: Optional[float] = None
+    epss_percentile: float | None = None
     kev_listed: bool = False
-    ssvc_decision: Optional[SSVCDecision] = None
+    ssvc_decision: SSVCDecision | None = None
 
 
 def test_rank_objects_kev_first() -> None:
-    nokev = _ApiFindingLike(
-        title="A", cwe="CWE-79", cvss_v3_score=9.0, kev_listed=False
-    )
-    kev = _ApiFindingLike(
-        title="B", cwe="CWE-89", cvss_v3_score=5.0, kev_listed=True
-    )
+    nokev = _ApiFindingLike(title="A", cwe="CWE-79", cvss_v3_score=9.0, kev_listed=False)
+    kev = _ApiFindingLike(title="B", cwe="CWE-89", cvss_v3_score=5.0, kev_listed=True)
     out = FindingPrioritizer.rank_objects([nokev, kev])
     assert out[0] is kev
 
@@ -685,9 +686,7 @@ def test_rank_objects_with_id_extractor() -> None:
     a = _ApiFindingLike(title="dup", cwe="CWE-1", cvss_v3_score=5.0)
     b = _ApiFindingLike(title="dup", cwe="CWE-1", cvss_v3_score=5.0)
     out_default = FindingPrioritizer.rank_objects([a, b])
-    out_custom = FindingPrioritizer.rank_objects(
-        [a, b], id_extractor=lambda o: id(o).__str__()
-    )
+    out_custom = FindingPrioritizer.rank_objects([a, b], id_extractor=lambda o: id(o).__str__())
     # Both must produce the same length / membership; ordering can differ
     # because the id extractor is different.
     assert {id(x) for x in out_default} == {id(x) for x in out_custom}
@@ -698,10 +697,7 @@ def test_rank_objects_empty() -> None:
 
 
 def test_rank_objects_is_idempotent() -> None:
-    items = [
-        _ApiFindingLike(title=f"f-{i}", cwe="CWE-1", cvss_v3_score=float(i))
-        for i in range(5)
-    ]
+    items = [_ApiFindingLike(title=f"f-{i}", cwe="CWE-1", cvss_v3_score=float(i)) for i in range(5)]
     a = FindingPrioritizer.rank_objects(items)
     b = FindingPrioritizer.rank_objects(items)
     assert [id(x) for x in a] == [id(x) for x in b]

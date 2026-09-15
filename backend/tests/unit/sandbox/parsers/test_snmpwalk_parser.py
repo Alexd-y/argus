@@ -39,7 +39,7 @@ def _snmpwalk_output(community: str = "secret") -> bytes:
         "SNMPv2-MIB::sysName.0 = STRING: edge-router-01\n"
         "SNMPv2-MIB::sysLocation.0 = STRING: rack 14\n"
         "IF-MIB::ifNumber.0 = INTEGER: 12\n"
-    ).encode("utf-8")
+    ).encode()
 
 
 def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
@@ -56,9 +56,7 @@ def test_happy_path_emits_info_finding_for_walk(tmp_path: Path) -> None:
 
 
 def test_default_community_escalates_to_misconfig(tmp_path: Path) -> None:
-    findings = parse_snmpwalk(
-        _snmpwalk_output(community="public"), b"", tmp_path, "snmpwalk"
-    )
+    findings = parse_snmpwalk(_snmpwalk_output(community="public"), b"", tmp_path, "snmpwalk")
     assert len(findings) == 1
     finding = findings[0]
     assert finding.category is FindingCategory.MISCONFIG
@@ -68,9 +66,7 @@ def test_default_community_escalates_to_misconfig(tmp_path: Path) -> None:
 
 
 def test_private_community_also_default(tmp_path: Path) -> None:
-    findings = parse_snmpwalk(
-        _snmpwalk_output(community="private"), b"", tmp_path, "snmpwalk"
-    )
+    findings = parse_snmpwalk(_snmpwalk_output(community="private"), b"", tmp_path, "snmpwalk")
     assert findings[0].category is FindingCategory.MISCONFIG
 
 
@@ -91,7 +87,7 @@ def test_unrecognised_lines_skipped(tmp_path: Path) -> None:
 
 def test_long_string_value_is_truncated(tmp_path: Path) -> None:
     long_str = "X" * 700
-    payload = (f"SNMPv2-MIB::sysDescr.0 = STRING: {long_str}\n").encode("utf-8")
+    payload = (f"SNMPv2-MIB::sysDescr.0 = STRING: {long_str}\n").encode()
     parse_snmpwalk(payload, b"", tmp_path, "snmpwalk")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     record = json.loads(sidecar.splitlines()[0])
@@ -110,7 +106,5 @@ def test_dedup_runs_against_same_host(tmp_path: Path) -> None:
 
 
 def test_finding_confidence_for_default_is_confirmed(tmp_path: Path) -> None:
-    findings = parse_snmpwalk(
-        _snmpwalk_output(community="public"), b"", tmp_path, "snmpwalk"
-    )
+    findings = parse_snmpwalk(_snmpwalk_output(community="public"), b"", tmp_path, "snmpwalk")
     assert findings[0].confidence is ConfidenceLevel.CONFIRMED

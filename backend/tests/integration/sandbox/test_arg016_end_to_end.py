@@ -42,7 +42,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -67,7 +66,6 @@ from src.sandbox.signing import (
 )
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 _SHELL_METACHARS: Final[tuple[str, ...]] = (
     ";",
@@ -209,9 +207,7 @@ def isolated_catalog(
         assert src.is_file(), f"source YAML missing: {src}"
         shutil.copy2(src, tools_dir / f"{tool_id}.yaml")
 
-    priv_path, _, key_id = KeyManager.generate_dev_keypair(
-        keys_dir, name="arg016_e2e_signing"
-    )
+    priv_path, _, key_id = KeyManager.generate_dev_keypair(keys_dir, name="arg016_e2e_signing")
     private_key = load_private_key_bytes(priv_path.read_bytes())
     priv_path.unlink()  # private material lives only in this test process
 
@@ -432,8 +428,7 @@ def test_sqlmap_dispatch_yields_sqli_finding(
     )
     assert findings, f"{tool_id}: sqlmap parser produced no findings"
     assert len(findings) == 1, (
-        f"{tool_id}: techniques must fold into one finding per parameter, "
-        f"got {len(findings)}"
+        f"{tool_id}: techniques must fold into one finding per parameter, got {len(findings)}"
     )
 
     finding = findings[0]
@@ -441,12 +436,9 @@ def test_sqlmap_dispatch_yields_sqli_finding(
         f"{tool_id}: expected SQLi category, got {finding.category}"
     )
     assert finding.confidence is ConfidenceLevel.CONFIRMED, (
-        f"{tool_id}: sqlmap injections must produce CONFIRMED findings, "
-        f"got {finding.confidence}"
+        f"{tool_id}: sqlmap injections must produce CONFIRMED findings, got {finding.confidence}"
     )
-    assert 89 in finding.cwe, (
-        f"{tool_id}: SQLi finding must declare CWE-89, got {finding.cwe}"
-    )
+    assert 89 in finding.cwe, f"{tool_id}: SQLi finding must declare CWE-89, got {finding.cwe}"
 
 
 @pytest.mark.parametrize("tool_id", ("sqlmap_safe", "sqlmap_confirm"))
@@ -470,9 +462,7 @@ def test_sqlmap_dispatch_writes_evidence_sidecar(
     assert findings
 
     sidecar = artifacts_dir / SQLMAP_SIDECAR
-    assert sidecar.is_file(), (
-        f"{tool_id}: sqlmap parser must write the {SQLMAP_SIDECAR} sidecar"
-    )
+    assert sidecar.is_file(), f"{tool_id}: sqlmap parser must write the {SQLMAP_SIDECAR} sidecar"
     parsed = [
         json.loads(line)
         for line in sidecar.read_text(encoding="utf-8").splitlines()
@@ -530,9 +520,7 @@ def _dalfox_payload() -> bytes:
     return json.dumps(payload).encode("utf-8")
 
 
-def test_dalfox_dispatch_yields_xss_findings(
-    loaded_registry: ToolRegistry, tmp_path: Path
-) -> None:
+def test_dalfox_dispatch_yields_xss_findings(loaded_registry: ToolRegistry, tmp_path: Path) -> None:
     """Synthetic dalfox JSON → 3 findings (V/S/R) with the correct ladder.
 
     Verified → ``XSS / CONFIRMED``, Stored → ``XSS / LIKELY``, Reflected →
@@ -554,9 +542,7 @@ def test_dalfox_dispatch_yields_xss_findings(
     )
     assert len(findings) == 3, f"expected 3 findings (V/S/R), got {len(findings)}"
 
-    assert all(79 in f.cwe for f in findings), (
-        "every dalfox finding must declare CWE-79"
-    )
+    assert all(79 in f.cwe for f in findings), "every dalfox finding must declare CWE-79"
 
     confidences = sorted(f.confidence.value for f in findings)
     assert confidences == sorted(
@@ -571,9 +557,7 @@ def test_dalfox_dispatch_yields_xss_findings(
     assert FindingCategory.XSS in categories, (
         "Verified + Stored XSS must classify as FindingCategory.XSS"
     )
-    assert FindingCategory.INFO in categories, (
-        "Reflected XSS must classify as FindingCategory.INFO"
-    )
+    assert FindingCategory.INFO in categories, "Reflected XSS must classify as FindingCategory.INFO"
 
     # The exact V/S/R → category/confidence pairing pinned from the
     # dalfox parser contract (src/sandbox/parsers/dalfox_parser._TYPE_MAP).
@@ -641,6 +625,4 @@ def test_dalfox_canonical_artifact_round_trip(
         artifacts_dir,
         tool_id="dalfox",
     )
-    assert len(findings) == 3, (
-        "dalfox parser must prefer canonical artefact over stdout"
-    )
+    assert len(findings) == 3, "dalfox parser must prefer canonical artefact over stdout"

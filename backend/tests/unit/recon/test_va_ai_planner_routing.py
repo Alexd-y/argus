@@ -7,7 +7,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-
 import src.recon.vulnerability_analysis.active_scan_planner as planner
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
@@ -21,7 +20,9 @@ def _enable(monkeypatch):
 @pytest.mark.asyncio
 async def test_planner_routes_through_unified_facade(monkeypatch):
     _enable(monkeypatch)
-    mock_unified = AsyncMock(return_value='[{"tool": "nuclei", "args": ["-u", "https://t.example"]}]')
+    mock_unified = AsyncMock(
+        return_value='[{"tool": "nuclei", "args": ["-u", "https://t.example"]}]'
+    )
     monkeypatch.setattr("src.llm.facade.call_llm_unified", mock_unified)
 
     bundle = VulnerabilityAnalysisInputBundle(engagement_id="e1")

@@ -28,8 +28,15 @@ from src.reports.tier_classifier import (
 
 def _summary() -> ReportSummary:
     return ReportSummary(
-        critical=0, high=0, medium=0, low=0, info=0,
-        technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+        critical=0,
+        high=0,
+        medium=0,
+        low=0,
+        info=0,
+        technologies=[],
+        sslIssues=0,
+        headerIssues=0,
+        leaksFound=False,
     )
 
 
@@ -62,16 +69,17 @@ def _make_full_data(*, num_findings: int = 5) -> ReportData:
         technologies=["nginx", "django"],
         timeline=[
             TimelineEntry(
-                phase="recon", order_index=0, entry={"x": 1}, created_at="2026-04-19T10:00:00Z"
+                phase="recon",
+                order_index=0,
+                entry={"x": 1},
+                created_at="2026-04-19T10:00:00Z",
             )
         ],
         phase_outputs=[PhaseOutputEntry(phase="recon", output_data={"k": "v"})],
         evidence=[
             EvidenceEntry(finding_id="f1", object_key="evidence/a.txt", description="hex dump")
         ],
-        screenshots=[
-            ScreenshotEntry(object_key="screenshots/x.png", url_or_email="login")
-        ],
+        screenshots=[ScreenshotEntry(object_key="screenshots/x.png", url_or_email="login")],
         ai_insights=["LLM commentary"],
         executive_summary="Top-level summary.",
         remediation=["Apply patch X.", "Rotate secret Y."],
@@ -115,7 +123,9 @@ class TestMidgard:
         data = _make_full_data()
         before_findings = list(data.findings)
         before_evidence = list(data.evidence)
-        before_remediation = list(data.remediation) if isinstance(data.remediation, list) else data.remediation
+        before_remediation = (
+            list(data.remediation) if isinstance(data.remediation, list) else data.remediation
+        )
         classify_for_tier(data, ReportTier.MIDGARD)
         assert data.findings == before_findings
         assert data.evidence == before_evidence
@@ -130,8 +140,11 @@ class TestMidgard:
             _make_finding("info", "d-info"),
         ]
         data = ReportData(
-            report_id="r", target="x",
-            summary=_summary(), findings=findings, technologies=[],
+            report_id="r",
+            target="x",
+            summary=_summary(),
+            findings=findings,
+            technologies=[],
         )
         out = classify_for_tier(data, ReportTier.MIDGARD)
         titles = [f.title for f in out.findings]
@@ -145,8 +158,11 @@ class TestMidgard:
 
     def test_handles_empty_findings(self) -> None:
         data = ReportData(
-            report_id="r", target="x",
-            summary=_summary(), findings=[], technologies=[],
+            report_id="r",
+            target="x",
+            summary=_summary(),
+            findings=[],
+            technologies=[],
         )
         out = classify_for_tier(data, ReportTier.MIDGARD)
         assert out.findings == []

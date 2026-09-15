@@ -57,12 +57,12 @@ def argus_error_to_http(
 ) -> HTTPException:
     """Convert an ArgusProfileError to an HTTPException the contract handler renders."""
     cid = correlation_id or new_correlation_id()
-    return HTTPException(status_code=exc.http_status, detail=argus_error_body(exc, correlation_id=cid))
+    return HTTPException(
+        status_code=exc.http_status, detail=argus_error_body(exc, correlation_id=cid)
+    )
 
 
-async def argus_profile_exception_handler(
-    request: Request, exc: ArgusProfileError
-) -> JSONResponse:
+async def argus_profile_exception_handler(request: Request, exc: ArgusProfileError) -> JSONResponse:
     """Render ArgusProfileError as the flat contract body + correlation_id."""
     cid = _correlation_from_request(request)
     body = argus_error_body(exc, correlation_id=cid)

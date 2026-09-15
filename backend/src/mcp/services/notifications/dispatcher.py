@@ -83,14 +83,10 @@ class NotificationDispatcher:
         per_tenant_disabled_adapters: Mapping[str, frozenset[str]] | None = None,
     ) -> None:
         self._adapters: tuple[NotifierProtocol, ...] = tuple(adapters)
-        self._adapter_index: dict[str, NotifierProtocol] = {
-            a.name: a for a in self._adapters
-        }
+        self._adapter_index: dict[str, NotifierProtocol] = {a.name: a for a in self._adapters}
         self._enabled = bool(enabled)
         self._audit_logger = audit_logger
-        self._per_adapter_enabled: dict[str, bool] = {
-            a.name: False for a in self._adapters
-        }
+        self._per_adapter_enabled: dict[str, bool] = {a.name: False for a in self._adapters}
         self._per_tenant_disabled: dict[str, frozenset[str]] = {
             k: frozenset(v) for k, v in (per_tenant_disabled_adapters or {}).items()
         }
@@ -111,9 +107,7 @@ class NotificationDispatcher:
             raise KeyError(f"unknown adapter: {name}")
         self._per_adapter_enabled[name] = bool(enabled)
 
-    def set_tenant_disabled_adapters(
-        self, tenant_id: str, adapters: Iterable[str]
-    ) -> None:
+    def set_tenant_disabled_adapters(self, tenant_id: str, adapters: Iterable[str]) -> None:
         self._per_tenant_disabled[tenant_id] = frozenset(adapters)
 
     async def aclose(self) -> None:
@@ -160,7 +154,7 @@ class NotificationDispatcher:
         gathered = await asyncio.gather(*coros, return_exceptions=True)
 
         results: list[AdapterResult] = []
-        for adapter, outcome in zip(slots, gathered):
+        for adapter, outcome in zip(slots, gathered, strict=False):
             if isinstance(outcome, AdapterResult):
                 results.append(outcome)
                 continue
@@ -191,9 +185,7 @@ class NotificationDispatcher:
         """Fire-and-forget convenience: schedule :meth:`dispatch` as a Task."""
         return asyncio.create_task(self.dispatch(event))
 
-    def _audit_dispatch(
-        self, *, event: NotificationEvent, results: list[AdapterResult]
-    ) -> None:
+    def _audit_dispatch(self, *, event: NotificationEvent, results: list[AdapterResult]) -> None:
         if self._audit_logger is None:
             return
         summary: list[dict[str, object]] = []

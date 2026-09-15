@@ -29,7 +29,6 @@ import pytest
 from httpx import AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.api.schemas import (
     WEBHOOK_DLQ_REASON_MAX_LEN,
     WEBHOOK_DLQ_REASON_MIN_LEN,
@@ -70,9 +69,7 @@ def _make_adapter_stub(result: AdapterResult) -> MagicMock:
     return stub
 
 
-def _patch_adapter(
-    monkeypatch: pytest.MonkeyPatch, stub: MagicMock
-) -> None:
+def _patch_adapter(monkeypatch: pytest.MonkeyPatch, stub: MagicMock) -> None:
     """Replace `_build_adapter` so every replay returns the given stub."""
     monkeypatch.setattr(
         "src.api.routers.admin_webhook_dlq._build_adapter",
@@ -118,21 +115,15 @@ class TestReplayRequestSchema:
 
     def test_replay_request_schema_rejects_short_reason(self) -> None:
         with pytest.raises(ValidationError):
-            WebhookDlqReplayRequest(
-                reason="x" * (WEBHOOK_DLQ_REASON_MIN_LEN - 1)
-            )
+            WebhookDlqReplayRequest(reason="x" * (WEBHOOK_DLQ_REASON_MIN_LEN - 1))
 
     def test_replay_request_schema_rejects_long_reason(self) -> None:
         with pytest.raises(ValidationError):
-            WebhookDlqReplayRequest(
-                reason="x" * (WEBHOOK_DLQ_REASON_MAX_LEN + 1)
-            )
+            WebhookDlqReplayRequest(reason="x" * (WEBHOOK_DLQ_REASON_MAX_LEN + 1))
 
     def test_replay_request_schema_rejects_extra_field(self) -> None:
         with pytest.raises(ValidationError):
-            WebhookDlqReplayRequest.model_validate(
-                {"reason": DEFAULT_REASON, "stowaway": "no"}
-            )
+            WebhookDlqReplayRequest.model_validate({"reason": DEFAULT_REASON, "stowaway": "no"})
 
 
 # ===========================================================================
@@ -149,13 +140,9 @@ class TestReplayRbac:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-rbac-op"
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-rbac-op")
         # Adapter MUST never be invoked on a 403 path.
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -180,9 +167,7 @@ class TestReplayRbac:
         entry = await enqueue_dlq_entry(
             session, tenant_id=TENANT_A, event_id="evt-rbac-admin-no-tenant"
         )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -210,9 +195,7 @@ class TestReplayRbac:
         target = await enqueue_dlq_entry(
             session, tenant_id=TENANT_B, event_id="evt-cross-tenant-target"
         )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=target.event_id)
-        )
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=target.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -223,8 +206,7 @@ class TestReplayRbac:
 
         # MUST be 404 — never 403 — to prevent enumeration of other tenants' rows.
         assert r.status_code == 404, (
-            f"expected 404 for cross-tenant probe, got {r.status_code}; "
-            f"body={r.text!r}"
+            f"expected 404 for cross-tenant probe, got {r.status_code}; body={r.text!r}"
         )
         assert r.json()["detail"] == "dlq_entry_not_found"
 
@@ -245,12 +227,8 @@ class TestReplayRbac:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-admin-own"
-        )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-admin-own")
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -275,12 +253,8 @@ class TestReplayRbac:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-super-cross"
-        )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-super-cross")
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         # No X-Admin-Tenant — super-admin can hit any tenant's rows.
@@ -442,9 +416,7 @@ class TestReplayAlreadyTerminal:
             session, tenant_id=TENANT_A, event_id="evt-already-replayed"
         )
         await force_terminal_replayed(session, entry_id=entry.id)
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -470,9 +442,7 @@ class TestReplayAlreadyTerminal:
             session, tenant_id=TENANT_A, event_id="evt-already-abandoned"
         )
         await force_terminal_abandoned(session, entry_id=entry.id)
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -501,12 +471,8 @@ class TestReplayValidation:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-missing-reason"
-        )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-missing-reason")
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -527,12 +493,8 @@ class TestReplayValidation:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-short-reason"
-        )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-short-reason")
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -553,12 +515,8 @@ class TestReplayValidation:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-long-reason"
-        )
-        adapter = _make_adapter_stub(
-            _adapter_result(delivered=True, event_id=entry.event_id)
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-long-reason")
+        adapter = _make_adapter_stub(_adapter_result(delivered=True, event_id=entry.event_id))
         _patch_adapter(monkeypatch, adapter)
 
         r = await api_client.post(
@@ -652,10 +610,7 @@ class TestReplayEdgeCases:
             "reason",
         }
         missing = required_keys - set(details.keys())
-        assert not missing, (
-            f"audit details missing required keys: {missing}; "
-            f"details={details!r}"
-        )
+        assert not missing, f"audit details missing required keys: {missing}; details={details!r}"
         assert details["entry_id"] == entry.id
         assert details["adapter_name"] == "jira"
         assert details["event_id"] == entry.event_id

@@ -26,7 +26,7 @@ import json
 from typing import Any
 
 import pytest
-
+from pydantic import ValidationError
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -108,9 +108,7 @@ def _make_data(
 ) -> ReportData:
     # Sentinel pattern: the caller can pass an explicit ``findings=[]`` to mean
     # "no findings". A bare ``None`` (or omission) yields the default fixture.
-    if findings is _SENTINEL:
-        findings = [_finding()]
-    elif findings is None:
+    if findings is _SENTINEL or findings is None:
         findings = [_finding()]
     return ReportData(
         report_id="rep-001",
@@ -150,7 +148,7 @@ def test_section_order_constant_is_complete_and_immutable() -> None:
         "evidence_refs",
         "timeline_entries",
     )
-    assert VALHALLA_EXECUTIVE_SECTION_ORDER == expected
+    assert expected == VALHALLA_EXECUTIVE_SECTION_ORDER
     assert isinstance(VALHALLA_EXECUTIVE_SECTION_ORDER, tuple)
 
 
@@ -177,7 +175,7 @@ def test_assembly_is_frozen() -> None:
 
 
 def test_assembly_forbids_extra_fields() -> None:
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValidationError):
         ValhallaSectionAssembly(executive_summary="x", unexpected="boom")  # type: ignore[call-arg]
 
 
@@ -194,9 +192,7 @@ def test_assembly_is_byte_deterministic_across_runs() -> None:
             _finding(severity="medium", title="C", cwe="CWE-22", cvss=5.0),
         ],
         timeline=[
-            TimelineEntry(
-                phase="recon", order_index=1, entry={"k": 1}, created_at="t1"
-            ),
+            TimelineEntry(phase="recon", order_index=1, entry={"k": 1}, created_at="t1"),
             TimelineEntry(phase="scan", order_index=2, entry={"k": 2}, created_at="t2"),
         ],
         evidence=[
@@ -289,9 +285,7 @@ def test_top_findings_ranked_by_intel_aware_prioritizer() -> None:
         _finding(severity="high", title="C_high", cvss=8.0, owasp="A03"),
         _finding(severity="high", title="A_high", cvss=8.0, owasp="A03"),
     ]
-    out = assemble_valhalla_sections(
-        _make_data(findings=findings), business_context=bctx
-    )
+    out = assemble_valhalla_sections(_make_data(findings=findings), business_context=bctx)
     titles = [r.title for r in out.top_findings_by_business_impact]
     assert titles[0] == "B_crit"
     # Intel-aware :class:`FindingPrioritizer` orders within bucket; not title-only.
@@ -363,18 +357,10 @@ def test_business_value_inflates_composite_score() -> None:
         confidence="confirmed",
         poc={"url": "https://payments.acme.example.com/api"},
     )
-    bctx_low = BusinessContext(
-        asset_business_values=(("payments.acme.example.com", 1.0),)
-    )
-    bctx_high = BusinessContext(
-        asset_business_values=(("payments.acme.example.com", 5.0),)
-    )
-    low = assemble_valhalla_sections(
-        _make_data(findings=[f]), business_context=bctx_low
-    )
-    high = assemble_valhalla_sections(
-        _make_data(findings=[f]), business_context=bctx_high
-    )
+    bctx_low = BusinessContext(asset_business_values=(("payments.acme.example.com", 1.0),))
+    bctx_high = BusinessContext(asset_business_values=(("payments.acme.example.com", 5.0),))
+    low = assemble_valhalla_sections(_make_data(findings=[f]), business_context=bctx_low)
+    high = assemble_valhalla_sections(_make_data(findings=[f]), business_context=bctx_high)
     assert (
         high.risk_quantification_per_asset[0].composite_score
         > low.risk_quantification_per_asset[0].composite_score
@@ -533,9 +519,7 @@ def test_evidence_invokes_presigner_and_returns_url() -> None:
 
 
 def test_evidence_handles_presigner_exception_gracefully() -> None:
-    data = _make_data(
-        evidence=[EvidenceEntry(finding_id="f1", object_key="k/a", description=None)]
-    )
+    data = _make_data(evidence=[EvidenceEntry(finding_id="f1", object_key="k/a", description=None)])
 
     def boom(_: str) -> str | None:
         raise RuntimeError("S3 down")
@@ -572,9 +556,7 @@ def test_executive_summary_is_non_empty() -> None:
 def test_executive_summary_zero_findings_handled() -> None:
     out = assemble_valhalla_sections(_make_data(findings=[]))
     assert out.executive_summary
-    assert (
-        "0 actionable" in out.executive_summary or "0 finding" in out.executive_summary
-    )
+    assert "0 actionable" in out.executive_summary or "0 finding" in out.executive_summary
 
 
 def test_executive_summary_contains_top_asset_when_findings_present() -> None:
@@ -780,9 +762,7 @@ def test_pydantic_row_models_are_frozen() -> None:
         finding_count=0,
         top_finding_titles=(),
     )
-    e = ValhallaEvidenceRef(
-        finding_id="f", object_key="k", description=None, presigned_url=None
-    )
+    e = ValhallaEvidenceRef(finding_id="f", object_key="k", description=None, presigned_url=None)
     t = ValhallaTimelineEntry(order_index=0, phase="x", snippet="", created_at=None)
     cases = [
         (a, "asset"),
@@ -803,17 +783,17 @@ def test_pydantic_row_models_are_frozen() -> None:
 
 
 def test_business_context_default_value_below_zero_rejected() -> None:
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValidationError):
         BusinessContext(default_business_value=-0.1)
 
 
 def test_business_context_default_value_above_ten_rejected() -> None:
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValidationError):
         BusinessContext(default_business_value=10.1)
 
 
 def test_business_context_extra_fields_rejected() -> None:
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValidationError):
         BusinessContext(default_business_value=1.0, unexpected="boom")  # type: ignore[call-arg]
 
 

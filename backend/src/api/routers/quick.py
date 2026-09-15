@@ -21,10 +21,15 @@ async def list_quick_profiles() -> QuickProfilesResponse:
     try:
         catalog = load_quick_profiles()
     except QuickProfileCatalogError:
-        logger.warning("quick_profiles_catalog_unavailable", extra={"event": "quick_profiles_catalog_unavailable"})
+        logger.warning(
+            "quick_profiles_catalog_unavailable",
+            extra={"event": "quick_profiles_catalog_unavailable"},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=error_detail("Quick profiles are unavailable", "quick_profile_catalog_unavailable"),
+            detail=error_detail(
+                "Quick profiles are unavailable", "quick_profile_catalog_unavailable"
+            ),
         ) from None
 
     items: list[QuickProfileCatalogItem] = []

@@ -1,9 +1,11 @@
 """Tests for LLM Gateway redaction and logging."""
 
-import pytest
 from src.llm_gateway.redaction import (
-    hash_prompt, redact_api_keys, redact_response,
-    summary_response, log_prompt, log_response,
+    hash_prompt,
+    log_prompt,
+    log_response,
+    redact_api_keys,
+    summary_response,
 )
 
 
@@ -28,7 +30,9 @@ class TestRedactApiKeys:
         assert "sk-proj-" not in result
 
     def test_redacts_bearer_token(self):
-        text = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+        text = (
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+        )
         result = redact_api_keys(text)
         assert "REDACTED:bearer_token" in result
         assert "eyJ" not in result

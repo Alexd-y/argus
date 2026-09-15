@@ -45,7 +45,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -120,7 +120,7 @@ _STATUS_TO_SEVERITY: Final[dict[str, str]] = {
 }
 
 
-DedupKey: TypeAlias = tuple[str, str, str, str]
+type DedupKey = tuple[str, str, str, str]
 
 
 def parse_cloudsploit_json(
@@ -222,9 +222,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "severity": record.get("severity"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
@@ -274,9 +272,7 @@ def _iter_results_array(
             yield normalised
 
 
-def _iter_legacy_envelope(
-    payload: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_legacy_envelope(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:  # noqa: ARG001 - retained for signature/API compatibility
     cloud = _string_field(payload, "cloud")
     regions = payload.get("regions")
     if not isinstance(regions, dict):
@@ -314,9 +310,7 @@ def _normalise(
         title = plugin or "CloudSploit finding"
     base_severity = _STATUS_TO_SEVERITY[status_token]
     severity = _maybe_promote_severity(base_severity, title=title)
-    category, cwes = _classify(
-        title=title, category_hint=_string_field(raw, "category")
-    )
+    category, cwes = _classify(title=title, category_hint=_string_field(raw, "category"))
     region = _string_field(raw, "region")
     resource = _string_field(raw, "resource")
     message = _string_field(raw, "message") or _string_field(raw, "description")
@@ -342,9 +336,7 @@ def _maybe_promote_severity(base: str, *, title: str) -> str:
     return base
 
 
-def _classify(
-    *, title: str, category_hint: str | None
-) -> tuple[FindingCategory, tuple[int, ...]]:
+def _classify(*, title: str, category_hint: str | None) -> tuple[FindingCategory, tuple[int, ...]]:
     haystack = " ".join(filter(None, (category_hint, title))).lower()
     for keyword, category, cwes in _CATEGORY_KEYWORDS:
         if keyword in haystack:

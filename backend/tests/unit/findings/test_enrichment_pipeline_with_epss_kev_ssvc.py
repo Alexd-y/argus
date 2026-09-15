@@ -10,11 +10,11 @@ contract is covered by ``test_epss_persistence.py`` and
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
-
+from pydantic import ValidationError
 from src.findings.enrichment import FindingEnricher
 from src.findings.epss_persistence import EpssScoreRecord
 from src.findings.kev_persistence import KevRecord
@@ -23,7 +23,6 @@ from src.pipeline.contracts.finding_dto import (
     FindingDTO,
     SSVCDecision,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -79,7 +78,7 @@ def _epss(score: float, pct: float) -> EpssScoreRecord:
         epss_score=score,
         epss_percentile=pct,
         model_date=date(2026, 4, 1),
-        updated_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 1, tzinfo=UTC),
     )
 
 
@@ -128,9 +127,7 @@ async def test_enrich_populates_epss(
     f = make_finding()
     epss_repo = _FakeEpssRepo({"CVE-2024-1234": _epss(0.42, 0.85)})
     enricher = FindingEnricher(epss_repo=epss_repo, kev_repo=None)
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["cve-2024-1234"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["cve-2024-1234"]})
     assert out[0].epss_score == pytest.approx(0.42)
     assert out[0].epss_percentile == pytest.approx(0.85)
     # CVE map normalisation: lowercase input becomes upper-case in the repo call.
@@ -143,9 +140,7 @@ async def test_enrich_populates_kev(
     f = make_finding()
     kev_repo = _FakeKevRepo({"CVE-2024-1234": _kev("CVE-2024-1234", added=date(2026, 2, 14))})
     enricher = FindingEnricher(epss_repo=None, kev_repo=kev_repo)
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]})
     assert out[0].kev_listed is True
     assert out[0].kev_added_date == date(2026, 2, 14)
 
@@ -208,9 +203,7 @@ async def test_airgap_skips_repo_calls(
     epss_repo = _FakeEpssRepo({"CVE-2024-1234": _epss(0.9, 0.99)})
     kev_repo = _FakeKevRepo({"CVE-2024-1234": _kev("CVE-2024-1234")})
     enricher = FindingEnricher(epss_repo=epss_repo, kev_repo=kev_repo, airgap=True)
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]})
     assert out[0].epss_score == f.epss_score  # unchanged
     assert out[0].kev_listed == f.kev_listed
     assert epss_repo.get_many_calls == []
@@ -225,9 +218,7 @@ async def test_repo_failure_returns_dto_without_epss(
         epss_repo=_FakeEpssRepo(raise_on_get_many=True),
         kev_repo=None,
     )
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]})
     assert out[0].epss_score == f.epss_score
 
 
@@ -239,9 +230,7 @@ async def test_repo_failure_returns_dto_without_kev(
         epss_repo=None,
         kev_repo=_FakeKevRepo(raise_on_listed=True),
     )
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["CVE-2024-1234"]})
     assert out[0].kev_listed is False
 
 
@@ -256,9 +245,7 @@ async def test_kev_listing_propagates_to_ssvc(
     )
     kev_repo = _FakeKevRepo({"CVE-2024-7777": _kev("CVE-2024-7777")})
     enricher = FindingEnricher(epss_repo=None, kev_repo=kev_repo)
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(f.id): ["CVE-2024-7777"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(f.id): ["CVE-2024-7777"]})
     # Active exploitation + total impact → at least Attend.
     assert out[0].kev_listed is True
     assert out[0].ssvc_decision in {SSVCDecision.ATTEND, SSVCDecision.ACT}
@@ -270,7 +257,7 @@ async def test_returned_findings_are_immutable(
     f = make_finding()
     enricher = FindingEnricher(epss_repo=None, kev_repo=None)
     out = await enricher.enrich([f])
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         out[0].epss_score = 0.99  # type: ignore[misc]
 
 
@@ -282,9 +269,7 @@ async def test_finding_id_lookup_uses_str_form(
     f = make_finding(finding_id=fid)
     epss_repo = _FakeEpssRepo({"CVE-2024-0001": _epss(0.5, 0.5)})
     enricher = FindingEnricher(epss_repo=epss_repo, kev_repo=None)
-    out = await enricher.enrich(
-        [f], cve_ids_by_finding={str(fid): ["CVE-2024-0001"]}
-    )
+    out = await enricher.enrich([f], cve_ids_by_finding={str(fid): ["CVE-2024-0001"]})
     assert out[0].epss_score == pytest.approx(0.5)
 
 
@@ -296,9 +281,7 @@ async def test_cve_id_dedup(
     enricher = FindingEnricher(epss_repo=epss_repo, kev_repo=None)
     await enricher.enrich(
         [f],
-        cve_ids_by_finding={
-            str(f.id): ["CVE-2024-0001", "cve-2024-0001", "CVE-2024-0001"]
-        },
+        cve_ids_by_finding={str(f.id): ["CVE-2024-0001", "cve-2024-0001", "CVE-2024-0001"]},
     )
     # Only one round-trip — the CVE list was deduped before the repo call.
     assert epss_repo.get_many_calls == [["CVE-2024-0001"]]

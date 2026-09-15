@@ -148,8 +148,7 @@ def test_arg045_migrations_chain_in_sequence() -> None:
     for rev, expected_down in expected_order:
         assert rev in chain, f"revision {rev} missing from chain"
         assert chain[rev] == expected_down, (
-            f"revision {rev} expected down_revision={expected_down}, "
-            f"got {chain[rev]}"
+            f"revision {rev} expected down_revision={expected_down}, got {chain[rev]}"
         )
 
 
@@ -251,15 +250,16 @@ def test_report_bundles_columns_match_arg045_spec(pg_url: str) -> None:
     assert not missing, f"report_bundles missing columns: {missing}"
 
     fk_targets = {
-        (fk["referred_table"], tuple(fk["referred_columns"]))
-        for fk in table["foreign_keys"]
+        (fk["referred_table"], tuple(fk["referred_columns"])) for fk in table["foreign_keys"]
     }
     assert ("tenants", ("id",)) in fk_targets, "tenant FK missing on report_bundles"
     assert ("scans", ("id",)) in fk_targets, "scan FK missing on report_bundles"
 
     rls_entries = [
-        entry for entry in snap["rls"] if isinstance(entry, dict) and entry.get("table") == "report_bundles"
+        entry
+        for entry in snap["rls"]
+        if isinstance(entry, dict) and entry.get("table") == "report_bundles"
     ]
-    assert any(
-        entry.get("rowsecurity") for entry in rls_entries
-    ), "RLS not enabled on report_bundles"
+    assert any(entry.get("rowsecurity") for entry in rls_entries), (
+        "RLS not enabled on report_bundles"
+    )

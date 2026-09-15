@@ -78,18 +78,19 @@ class GatewayClient:
             async with httpx.AsyncClient(timeout=_GATEWAY_TIMEOUT) as client:
                 resp = await client.post(
                     f"{self._base_url}/v1/chat/completions",
-                    json=payload, headers=headers,
+                    json=payload,
+                    headers=headers,
                 )
         except httpx.TimeoutException:
             raise GatewayClientError(
                 "llm_gateway_timeout",
                 "LLM Gateway request timed out",
-            )
+            ) from None
         except httpx.ConnectError:
             raise GatewayClientError(
                 "llm_gateway_unavailable",
                 "LLM Gateway is unreachable",
-            )
+            ) from None
 
         if resp.status_code == 403:
             detail = {}
@@ -100,7 +101,9 @@ class GatewayClient:
                 pass
             raise GatewayClientError(
                 detail.get("code") if isinstance(detail, dict) else "llm_policy_denied",
-                detail.get("message") if isinstance(detail, dict) else "LLM request denied by policy",
+                detail.get("message")
+                if isinstance(detail, dict)
+                else "LLM request denied by policy",
                 detail.get("details") if isinstance(detail, dict) else {},
             )
 
@@ -118,7 +121,7 @@ class GatewayClient:
             raise GatewayClientError(
                 "llm_gateway_parse_error",
                 "Failed to parse gateway response",
-            )
+            ) from None
 
         return GatewayResponse(data)
 

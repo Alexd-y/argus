@@ -6,13 +6,12 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from src.llm.task_router import (
     _GLOBAL_LLM_FALLBACK_CHAIN,
+    LLMTask,
     _merge_route_with_global_chain,
+    call_llm_for_task,
 )
-from src.llm.task_router import LLMTask
-from src.llm.task_router import call_llm_for_task
 
 
 def test_global_chain_order_matches_product_requirement() -> None:
@@ -34,9 +33,9 @@ def test_merge_preserves_route_multi_same_env() -> None:
     ]
     merged = _merge_route_with_global_chain(route_attempts)
     assert merged[:2] == route_attempts
-    assert not any(
-        e[0] == "PERPLEXITY_API_KEY" for e in merged[2:]
-    ), "global Perplexity must not duplicate route Perplexity"
+    assert not any(e[0] == "PERPLEXITY_API_KEY" for e in merged[2:]), (
+        "global Perplexity must not duplicate route Perplexity"
+    )
 
 
 def test_merge_appends_openrouter_when_route_only_deepseek_openai() -> None:
@@ -50,7 +49,9 @@ def test_merge_appends_openrouter_when_route_only_deepseek_openai() -> None:
 
 
 @pytest.mark.asyncio
-async def test_call_skips_empty_env_and_succeeds_on_later_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_call_skips_empty_env_and_succeeds_on_later_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
@@ -77,13 +78,15 @@ async def test_call_skips_empty_env_and_succeeds_on_later_provider(monkeypatch: 
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-good")
 
-    with patch("src.llm.task_router._call_route", new=fake_call_route):
-        with patch("src.llm.task_router._call_gemini_route", new=AsyncMock()):
-            resp = await call_llm_for_task(
-                LLMTask.ORCHESTRATION,
-                "hello",
-                system_prompt="sys",
-            )
+    with (
+        patch("src.llm.task_router._call_route", new=fake_call_route),
+        patch("src.llm.task_router._call_gemini_route", new=AsyncMock()),
+    ):
+        resp = await call_llm_for_task(
+            LLMTask.ORCHESTRATION,
+            "hello",
+            system_prompt="sys",
+        )
     assert resp.text == "ok-from-openrouter"
     assert resp.provider == "OPENROUTER_API_KEY"
 
@@ -95,7 +98,9 @@ GEMINI_SENTINEL_FOR_TESTS = __import__(
 
 
 @pytest.mark.asyncio
-async def test_gemini_invoked_when_only_google_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_gemini_invoked_when_only_google_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     for k in (
         "DEEPSEEK_API_KEY",
         "OPENAI_API_KEY",
@@ -118,8 +123,13 @@ async def test_gemini_invoked_when_only_google_configured(monkeypatch: pytest.Mo
         )
     )
 
-    with patch("src.llm.task_router._call_route", new=AsyncMock(side_effect=AssertionError("openapi should not run"))):
-        with patch("src.llm.task_router._call_gemini_route", new=gemini_mock):
-            resp = await call_llm_for_task(LLMTask.ORCHESTRATION, "p", system_prompt=None)
+    with (
+        patch(
+            "src.llm.task_router._call_route",
+            new=AsyncMock(side_effect=AssertionError("openapi should not run")),
+        ),
+        patch("src.llm.task_router._call_gemini_route", new=gemini_mock),
+    ):
+        resp = await call_llm_for_task(LLMTask.ORCHESTRATION, "p", system_prompt=None)
     assert resp.text == "gemini-ok"
     gemini_mock.assert_awaited_once()

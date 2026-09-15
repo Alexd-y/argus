@@ -45,8 +45,8 @@ class HIBPClient(DataSourceClient):
             return {"available": False, "source": _SOURCE}
 
         query_type = (
-            kwargs.get("query_type") or kwargs.get("type") or "breachedaccount"
-        ).strip().lower()
+            (kwargs.get("query_type") or kwargs.get("type") or "breachedaccount").strip().lower()
+        )
         headers = self._headers(key)
 
         try:
@@ -59,7 +59,11 @@ class HIBPClient(DataSourceClient):
                 if query_type == "pasteaccount":
                     account = (kwargs.get("account") or "").strip()
                     if not account:
-                        return {"source": _SOURCE, "available": True, "error": "missing_account"}
+                        return {
+                            "source": _SOURCE,
+                            "available": True,
+                            "error": "missing_account",
+                        }
                     enc = quote(account, safe="")
                     url = f"{self._base_url}/pasteaccount/{enc}"
                     resp = await client.get(url, headers=headers)
@@ -68,7 +72,11 @@ class HIBPClient(DataSourceClient):
                 # breachedaccount
                 account = (kwargs.get("account") or "").strip()
                 if not account:
-                    return {"source": _SOURCE, "available": True, "error": "missing_account"}
+                    return {
+                        "source": _SOURCE,
+                        "available": True,
+                        "error": "missing_account",
+                    }
                 enc = quote(account, safe="")
                 url = f"{self._base_url}/breachedaccount/{enc}"
                 resp = await client.get(url, headers=headers)

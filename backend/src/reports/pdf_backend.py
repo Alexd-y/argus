@@ -595,12 +595,10 @@ class LatexBackend:
                 # The ``\jobname`` resolves to ``report`` because we always
                 # write the source as ``report.tex`` — keeps the xmpdata
                 # filename deterministic across renders.
-                (tmp_dir / _PDFA_XMPDATA_FILENAME).write_text(
-                    xmpdata_content, encoding="utf-8"
-                )
+                (tmp_dir / _PDFA_XMPDATA_FILENAME).write_text(xmpdata_content, encoding="utf-8")
 
             try:
-                result = subprocess.run(  # noqa: S603 — argv is explicit, no shell.
+                result = subprocess.run(
                     [
                         "latexmk",
                         engine_flag,
@@ -739,9 +737,7 @@ class DisabledBackend:
 # Registry keyed by ``REPORT_PDF_BACKEND`` env-var values. The order in
 # ``_FALLBACK_CHAIN`` is what :func:`get_active_backend` walks when the
 # requested backend is unavailable.
-_BACKEND_REGISTRY: Final[
-    dict[str, type[WeasyPrintBackend | LatexBackend | DisabledBackend]]
-] = {
+_BACKEND_REGISTRY: Final[dict[str, type[WeasyPrintBackend | LatexBackend | DisabledBackend]]] = {
     WeasyPrintBackend.name: WeasyPrintBackend,
     LatexBackend.name: LatexBackend,
     DisabledBackend.name: DisabledBackend,

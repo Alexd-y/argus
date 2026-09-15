@@ -137,7 +137,7 @@ def build_openapi_spec(app: FastMCP) -> dict[str, Any]:
 class _RuntimeSnapshot:
     """Sorted, immutable view of the FastMCP capability surface."""
 
-    __slots__ = ("tools", "resources", "templates", "prompts")
+    __slots__ = ("prompts", "resources", "templates", "tools")
 
     def __init__(
         self,
@@ -170,9 +170,7 @@ async def _collect_runtime_snapshot_async(app: FastMCP) -> _RuntimeSnapshot:
     resources = sorted(await app.list_resources(), key=lambda r: r.name)
     templates = sorted(await app.list_resource_templates(), key=lambda t: t.name)
     prompts = sorted(await app.list_prompts(), key=lambda p: p.name)
-    return _RuntimeSnapshot(
-        tools=tools, resources=resources, templates=templates, prompts=prompts
-    )
+    return _RuntimeSnapshot(tools=tools, resources=resources, templates=templates, prompts=prompts)
 
 
 # ---------------------------------------------------------------------------
@@ -180,9 +178,7 @@ async def _collect_runtime_snapshot_async(app: FastMCP) -> _RuntimeSnapshot:
 # ---------------------------------------------------------------------------
 
 
-def _build_tool_paths(
-    tools: list[Tool], schemas: dict[str, dict[str, Any]]
-) -> dict[str, Any]:
+def _build_tool_paths(tools: list[Tool], schemas: dict[str, dict[str, Any]]) -> dict[str, Any]:
     paths: dict[str, Any] = {}
     for tool in tools:
         path = f"{TOOL_PATH_PREFIX}{tool.name}"
@@ -279,9 +275,7 @@ def _build_prompt_paths(
 # ---------------------------------------------------------------------------
 
 
-def _register_schema(
-    schema: dict[str, Any], registry: dict[str, dict[str, Any]]
-) -> str:
+def _register_schema(schema: dict[str, Any], registry: dict[str, dict[str, Any]]) -> str:
     """Lift `schema` into `registry` (deep-copied) and return a `$ref` URL."""
     name = _schema_name(schema)
     lifted = _lift_and_rewrite(schema, registry)
@@ -322,11 +316,7 @@ def _rewrite_refs(node: Any) -> Any:
     if isinstance(node, dict):
         result: dict[str, Any] = {}
         for key, value in node.items():
-            if (
-                key == "$ref"
-                and isinstance(value, str)
-                and value.startswith(LOCAL_DEFS_PREFIX)
-            ):
+            if key == "$ref" and isinstance(value, str) and value.startswith(LOCAL_DEFS_PREFIX):
                 result[key] = GLOBAL_DEFS_PREFIX + value[len(LOCAL_DEFS_PREFIX) :]
             else:
                 result[key] = _rewrite_refs(value)
@@ -437,9 +427,7 @@ def _build_responses(response_ref: str | None) -> dict[str, Any]:
         "404": {"description": "Resource not found (anti-enumeration response)."},
         "422": _validation_error_response(),
         "429": {"description": "Rate limit exceeded."},
-        "500": {
-            "description": "Internal MCP error (server-side stack trace redacted)."
-        },
+        "500": {"description": "Internal MCP error (server-side stack trace redacted)."},
     }
 
 
@@ -465,9 +453,7 @@ def _unauthorized_response() -> dict[str, Any]:
 
 
 def _forbidden_response() -> dict[str, Any]:
-    return {
-        "description": "Forbidden — tenant mismatch, scope violation, or policy denial."
-    }
+    return {"description": "Forbidden — tenant mismatch, scope violation, or policy denial."}
 
 
 __all__ = [

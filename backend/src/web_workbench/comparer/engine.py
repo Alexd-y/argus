@@ -19,12 +19,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from enum import Enum
+from enum import StrEnum
 from html.parser import HTMLParser
 from typing import Any
 
 
-class DiffKind(str, Enum):
+class DiffKind(StrEnum):
     BYTE = "byte"
     WORD = "word"
     LINE = "line"
@@ -36,7 +36,7 @@ class ComparerError(Exception):
     """Raised on an unsupported mode or malformed structured input."""
 
 
-class DiffOp(str, Enum):
+class DiffOp(StrEnum):
     EQUAL = "equal"
     INSERT = "insert"
     DELETE = "delete"

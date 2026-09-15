@@ -60,8 +60,9 @@ def generate_bounty_insights_sync(
     Useful when running outside async context (CLI mode).
     """
     import asyncio
+
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         return ""
     except RuntimeError:
         return asyncio.run(generate_bounty_insights(scope_json, llm_facade))

@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.orchestration.handlers import run_exploit_attempt
 from src.orchestration.phase_resume import (
     ResumeDecision,

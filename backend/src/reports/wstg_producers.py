@@ -162,7 +162,9 @@ class ReportDataEvidenceResolver:
         finding = self._by_id.get(fid)
         if finding is None:
             return ResolvedArtifact(
-                ref, exists=False, unresolved_reason="finding not present in report data"
+                ref,
+                exists=False,
+                unresolved_reason="finding not present in report data",
             )
 
         if self._store_backed:

@@ -71,8 +71,7 @@ def test_pwn3d_marker_recorded(tmp_path: Path) -> None:
 
 def test_dedup_collapses_repeated_entries(tmp_path: Path) -> None:
     payload = (
-        b"SMB 10.0.0.1 445 DC [+] CORP\\admin:pwd1\n"
-        b"SMB 10.0.0.1 445 DC [+] CORP\\admin:pwd2\n"
+        b"SMB 10.0.0.1 445 DC [+] CORP\\admin:pwd1\nSMB 10.0.0.1 445 DC [+] CORP\\admin:pwd2\n"
     )
     assert len(parse_crackmapexec(payload, b"", tmp_path, "crackmapexec")) == 1
 

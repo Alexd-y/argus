@@ -109,11 +109,12 @@ class LanguageDetector:
                     detected_frameworks.append(fw)
 
         for indicator_name, framework in _FRAMEWORK_INDICATORS.items():
-            if (self.repo_path / indicator_name).exists():
-                if framework not in detected_frameworks:
-                    detected_frameworks.append(framework)
+            if (self.repo_path / indicator_name).exists() and framework not in detected_frameworks:
+                detected_frameworks.append(framework)
 
-        primary = max(language_counts, key=language_counts.get) if language_counts else Language.UNKNOWN
+        primary = (
+            max(language_counts, key=language_counts.get) if language_counts else Language.UNKNOWN
+        )
         total = sum(language_counts.values())
 
         return {
@@ -126,9 +127,22 @@ class LanguageDetector:
     def _iter_source_files(self) -> list[Path]:
         """Iterate over source files in the repository."""
         skip_dirs = {
-            "node_modules", ".git", "__pycache__", ".venv", "venv",
-            "dist", "build", ".next", ".nuxt", "target", "vendor",
-            ".idea", ".vscode", "coverage", ".tox", "env",
+            "node_modules",
+            ".git",
+            "__pycache__",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            "target",
+            "vendor",
+            ".idea",
+            ".vscode",
+            "coverage",
+            ".tox",
+            "env",
         }
         files: list[Path] = []
         try:
@@ -183,13 +197,16 @@ class TreeSitterParser:
         if cls._TREE_SITTER_AVAILABLE is not None:
             return cls._TREE_SITTER_AVAILABLE
         try:
-            import tree_sitter_python
+            import tree_sitter_python  # noqa: F401 - availability probe for optional dependency
+
             cls._TREE_SITTER_AVAILABLE = True
         except ImportError:
             cls._TREE_SITTER_AVAILABLE = False
         return cls._TREE_SITTER_AVAILABLE
 
-    def _parse_with_tree_sitter(self, file_path: Path, language: str) -> list[dict[str, Any]] | None:
+    def _parse_with_tree_sitter(
+        self, file_path: Path, language: str
+    ) -> list[dict[str, Any]] | None:
         """Parse a file with tree-sitter and return AST nodes of interest.
 
         Returns None if tree-sitter is not available or parsing fails.
@@ -220,24 +237,49 @@ class TreeSitterParser:
                 if depth > 50 or len(sinks) >= 500:
                     return
                 node_type = node.type
-                if node_type in ("call_expression", "function_call", "method_invocation"):
-                    text = node.text.decode("utf-8", errors="replace")[:300] if hasattr(node, 'text') else ""
+                if node_type in (
+                    "call_expression",
+                    "function_call",
+                    "method_invocation",
+                ):
+                    text = (
+                        node.text.decode("utf-8", errors="replace")[:300]
+                        if hasattr(node, "text")
+                        else ""
+                    )
                     for pattern, sink_type in [
-                        (r"cursor\.execute|\.raw\(|\.query\(|executeQuery|createStatement|nativeQuery|sequelize\.query", "sql_query"),
-                        (r"os\.system|subprocess\.(call|run|Popen)|os\.popen|child_process\.(exec|spawn)|exec\s*\(", "command_exec"),
-                        (r"innerHTML|document\.write|dangerouslySetInnerHTML|render_template_string|Markup\s*\(", "html_render"),
-                        (r"requests\.(get|post|put|delete|patch)|urllib\.request\.urlopen|httpx\.Client\.(get|post)|axios\.(get|post)|fetch\s*\(|got\s*\(", "http_request"),
+                        (
+                            r"cursor\.execute|\.raw\(|\.query\(|executeQuery|createStatement|nativeQuery|sequelize\.query",
+                            "sql_query",
+                        ),
+                        (
+                            r"os\.system|subprocess\.(call|run|Popen)|os\.popen|child_process\.(exec|spawn)|exec\s*\(",
+                            "command_exec",
+                        ),
+                        (
+                            r"innerHTML|document\.write|dangerouslySetInnerHTML|render_template_string|Markup\s*\(",
+                            "html_render",
+                        ),
+                        (
+                            r"requests\.(get|post|put|delete|patch)|urllib\.request\.urlopen|httpx\.Client\.(get|post)|axios\.(get|post)|fetch\s*\(|got\s*\(",
+                            "http_request",
+                        ),
                     ]:
                         import re
+
                         if re.search(pattern, text):
-                            sinks.append({
-                                "file_path": rel_path,
-                                "line_number": node.start_point[0] + 1,
-                                "sink_type": sink_type,
-                                "code_snippet": text[:200],
-                                "severity": "high" if sink_type in ("sql_query", "command_exec") else "medium",
-                                "parser": "tree_sitter",
-                            })
+                            sinks.append(
+                                {
+                                    "file_path": rel_path,
+                                    "line_number": node.start_point[0] + 1,
+                                    "sink_type": sink_type,
+                                    "code_snippet": text[:200],
+                                    "severity": "high"
+                                    if sink_type in ("sql_query", "command_exec")
+                                    else "medium",
+                                    "parser": "tree_sitter",
+                                }
+                            )
                             break
                 for child in node.children:
                     _walk(child, depth + 1)
@@ -245,7 +287,10 @@ class TreeSitterParser:
             _walk(root)
             return sinks if sinks else None
         except Exception as exc:
-            logger.debug("tree_sitter_parse_failed", extra={"file": str(file_path), "error": str(exc)})
+            logger.debug(
+                "tree_sitter_parse_failed",
+                extra={"file": str(file_path), "error": str(exc)},
+            )
             return None
 
     # Sink patterns by language (class-level constants)
@@ -323,7 +368,10 @@ class TreeSitterParser:
                 if ts_result is not None:
                     sinks.extend(ts_result)
             if sinks:
-                logger.info("tree_sitter_sinks_found", extra={"count": len(sinks), "language": language})
+                logger.info(
+                    "tree_sitter_sinks_found",
+                    extra={"count": len(sinks), "language": language},
+                )
                 return sinks[:500]
 
         patterns = {}
@@ -347,13 +395,17 @@ class TreeSitterParser:
             for line_no, line in enumerate(content.splitlines(), 1):
                 for pattern, sink_type in patterns.items():
                     if re.search(pattern, line):
-                        sinks.append({
-                            "file_path": rel_path,
-                            "line_number": line_no,
-                            "sink_type": sink_type,
-                            "code_snippet": line.strip()[:200],
-                            "severity": "high" if sink_type in ("sql_query", "command_exec") else "medium",
-                        })
+                        sinks.append(
+                            {
+                                "file_path": rel_path,
+                                "line_number": line_no,
+                                "sink_type": sink_type,
+                                "code_snippet": line.strip()[:200],
+                                "severity": "high"
+                                if sink_type in ("sql_query", "command_exec")
+                                else "medium",
+                            }
+                        )
 
         return sinks[:500]
 
@@ -370,7 +422,15 @@ class TreeSitterParser:
         }
         ext = ext_map.get(language, ".py")
         files: list[Path] = []
-        skip_dirs = {"node_modules", ".git", "__pycache__", "venv", "dist", "build", "vendor"}
+        skip_dirs = {
+            "node_modules",
+            ".git",
+            "__pycache__",
+            "venv",
+            "dist",
+            "build",
+            "vendor",
+        }
         try:
             for path in self.repo_path.rglob(f"*{ext}"):
                 if any(skip in path.parts for skip in skip_dirs):

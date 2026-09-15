@@ -61,10 +61,7 @@ def get_llm_client() -> Callable[[str, dict], str]:
     """
     provider = _get_first_available_provider()
     if not provider:
-        raise RuntimeError(
-            "No LLM provider configured. Set one of: "
-            + ", ".join(LLM_KEYS)
-        )
+        raise RuntimeError("No LLM provider configured. Set one of: " + ", ".join(LLM_KEYS))
 
     env_key, base_url, default_model = provider
     api_key = (os.environ.get(env_key) or "").strip()
@@ -78,7 +75,7 @@ def get_llm_client() -> Callable[[str, dict], str]:
 
     client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/"))
 
-    def call_llm(prompt: str, context: dict) -> str:
+    def call_llm(prompt: str, context: dict) -> str:  # noqa: ARG001 - retained for signature/API compatibility
         """Sync LLM call. context is passed for future use (e.g. model override)."""
         try:
             messages: list[dict[str, str]] = [{"role": "user", "content": prompt}]

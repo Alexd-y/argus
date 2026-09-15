@@ -303,10 +303,7 @@ def finding_key(finding: dict[str, Any]) -> str:
     # Noisy check families (rate-limit, security headers, whatweb, TLS probe)
     # collapse per host regardless of the exact (often LLM-paraphrased) wording.
     semantic = _semantic_class(finding)
-    if semantic:
-        basis = f"class:{semantic}|{host}"
-    else:
-        basis = f"{title}|{cwe}|{host}|{port}|{param}"
+    basis = f"class:{semantic}|{host}" if semantic else f"{title}|{cwe}|{host}|{port}|{param}"
     return hashlib.sha256(basis.encode("utf-8", "replace")).hexdigest()[:16]
 
 

@@ -53,9 +53,7 @@ def _patch_login_db_with_user(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 
 class TestAuthLoginBlock9:
-    def test_jwt_secret_missing_returns_503(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_jwt_secret_missing_returns_503(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("src.core.config.settings.jwt_secret", "")
         from main import app
 
@@ -67,9 +65,7 @@ class TestAuthLoginBlock9:
         assert r.status_code == 503
         assert "JWT_SECRET" in (r.json().get("detail") or "")
 
-    def test_dev_debug_login_when_no_db_user(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_dev_debug_login_when_no_db_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
         secret = "test-secret-key-min-32-chars-long-for-hs256"
         monkeypatch.setattr("src.core.config.settings.jwt_secret", secret)
         monkeypatch.setattr("src.core.config.settings.debug", True)
@@ -88,9 +84,7 @@ class TestAuthLoginBlock9:
         assert body.get("dev_mode") is True
         assert body.get("access_token")
 
-    def test_dev_bypass_requires_flag_even_in_debug(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_dev_bypass_requires_flag_even_in_debug(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """F-H03 dual-gate: DEBUG alone must NOT open the dev-login bypass.
 
         The bypass is gated behind BOTH ``settings.debug`` AND

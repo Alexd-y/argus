@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.core.config import Settings, lab_destructive_execution_allowed
 
 
@@ -84,16 +83,16 @@ def test_lab_destructive_execution_allowed_happy_path() -> None:
     ],
 )
 def test_lab_destructive_execution_invalid_combo_false(kwargs: dict) -> None:
-    base = dict(
-        _env_file=None,
-        argus_lab_mode=True,
-        argus_destructive_lab_mode=True,
-        sandbox_enabled=True,
-        argus_lab_operator_id="op",
-        argus_lab_signed_approval_id="appr",
-        argus_lab_allowed_targets="https://t",
-        argus_kill_switch_required=False,
-    )
+    base = {
+        "_env_file": None,
+        "argus_lab_mode": True,
+        "argus_destructive_lab_mode": True,
+        "sandbox_enabled": True,
+        "argus_lab_operator_id": "op",
+        "argus_lab_signed_approval_id": "appr",
+        "argus_lab_allowed_targets": "https://t",
+        "argus_kill_switch_required": False,
+    }
     base.update(kwargs)
     s = Settings(**base)  # type: ignore[arg-type]
     assert lab_destructive_execution_allowed(s) is False

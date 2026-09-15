@@ -2,14 +2,11 @@
 
 from pathlib import Path
 
-import pytest
-
-from src.recon.parsers.whois_parser import parse_whois
-from src.recon.parsers.dns_parser import parse_dns
-from src.recon.parsers.resolved_parser import parse_resolved
 from src.recon.parsers.cname_parser import parse_cname
+from src.recon.parsers.dns_parser import parse_dns
 from src.recon.parsers.http_probe_parser import parse_http_probe
-
+from src.recon.parsers.resolved_parser import parse_resolved
+from src.recon.parsers.whois_parser import parse_whois
 
 # --- WHOIS Parser ---
 
@@ -306,7 +303,11 @@ class TestCnameParser:
 
     def test_malformed_csv_no_exception(self, tmp_path):
         f = tmp_path / "cname_map.csv"
-        f.write_text('host,record_type,value,comment\n"unclosed', encoding="utf-8", errors="replace")
+        f.write_text(
+            'host,record_type,value,comment\n"unclosed',
+            encoding="utf-8",
+            errors="replace",
+        )
         result = parse_cname(f)
         assert isinstance(result, list)
 
@@ -377,12 +378,18 @@ api.example.com,https://api.example.com/,https,301,,,https://api.example.com/v1/
 
     def test_malformed_csv_no_exception(self, tmp_path):
         f = tmp_path / "http_probe.csv"
-        f.write_text('host,url,scheme,status,title,server,redirect\n"unclosed', encoding="utf-8", errors="replace")
+        f.write_text(
+            'host,url,scheme,status,title,server,redirect\n"unclosed',
+            encoding="utf-8",
+            errors="replace",
+        )
         result = parse_http_probe(f)
         assert isinstance(result, list)
 
     def test_accepts_path_object(self, tmp_path):
-        content = "host,url,scheme,status,title,server,redirect\ntest.com,https://test.com/,https,200,,,"
+        content = (
+            "host,url,scheme,status,title,server,redirect\ntest.com,https://test.com/,https,200,,,"
+        )
         f = tmp_path / "http_probe.csv"
         f.write_text(content, encoding="utf-8", newline="")
         result = parse_http_probe(Path(f))

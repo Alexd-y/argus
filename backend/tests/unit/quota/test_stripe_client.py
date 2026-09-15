@@ -30,9 +30,7 @@ class TestSignature:
         assert verify_webhook_signature(_PAYLOAD, _sig_header(), _SECRET, now=_TS) is True
 
     def test_expired_timestamp_rejected(self):
-        assert verify_webhook_signature(
-            _PAYLOAD, _sig_header(), _SECRET, now=_TS + 10_000
-        ) is False
+        assert verify_webhook_signature(_PAYLOAD, _sig_header(), _SECRET, now=_TS + 10_000) is False
 
     def test_wrong_secret_rejected(self):
         assert verify_webhook_signature(_PAYLOAD, _sig_header(), "whsec_other", now=_TS) is False
@@ -66,8 +64,11 @@ class TestCheckout:
     async def test_checkout_noop_without_config(self, monkeypatch):
         monkeypatch.setattr(settings, "stripe_secret_key", "")
         url = await create_checkout_session(
-            tenant_id="t", tier="standard", quantity=1,
-            success_url="https://x/ok", cancel_url="https://x/no",
+            tenant_id="t",
+            tier="standard",
+            quantity=1,
+            success_url="https://x/ok",
+            cancel_url="https://x/no",
         )
         assert url is None
 
@@ -94,7 +95,10 @@ class TestCheckout:
 
         monkeypatch.setattr(stripe_client.httpx, "AsyncClient", lambda **_k: _Client())
         url = await create_checkout_session(
-            tenant_id="t", tier="standard", quantity=2,
-            success_url="https://x/ok", cancel_url="https://x/no",
+            tenant_id="t",
+            tier="standard",
+            quantity=2,
+            success_url="https://x/ok",
+            cancel_url="https://x/no",
         )
         assert url == "https://checkout.stripe.com/c/pay/cs_test_123"

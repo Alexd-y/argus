@@ -156,7 +156,11 @@ def test_live_lab_path_lease_execute_findings_diff_report() -> None:
     created = client.post(
         "/api/v1/lab/scripts",
         headers=headers,
-        json={"language": "python", "source": "print('lab-live-ok')", "lease_id": lease_id},
+        json={
+            "language": "python",
+            "source": "print('lab-live-ok')",
+            "lease_id": lease_id,
+        },
     )
     assert created.status_code == 201
     executed = client.post(f"/api/v1/lab/scripts/{created.json()['script_id']}/execute")
@@ -274,7 +278,12 @@ def test_live_lab_path_lease_execute_findings_diff_report() -> None:
             scan_id="scan-lab-live",
             tenant_id="t-1",
             created_at="2026-08-16T12:00:00Z",
-            raw_artifacts=[{"execution_id": executed.json()["execution_id"], "stdout": "lab-live-ok"}],
+            raw_artifacts=[
+                {
+                    "execution_id": executed.json()["execution_id"],
+                    "stdout": "lab-live-ok",
+                }
+            ],
         )
     )
     payload = json.loads(report.decode("utf-8"))

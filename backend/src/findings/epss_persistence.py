@@ -145,9 +145,7 @@ class EpssScoreRepository:
             return None
         return _to_record(row)
 
-    async def get_many(
-        self, cve_ids: Iterable[str]
-    ) -> dict[str, EpssScoreRecord]:
+    async def get_many(self, cve_ids: Iterable[str]) -> dict[str, EpssScoreRecord]:
         """Bulk fetch records for ``cve_ids``; missing entries are skipped."""
         normalised = {cid.upper() for cid in cve_ids if _CVE_RE.fullmatch(cid.upper())}
         if not normalised:
@@ -175,9 +173,7 @@ class EpssScoreRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
-    async def _upsert_chunk(
-        self, chunk: Sequence[EpssScoreRecord], *, dialect: str
-    ) -> int:
+    async def _upsert_chunk(self, chunk: Sequence[EpssScoreRecord], *, dialect: str) -> int:
         if dialect == "postgresql":
             return await self._upsert_chunk_postgres(chunk)
         return await self._upsert_chunk_generic(chunk)

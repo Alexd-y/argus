@@ -73,7 +73,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -124,7 +124,7 @@ _SEVERITY_RANK: Final[dict[str, int]] = {
 }
 
 
-DedupKey: TypeAlias = tuple[str, str, int]
+type DedupKey = tuple[str, str, int]
 
 
 # ---------------------------------------------------------------------------
@@ -151,11 +151,7 @@ def parse_checkov_json(
         results = runner.get("results")
         if not isinstance(results, dict):
             continue
-        check_type = (
-            runner.get("check_type")
-            if isinstance(runner.get("check_type"), str)
-            else None
-        )
+        check_type = runner.get("check_type") if isinstance(runner.get("check_type"), str) else None
         failed = results.get("failed_checks")
         if not isinstance(failed, list):
             continue
@@ -228,14 +224,10 @@ def _sort_key(record: dict[str, Any]) -> tuple[int, str, str, int]:
 def _build_finding(record: dict[str, Any]) -> FindingDTO:
     category: FindingCategory = record["category"]
     cwe_list = list(
-        _CWE_SECRET_LEAK
-        if category is FindingCategory.SECRET_LEAK
-        else _CWE_MISCONFIG_DEFAULT
+        _CWE_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _CWE_MISCONFIG_DEFAULT
     )
     owasp = list(
-        _OWASP_SECRET_LEAK
-        if category is FindingCategory.SECRET_LEAK
-        else _OWASP_MISCONFIG
+        _OWASP_SECRET_LEAK if category is FindingCategory.SECRET_LEAK else _OWASP_MISCONFIG
     )
     return make_finding_dto(
         category=category,

@@ -56,28 +56,30 @@ class ProwlerAdapter(SecurityToolAdapter):
                 results.append(row)
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for item in raw_results:
-            title = item.get("CheckTitle") or item.get("check_title") or item.get("check") or "unknown"
+            title = (
+                item.get("CheckTitle") or item.get("check_title") or item.get("check") or "unknown"
+            )
             sev = _map_prowler_severity(item.get("Severity") or item.get("severity"))
             resource = item.get("ResourceId") or item.get("resource_id") or ""
             region = item.get("Region") or item.get("region") or ""
             cid = item.get("CheckID") or item.get("check_id") or ""
             value = f"{region}:{resource}:{cid}" if resource else f"{region}:{cid}"
-            findings.append({
-                "finding_type": FindingType.MISCONFIGURATION,
-                "value": value,
-                "data": {
-                    "title": str(title),
-                    "severity": sev,
-                    "resource_id": resource,
-                    "region": region,
-                    "check_id": cid,
-                },
-                "source_tool": "prowler",
-                "confidence": 0.88,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.MISCONFIGURATION,
+                    "value": value,
+                    "data": {
+                        "title": str(title),
+                        "severity": sev,
+                        "resource_id": resource,
+                        "region": region,
+                        "check_id": cid,
+                    },
+                    "source_tool": "prowler",
+                    "confidence": 0.88,
+                }
+            )
         return findings

@@ -39,13 +39,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pytest
-from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from mcp import ClientSession, StdioServerParameters
 
-_REPO_BACKEND_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..")
-)
+_REPO_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 
 _EXPECTED_TOOLS: frozenset[str] = frozenset(
@@ -91,9 +89,7 @@ def _server_env() -> dict[str, str]:
     return {
         **os.environ,
         "DEBUG": "true",
-        "DATABASE_URL": (
-            "postgresql+asyncpg://argus:argus@localhost:5432/argus_int_test"
-        ),
+        "DATABASE_URL": ("postgresql+asyncpg://argus:argus@localhost:5432/argus_int_test"),
         "JWT_SECRET": "test-secret-not-for-prod-but-required-by-settings",
         "MCP_TRANSPORT": "stdio",
         "MCP_REQUIRE_AUTH": "false",
@@ -115,18 +111,18 @@ def _server_params() -> StdioServerParameters:
 
 
 @asynccontextmanager
-async def _open_session() -> AsyncIterator[
-    tuple[ClientSession, "InitializeResultLike"]
-]:
+async def _open_session() -> AsyncIterator[tuple[ClientSession, InitializeResultLike]]:
     """Spawn the MCP server in stdio mode and yield an initialised session.
 
     The InitializeResult is also yielded so callers do not need to reach
     into private session attributes to assert on server metadata.
     """
-    async with stdio_client(_server_params()) as (read_stream, write_stream):
-        async with ClientSession(read_stream, write_stream) as client:
-            init_result = await client.initialize()
-            yield client, init_result
+    async with (
+        stdio_client(_server_params()) as (read_stream, write_stream),
+        ClientSession(read_stream, write_stream) as client,
+    ):
+        init_result = await client.initialize()
+        yield client, init_result
 
 
 # Type alias used only for readability above; the concrete type comes from

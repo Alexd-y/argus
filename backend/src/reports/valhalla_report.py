@@ -142,7 +142,13 @@ class ValhallaReportContext(BaseModel):
 
     # Structured data
     severity_counts: dict[str, int] = Field(
-        default_factory=lambda: {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        default_factory=lambda: {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "info": 0,
+        }
     )
     finding_count: int = 0
     tech_stack_structured: dict[str, Any] = Field(default_factory=dict)
@@ -206,7 +212,13 @@ class ValhallaReportContext(BaseModel):
 
 
 def _counts_from_findings(findings: list[dict[str, Any]]) -> dict[str, int]:
-    counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    counts: dict[str, int] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
     for f in findings:
         s = (f.get("severity") or "").lower()
         if s == "informational":
@@ -417,7 +429,8 @@ def _build_cmdi_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any
                 "payload": _truncate(str(poc.get("payload") or ""), 512) or None,
                 "harmless_marker": _truncate(str(poc.get("harmless_marker") or ""), 256) or None,
                 "controlled_output": _truncate(
-                    str(poc.get("controlled_output") or poc.get("command_output") or ""), 512
+                    str(poc.get("controlled_output") or poc.get("command_output") or ""),
+                    512,
                 )
                 or None,
                 "server_proof": _truncate(
@@ -476,7 +489,8 @@ def _build_exploit_chains(
     for i, ex in enumerate(verified[:4], 1):
         fid = ex.get("finding_id", "")
         matched = next(
-            (f for f in findings if f.get("id") == fid or f.get("finding_id") == fid), None
+            (f for f in findings if f.get("id") == fid or f.get("finding_id") == fid),
+            None,
         )
         chains.append(
             {
@@ -621,13 +635,13 @@ def _build_remediation_stages(
         poc = f.get("proof_of_concept") or {}
         if not isinstance(poc, dict):
             poc = {}
-        cwe = str(f.get("cwe") or "").upper()
+        str(f.get("cwe") or "").upper()
         title = str(f.get("title") or "").lower()
         affected_url = str(
             poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or ""
         )
         affected_parameter = str(poc.get("parameter") or "")
-        severity = str(f.get("severity") or "info").lower()
+        str(f.get("severity") or "info").lower()
         ts = tech_stack or {}
         web_server = str(ts.get("web_server") or "").lower()
         frameworks = str(ts.get("frameworks") or "").lower()
@@ -863,7 +877,7 @@ def _build_remediation_stages(
 def _build_zero_day_assessment(findings: list[dict[str, Any]]) -> dict[str, Any]:
     non_standard = 0
     for f in findings:
-        cwe = str(f.get("cwe") or "").upper()
+        str(f.get("cwe") or "").upper()
         title = str(f.get("title") or "").lower()
         if any(kw in title for kw in ("custom", "proprietary", "unusual", "non-standard")):
             non_standard += 1
@@ -910,7 +924,10 @@ def _build_retest_plan(findings: list[dict[str, Any]]) -> dict[str, Any]:
         if not isinstance(f, dict):
             continue
         f_type = str(
-            f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "")
+            f.get(
+                "type",
+                f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "",
+            )
             or ""
         ).upper()
         affected_url = str(
@@ -952,7 +969,7 @@ def _extract_recon_from_findings(findings: list[dict[str, Any]]) -> dict[str, An
         if not isinstance(f, dict):
             continue
         data = f.get("data") or f
-        poc = data.get("proof_of_concept") or {}
+        data.get("proof_of_concept") or {}
         tool = str(
             data.get("tool") or data.get("evidence_type") or data.get("scanner") or ""
         ).lower()
@@ -974,7 +991,9 @@ def _extract_recon_from_findings(findings: list[dict[str, Any]]) -> dict[str, An
     }
 
 
-def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+def _extract_threat_model_from_findings(
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Extract threat-model-like data from findings."""
     categories = {}
     for f in findings:
@@ -992,7 +1011,11 @@ def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[
                     and "|" in v
                     and any(
                         t in v.lower()
-                        for t in ("high|medium|low", "low|medium|high", "medium|high|low")
+                        for t in (
+                            "high|medium|low",
+                            "low|medium|high",
+                            "medium|high|low",
+                        )
                     )
                 ):
                     cleaned[k] = "unknown"
@@ -1015,7 +1038,9 @@ def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[
     )
 
 
-def _extract_exploitation_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+def _extract_exploitation_from_findings(
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Extract exploitation-like data from findings."""
     exploits = []
     for f in findings:
@@ -1860,7 +1885,8 @@ def _css_severity_bar_chart(sev_counts: dict[str, int]) -> str:
 def _findings_table_html(findings: list[dict[str, Any]]) -> str:
     """Sortable findings table for Valhalla HTML report."""
     sorted_f = sorted(
-        findings, key=lambda f: _SEVERITY_RANK.get((f.get("severity") or "").lower(), 99)
+        findings,
+        key=lambda f: _SEVERITY_RANK.get((f.get("severity") or "").lower(), 99),
     )
     rows: list[str] = []
     badge: dict[str, str] = {
@@ -1963,7 +1989,7 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
                 for idx, sc in enumerate(screenshots[:5]):
                     if isinstance(sc, dict):
                         sc_data = sc.get("data") or sc.get("base64") or sc.get("url", "")
-                        sc_alt = sc.get("alt", f"Screenshot {idx+1}")
+                        sc_alt = sc.get("alt", f"Screenshot {idx + 1}")
                         if sc_data:
                             if sc_data.startswith("data:image") or sc_data.startswith("http"):
                                 parts.append(
@@ -1976,11 +2002,11 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
                     elif isinstance(sc, str):
                         if sc.startswith("data:image") or sc.startswith("http"):
                             parts.append(
-                                f'<img src="{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">'
+                                f'<img src="{sc}" alt="Screenshot {idx + 1}" style="max-width:100%;border:1px solid var(--border);">'
                             )
                         elif len(sc) > 100:
                             parts.append(
-                                f'<img src="data:image/png;base64,{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">'
+                                f'<img src="data:image/png;base64,{sc}" alt="Screenshot {idx + 1}" style="max-width:100%;border:1px solid var(--border);">'
                             )
                         else:
                             parts.append(f"<p><strong>Screenshot:</strong> <code>{sc}</code></p>")
@@ -2050,7 +2076,8 @@ def _unverified_items_html(context: ValhallaReportContext) -> str:
         '<table class="data-table"><thead><tr><th>Severity</th><th>Title</th><th>Confidence</th><th>Evidence Quality</th><th>Required for Validation</th></tr></thead><tbody>',
     ]
     for f in sorted(
-        unverified, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)
+        unverified,
+        key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99),
     ):
         sev = (f.get("severity") or "info").lower()
         badge = (
@@ -2138,7 +2165,7 @@ def _retest_plan_html(context: ValhallaReportContext) -> str:
         rows.append(f"<tr><td>{vt}</td><td>{fid}</td><td><code>{cmd[:300]}</code></td></tr>")
     return (
         '<table class="data-table"><thead><tr><th>Vuln Type</th><th>Finding ID</th><th>Verification Command</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
     )
 
 
@@ -2155,7 +2182,7 @@ def _timeline_html(context: ValhallaReportContext) -> str:
         rows.append(f"<tr><td>{ts}</td><td>{phase}</td><td>{tool}</td></tr>")
     return (
         '<table class="data-table"><thead><tr><th>Timestamp</th><th>Phase</th><th>Tool</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
     )
 
 
@@ -2189,7 +2216,7 @@ def render_valhalla_report(
             f"<td>{r.get('title', '')}</td>"
             f"<td>{r.get('assessed', '')}</td>"
             f"<td>{r.get('findings_present', '0')}</td>"
-            f"<td class=\"{cls}\">{r.get('assessment_result', '')}</td>"
+            f'<td class="{cls}">{r.get("assessment_result", "")}</td>'
             "</tr>"
         )
 
@@ -2262,7 +2289,7 @@ def render_valhalla_report(
                 },
             ]
         rem_html += f'<h3>{tier_label}</h3><table class="data-table"><thead><tr><th>Finding</th><th>Remediation Action</th><th>Verification</th><th>Owner</th><th>Effort</th></tr></thead><tbody>'
-        for item in (items if isinstance(items, list) else []):
+        for item in items if isinstance(items, list) else []:
             if isinstance(item, dict):
                 title = item.get("title") or item.get("action", "—")
                 action = item.get("action", "Review and apply fix per finding details")
@@ -2650,7 +2677,7 @@ def render_valhalla_report(
 <!-- Executive Summary -->
 <section id="section-executive" class="card">
   <h2>Executive Summary</h2>
-  <div class="ai-content"><p>{context.ai_sections.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA, '') or context.ai_sections.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY, '(No executive summary generated.)')}</p></div>
+  <div class="ai-content"><p>{context.ai_sections.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA, "") or context.ai_sections.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY, "(No executive summary generated.)")}</p></div>
 </section>
 
 <!-- Severity Distribution Chart -->
@@ -2844,7 +2871,8 @@ def _render_valhalla_markdown(context: ValhallaReportContext) -> bytes:
 
     lines.append("---\n\n## Findings\n")
     for f in sorted(
-        context.findings, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)
+        context.findings,
+        key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99),
     ):
         lines.append(f"### {f.get('title', 'Untitled')}")
         lines.append(f"- **Severity:** {f.get('severity', 'info')}")
@@ -2874,7 +2902,7 @@ async def generate_valhalla_report(
     *,
     scan_id: str,
     tenant_id: str,
-    report_id: str | None = None,
+    report_id: str | None = None,  # noqa: ARG001 - retained for signature/API compatibility
     recon_output: dict[str, Any] | None = None,
     threat_model_output: dict[str, Any] | None = None,
     findings_list: list[dict[str, Any]] | None = None,

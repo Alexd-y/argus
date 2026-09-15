@@ -296,7 +296,9 @@ class ScenarioPlanner:
                     ),
                 )
                 return PlannedScenario(
-                    playbook_id=playbook.playbook_id, title=playbook.title, state=waiting
+                    playbook_id=playbook.playbook_id,
+                    title=playbook.title,
+                    state=waiting,
                 )
         return PlannedScenario(
             playbook_id=playbook.playbook_id, title=playbook.title, state=planned

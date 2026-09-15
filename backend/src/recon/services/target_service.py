@@ -37,9 +37,7 @@ async def create_target(
 ) -> ReconTarget:
     """Create target after scope validation."""
     eng_result = await db.execute(
-        select(Engagement).where(
-            Engagement.id == engagement_id, Engagement.tenant_id == tenant_id
-        )
+        select(Engagement).where(Engagement.id == engagement_id, Engagement.tenant_id == tenant_id)
     )
     engagement = eng_result.scalar_one_or_none()
     if not engagement:
@@ -51,9 +49,7 @@ async def create_target(
         validator = ScopeValidator(scope)
         result = validator.validate_target(data.domain, data.target_type.value)
         if not result.is_in_scope:
-            raise TargetOutOfScopeError(
-                f"Target {data.domain} is out of scope: {result.reason}"
-            )
+            raise TargetOutOfScopeError(f"Target {data.domain} is out of scope: {result.reason}")
 
     existing = await db.execute(
         select(ReconTarget).where(
@@ -79,21 +75,15 @@ async def create_target(
     return target
 
 
-async def get_target(
-    db: AsyncSession, tenant_id: str, target_id: str
-) -> ReconTarget | None:
+async def get_target(db: AsyncSession, tenant_id: str, target_id: str) -> ReconTarget | None:
     """Get target by ID, scoped to tenant."""
     result = await db.execute(
-        select(ReconTarget).where(
-            ReconTarget.id == target_id, ReconTarget.tenant_id == tenant_id
-        )
+        select(ReconTarget).where(ReconTarget.id == target_id, ReconTarget.tenant_id == tenant_id)
     )
     return result.scalar_one_or_none()
 
 
-async def list_targets(
-    db: AsyncSession, engagement_id: str
-) -> list[ReconTarget]:
+async def list_targets(db: AsyncSession, engagement_id: str) -> list[ReconTarget]:
     """List all targets for an engagement."""
     result = await db.execute(
         select(ReconTarget)
@@ -103,9 +93,7 @@ async def list_targets(
     return list(result.scalars().all())
 
 
-async def delete_target(
-    db: AsyncSession, tenant_id: str, target_id: str
-) -> bool:
+async def delete_target(db: AsyncSession, tenant_id: str, target_id: str) -> bool:
     """Delete target if it belongs to tenant."""
     target = await get_target(db, tenant_id, target_id)
     if not target:

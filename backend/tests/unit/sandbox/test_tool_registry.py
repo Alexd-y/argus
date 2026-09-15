@@ -17,7 +17,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.sandbox.adapter_base import ToolCategory, ToolDescriptor
 from src.sandbox.signing import SignatureRecord, SignaturesFile, sign_blob
@@ -26,7 +25,6 @@ from src.sandbox.tool_registry import (
     RegistrySummary,
     ToolRegistry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Empty catalog
@@ -92,9 +90,7 @@ def test_load_signed_catalog_succeeds(
 
 def test_get_returns_descriptor(signed_tools_dir: tuple[Path, Path, Path, str]) -> None:
     tools_dir, keys_dir, signatures_path, _ = signed_tools_dir
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     registry.load()
     descriptor = registry.get("nmap_quick")
     assert isinstance(descriptor, ToolDescriptor)
@@ -106,9 +102,7 @@ def test_get_adapter_returns_adapter(
     signed_tools_dir: tuple[Path, Path, Path, str],
 ) -> None:
     tools_dir, keys_dir, signatures_path, _ = signed_tools_dir
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     registry.load()
     adapter = registry.get_adapter("nmap_quick")
     assert adapter is not None
@@ -120,9 +114,7 @@ def test_list_by_phase_filters(
     signed_tools_dir: tuple[Path, Path, Path, str],
 ) -> None:
     tools_dir, keys_dir, signatures_path, _ = signed_tools_dir
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     registry.load()
     recon_tools = registry.list_by_phase(ScanPhase.RECON)
     assert {t.tool_id for t in recon_tools} == {"nmap_quick"}
@@ -135,9 +127,7 @@ def test_list_by_category_filters(
     signed_tools_dir: tuple[Path, Path, Path, str],
 ) -> None:
     tools_dir, keys_dir, signatures_path, _ = signed_tools_dir
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     registry.load()
     web = registry.list_by_category(ToolCategory.WEB_VA)
     assert {t.tool_id for t in web} == {"httpx_probe"}
@@ -147,9 +137,7 @@ def test_iteration_and_membership(
     signed_tools_dir: tuple[Path, Path, Path, str],
 ) -> None:
     tools_dir, keys_dir, signatures_path, _ = signed_tools_dir
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     registry.load()
     assert "nmap_quick" in registry
     assert 42 not in registry
@@ -171,9 +159,7 @@ def test_tampered_yaml_rejected(
     payload["requires_approval"] = True
     nmap_yaml.write_text(yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
 
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=signatures_path)
     with pytest.raises(RegistryLoadError) as exc_info:
         registry.load()
     assert "signature" in str(exc_info.value).lower()
@@ -206,9 +192,7 @@ def test_unknown_signing_key_rejected(
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
 
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError):
         registry.load()
 
@@ -258,9 +242,7 @@ def test_duplicate_tool_id_rejected(
         )
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError) as exc_info:
         registry.load()
     assert "duplicate" in str(exc_info.value).lower()
@@ -287,9 +269,7 @@ def test_yaml_not_a_mapping_rejected(
     )
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError):
         registry.load()
 
@@ -315,9 +295,7 @@ def test_invalid_yaml_rejected(
     )
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError):
         registry.load()
 
@@ -347,9 +325,7 @@ def test_invalid_descriptor_schema_rejected(
     )
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError):
         registry.load()
 
@@ -379,9 +355,7 @@ def test_template_with_unknown_placeholder_rejected(
     )
     sig_path = tools_dir / "SIGNATURES"
     sigfile.write(sig_path)
-    registry = ToolRegistry(
-        tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path
-    )
+    registry = ToolRegistry(tools_dir=tools_dir, keys_dir=keys_dir, signatures_path=sig_path)
     with pytest.raises(RegistryLoadError):
         registry.load()
 

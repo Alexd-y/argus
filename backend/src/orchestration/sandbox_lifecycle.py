@@ -90,9 +90,7 @@ async def run_in_sandbox(
         result.stdout = exec_result.stdout
         result.stderr = exec_result.stderr
         # Collect artifacts AFTER execution completes, before teardown.
-        result.artifacts = await adapter.collect_artifacts(
-            container_id, artifact_prefix or task_id
-        )
+        result.artifacts = await adapter.collect_artifacts(container_id, artifact_prefix or task_id)
         result.status = (
             SandboxStatus.SUCCEEDED if exec_result.exit_code == 0 else SandboxStatus.FAILED
         )

@@ -68,7 +68,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -120,7 +120,7 @@ _MAX_FINDINGS: Final[int] = 5_000
 # Stable dedup key shape: (kind, component, slug, title, *cve_ids). Exposed
 # as a module-level alias so the dedup loop and ``_dedup_key`` share a
 # single canonical type instead of repeating ``tuple[str, ...]`` inline.
-DedupKey: TypeAlias = tuple[str, ...]
+type DedupKey = tuple[str, ...]
 
 
 # Shape of a normalised intermediate record carried through the pipeline.

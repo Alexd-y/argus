@@ -175,13 +175,9 @@ def _project_asgard(
         phase_outputs=list(data.phase_outputs),
         evidence=list(data.evidence),
         screenshots=list(data.screenshots),
-        ai_insights=data.ai_insights
-        if isinstance(data.ai_insights, list)
-        else [data.ai_insights],
+        ai_insights=data.ai_insights if isinstance(data.ai_insights, list) else [data.ai_insights],
         executive_summary=data.executive_summary,
-        remediation=data.remediation
-        if isinstance(data.remediation, list)
-        else [data.remediation],
+        remediation=data.remediation if isinstance(data.remediation, list) else [data.remediation],
         raw_artifacts=[],
         hibp_pwned_password_summary=None,
     )
@@ -251,13 +247,9 @@ def _project_valhalla(
         phase_outputs=list(data.phase_outputs),
         evidence=list(data.evidence),
         screenshots=list(data.screenshots),
-        ai_insights=data.ai_insights
-        if isinstance(data.ai_insights, list)
-        else [data.ai_insights],
+        ai_insights=data.ai_insights if isinstance(data.ai_insights, list) else [data.ai_insights],
         executive_summary=data.executive_summary,
-        remediation=data.remediation
-        if isinstance(data.remediation, list)
-        else [data.remediation],
+        remediation=data.remediation if isinstance(data.remediation, list) else [data.remediation],
         raw_artifacts=list(data.raw_artifacts),
         hibp_pwned_password_summary=data.hibp_pwned_password_summary,
     )

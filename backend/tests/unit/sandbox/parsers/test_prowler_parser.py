@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory
 from src.sandbox.parsers import prowler_parser as prowler_module
 from src.sandbox.parsers.prowler_parser import (
@@ -60,9 +59,7 @@ def _record(
         "StatusExtended": "Root account does not have MFA enabled",
         "Compliance": {"CIS-1.5.0": ["1.5"]},
         "Remediation": {
-            "Recommendation": {
-                "Text": "Enable MFA on the root account via the IAM console."
-            }
+            "Recommendation": {"Text": "Enable MFA on the root account via the IAM console."}
         },
     }
     if extra:
@@ -186,9 +183,7 @@ def test_findings_sorted_by_severity_descending(tmp_path: Path) -> None:
     assert severities == sorted(severities, reverse=True)
 
 
-def test_envelope_not_list_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_list_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     canonical = tmp_path / "prowler.json"
     canonical.write_bytes(b'{"unexpected": "shape"}')
     with caplog.at_level("WARNING"):
@@ -200,9 +195,7 @@ def test_envelope_not_list_emits_warning(
     )
 
 
-def test_record_missing_check_id_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_record_missing_check_id_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     raw = _record()
     raw.pop("CheckID")
     payload = _payload(raw, _record(check_id="ok_check"))

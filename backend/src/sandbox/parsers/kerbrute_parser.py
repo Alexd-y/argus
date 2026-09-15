@@ -40,7 +40,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -90,7 +90,7 @@ _VALID_USER_RE: Final[re.Pattern[str]] = re.compile(
 # ---------------------------------------------------------------------------
 
 
-DedupKey: TypeAlias = tuple[str, int]
+type DedupKey = tuple[str, int]
 
 
 # ---------------------------------------------------------------------------

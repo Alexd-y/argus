@@ -121,7 +121,10 @@ def revoke_celery_task_ids(
         except Exception:  # noqa: BLE001 — broker/control failures must not fail cancel
             logger.warning(
                 "quick_celery_revoke_failed",
-                extra={"event": "quick_celery_revoke_failed", "celery_task_id": task_id},
+                extra={
+                    "event": "quick_celery_revoke_failed",
+                    "celery_task_id": task_id,
+                },
             )
     return tuple(revoked)
 
@@ -203,7 +206,7 @@ async def _cancel_quick_task_rows(
     )
     celery_ids: list[str] = []
     cancellable = 0
-    for row_id, celery_id, status in result.all():
+    for _row_id, celery_id, status in result.all():
         if celery_id:
             celery_ids.append(str(celery_id))
         if status in _ACTIVE_TASK_STATUSES:
@@ -283,7 +286,10 @@ async def propagate_scan_cancellation(
         "quick.cancel",
         scan_id=scan_id,
         tenant_id=tenant_id,
-        payload={"cancelled_quick_tasks": cancelled_tasks, "reason_present": bool(reason)},
+        payload={
+            "cancelled_quick_tasks": cancelled_tasks,
+            "reason_present": bool(reason),
+        },
     )
     return CancellationResult(
         scan_id=scan_id,
@@ -297,9 +303,7 @@ async def propagate_scan_cancellation(
 async def scan_row_is_cancelled(session: AsyncSession, scan_id: str) -> bool:
     if is_scan_cancelled(scan_id):
         return True
-    result = await session.execute(
-        select(Scan.status).where(cast(Scan.id, String) == scan_id)
-    )
+    result = await session.execute(select(Scan.status).where(cast(Scan.id, String) == scan_id))
     status = result.scalar_one_or_none()
     cancelled = str(status or "").lower() == "cancelled"
     if cancelled:

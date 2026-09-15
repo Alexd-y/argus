@@ -22,9 +22,7 @@ from src.quick.comparison import (
     write_report,
 )
 
-_FIXTURE_DIR = (
-    Path(__file__).resolve().parents[2] / "fixtures" / "quick" / "baselines"
-)
+_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "quick" / "baselines"
 
 
 def _labeled(*rows: LabeledFixture) -> tuple[LabeledFixture, ...]:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.llm_orchestrator.intent_compiler import (
     AbstainResult,
     CompiledToolJob,
@@ -16,17 +15,17 @@ from src.profiles.resolver import resolve_scan_profile
 
 
 def _ctx(profile="light", **overrides):
-    base = dict(
-        resolved_profile=resolve_scan_profile(profile),
-        allowed_scope_refs=frozenset({"scope-1"}),
-        allowed_tool_ids=frozenset({"nuclei", "ffuf"}),
-        allowed_payload_family_ids=frozenset({"xss_safe", "sqli_safe"}),
-        lab_lease_active=False,
-        granted_approvals=frozenset(),
-        budget_remaining=True,
-        scan_id="s-1",
-        tenant_id="t-1",
-    )
+    base = {
+        "resolved_profile": resolve_scan_profile(profile),
+        "allowed_scope_refs": frozenset({"scope-1"}),
+        "allowed_tool_ids": frozenset({"nuclei", "ffuf"}),
+        "allowed_payload_family_ids": frozenset({"xss_safe", "sqli_safe"}),
+        "lab_lease_active": False,
+        "granted_approvals": frozenset(),
+        "budget_remaining": True,
+        "scan_id": "s-1",
+        "tenant_id": "t-1",
+    }
     base.update(overrides)
     return CompilerContext(**base)
 
@@ -171,9 +170,7 @@ class TestFindingClaimValidation:
 
     def test_cve_without_evidence_rejected(self):
         with pytest.raises(IntentCompileError) as exc:
-            validate_finding_claim(
-                {"title": "Affected by CVE-2021-44228", "evidence_ids": []}
-            )
+            validate_finding_claim({"title": "Affected by CVE-2021-44228", "evidence_ids": []})
         assert exc.value.code == "cve_without_evidence"
 
     def test_unknown_category_rejected(self):

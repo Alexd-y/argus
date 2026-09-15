@@ -86,8 +86,7 @@ class TestReconcileFindingEvidenceView:
 class TestHumanizeFindingTitle:
     def test_whatweb_plugin_token(self) -> None:
         assert (
-            humanize_finding_title("WHATWEB_PLUGIN finding")
-            == "Technology fingerprint (WhatWeb)"
+            humanize_finding_title("WHATWEB_PLUGIN finding") == "Technology fingerprint (WhatWeb)"
         )
 
     def test_tls_probe_token_preserves_locator_suffix(self) -> None:
@@ -104,8 +103,7 @@ class TestHumanizeFindingTitle:
 
     def test_human_title_unchanged(self) -> None:
         assert (
-            humanize_finding_title("SQL Injection in login form")
-            == "SQL Injection in login form"
+            humanize_finding_title("SQL Injection in login form") == "SQL Injection in login form"
         )
 
     def test_empty_falls_back_to_vuln_type(self) -> None:

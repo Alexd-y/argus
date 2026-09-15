@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-
 from src.orchestration.checkpoint_persistence import (
     init_scan_checkpoint,
     profile_skipped_phases,
@@ -107,7 +106,10 @@ async def test_update_checkpoint_phase_advances():
         session, scan_id="s", tenant_id="t", options=options, current_phase="recon"
     )
     await update_checkpoint_phase(
-        session, scan_id="s", options=options, current_phase="vuln_analysis",
+        session,
+        scan_id="s",
+        options=options,
+        current_phase="vuln_analysis",
         completed_phase="recon",
     )
     cp = read_checkpoint(options)

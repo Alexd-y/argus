@@ -158,13 +158,9 @@ def ensure_planned_coverage(
 ) -> list[CoverageResult]:
     """Write a coverage row for every planned capability×asset (rate = 1.00)."""
     active = sink if sink is not None else get_coverage_phase_sink()
-    existing = {
-        (row.capability_id, row.asset_id) for row in active.results_for_scan(scan_id)
-    }
+    existing = {(row.capability_id, row.asset_id) for row in active.results_for_scan(scan_id)}
     missing = [
-        record
-        for record in planned
-        if (record.capability_id, record.asset_id) not in existing
+        record for record in planned if (record.capability_id, record.asset_id) not in existing
     ]
     if not missing:
         return []
@@ -193,9 +189,7 @@ def coverage_accounting_rate(
 
 
 def _pair_keys(
-    items: Sequence[QuickCoverageRecord]
-    | Sequence[CoverageResult]
-    | Sequence[tuple[str, str]],
+    items: Sequence[QuickCoverageRecord] | Sequence[CoverageResult] | Sequence[tuple[str, str]],
 ) -> set[tuple[str, str]]:
     keys: set[tuple[str, str]] = set()
     for item in items:

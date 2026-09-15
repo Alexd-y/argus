@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -72,9 +71,7 @@ def test_canonical_file_takes_precedence(tmp_path: Path) -> None:
             }
         )
     )
-    decoy = _payload(
-        {"code_analysis": {"rule-decoy": {"severity": "high", "title": "decoy"}}}
-    )
+    decoy = _payload({"code_analysis": {"rule-decoy": {"severity": "high", "title": "decoy"}}})
     findings = parse_mobsf_json(decoy, b"", tmp_path, "mobsf_api")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
@@ -82,18 +79,14 @@ def test_canonical_file_takes_precedence(tmp_path: Path) -> None:
 
 
 def test_high_severity_likely(tmp_path: Path) -> None:
-    payload = _payload(
-        {"code_analysis": {"rule-x": {"severity": "high", "title": "X"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-x": {"severity": "high", "title": "X"}}})
     findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert findings[0].cvss_v3_score == pytest.approx(7.5)
     assert findings[0].confidence is ConfidenceLevel.LIKELY
 
 
 def test_warning_maps_to_medium_suspected(tmp_path: Path) -> None:
-    payload = _payload(
-        {"code_analysis": {"rule-y": {"severity": "warning", "title": "Y"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-y": {"severity": "warning", "title": "Y"}}})
     findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert findings[0].cvss_v3_score == pytest.approx(5.0)
     assert findings[0].confidence is ConfidenceLevel.SUSPECTED
@@ -254,9 +247,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     assert severities == ["high", "medium", "info"]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_mobsf_json(b"[]", b"", tmp_path, "mobsf_api")
     assert findings == []
@@ -276,9 +267,7 @@ def test_no_known_sections_returns_empty(tmp_path: Path) -> None:
 
 
 def test_evidence_sidecar_includes_tool_id_and_kind(tmp_path: Path) -> None:
-    payload = _payload(
-        {"code_analysis": {"rule-z": {"severity": "high", "title": "Z"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-z": {"severity": "high", "title": "Z"}}})
     parse_mobsf_json(payload, b"", tmp_path, "mobsf-android")
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert blob["tool_id"] == "mobsf-android"
@@ -289,9 +278,7 @@ def test_evidence_sidecar_includes_tool_id_and_kind(tmp_path: Path) -> None:
 
 def test_critical_severity_maps_to_critical(tmp_path: Path) -> None:
     """`critical` severity is preserved verbatim and confidence is LIKELY."""
-    payload = _payload(
-        {"code_analysis": {"rule-c": {"severity": "critical", "title": "C"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-c": {"severity": "critical", "title": "C"}}})
     findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert findings[0].cvss_v3_score == pytest.approx(9.0)
     assert findings[0].confidence is ConfidenceLevel.LIKELY
@@ -314,9 +301,7 @@ def test_low_and_medium_severities_recognised(tmp_path: Path) -> None:
 
 def test_unknown_severity_collapses_to_info(tmp_path: Path) -> None:
     """Unknown severity strings collapse to `info` (CVSS 0.0)."""
-    payload = _payload(
-        {"code_analysis": {"rule-x": {"severity": "weird", "title": "x"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-x": {"severity": "weird", "title": "x"}}})
     findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert findings[0].cvss_v3_score == pytest.approx(0.0)
 
@@ -356,8 +341,7 @@ def test_cap_reached_emits_warning_and_truncates(
     """Hitting `_MAX_FINDINGS` truncates results and emits a structured warning."""
     monkeypatch.setattr(mobsf_module, "_MAX_FINDINGS", 2)
     findings_array = [
-        {"rule_id": f"R{i}", "severity": "high", "title": f"r{i}", "line": i}
-        for i in range(5)
+        {"rule_id": f"R{i}", "severity": "high", "title": f"r{i}", "line": i} for i in range(5)
     ]
     payload = _payload({"findings": findings_array})
     with caplog.at_level(logging.WARNING):
@@ -385,9 +369,7 @@ def test_canonical_read_oserror_falls_back_to_stdout(
         return real_read_bytes(self)
 
     monkeypatch.setattr(Path, "read_bytes", _explode)
-    payload = _payload(
-        {"code_analysis": {"rule-stdout": {"severity": "high", "title": "x"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-stdout": {"severity": "high", "title": "x"}}})
     with caplog.at_level(logging.WARNING):
         findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert len(findings) == 1
@@ -411,15 +393,12 @@ def test_sidecar_persist_oserror_logs_warning(
         real_mkdir(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", _boom)
-    payload = _payload(
-        {"code_analysis": {"rule-fs": {"severity": "high", "title": "fs"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-fs": {"severity": "high", "title": "fs"}}})
     with caplog.at_level(logging.WARNING):
         findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert len(findings) == 1
     assert any(
-        "mobsf_parser_evidence_sidecar_write_failed"
-        in (record.__dict__.get("event") or "")
+        "mobsf_parser_evidence_sidecar_write_failed" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -690,9 +669,7 @@ def test_non_dict_section_value_skipped(tmp_path: Path) -> None:
 def test_canonical_blank_file_falls_back_to_stdout(tmp_path: Path) -> None:
     """A canonical file with only whitespace falls back to parsing stdout."""
     (tmp_path / "mobsf.json").write_bytes(b"   \n  ")
-    payload = _payload(
-        {"code_analysis": {"rule-fb": {"severity": "high", "title": "fb"}}}
-    )
+    payload = _payload({"code_analysis": {"rule-fb": {"severity": "high", "title": "fb"}}})
     findings = parse_mobsf_json(payload, b"", tmp_path, "mobsf_api")
     assert len(findings) == 1
     blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())

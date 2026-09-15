@@ -87,7 +87,7 @@ import logging
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -183,7 +183,7 @@ _DBMS_RE: Final[re.Pattern[str]] = re.compile(
 # as a module-level alias so the dedup loop and ``_dedup_key`` share a
 # single canonical type instead of repeating ``tuple[str, str, str]``
 # inline in three places.
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 # Technique → CVSS v3.1 base score map (ARG-016/017 reviewer H1).
@@ -373,8 +373,7 @@ def _max_cvss_for_techniques(techniques: Iterable[Any]) -> float:
         if score is None:
             continue
         matched = True
-        if score > best:
-            best = score
+        best = max(best, score)
     return best if matched else _SQLMAP_DEFAULT_CVSS
 
 

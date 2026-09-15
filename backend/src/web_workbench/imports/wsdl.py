@@ -39,7 +39,17 @@ _MAX_PARTS: Final[int] = 100
 _DEFAULT_HTTP_VERSION: Final[str] = "HTTP/1.1"
 
 _NUMERIC_XSD: Final[frozenset[str]] = frozenset(
-    {"int", "integer", "long", "short", "decimal", "double", "float", "byte", "unsignedInt"}
+    {
+        "int",
+        "integer",
+        "long",
+        "short",
+        "decimal",
+        "double",
+        "float",
+        "byte",
+        "unsignedInt",
+    }
 )
 
 

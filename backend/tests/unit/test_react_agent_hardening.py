@@ -13,7 +13,7 @@ def _llm_returning(*responses: str):
     """A fake async llm_caller yielding the given responses in order."""
     seq = list(responses)
 
-    async def _caller(_system_prompt, _prompt, scan_id=None, phase=None):  # noqa: ARG001
+    async def _caller(_system_prompt, _prompt, scan_id=None, phase=None):
         return seq.pop(0) if seq else ""
 
     return _caller

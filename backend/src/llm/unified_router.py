@@ -194,10 +194,7 @@ class RoutingPolicy:
         if (
             request.cost_budget_usd <= 0.0
             and record.cloud
-            and (
-                record.price_input_per_million_usd > 0
-                or record.price_output_per_million_usd > 0
-            )
+            and (record.price_input_per_million_usd > 0 or record.price_output_per_million_usd > 0)
         ):
             reasons.append("zero_cost_budget_cloud_skipped")
             return False

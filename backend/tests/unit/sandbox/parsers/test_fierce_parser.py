@@ -22,9 +22,7 @@ from src.sandbox.parsers.fierce_parser import (
 )
 
 
-def _payload(
-    found: list[dict[str, str]] | None = None, zone: dict | None = None
-) -> bytes:
+def _payload(found: list[dict[str, str]] | None = None, zone: dict | None = None) -> bytes:
     body: dict[str, object] = {"domain": "example.com"}
     if found is not None:
         body["found_dns"] = found

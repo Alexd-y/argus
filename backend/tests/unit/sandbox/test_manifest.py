@@ -17,7 +17,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -38,7 +37,7 @@ from src.sandbox.manifest import (
     build_volumes,
     resolve_image,
 )
-
+from src.sandbox.templating import TemplateRenderError
 
 _DNS_1123_LABEL = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$|^[a-z0-9]$")
 
@@ -152,9 +151,7 @@ def test_resource_limits_match_descriptor(descriptor: ToolDescriptor) -> None:
         ("500m", "256Q"),
     ],
 )
-def test_invalid_resource_quantities_raise(
-    cpu: str, mem: str, descriptor: ToolDescriptor
-) -> None:
+def test_invalid_resource_quantities_raise(cpu: str, mem: str, descriptor: ToolDescriptor) -> None:
     bad = descriptor.model_copy(update={"cpu_limit": cpu, "memory_limit": mem})
     with pytest.raises(ValueError):
         build_resource_limits(bad)
@@ -250,9 +247,9 @@ def test_resolve_image_falls_back_binary_alias_to_full(
     with caplog.at_level("WARNING"):
         resolved = resolve_image(desc)
     assert resolved == "ghcr.io/argus/argus-kali-full:latest"
-    assert any(
-        getattr(rec, "event", None) == "image_alias_fallback" for rec in caplog.records
-    ), "expected an image_alias_fallback warning record"
+    assert any(getattr(rec, "event", None) == "image_alias_fallback" for rec in caplog.records), (
+        "expected an image_alias_fallback warning record"
+    )
 
 
 def test_resolve_image_alias_fallback_preserves_missing_tag() -> None:
@@ -266,9 +263,7 @@ def test_resolve_image_alias_fallback_preserves_missing_tag() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_argv_renders_template(
-    descriptor: ToolDescriptor, tool_job: ToolJob
-) -> None:
+def test_build_argv_renders_template(descriptor: ToolDescriptor, tool_job: ToolJob) -> None:
     argv = build_argv(descriptor, tool_job)
     assert argv == [
         "nmap",
@@ -297,7 +292,7 @@ def test_build_argv_rejects_shell_meta_in_parameters(
         timeout_s=60,
         correlation_id="abc",
     )
-    with pytest.raises(Exception):
+    with pytest.raises(TemplateRenderError):
         build_argv(descriptor, bad)
 
 

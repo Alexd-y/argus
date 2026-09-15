@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-
 from src.reports.finding_severity_normalizer import (
     normalize_findings_severity,
     severity_from_cvss,

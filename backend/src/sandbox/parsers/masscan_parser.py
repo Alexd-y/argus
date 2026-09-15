@@ -52,7 +52,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -78,7 +78,7 @@ _CANONICAL_FILENAME: Final[str] = "masscan.json"
 _MAX_FINDINGS: Final[int] = 100_000
 
 
-DedupKey: TypeAlias = tuple[str, int, str]
+type DedupKey = tuple[str, int, str]
 
 
 def parse_masscan_json(
@@ -235,9 +235,7 @@ def _load_payload(
     )
     if payload is not None:
         return payload
-    raw = _read_repair_source(
-        stdout=stdout, artifacts_dir=artifacts_dir, tool_id=tool_id
-    )
+    raw = _read_repair_source(stdout=stdout, artifacts_dir=artifacts_dir, tool_id=tool_id)
     if not raw:
         return None
     repaired = _repair_trailing_comma(raw)

@@ -14,7 +14,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from src.findings.kev_persistence import (
     KevCatalogRepository,
     KevEntry,
@@ -83,9 +82,7 @@ def _rec(
 @pytest.mark.asyncio
 async def test_upsert_inserts_new_rows(session: AsyncSession) -> None:
     repo = KevCatalogRepository(session)
-    written = await repo.upsert_batch(
-        [_rec(cve_id="CVE-2024-0001"), _rec(cve_id="CVE-2024-0002")]
-    )
+    written = await repo.upsert_batch([_rec(cve_id="CVE-2024-0001"), _rec(cve_id="CVE-2024-0002")])
     await session.commit()
     assert written == 2
     assert await repo.count() == 2
@@ -94,9 +91,7 @@ async def test_upsert_inserts_new_rows(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_upsert_updates_existing_row(session: AsyncSession) -> None:
     repo = KevCatalogRepository(session)
-    await repo.upsert_batch(
-        [_rec(cve_id="CVE-2024-1111", vendor_project="Old", product="OldP")]
-    )
+    await repo.upsert_batch([_rec(cve_id="CVE-2024-1111", vendor_project="Old", product="OldP")])
     await session.commit()
     written = await repo.upsert_batch(
         [
@@ -199,9 +194,7 @@ async def test_get_listed_set_returns_intersection(session: AsyncSession) -> Non
         ]
     )
     await session.commit()
-    out = await repo.get_listed_set(
-        ["CVE-2024-0001", "CVE-2024-9999", "CVE-2024-0003", "bogus"]
-    )
+    out = await repo.get_listed_set(["CVE-2024-0001", "CVE-2024-9999", "CVE-2024-0003", "bogus"])
     assert out == {"CVE-2024-0001", "CVE-2024-0003"}
 
 
@@ -265,8 +258,6 @@ async def test_count_starts_at_zero(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_count_reflects_upserts(session: AsyncSession) -> None:
     repo = KevCatalogRepository(session)
-    await repo.upsert_batch(
-        [_rec(cve_id=f"CVE-2024-{i:05d}") for i in range(1, 6)]
-    )
+    await repo.upsert_batch([_rec(cve_id=f"CVE-2024-{i:05d}") for i in range(1, 6)])
     await session.commit()
     assert await repo.count() == 5

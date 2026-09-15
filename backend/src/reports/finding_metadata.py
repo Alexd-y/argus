@@ -20,9 +20,7 @@ FindingEvidenceType = Literal[
     "threat_model_inference",
 ]
 
-_CONFIDENCE_SET: frozenset[str] = frozenset(
-    {"confirmed", "likely", "possible", "advisory"}
-)
+_CONFIDENCE_SET: frozenset[str] = frozenset({"confirmed", "likely", "possible", "advisory"})
 _EVIDENCE_TYPE_SET: frozenset[str] = frozenset(
     {
         "observed",
@@ -358,8 +356,15 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
 _REMEDIATION_DEFAULTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (
         (
-            "missing security header", "security http header", "content-security-policy",
-            "x-frame-options", "hsts", "strict-transport", "clickjacking", "cwe-693", "cwe-1021",
+            "missing security header",
+            "security http header",
+            "content-security-policy",
+            "x-frame-options",
+            "hsts",
+            "strict-transport",
+            "clickjacking",
+            "cwe-693",
+            "cwe-1021",
         ),
         (
             "Add the missing HTTP security headers at the edge/app, e.g.:\n"
@@ -371,7 +376,15 @@ _REMEDIATION_DEFAULTS: tuple[tuple[tuple[str, ...], str], ...] = (
         ),
     ),
     (
-        ("tls", "ssl", "cipher", "cwe-326", "cwe-327", "weak protocol", "outdated protocol"),
+        (
+            "tls",
+            "ssl",
+            "cipher",
+            "cwe-326",
+            "cwe-327",
+            "weak protocol",
+            "outdated protocol",
+        ),
         (
             "Disable TLS < 1.2 and weak/legacy cipher suites; prefer TLS 1.3 with "
             "forward-secret AEAD ciphers. Verify with: sslscan <host>:443 or testssl.sh."
@@ -406,9 +419,7 @@ def _ensure_report_fields(f: dict[str, Any]) -> None:
         )
 
     if not str(f.get("remediation") or "").strip():
-        blob = " ".join(
-            str(f.get(k, "")) for k in ("title", "description", "cwe")
-        ).lower()
+        blob = " ".join(str(f.get(k, "")) for k in ("title", "description", "cwe")).lower()
         for needles, fix in _REMEDIATION_DEFAULTS:
             if any(n in blob for n in needles):
                 f["remediation"] = fix

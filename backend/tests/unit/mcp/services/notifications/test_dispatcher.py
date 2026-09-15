@@ -7,16 +7,16 @@ import logging
 from collections.abc import Awaitable, Callable
 
 import pytest
-
 from src.mcp.services.notifications import (
-    AdapterResult,
     ENABLE_ENV,
+    AdapterResult,
     NotificationDispatcher,
     NotificationEvent,
     NotificationSeverity,
     NotifierProtocol,
     is_globally_enabled_via_env,
 )
+
 from tests.unit.mcp.services.notifications.conftest import make_event
 
 
@@ -28,8 +28,7 @@ class _StubNotifier:
         name: str,
         *,
         delivered: bool = True,
-        side_effect: Callable[[NotificationEvent, str], Awaitable[AdapterResult]]
-        | None = None,
+        side_effect: Callable[[NotificationEvent, str], Awaitable[AdapterResult]] | None = None,
         raise_with: BaseException | None = None,
     ) -> None:
         self.name = name
@@ -39,9 +38,7 @@ class _StubNotifier:
         self._raise_with = raise_with
         self.closed = False
 
-    async def send_with_retry(
-        self, event: NotificationEvent, *, tenant_id: str
-    ) -> AdapterResult:
+    async def send_with_retry(self, event: NotificationEvent, *, tenant_id: str) -> AdapterResult:
         self.calls.append((tenant_id, event))
         if self._raise_with is not None:
             raise self._raise_with
@@ -75,9 +72,7 @@ def _build_dispatcher(
         audit_logger=audit_logger,  # type: ignore[arg-type]
         per_tenant_disabled_adapters=per_tenant_disabled,
     )
-    targets = (
-        enabled_adapters if enabled_adapters is not None else {a.name for a in adapters}
-    )
+    targets = enabled_adapters if enabled_adapters is not None else {a.name for a in adapters}
     for a in adapters:
         disp.set_adapter_enabled(a.name, a.name in targets)
     return disp
@@ -98,9 +93,7 @@ class TestDispatcherDisabled:
             adapters=[slack, linear],
             enabled_adapters={"linear"},
         )
-        result = asyncio.run(
-            disp.dispatch(make_event(severity=NotificationSeverity.HIGH))
-        )
+        result = asyncio.run(disp.dispatch(make_event(severity=NotificationSeverity.HIGH)))
         names = {r.adapter_name for r in result}
         assert names == {"linear"}
         assert slack.calls == []
@@ -122,9 +115,7 @@ class TestDispatcherDisabled:
             adapters=[slack],
             enabled=True,
         )
-        result = asyncio.run(
-            disp.dispatch(make_event(severity=NotificationSeverity.HIGH))
-        )
+        result = asyncio.run(disp.dispatch(make_event(severity=NotificationSeverity.HIGH)))
         assert result == []
         assert slack.calls == []
 
@@ -192,9 +183,7 @@ class TestDispatcherSchedule:
 
 
 class TestDispatcherAudit:
-    def test_audit_log_emitted_with_summary(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_audit_log_emitted_with_summary(self, caplog: pytest.LogCaptureFixture) -> None:
         slack = _StubNotifier("slack")
         disp = NotificationDispatcher(
             adapters=[slack],
@@ -203,13 +192,9 @@ class TestDispatcherAudit:
         )
         disp.set_adapter_enabled("slack", True)
         ev = make_event(severity=NotificationSeverity.HIGH)
-        with caplog.at_level(
-            logging.INFO, logger="src.mcp.services.notifications.dispatcher"
-        ):
+        with caplog.at_level(logging.INFO, logger="src.mcp.services.notifications.dispatcher"):
             asyncio.run(disp.dispatch(ev))
-        records = [
-            r for r in caplog.records if r.message == "mcp.notifications.dispatched"
-        ]
+        records = [r for r in caplog.records if r.message == "mcp.notifications.dispatched"]
         assert records, "expected mcp.notifications.dispatched log row"
         adapters_summary = records[-1].adapters
         assert adapters_summary[0]["adapter_name"] == "slack"
@@ -219,41 +204,26 @@ class TestDispatcherAudit:
         slack = _StubNotifier("slack")
         disp = _build_dispatcher(adapters=[slack])
         ev = make_event(event_type="bogus.event")
-        with caplog.at_level(
-            logging.WARNING, logger="src.mcp.services.notifications.dispatcher"
-        ):
+        with caplog.at_level(logging.WARNING, logger="src.mcp.services.notifications.dispatcher"):
             asyncio.run(disp.dispatch(ev))
-        assert any(
-            r.message == "mcp.notifications.unknown_event_type" for r in caplog.records
-        )
+        assert any(r.message == "mcp.notifications.unknown_event_type" for r in caplog.records)
 
-    def test_audit_logger_absent_does_not_raise(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_audit_logger_absent_does_not_raise(self, caplog: pytest.LogCaptureFixture) -> None:
         slack = _StubNotifier("slack")
         disp = _build_dispatcher(adapters=[slack], audit_logger=None)
         ev = make_event(severity=NotificationSeverity.HIGH)
-        with caplog.at_level(
-            logging.INFO, logger="src.mcp.services.notifications.dispatcher"
-        ):
+        with caplog.at_level(logging.INFO, logger="src.mcp.services.notifications.dispatcher"):
             asyncio.run(disp.dispatch(ev))
-        assert not any(
-            r.message == "mcp.notifications.dispatched" for r in caplog.records
-        )
+        assert not any(r.message == "mcp.notifications.dispatched" for r in caplog.records)
 
 
 class TestDispatcherToggle:
     def test_set_enabled_runtime_toggle(self) -> None:
         slack = _StubNotifier("slack")
         disp = _build_dispatcher(adapters=[slack], enabled=False)
-        assert (
-            asyncio.run(disp.dispatch(make_event(severity=NotificationSeverity.HIGH)))
-            == []
-        )
+        assert asyncio.run(disp.dispatch(make_event(severity=NotificationSeverity.HIGH))) == []
         disp.set_enabled(True)
-        result = asyncio.run(
-            disp.dispatch(make_event(severity=NotificationSeverity.HIGH))
-        )
+        result = asyncio.run(disp.dispatch(make_event(severity=NotificationSeverity.HIGH)))
         assert [r.adapter_name for r in result] == ["slack"]
 
     def test_set_adapter_enabled_unknown_raises(self) -> None:
@@ -286,15 +256,11 @@ class TestEnvFlag:
         assert is_globally_enabled_via_env() is False
 
     @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
-    def test_truthy_values_enable(
-        self, monkeypatch: pytest.MonkeyPatch, value: str
-    ) -> None:
+    def test_truthy_values_enable(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
         monkeypatch.setenv(ENABLE_ENV, value)
         assert is_globally_enabled_via_env() is True
 
     @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "garbage"])
-    def test_falsy_values_disable(
-        self, monkeypatch: pytest.MonkeyPatch, value: str
-    ) -> None:
+    def test_falsy_values_disable(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
         monkeypatch.setenv(ENABLE_ENV, value)
         assert is_globally_enabled_via_env() is False

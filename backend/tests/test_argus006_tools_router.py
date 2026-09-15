@@ -11,7 +11,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from starlette.testclient import TestClient
+from starlette.testclient import TestClient  # noqa: E402 — after sys.path insert
 
 
 class TestToolsExecute:

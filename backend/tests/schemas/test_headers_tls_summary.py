@@ -2,18 +2,19 @@ import json
 from pathlib import Path
 
 import pytest
-from src.schemas.ai.common import ReconAiTask, build_task_metadata
-from src.schemas.ai.headers_tls_summary import HeadersTlsSummaryInput, HeadersTlsSummaryOutput
 from pydantic import ValidationError
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.headers_tls_summary import (
+    HeadersTlsSummaryInput,
+    HeadersTlsSummaryOutput,
+)
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 
 
 def test_headers_tls_example_validates() -> None:
     payload = json.loads(
-        (EXAMPLES_AI_OUTPUTS_DIR / "headers_tls_summary.example.json").read_text(
-            encoding="utf-8"
-        )
+        (EXAMPLES_AI_OUTPUTS_DIR / "headers_tls_summary.example.json").read_text(encoding="utf-8")
     )
     parsed = HeadersTlsSummaryOutput.model_validate(payload)
     assert parsed.controls

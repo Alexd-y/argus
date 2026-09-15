@@ -51,7 +51,16 @@ def test_artifact_missing_body_when_whatweb_meta_but_no_fetch() -> None:
         raw_hints=raw_hints,
         tool_run_summaries=[("whatweb", "success")],
         feature_flags={},
-        fallback_messages={k: None for k in ("tech_stack", "outdated", "ssl_tls", "security_headers", "robots_sitemap", "leaked_emails")},
+        fallback_messages=dict.fromkeys(
+            (
+                "tech_stack",
+                "outdated",
+                "ssl_tls",
+                "security_headers",
+                "robots_sitemap",
+                "leaked_emails",
+            )
+        ),
         port_data=PortExposureSummaryModel(),
     )
     assert mand.tech_stack_structured.status == "artifact_missing_body"
@@ -70,47 +79,63 @@ def test_artifact_missing_body_tls_when_meta_only_no_body() -> None:
         "has_email_fallback": False,
         "has_ports": False,
     }
-    kwargs = dict(
-        structured=TechStackStructuredModel(),
-        tech_table=[],
-        outdated=[],
-        ssl_out=SslTlsAnalysisModel(),
-        sec_hdr=SecurityHeadersAnalysisModel(),
-        security_headers_from_findings=False,
-        robots=RobotsTxtAnalysisModel(),
-        sitemap=SitemapAnalysisModel(),
-        robots_sitemap_merged=RobotsSitemapMergedSummaryModel(),
-        final_emails=[],
-        merged_http_headers={},
-        deps=[],
-        fetch_raw_bodies=True,
-        harvester_enabled=False,
-        trivy_enabled=False,
-        phase_outputs=[],
-        raw_artifact_keys=raw_keys,
-        raw_hints=raw_hints,
-        tool_run_summaries=[("testssl", "success")],
-        feature_flags={},
-        fallback_messages={k: None for k in ("tech_stack", "outdated", "ssl_tls", "security_headers", "robots_sitemap", "leaked_emails")},
-        port_data=PortExposureSummaryModel(),
-    )
+    kwargs = {
+        "structured": TechStackStructuredModel(),
+        "tech_table": [],
+        "outdated": [],
+        "ssl_out": SslTlsAnalysisModel(),
+        "sec_hdr": SecurityHeadersAnalysisModel(),
+        "security_headers_from_findings": False,
+        "robots": RobotsTxtAnalysisModel(),
+        "sitemap": SitemapAnalysisModel(),
+        "robots_sitemap_merged": RobotsSitemapMergedSummaryModel(),
+        "final_emails": [],
+        "merged_http_headers": {},
+        "deps": [],
+        "fetch_raw_bodies": True,
+        "harvester_enabled": False,
+        "trivy_enabled": False,
+        "phase_outputs": [],
+        "raw_artifact_keys": raw_keys,
+        "raw_hints": raw_hints,
+        "tool_run_summaries": [("testssl", "success")],
+        "feature_flags": {},
+        "fallback_messages": dict.fromkeys(
+            (
+                "tech_stack",
+                "outdated",
+                "ssl_tls",
+                "security_headers",
+                "robots_sitemap",
+                "leaked_emails",
+            )
+        ),
+        "port_data": PortExposureSummaryModel(),
+    }
     with patch("src.reports.valhalla_report_context._safe_download_raw", return_value=None):
         mand, _ = _compute_mandatory_sections_and_coverage(**kwargs)
     assert mand.ssl_tls_analysis.status == "artifact_missing_body"
 
 
 def test_raw_artifact_has_non_empty_body_for_needles() -> None:
-    from src.reports.valhalla_report_context import raw_artifact_has_non_empty_body_for_needles
+    from src.reports.valhalla_report_context import (
+        raw_artifact_has_non_empty_body_for_needles,
+    )
 
     keys = [("20260101_tool_nikto_scan_abc_stdout.txt", "vuln_analysis")]
-    with patch("src.reports.valhalla_report_context._safe_download_raw", return_value=b"Server: nginx"):
+    with patch(
+        "src.reports.valhalla_report_context._safe_download_raw",
+        return_value=b"Server: nginx",
+    ):
         assert raw_artifact_has_non_empty_body_for_needles(keys, True, ("nikto",))
     with patch("src.reports.valhalla_report_context._safe_download_raw", return_value=b""):
         assert not raw_artifact_has_non_empty_body_for_needles(keys, True, ("nikto",))
 
 
 def test_apply_security_header_table_gap_to_findings() -> None:
-    from src.reports.report_quality_gate import apply_security_header_table_gap_to_findings
+    from src.reports.report_quality_gate import (
+        apply_security_header_table_gap_to_findings,
+    )
 
     vc = SimpleNamespace(
         security_headers_analysis=SimpleNamespace(rows=[]),
@@ -167,7 +192,10 @@ def test_xss_dedup_merges_same_url_cwe() -> None:
         "cwe": "CWE-79",
         "severity": "high",
         "affected_url": "https://ex.test/page",
-        "proof_of_concept": {"request_url": "https://ex.test/page?p=1", "payload": "alert(1)"},
+        "proof_of_concept": {
+            "request_url": "https://ex.test/page?p=1",
+            "payload": "alert(1)",
+        },
     }
     f2 = {
         "title": "XSS in page",
@@ -175,7 +203,20 @@ def test_xss_dedup_merges_same_url_cwe() -> None:
         "cwe": "CWE-79",
         "severity": "high",
         "affected_url": "https://ex.test/page",
-        "proof_of_concept": {"request_url": "https://ex.test/page?p=1", "payload": "alert(1)"},
+        "proof_of_concept": {
+            "request_url": "https://ex.test/page?p=1",
+            "payload": "alert(1)",
+        },
     }
     out = normalize_findings_for_report([f1, f2])
-    assert len([x for x in out if "xss" in str(x.get("title", "")).lower() or "cwe-79" in str(x.get("cwe", "")).lower()]) == 1
+    assert (
+        len(
+            [
+                x
+                for x in out
+                if "xss" in str(x.get("title", "")).lower()
+                or "cwe-79" in str(x.get("cwe", "")).lower()
+            ]
+        )
+        == 1
+    )

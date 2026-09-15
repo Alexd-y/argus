@@ -5,7 +5,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     EvidenceTier,
@@ -62,7 +61,11 @@ def _check(**overrides: object) -> dict[str, object]:
         "match": {
             "op": "and",
             "matchers": [
-                {"part": "response_header", "kind": "regex", "value": r"Server:\s*\w+/\d"},
+                {
+                    "part": "response_header",
+                    "kind": "regex",
+                    "value": r"Server:\s*\w+/\d",
+                },
             ],
         },
     }
@@ -313,7 +316,12 @@ def test_extractor_capture_truncated() -> None:
         _check(
             match={"matchers": [{"part": "response_body", "kind": "contains", "value": "TOKEN"}]},
             extractors=[
-                {"name": "tok", "part": "response_body", "regex": r"TOKEN(A+)", "group": 1}
+                {
+                    "name": "tok",
+                    "part": "response_body",
+                    "regex": r"TOKEN(A+)",
+                    "group": 1,
+                }
             ],
         )
     )

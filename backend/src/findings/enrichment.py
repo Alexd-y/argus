@@ -133,9 +133,7 @@ class FindingEnricher:
             out.append(enriched)
         return out
 
-    async def _fetch_intel(
-        self, cves: list[str]
-    ) -> tuple[dict[str, EpssRow], dict[str, KevRow]]:
+    async def _fetch_intel(self, cves: list[str]) -> tuple[dict[str, EpssRow], dict[str, KevRow]]:
         """Pull EPSS + KEV rows for ``cves`` (best-effort)."""
         epss_rows: dict[str, EpssRow] = {}
         kev_rows: dict[str, KevRow] = {}
@@ -162,9 +160,7 @@ class FindingEnricher:
                 for cid in listed:
                     kev_rec = await self._kev_repo.get(cid)
                     if kev_rec is not None:
-                        kev_rows[cid] = KevRow(
-                            listed=True, date_added=kev_rec.date_added
-                        )
+                        kev_rows[cid] = KevRow(listed=True, date_added=kev_rec.date_added)
             except Exception:
                 _logger.warning(
                     "enrichment.kev_lookup_failed",
@@ -210,9 +206,7 @@ class FindingEnricher:
         # SSVC is derived from the *enriched* DTO state — KEV / EPSS may
         # have just changed. ``public_exploit_known`` is a heuristic: if
         # EPSS percentile crosses 0.5, treat it as a published PoC.
-        public_exploit_known = bool(
-            epss_percentile is not None and epss_percentile >= 0.5
-        )
+        public_exploit_known = bool(epss_percentile is not None and epss_percentile >= 0.5)
         inputs = derive_ssvc_inputs(
             finding,
             kev_listed=bool(kev_listed),

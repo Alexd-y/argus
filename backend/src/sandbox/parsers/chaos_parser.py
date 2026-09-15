@@ -15,7 +15,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.parsers._base import stable_hash_12
@@ -37,7 +37,7 @@ _CANONICAL_NAMES: Final[tuple[str, ...]] = ("chaos.txt", "chaos.log")
 _MAX_FINDINGS: Final[int] = 50_000
 
 
-_DedupKey: TypeAlias = str
+type _DedupKey = str
 
 
 def parse_chaos(

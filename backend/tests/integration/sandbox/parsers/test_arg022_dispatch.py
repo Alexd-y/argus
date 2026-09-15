@@ -47,7 +47,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import (
@@ -85,7 +84,6 @@ from src.sandbox.parsers.smbmap_parser import (
 from src.sandbox.parsers.snmpwalk_parser import (
     EVIDENCE_SIDECAR_NAME as SNMPWALK_SIDECAR,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -164,9 +162,7 @@ def _payload(tool_id: str) -> bytes:
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -237,9 +233,7 @@ def test_arg022_contribution_is_intact() -> None:
         f"ARG-022 batch-2 tools missing from registry after later cycles: "
         f"{missing!r} — check src.sandbox.parsers.__init__._DEFAULT_TOOL_PARSERS"
     )
-    assert len(registered) >= len(ARG022_TOOL_IDS), (
-        "registry shrank below the ARG-022 contribution"
-    )
+    assert len(registered) >= len(ARG022_TOOL_IDS), "registry shrank below the ARG-022 contribution"
 
 
 # ---------------------------------------------------------------------------
@@ -277,9 +271,7 @@ def test_dispatch_writes_per_tool_sidecar(tool_id: str, tmp_path: Path) -> None:
     )
     assert findings
     sidecar = artifacts_dir / ARG022_TOOL_SIDECARS[tool_id]
-    assert sidecar.is_file(), (
-        f"{tool_id}: parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert parsed, f"{tool_id}: sidecar is empty"
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -301,9 +293,7 @@ def test_arg022_tools_use_distinct_sidecar_filenames() -> None:
 # ---------------------------------------------------------------------------
 
 
-_NT_HASH_PAIR_RE: Final[re.Pattern[str]] = re.compile(
-    r"\b[a-fA-F0-9]{32}:[a-fA-F0-9]{32}\b"
-)
+_NT_HASH_PAIR_RE: Final[re.Pattern[str]] = re.compile(r"\b[a-fA-F0-9]{32}:[a-fA-F0-9]{32}\b")
 _LONG_HEX_RE: Final[re.Pattern[str]] = re.compile(r"\b[a-fA-F0-9]{32,}\b")
 
 
@@ -333,15 +323,12 @@ def test_impacket_secretsdump_redacts_hashes_in_sidecar(tmp_path: Path) -> None:
     pair_hits = _NT_HASH_PAIR_RE.findall(text)
     long_hex_hits = _LONG_HEX_RE.findall(text)
     assert pair_hits == [], (
-        f"RAW LM:NT PAIR LEAKED through impacket sidecar — redaction broken. "
-        f"Hits: {pair_hits[:3]}"
+        f"RAW LM:NT PAIR LEAKED through impacket sidecar — redaction broken. Hits: {pair_hits[:3]}"
     )
     assert long_hex_hits == [], (
         f"RAW long hash hex LEAKED through impacket sidecar. Hits: {long_hex_hits[:3]}"
     )
-    assert "[REDACTED-NT-HASH]" in text, (
-        "expected NT redaction marker in impacket sidecar"
-    )
+    assert "[REDACTED-NT-HASH]" in text, "expected NT redaction marker in impacket sidecar"
 
 
 # ---------------------------------------------------------------------------
@@ -361,9 +348,7 @@ def test_impacket_secretsdump_redacts_hashes_in_sidecar(tmp_path: Path) -> None:
         ("impacket_secretsdump", "evil_winrm"),
     ],
 )
-def test_cross_routing_is_inert(
-    payload_tool: str, wrong_tool: str, tmp_path: Path
-) -> None:
+def test_cross_routing_is_inert(payload_tool: str, wrong_tool: str, tmp_path: Path) -> None:
     """A payload from tool X dispatched as tool Y produces 0 real findings.
 
     Defence-in-depth check that every ARG-022 parser refuses to
@@ -397,12 +382,8 @@ def test_arg022_dispatch_is_deterministic(tool_id: str, tmp_path: Path) -> None:
     artifacts_b = tmp_path / "b"
     artifacts_a.mkdir()
     artifacts_b.mkdir()
-    dispatch_parse(
-        ARG022_TOOL_STRATEGIES[tool_id], payload, b"", artifacts_a, tool_id=tool_id
-    )
-    dispatch_parse(
-        ARG022_TOOL_STRATEGIES[tool_id], payload, b"", artifacts_b, tool_id=tool_id
-    )
+    dispatch_parse(ARG022_TOOL_STRATEGIES[tool_id], payload, b"", artifacts_a, tool_id=tool_id)
+    dispatch_parse(ARG022_TOOL_STRATEGIES[tool_id], payload, b"", artifacts_b, tool_id=tool_id)
     sidecar_name = ARG022_TOOL_SIDECARS[tool_id]
     a_bytes = (artifacts_a / sidecar_name).read_bytes()
     b_bytes = (artifacts_b / sidecar_name).read_bytes()
@@ -431,9 +412,7 @@ def test_all_arg022_parsers_in_single_artifacts_dir_keeps_sidecars_intact(
 
     for tool_id, sidecar_name in ARG022_TOOL_SIDECARS.items():
         sidecar = tmp_path / sidecar_name
-        assert sidecar.is_file(), (
-            f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
-        )
+        assert sidecar.is_file(), f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
         records = _read_sidecar(sidecar)
         assert records, f"{tool_id}: sidecar {sidecar_name} is empty"
         assert all(r["tool_id"] == tool_id for r in records), (

@@ -48,9 +48,7 @@ def test_empty_stdout_and_stderr_returns_no_findings(tmp_path: Path) -> None:
 
 
 def test_happy_path_emits_finding_for_zip_marker(tmp_path: Path) -> None:
-    findings = parse_bloodhound_python(
-        _bloodhound_log(), b"", tmp_path, "bloodhound_python"
-    )
+    findings = parse_bloodhound_python(_bloodhound_log(), b"", tmp_path, "bloodhound_python")
     assert len(findings) >= 1
     finding = findings[0]
     assert finding.category is FindingCategory.INFO
@@ -108,9 +106,7 @@ def test_no_zip_but_domain_emits_collection_run(tmp_path: Path) -> None:
 
 
 def test_uses_stderr_when_stdout_empty(tmp_path: Path) -> None:
-    findings = parse_bloodhound_python(
-        b"", _bloodhound_log(), tmp_path, "bloodhound_python"
-    )
+    findings = parse_bloodhound_python(b"", _bloodhound_log(), tmp_path, "bloodhound_python")
     assert len(findings) == 1
 
 

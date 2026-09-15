@@ -24,6 +24,7 @@ Security
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from datetime import UTC, datetime
 from typing import Annotated, Final
@@ -89,11 +90,15 @@ async def _resolve_caller(
 ) -> tuple[dict[str, object], str]:
     raw_token = request_cookie or _bearer_session(authorization)
     if not raw_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+        )
 
     principal = await resolve_session(db, session_id=raw_token, ip=None, user_agent=None)
     if principal is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+        )
 
     return {
         "subject": principal.subject,
@@ -109,9 +114,7 @@ async def _resolve_caller(
 )
 async def get_admin_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=_SESSION_COOKIE_NAME)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=_SESSION_COOKIE_NAME)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> AdminProfileResponse:
     caller, _ = await _resolve_caller(cookie_session, authorization, db)
@@ -120,15 +123,22 @@ async def get_admin_profile(
     result = await db.execute(select(AdminUser).where(AdminUser.subject == subject))
     admin_user = result.scalar_one_or_none()
     if admin_user is None or admin_user.disabled_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found or disabled")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account not found or disabled",
+        )
 
     return AdminProfileResponse(
         subject=admin_user.subject,
         role=admin_user.role,
         tenant_id=admin_user.tenant_id,
         mfa_enabled=admin_user.mfa_enabled,
-        created_at=format_created_at_iso_z(admin_user.created_at) if admin_user.created_at else None,
-        disabled_at=format_created_at_iso_z(admin_user.disabled_at) if admin_user.disabled_at else None,
+        created_at=format_created_at_iso_z(admin_user.created_at)
+        if admin_user.created_at
+        else None,
+        disabled_at=format_created_at_iso_z(admin_user.disabled_at)
+        if admin_user.disabled_at
+        else None,
     )
 
 
@@ -139,9 +149,7 @@ async def get_admin_profile(
 )
 async def list_admin_sessions(
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=_SESSION_COOKIE_NAME)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=_SESSION_COOKIE_NAME)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> SessionListResponse:
     caller, raw_token = await _resolve_caller(cookie_session, authorization, db)
@@ -151,10 +159,8 @@ async def list_admin_sessions(
 
     current_hash = ""
     if raw_token and settings.admin_session_pepper:
-        try:
+        with contextlib.suppress(ValueError):
             current_hash = hash_session_token(raw_token)
-        except ValueError:
-            pass
 
     now = datetime.now(tz=UTC)
     stmt = (
@@ -193,9 +199,7 @@ async def list_admin_sessions(
 async def revoke_admin_session(
     session_hash_prefix: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    cookie_session: Annotated[
-        str | None, Cookie(alias=_SESSION_COOKIE_NAME)
-    ] = None,
+    cookie_session: Annotated[str | None, Cookie(alias=_SESSION_COOKIE_NAME)] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> RevokeSessionResponse:
     caller, raw_token = await _resolve_caller(cookie_session, authorization, db)
@@ -205,24 +209,21 @@ async def revoke_admin_session(
 
     current_hash = ""
     if raw_token and settings.admin_session_pepper:
-        try:
+        with contextlib.suppress(ValueError):
             current_hash = _hash_session(raw_token)
-        except ValueError:
-            pass
 
     prefix = session_hash_prefix.strip()[:_HASH_PREFIX_LEN]
     if not prefix:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session identifier")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session identifier"
+        )
 
     now = datetime.now(tz=UTC)
-    stmt = (
-        select(AdminSession)
-        .where(
-            AdminSession.subject == subject,
-            AdminSession.revoked_at.is_(None),
-            AdminSession.expires_at > now,
-            AdminSession.session_token_hash.startswith(prefix),
-        )
+    stmt = select(AdminSession).where(
+        AdminSession.subject == subject,
+        AdminSession.revoked_at.is_(None),
+        AdminSession.expires_at > now,
+        AdminSession.session_token_hash.startswith(prefix),
     )
     result = await db.execute(stmt)
     target = result.scalar_one_or_none()

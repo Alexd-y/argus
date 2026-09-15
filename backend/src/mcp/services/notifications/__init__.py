@@ -31,17 +31,17 @@ from src.mcp.services.notifications._base import (
     compute_backoff_seconds,
     hash_target,
 )
-from src.mcp.services.notifications.dispatcher import (
-    ENABLE_ENV,
-    NotificationDispatcher,
-    NotifierProtocol,
-    is_globally_enabled_via_env,
-)
 from src.mcp.services.notifications.discord import (
     DISCORD_MIN_SEVERITY_ENV,
     DISCORD_WEBHOOK_URL_ENV,
     DiscordNotifier,
     build_discord_payload,
+)
+from src.mcp.services.notifications.dispatcher import (
+    ENABLE_ENV,
+    NotificationDispatcher,
+    NotifierProtocol,
+    is_globally_enabled_via_env,
 )
 from src.mcp.services.notifications.github_issues import (
     GITHUB_ISSUES_MIN_SEVERITY_ENV,

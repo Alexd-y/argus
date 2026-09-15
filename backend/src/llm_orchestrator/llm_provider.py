@@ -103,13 +103,8 @@ class LLMRequest(BaseModel):
 
     @model_validator(mode="after")
     def _check_schema_present_when_required(self) -> Self:
-        if (
-            self.response_format is ResponseFormat.JSON_SCHEMA
-            and self.expected_schema is None
-        ):
-            raise ValueError(
-                "expected_schema must be provided when response_format=json_schema"
-            )
+        if self.response_format is ResponseFormat.JSON_SCHEMA and self.expected_schema is None:
+            raise ValueError("expected_schema must be provided when response_format=json_schema")
         return self
 
 
@@ -198,13 +193,9 @@ class EchoLLMProvider:
         if isinstance(response, str):
             self._canned[prompt_id] = response
         elif isinstance(response, dict):
-            self._canned[prompt_id] = json.dumps(
-                response, sort_keys=True, ensure_ascii=False
-            )
+            self._canned[prompt_id] = json.dumps(response, sort_keys=True, ensure_ascii=False)
         else:
-            raise TypeError(
-                f"response must be a str or dict, got {type(response).__name__}"
-            )
+            raise TypeError(f"response must be a str or dict, got {type(response).__name__}")
 
     def has(self, prompt_id: str) -> bool:
         """Return ``True`` if a canned response is registered for ``prompt_id``."""
@@ -329,9 +320,7 @@ class OpenAILLMProvider:
 
     async def call(self, request: LLMRequest) -> LLMResponse:
         if self._api_key is None:
-            raise LLMProviderUnavailableError(
-                self.name, reason="OPENAI_API_KEY not configured"
-            )
+            raise LLMProviderUnavailableError(self.name, reason="OPENAI_API_KEY not configured")
         _logger.warning(
             "openai_provider.real_http_call_blocked",
             extra={

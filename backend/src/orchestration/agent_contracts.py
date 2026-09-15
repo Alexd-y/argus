@@ -152,9 +152,11 @@ class AgentResult(BaseModel):
     @property
     def is_conclusive(self) -> bool:
         """A result that establishes something (tested, whether or not found)."""
-        return self.outcome in (AttemptOutcome.SUCCEEDED,) and self.coverage in (
-            CoverageStatus.TESTED_NO_FINDINGS,
-        ) or bool(self.findings)
+        return (
+            self.outcome in (AttemptOutcome.SUCCEEDED,)
+            and self.coverage in (CoverageStatus.TESTED_NO_FINDINGS,)
+            or bool(self.findings)
+        )
 
 
 def compute_input_fingerprint(payload: Any) -> str:

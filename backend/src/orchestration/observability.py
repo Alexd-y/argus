@@ -75,10 +75,14 @@ AGENT_TASK_RETRIES = _counter(
     "argus_agent_task_retries_total", "Agent task retries scheduled", ("phase",)
 )
 BUDGET_EVENTS = _counter(
-    "argus_budget_events_total", "Budget reserve/settle/release/deny events", ("outcome",)
+    "argus_budget_events_total",
+    "Budget reserve/settle/release/deny events",
+    ("outcome",),
 )
 LEASE_EVENTS = _counter(
-    "argus_lease_events_total", "Distributed lease acquire/contended/release", ("pool", "outcome")
+    "argus_lease_events_total",
+    "Distributed lease acquire/contended/release",
+    ("pool", "outcome"),
 )
 SANDBOX_FAILURES = _counter(
     "argus_sandbox_failures_total", "Sandbox lifecycle failures", ("reason",)
@@ -90,7 +94,9 @@ OUTBOX_EVENTS = _counter(
     "argus_outbox_events_total", "Transactional outbox dispatch results", ("outcome",)
 )
 QUEUE_WAIT = _histogram(
-    "argus_agent_queue_wait_seconds", "Time a task waited before being claimed", ("phase",)
+    "argus_agent_queue_wait_seconds",
+    "Time a task waited before being claimed",
+    ("phase",),
 )
 TASK_DURATION = _histogram(
     "argus_agent_task_duration_seconds", "Task attempt duration", ("phase", "outcome")

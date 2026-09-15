@@ -67,7 +67,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.pool import StaticPool
-
 from src.db.models import WebhookDlqEntry
 from src.mcp.services.notifications._base import hash_target
 from src.mcp.services.notifications.webhook_dlq_persistence import (
@@ -139,12 +138,7 @@ def _bootstrap_schema_sync(conn: Any) -> None:
     Alembic operations run against the bound sync DB-API connection.
     """
     conn.execute(
-        text(
-            "CREATE TABLE tenants ("
-            "id VARCHAR(36) PRIMARY KEY, "
-            "name VARCHAR(255) NOT NULL"
-            ")"
-        )
+        text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL)")
     )
     module = _load_revision_module()
     ctx = MigrationContext.configure(conn)
@@ -264,9 +258,7 @@ async def _enqueue_default(
     )
 
 
-async def _force_created_at(
-    session: AsyncSession, *, entry_id: str, when: datetime
-) -> None:
+async def _force_created_at(session: AsyncSession, *, entry_id: str, when: datetime) -> None:
     """Backdate / forward-date ``created_at`` for a specific row.
 
     ``created_at`` uses ``server_default=func.now()`` so the DAO never
@@ -371,9 +363,7 @@ async def test_enqueue_happy_path_persists_hashed_target_and_first_backoff(
 
     assert entry.target_url_hash == hash_target(raw_url)
     assert raw_url not in entry.target_url_hash
-    assert entry.next_retry_at == freeze_now + timedelta(
-        seconds=DLQ_BACKOFF_BASE_SECONDS
-    )
+    assert entry.next_retry_at == freeze_now + timedelta(seconds=DLQ_BACKOFF_BASE_SECONDS)
     assert entry.replayed_at is None
     assert entry.abandoned_at is None
     assert entry.attempt_count == 0
@@ -400,13 +390,9 @@ async def test_enqueue_idempotent_duplicate_returns_existing_row(
     )
     await session.commit()
 
-    assert second.id == first_id, (
-        "second enqueue must return the existing row, not a fresh one"
-    )
+    assert second.id == first_id, "second enqueue must return the existing row, not a fresh one"
 
-    total = await session.scalar(
-        select(func.count()).select_from(WebhookDlqEntry)
-    )
+    total = await session.scalar(select(func.count()).select_from(WebhookDlqEntry))
     assert total == 1, f"only one row should exist, got {total}"
 
 
@@ -421,25 +407,17 @@ async def test_enqueue_multi_tenant_same_event_creates_distinct_rows(
     tenant_a = await _seed_tenant(session, "multi-tenant-a")
     tenant_b = await _seed_tenant(session, "multi-tenant-b")
 
-    row_a = await _enqueue_default(
-        session, tenant_id=tenant_a, event_id="evt-shared"
-    )
+    row_a = await _enqueue_default(session, tenant_id=tenant_a, event_id="evt-shared")
     await session.commit()
-    row_b = await _enqueue_default(
-        session, tenant_id=tenant_b, event_id="evt-shared"
-    )
+    row_b = await _enqueue_default(session, tenant_id=tenant_b, event_id="evt-shared")
     await session.commit()
 
     assert row_a.id != row_b.id
-    total = await session.scalar(
-        select(func.count()).select_from(WebhookDlqEntry)
-    )
+    total = await session.scalar(select(func.count()).select_from(WebhookDlqEntry))
     assert total == 2
 
     rows = (
-        await session.scalars(
-            select(WebhookDlqEntry).order_by(WebhookDlqEntry.tenant_id)
-        )
+        await session.scalars(select(WebhookDlqEntry).order_by(WebhookDlqEntry.tenant_id))
     ).all()
     tenant_ids = {r.tenant_id for r in rows}
     assert tenant_ids == {tenant_a, tenant_b}
@@ -518,9 +496,7 @@ async def test_get_by_id_with_wrong_tenant_returns_none(
     """
     tenant_a = await _seed_tenant(session, "probe-tenant-a")
     tenant_b = await _seed_tenant(session, "probe-tenant-b")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_a, event_id="evt-probe"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_a, event_id="evt-probe")
     await session.commit()
 
     fetched = await get_by_id(session, entry_id=entry.id, tenant_id=tenant_b)
@@ -577,14 +553,10 @@ async def test_list_for_tenant_paginates_and_returns_total(
     """10 rows + ``limit=3, offset=3`` -> 3 rows + ``total=10``."""
     tenant_id = await _seed_tenant(session, "page-tenant")
     for i in range(10):
-        await _enqueue_default(
-            session, tenant_id=tenant_id, event_id=f"evt-page-{i:02d}"
-        )
+        await _enqueue_default(session, tenant_id=tenant_id, event_id=f"evt-page-{i:02d}")
         await session.commit()
 
-    rows, total = await list_for_tenant(
-        session, tenant_id=tenant_id, limit=3, offset=3
-    )
+    rows, total = await list_for_tenant(session, tenant_id=tenant_id, limit=3, offset=3)
     assert total == 10, f"total must report the full filter cardinality, got {total}"
     assert len(rows) == 3, f"limit=3 must cap the page at 3 rows, got {len(rows)}"
 
@@ -594,15 +566,9 @@ async def test_list_for_tenant_status_pending_excludes_terminal_rows(
 ) -> None:
     """``status="pending"`` filter excludes both terminal columns."""
     tenant_id = await _seed_tenant(session, "status-tenant")
-    pending = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-pending"
-    )
-    replayed_row = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-replayed"
-    )
-    abandoned_row = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-abandoned"
-    )
+    pending = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-pending")
+    replayed_row = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-replayed")
+    abandoned_row = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-abandoned")
     await session.commit()
 
     await mark_replayed(session, entry_id=replayed_row.id, tenant_id=tenant_id)
@@ -614,12 +580,8 @@ async def test_list_for_tenant_status_pending_excludes_terminal_rows(
     )
     await session.commit()
 
-    rows, total = await list_for_tenant(
-        session, tenant_id=tenant_id, status="pending"
-    )
-    assert total == 1, (
-        f"pending filter must report exactly one row, got total={total}"
-    )
+    rows, total = await list_for_tenant(session, tenant_id=tenant_id, status="pending")
+    assert total == 1, f"pending filter must report exactly one row, got total={total}"
     assert [r.id for r in rows] == [pending.id]
 
 
@@ -631,35 +593,20 @@ async def test_list_due_for_replay_returns_only_due_rows_in_fifo_order(
     """
     tenant_id = await _seed_tenant(session, "due-tenant")
 
-    older_due = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-due-older"
-    )
+    older_due = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-due-older")
     await session.commit()
-    newer_due = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-due-newer"
-    )
+    newer_due = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-due-newer")
     await session.commit()
-    not_due = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-not-due"
-    )
+    not_due = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-not-due")
     await session.commit()
 
     cutoff_anchor = datetime(2026, 4, 22, 12, 0, 0, tzinfo=UTC)
-    await _force_created_at(
-        session, entry_id=older_due.id, when=cutoff_anchor - timedelta(hours=2)
-    )
-    await _force_created_at(
-        session, entry_id=newer_due.id, when=cutoff_anchor - timedelta(hours=1)
-    )
-    await _force_created_at(
-        session, entry_id=not_due.id, when=cutoff_anchor
-    )
+    await _force_created_at(session, entry_id=older_due.id, when=cutoff_anchor - timedelta(hours=2))
+    await _force_created_at(session, entry_id=newer_due.id, when=cutoff_anchor - timedelta(hours=1))
+    await _force_created_at(session, entry_id=not_due.id, when=cutoff_anchor)
 
     await session.execute(
-        text(
-            "UPDATE webhook_dlq_entries "
-            "SET next_retry_at = :ts WHERE id IN (:older, :newer)"
-        ),
+        text("UPDATE webhook_dlq_entries SET next_retry_at = :ts WHERE id IN (:older, :newer)"),
         {
             "ts": _naive(cutoff_anchor - timedelta(minutes=10)),
             "older": older_due.id,
@@ -667,10 +614,7 @@ async def test_list_due_for_replay_returns_only_due_rows_in_fifo_order(
         },
     )
     await session.execute(
-        text(
-            "UPDATE webhook_dlq_entries "
-            "SET next_retry_at = :ts WHERE id = :id"
-        ),
+        text("UPDATE webhook_dlq_entries SET next_retry_at = :ts WHERE id = :id"),
         {"ts": _naive(cutoff_anchor + timedelta(hours=1)), "id": not_due.id},
     )
     await session.commit()
@@ -678,9 +622,7 @@ async def test_list_due_for_replay_returns_only_due_rows_in_fifo_order(
     rows = await list_due_for_replay(session, now=cutoff_anchor)
     ids = [r.id for r in rows]
 
-    assert not_due.id not in ids, (
-        "row whose next_retry_at is in the future must NOT be returned"
-    )
+    assert not_due.id not in ids, "row whose next_retry_at is in the future must NOT be returned"
     assert ids == [older_due.id, newer_due.id], (
         f"due rows must be returned in FIFO created_at ASC order, got {ids}"
     )
@@ -692,30 +634,21 @@ async def test_list_abandoned_candidates_respects_fourteen_day_cutoff(
     """Acceptance criterion (e) — ``created_at <= now - 14d`` AND not terminal."""
     tenant_id = await _seed_tenant(session, "abandon-tenant")
 
-    aged = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-aged"
-    )
+    aged = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-aged")
     await session.commit()
-    fresh = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-fresh"
-    )
+    fresh = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-fresh")
     await session.commit()
 
     moment = datetime(2026, 4, 22, 12, 0, 0, tzinfo=UTC)
     cutoff = moment - timedelta(days=DLQ_MAX_AGE_DAYS)
-    await _force_created_at(
-        session, entry_id=aged.id, when=cutoff - timedelta(seconds=1)
-    )
-    await _force_created_at(
-        session, entry_id=fresh.id, when=cutoff + timedelta(seconds=1)
-    )
+    await _force_created_at(session, entry_id=aged.id, when=cutoff - timedelta(seconds=1))
+    await _force_created_at(session, entry_id=fresh.id, when=cutoff + timedelta(seconds=1))
 
     rows = await list_abandoned_candidates(session, now=moment)
     ids = [r.id for r in rows]
 
     assert ids == [aged.id], (
-        f"only the aged row should be a candidate; "
-        f"got {ids} for cutoff={cutoff.isoformat()}"
+        f"only the aged row should be a candidate; got {ids} for cutoff={cutoff.isoformat()}"
     )
 
 
@@ -729,14 +662,10 @@ async def test_mark_replayed_sets_replayed_at_and_makes_row_terminal(
 ) -> None:
     """Acceptance criterion (f) happy path — single mutation seal."""
     tenant_id = await _seed_tenant(session, "replay-happy-tenant")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-replay"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-replay")
     await session.commit()
 
-    updated = await mark_replayed(
-        session, entry_id=entry.id, tenant_id=tenant_id
-    )
+    updated = await mark_replayed(session, entry_id=entry.id, tenant_id=tenant_id)
     await session.commit()
 
     assert updated.replayed_at == freeze_now
@@ -749,9 +678,7 @@ async def test_mark_replayed_second_call_raises_already_terminal(
 ) -> None:
     """Acceptance criterion (f) idempotency seal — second mutate is rejected."""
     tenant_id = await _seed_tenant(session, "replay-twice-tenant")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-replay-twice"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-replay-twice")
     await session.commit()
 
     await mark_replayed(session, entry_id=entry.id, tenant_id=tenant_id)
@@ -770,9 +697,7 @@ async def test_mark_abandoned_happy_path_records_reason(
     plus that the row stays terminal afterwards.
     """
     tenant_id = await _seed_tenant(session, "abandon-happy-tenant")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-abandon"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-abandon")
     await session.commit()
 
     updated = await mark_abandoned(
@@ -795,21 +720,15 @@ async def test_mark_abandoned_with_invalid_reason_raises_value_error(
     trusted by downstream analytics.
     """
     tenant_id = await _seed_tenant(session, "abandon-bad-tenant")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_id, event_id="evt-bad-reason"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_id, event_id="evt-bad-reason")
     await session.commit()
 
     with pytest.raises(ValueError, match="invalid abandoned_reason"):
-        await mark_abandoned(
-            session, entry_id=entry.id, tenant_id=tenant_id, reason="garbage"
-        )
+        await mark_abandoned(session, entry_id=entry.id, tenant_id=tenant_id, reason="garbage")
 
     refetched = await get_by_id(session, entry_id=entry.id, tenant_id=tenant_id)
     assert refetched is not None
-    assert refetched.abandoned_at is None, (
-        "ValueError must short-circuit BEFORE the row is mutated"
-    )
+    assert refetched.abandoned_at is None, "ValueError must short-circuit BEFORE the row is mutated"
     assert refetched.abandoned_reason is None
 
 
@@ -825,21 +744,15 @@ async def test_mark_replayed_cross_tenant_probe_raises_not_found(
     """
     tenant_a = await _seed_tenant(session, "cross-tenant-a")
     tenant_b = await _seed_tenant(session, "cross-tenant-b")
-    entry = await _enqueue_default(
-        session, tenant_id=tenant_a, event_id="evt-cross"
-    )
+    entry = await _enqueue_default(session, tenant_id=tenant_a, event_id="evt-cross")
     await session.commit()
 
     with pytest.raises(DlqEntryNotFoundError, match="not found"):
         await mark_replayed(session, entry_id=entry.id, tenant_id=tenant_b)
 
-    untouched = await get_by_id(
-        session, entry_id=entry.id, tenant_id=tenant_a
-    )
+    untouched = await get_by_id(session, entry_id=entry.id, tenant_id=tenant_a)
     assert untouched is not None
-    assert untouched.replayed_at is None, (
-        "tenant B's failed probe must NOT mutate tenant A's row"
-    )
+    assert untouched.replayed_at is None, "tenant B's failed probe must NOT mutate tenant A's row"
 
 
 async def test_increment_attempt_bumps_count_and_recomputes_backoff(
@@ -866,9 +779,7 @@ async def test_increment_attempt_bumps_count_and_recomputes_backoff(
     )
     await session.commit()
 
-    expected_next = _FIXED_NOW + timedelta(
-        seconds=DLQ_BACKOFF_BASE_SECONDS * DLQ_BACKOFF_FACTOR
-    )
+    expected_next = _FIXED_NOW + timedelta(seconds=DLQ_BACKOFF_BASE_SECONDS * DLQ_BACKOFF_FACTOR)
     assert updated.attempt_count == initial_count + 1
     assert updated.last_error_code == "circuit_open"
     assert updated.last_status_code is None

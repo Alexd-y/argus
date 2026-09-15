@@ -29,7 +29,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -61,7 +61,7 @@ _MAX_FINDINGS: Final[int] = 1_000
 _HOST_SANITISE_RE: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9.\-:_]+")
 
 
-_DedupKey: TypeAlias = tuple[str, str, str]
+type _DedupKey = tuple[str, str, str]
 
 
 def parse_mongodb_probe(
@@ -132,9 +132,7 @@ def _sanitise_host(value: Any) -> str:
     return _HOST_SANITISE_RE.sub("", value).strip(":._-").lower()
 
 
-def _iter_findings(
-    payload: dict[str, Any], *, host: str
-) -> Iterator[dict[str, object]]:
+def _iter_findings(payload: dict[str, Any], *, host: str) -> Iterator[dict[str, object]]:
     auth_required = bool(payload.get("auth_required"))
     version = payload.get("version") if isinstance(payload.get("version"), str) else ""
     if version:

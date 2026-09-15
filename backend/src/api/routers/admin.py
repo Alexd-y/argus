@@ -65,11 +65,7 @@ _SENSITIVE_KEY_FRAGMENTS: tuple[str, ...] = (
 
 def _escape_ilike_pattern(fragment: str) -> str:
     """Escape ``%``, ``_``, and ``\\`` for SQL ``ILIKE`` with ``ESCAPE '\\'``."""
-    return (
-        fragment.replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
-    )
+    return fragment.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _is_sensitive_detail_key(key: str) -> bool:
@@ -151,9 +147,7 @@ _ALLOWED_LLM_PROVIDER_PATCH_CONFIG_KEYS: frozenset[str] = frozenset(
 
 _RE_SECRET_SK_TOKEN = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
 _RE_SECRET_PK_TOKEN = re.compile(r"pk-[A-Za-z0-9_-]{10,}")
-_RE_BEARER_CREDENTIAL = re.compile(
-    r"(?i)Bearer\s+[A-Za-z0-9_\-.~+/=]{8,}"
-)
+_RE_BEARER_CREDENTIAL = re.compile(r"(?i)Bearer\s+[A-Za-z0-9_\-.~+/=]{8,}")
 
 
 def _mask_secret_like_string_literals(s: str) -> str:
@@ -271,9 +265,7 @@ def _provider_config_to_out(row: ProviderConfig) -> ProviderConfigOut:
     )
 
 
-def _validate_audit_time_window(
-    since: datetime | None, until: datetime | None
-) -> None:
+def _validate_audit_time_window(since: datetime | None, until: datetime | None) -> None:
     if since is not None and until is not None and until < since:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -312,11 +304,7 @@ def _audit_logs_filtered_select(
 
 def _audit_row_export_dict(row: AuditLog) -> dict[str, Any]:
     raw_details = row.details
-    details = (
-        _redact_audit_details(dict(raw_details))
-        if isinstance(raw_details, dict)
-        else None
-    )
+    details = _redact_audit_details(dict(raw_details)) if isinstance(raw_details, dict) else None
     uid = str(row.user_id) if row.user_id else None
     ip = str(row.ip_address) if row.ip_address else None
     return {
@@ -331,6 +319,7 @@ def _audit_row_export_dict(row: AuditLog) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
+
 # Dual-mode admin gate (``require_admin``) and its session helpers live in
 # :mod:`src.auth.admin_dependencies` (ISS-T20-003 Phase 1, refactored in
 # C7-T03 to break the circular import that arose when this module needed
@@ -338,7 +327,7 @@ def _audit_row_export_dict(row: AuditLog) -> dict[str, Any]:
 # Only the public symbols are re-exported here so every existing
 # ``from src.api.routers.admin import require_admin`` keeps working;
 # the private helpers stay internal to ``src.auth.admin_dependencies``.
-from src.auth.admin_dependencies import (  # noqa: E402, F401 — re-exports for backwards compat
+from src.auth.admin_dependencies import (  # noqa: F401,E402 — re-exports; late import breaks a circular dependency
     admin_key_header,
     require_admin,
     require_admin_mfa_passed,
@@ -635,9 +624,7 @@ async def get_tenant(
     db: AsyncSession = Depends(get_db),
 ) -> TenantOut:
     """Get tenant by ID."""
-    result = await db.execute(
-        select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-    )
+    result = await db.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -667,9 +654,7 @@ async def patch_tenant(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="No fields to update",
         )
-    result = await db.execute(
-        select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-    )
+    result = await db.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -697,28 +682,21 @@ async def patch_tenant(
                 ("exports_sarif_junit_enabled", tenant.exports_sarif_junit_enabled, ev)
             )
             tenant.exports_sarif_junit_enabled = ev
-    if "rate_limit_rpm" in updates:
-        if tenant.rate_limit_rpm != updates["rate_limit_rpm"]:
-            audit_changes.append(
-                ("rate_limit_rpm", tenant.rate_limit_rpm, updates["rate_limit_rpm"])
+    if "rate_limit_rpm" in updates and tenant.rate_limit_rpm != updates["rate_limit_rpm"]:
+        audit_changes.append(("rate_limit_rpm", tenant.rate_limit_rpm, updates["rate_limit_rpm"]))
+        tenant.rate_limit_rpm = updates["rate_limit_rpm"]
+    if "scope_blacklist" in updates and tenant.scope_blacklist != updates["scope_blacklist"]:
+        audit_changes.append(
+            (
+                "scope_blacklist",
+                tenant.scope_blacklist,
+                updates["scope_blacklist"],
             )
-            tenant.rate_limit_rpm = updates["rate_limit_rpm"]
-    if "scope_blacklist" in updates:
-        if tenant.scope_blacklist != updates["scope_blacklist"]:
-            audit_changes.append(
-                (
-                    "scope_blacklist",
-                    tenant.scope_blacklist,
-                    updates["scope_blacklist"],
-                )
-            )
-            tenant.scope_blacklist = updates["scope_blacklist"]
-    if "retention_days" in updates:
-        if tenant.retention_days != updates["retention_days"]:
-            audit_changes.append(
-                ("retention_days", tenant.retention_days, updates["retention_days"])
-            )
-            tenant.retention_days = updates["retention_days"]
+        )
+        tenant.scope_blacklist = updates["scope_blacklist"]
+    if "retention_days" in updates and tenant.retention_days != updates["retention_days"]:
+        audit_changes.append(("retention_days", tenant.retention_days, updates["retention_days"]))
+        tenant.retention_days = updates["retention_days"]
     if "pdf_archival_format" in updates:
         new_format = updates["pdf_archival_format"]
         if new_format is None:
@@ -729,10 +707,7 @@ async def patch_tenant(
         if new_format not in PDF_ARCHIVAL_FORMAT_VALUES:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    "pdf_archival_format must be one of "
-                    f"{list(PDF_ARCHIVAL_FORMAT_VALUES)}"
-                ),
+                detail=(f"pdf_archival_format must be one of {list(PDF_ARCHIVAL_FORMAT_VALUES)}"),
             )
         if tenant.pdf_archival_format != new_format:
             audit_changes.append(
@@ -775,9 +750,7 @@ async def delete_tenant(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Delete a tenant and dependent rows (FK ON DELETE CASCADE)."""
-    result = await db.execute(
-        select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-    )
+    result = await db.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -790,9 +763,7 @@ async def delete_tenant(
 
 _MAX_SCOPE_EDITOR_RULES: int = 256
 _CIDR_PREVIEW_SAMPLE_CAP: int = 64
-_HOSTNAME_SAFE_RE = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?:\.(?!-)[A-Za-z0-9-]{1,63})*$"
-)
+_HOSTNAME_SAFE_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?:\.(?!-)[A-Za-z0-9-]{1,63})*$")
 
 
 class OwnershipProofStatusOut(BaseModel):
@@ -895,12 +866,8 @@ def _scope_rules_from_config(data: dict[str, Any] | None) -> list[ScopeRule]:
     return out
 
 
-async def _policy_require_ownership_proof(
-    db: AsyncSession, tenant_id: str
-) -> bool | None:
-    result = await db.execute(
-        select(Policy).where(cast(Policy.tenant_id, String) == tenant_id)
-    )
+async def _policy_require_ownership_proof(db: AsyncSession, tenant_id: str) -> bool | None:
+    result = await db.execute(select(Policy).where(cast(Policy.tenant_id, String) == tenant_id))
     rows = result.scalars().all()
     for pol in rows:
         if pol.enabled is False:
@@ -935,15 +902,11 @@ def _target_row_to_out(
         url=str(row.url),
         scope_config=row.scope_config if isinstance(row.scope_config, dict) else None,
         created_at=row.created_at,
-        ownership_proof=_ownership_status_for_target(
-            policy_requires_proof=policy_requires_proof
-        ),
+        ownership_proof=_ownership_status_for_target(policy_requires_proof=policy_requires_proof),
     )
 
 
-async def _target_to_out(
-    db: AsyncSession, row: Target, tenant_id: str
-) -> TargetOut:
+async def _target_to_out(db: AsyncSession, row: Target, tenant_id: str) -> TargetOut:
     pol = await _policy_require_ownership_proof(db, tenant_id)
     return _target_row_to_out(row, policy_requires_proof=pol)
 
@@ -955,8 +918,8 @@ async def _resolve_dns_preview(hostname: str) -> DnsPreviewOut:
     if not _HOSTNAME_SAFE_RE.match(h):
         return DnsPreviewOut(hostname=h, addresses=[], error="Invalid hostname format")
     try:
-        import dns.asyncresolver as dns_asyncresolver  # noqa: PLC0415
-        import dns.exception as dnsexception  # noqa: PLC0415
+        import dns.asyncresolver as dns_asyncresolver
+        import dns.exception as dnsexception
     except ImportError:
         return DnsPreviewOut(
             hostname=h, addresses=[], error="DNS preview is unavailable on this server"
@@ -980,9 +943,7 @@ async def _resolve_dns_preview(hostname: str) -> DnsPreviewOut:
     await _collect("A")
     await _collect("AAAA")
     if not addresses:
-        return DnsPreviewOut(
-            hostname=h, addresses=[], error="No DNS answers for this hostname"
-        )
+        return DnsPreviewOut(hostname=h, addresses=[], error="No DNS answers for this hostname")
     return DnsPreviewOut(hostname=h, addresses=addresses[:32], error=None)
 
 
@@ -1305,15 +1266,12 @@ async def update_provider(
     merged = _coerce_provider_config_dict(prov.config)
 
     if body.config is not None:
-        raw_keys = [str(k) for k in body.config.keys()]
+        raw_keys = [str(k) for k in body.config]
         unknown = [k for k in raw_keys if k not in _ALLOWED_LLM_PROVIDER_PATCH_CONFIG_KEYS]
         if unknown:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    "Unknown provider config keys: "
-                    + ", ".join(sorted(set(unknown)))
-                ),
+                detail=("Unknown provider config keys: " + ", ".join(sorted(set(unknown)))),
             )
         for sk, v in body.config.items():
             sk_s = str(sk)
@@ -1385,7 +1343,11 @@ async def list_audit_logs(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     tenant_id: str | None = Query(None),
-    q: str | None = Query(None, max_length=500, description="Search action, resource_type, details (ILIKE)"),
+    q: str | None = Query(
+        None,
+        max_length=500,
+        description="Search action, resource_type, details (ILIKE)",
+    ),
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
     event_type: str | None = Query(
@@ -1477,9 +1439,7 @@ async def export_audit_logs(
         return Response(
             content=json.dumps(export_rows, default=str),
             media_type="application/json; charset=utf-8",
-            headers={
-                "Content-Disposition": 'attachment; filename="audit_logs.json"'
-            },
+            headers={"Content-Disposition": 'attachment; filename="audit_logs.json"'},
         )
 
     buf = io.StringIO()
@@ -1657,7 +1617,7 @@ async def wrb_test_prompt(
             elapsed_ms=round(elapsed, 1),
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"WhiteRabbitNeo error: {exc}")
+        raise HTTPException(status_code=502, detail=f"WhiteRabbitNeo error: {exc}") from exc
 
 
 # --- Health dashboard ---

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.ownership import (
     OwnershipChallenge,
@@ -51,7 +50,7 @@ def make_challenge(
     issued_at: datetime | None = None,
     ttl: timedelta = timedelta(hours=1),
 ) -> OwnershipChallenge:
-    issued = issued_at or datetime.now(tz=timezone.utc)
+    issued = issued_at or datetime.now(tz=UTC)
     return OwnershipChallenge(
         challenge_id=uuid4(),
         tenant_id=tenant_id or UUID("11111111-1111-4111-8111-111111111111"),

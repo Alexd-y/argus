@@ -112,8 +112,7 @@ class RateLimitedDecision(RateLimitedError):
         tenant_id: str,
     ) -> None:
         super().__init__(
-            f"Rate limit exceeded for {deficit_scope}; retry after "
-            f"{retry_after_seconds:.2f}s",
+            f"Rate limit exceeded for {deficit_scope}; retry after {retry_after_seconds:.2f}s",
         )
         self.retry_after_seconds = max(0.0, float(retry_after_seconds))
         self.deficit_scope = deficit_scope
@@ -195,12 +194,8 @@ class InMemoryTokenBucket:
     ) -> None:
         self._default_client_budget = default_client_budget
         self._default_tenant_budget = default_tenant_budget
-        self._per_client_budgets: dict[str, BucketBudget] = dict(
-            per_client_budgets or {}
-        )
-        self._per_tenant_budgets: dict[str, BucketBudget] = dict(
-            per_tenant_budgets or {}
-        )
+        self._per_client_budgets: dict[str, BucketBudget] = dict(per_client_budgets or {})
+        self._per_tenant_budgets: dict[str, BucketBudget] = dict(per_tenant_budgets or {})
         self._client_state: dict[str, tuple[float, float]] = {}
         self._tenant_state: dict[str, tuple[float, float]] = {}
         self._lock = asyncio.Lock()
@@ -574,9 +569,7 @@ def build_rate_limiter(
         )
     if backend_normalised == "redis":
         if redis_client is None:
-            raise ValueError(
-                "redis backend requires a redis_client (redis.asyncio.Redis)"
-            )
+            raise ValueError("redis backend requires a redis_client (redis.asyncio.Redis)")
         return RedisTokenBucket(
             client=redis_client,
             default_client_budget=client_budget,
@@ -585,9 +578,7 @@ def build_rate_limiter(
             per_tenant_budgets=per_tenant_budgets,
             key_prefix=redis_key_prefix,
         )
-    raise ValueError(
-        f"unknown rate-limiter backend: {backend!r}; expected 'memory' or 'redis'"
-    )
+    raise ValueError(f"unknown rate-limiter backend: {backend!r}; expected 'memory' or 'redis'")
 
 
 __all__ = [

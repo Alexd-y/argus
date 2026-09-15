@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import (
@@ -78,9 +77,7 @@ _NMAP_XML: Final[str] = (
 
 def test_rustscan_routes_through_nmap_parser(tmp_path: Path) -> None:
     (tmp_path / "rustscan.xml").write_text(_NMAP_XML, encoding="utf-8")
-    findings = dispatch_parse(
-        ParseStrategy.XML_NMAP, b"", b"", tmp_path, tool_id="rustscan"
-    )
+    findings = dispatch_parse(ParseStrategy.XML_NMAP, b"", b"", tmp_path, tool_id="rustscan")
     assert findings, "rustscan XML must yield at least the open-port finding"
     assert not _is_only_heartbeat(findings)
 
@@ -92,9 +89,7 @@ def test_rustscan_routes_through_nmap_parser(tmp_path: Path) -> None:
 
 def test_curl_routes_through_curl_parser(tmp_path: Path) -> None:
     stdout = b"HTTP/1.1 200 OK\nServer: nginx/1.18.0\n"
-    findings = dispatch_parse(
-        ParseStrategy.TEXT_LINES, stdout, b"", tmp_path, tool_id="curl"
-    )
+    findings = dispatch_parse(ParseStrategy.TEXT_LINES, stdout, b"", tmp_path, tool_id="curl")
     assert len(findings) == 1
     assert findings[0].category is FindingCategory.INFO
 
@@ -109,9 +104,7 @@ def test_commix_routes_through_commix_parser(tmp_path: Path) -> None:
         b"[+] The (GET) 'addr' parameter is vulnerable to (results-based) "
         b"command injection technique.\n"
     )
-    findings = dispatch_parse(
-        ParseStrategy.TEXT_LINES, stdout, b"", tmp_path, tool_id="commix"
-    )
+    findings = dispatch_parse(ParseStrategy.TEXT_LINES, stdout, b"", tmp_path, tool_id="commix")
     assert len(findings) == 1
     assert findings[0].category is FindingCategory.CMDI
 

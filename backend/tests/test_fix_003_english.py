@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 ARGUS_ROOT = Path(__file__).resolve().parent.parent.parent
 GENERAL_PARTIALS_DIR = (
     ARGUS_ROOT / "backend" / "src" / "reports" / "templates" / "reports" / "partials"
@@ -41,15 +40,15 @@ class TestGeneralPartialsNoCyrillic:
 
     @pytest.mark.parametrize("template_name", GENERAL_PARTIAL_FILES)
     def test_no_cyrillic_in_template(
-        self, partials_content: dict[str, str], template_name: str,
+        self,
+        partials_content: dict[str, str],
+        template_name: str,
     ) -> None:
         if template_name not in partials_content:
             pytest.skip(f"Template {template_name} not found")
         content = partials_content[template_name]
         matches = CYRILLIC_RE.findall(content)
-        assert not matches, (
-            f"{template_name} contains Cyrillic: {''.join(matches[:20])!r}"
-        )
+        assert not matches, f"{template_name} contains Cyrillic: {''.join(matches[:20])!r}"
 
 
 class TestScanArtifactPhaseLabelsEnglish:
@@ -60,9 +59,7 @@ class TestScanArtifactPhaseLabelsEnglish:
 
         for key, label in _SCAN_ARTIFACT_PHASE_LABELS.items():
             matches = CYRILLIC_RE.findall(label)
-            assert not matches, (
-                f"_SCAN_ARTIFACT_PHASE_LABELS[{key!r}] has Cyrillic: {label!r}"
-            )
+            assert not matches, f"_SCAN_ARTIFACT_PHASE_LABELS[{key!r}] has Cyrillic: {label!r}"
 
     def test_values_are_strings(self) -> None:
         from src.services.reporting import _SCAN_ARTIFACT_PHASE_LABELS
@@ -86,9 +83,7 @@ class TestActiveWebScanAILabelsExist:
 
         for key, label in _ACTIVE_WEB_SCAN_AI_LABELS.items():
             matches = CYRILLIC_RE.findall(label)
-            assert not matches, (
-                f"_ACTIVE_WEB_SCAN_AI_LABELS[{key!r}] has Cyrillic: {label!r}"
-            )
+            assert not matches, f"_ACTIVE_WEB_SCAN_AI_LABELS[{key!r}] has Cyrillic: {label!r}"
 
     def test_no_ru_variant(self) -> None:
         """There should be no _ACTIVE_WEB_SCAN_AI_LABELS_RU attribute."""

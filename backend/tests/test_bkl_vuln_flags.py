@@ -10,7 +10,6 @@ Tests:
 from __future__ import annotations
 
 import pytest
-
 from src.recon.vulnerability_analysis.active_scan.planner import (
     _VULN_OVERRIDE_SPECS,
     plan_tools_by_scan_mode,
@@ -25,12 +24,18 @@ class TestVulnOverrideSpecsPresence:
 
     @pytest.mark.parametrize(
         "flag_key",
-        ["csrf_enabled", "rce_enabled", "idor_enabled", "xss_enabled", "sqli_enabled", "ssrf_enabled", "lfi_enabled"],
+        [
+            "csrf_enabled",
+            "rce_enabled",
+            "idor_enabled",
+            "xss_enabled",
+            "sqli_enabled",
+            "ssrf_enabled",
+            "lfi_enabled",
+        ],
     )
     def test_vuln_override_spec_key_present(self, flag_key: str) -> None:
-        assert flag_key in _VULN_OVERRIDE_SPECS, (
-            f"_VULN_OVERRIDE_SPECS must have key '{flag_key}'"
-        )
+        assert flag_key in _VULN_OVERRIDE_SPECS, f"_VULN_OVERRIDE_SPECS must have key '{flag_key}'"
 
     @pytest.mark.parametrize(
         "flag_key",
@@ -91,9 +96,7 @@ class TestGenericToolIDs:
         ],
     )
     def test_generic_tool_id_present(self, expected_id: str) -> None:
-        assert expected_id in _GENERIC_TOOL_IDS, (
-            f"_GENERIC_TOOL_IDS must contain '{expected_id}'"
-        )
+        assert expected_id in _GENERIC_TOOL_IDS, f"_GENERIC_TOOL_IDS must contain '{expected_id}'"
 
     def test_generic_tool_ids_is_frozenset(self) -> None:
         assert isinstance(_GENERIC_TOOL_IDS, frozenset)

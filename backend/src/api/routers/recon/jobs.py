@@ -30,6 +30,7 @@ def _enqueue_recon_job(job_id: str) -> None:
     """Enqueue Celery task for recon job execution."""
     try:
         from src.recon.jobs.runner import run_recon_job
+
         run_recon_job.delay(job_id)
         logger.info("Recon job enqueued", extra={"job_id": job_id})
     except Exception as e:
@@ -54,9 +55,9 @@ async def create(
         _enqueue_recon_job(job.id)
         return ScanJobResponse.model_validate(job)
     except ScanJobStateError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ScanJobServiceError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get(
@@ -79,9 +80,7 @@ async def list_all(
 
 
 @router.get("/recon/jobs/{job_id}", response_model=ScanJobResponse)
-async def get_one(
-    job_id: str, db: AsyncSession = Depends(get_db)
-) -> ScanJobResponse:
+async def get_one(job_id: str, db: AsyncSession = Depends(get_db)) -> ScanJobResponse:
     """Get scan job detail."""
     tenant_id = _get_tenant_id()
     job = await get_job(db, tenant_id, job_id)
@@ -91,15 +90,13 @@ async def get_one(
 
 
 @router.post("/recon/jobs/{job_id}/cancel", response_model=ScanJobResponse)
-async def cancel(
-    job_id: str, db: AsyncSession = Depends(get_db)
-) -> ScanJobResponse:
+async def cancel(job_id: str, db: AsyncSession = Depends(get_db)) -> ScanJobResponse:
     """Cancel a pending/running job."""
     tenant_id = _get_tenant_id()
     try:
         job = await cancel_job(db, tenant_id, job_id)
         return ScanJobResponse.model_validate(job)
     except ScanJobNotFoundError:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found") from None
     except ScanJobStateError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

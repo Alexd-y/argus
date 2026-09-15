@@ -44,6 +44,7 @@ class BreachDetail:
             "description": self.description[:500],
         }
 
+
 _PWNED_RANGE_URL = "https://api.pwnedpasswords.com/range"
 
 
@@ -113,7 +114,13 @@ def collect_password_candidates_from_structure(
                 if len(out) >= max_values:
                     return
                 lk = str(k).lower()
-                if lk in {"password", "passwd", "pwd", "user_password", "credential_password"}:
+                if lk in {
+                    "password",
+                    "passwd",
+                    "pwd",
+                    "user_password",
+                    "credential_password",
+                }:
                     if isinstance(v, str) and v.strip():
                         s = v.strip()[:256]
                         if s not in seen:
@@ -202,9 +209,7 @@ def finalize_hibp_pwned_password_summary(summary: dict[str, Any]) -> dict[str, A
     out["data_breach_password_exposure"] = exposure
 
     if pwned_n > 0:
-        note = (
-            "At least one sampled credential string matched HIBP Pwned Passwords corpus."
-        )
+        note = "At least one sampled credential string matched HIBP Pwned Passwords corpus."
     elif all_failed:
         note = (
             "HIBP Pwned Passwords checks did not complete (network, HTTP, or parse error); "
@@ -216,9 +221,7 @@ def finalize_hibp_pwned_password_summary(summary: dict[str, Any]) -> dict[str, A
             "returned a response; none of the completed checks matched the corpus."
         )
     elif checks > 0:
-        note = (
-            "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
-        )
+        note = "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
     else:
         note = (
             "No password samples were checked against the HIBP Pwned Passwords API in this run (checks_run=0). "

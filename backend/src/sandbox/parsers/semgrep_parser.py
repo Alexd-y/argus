@@ -161,7 +161,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -370,7 +370,7 @@ _CHECK_ID_TO_CATEGORY: Final[tuple[tuple[str, FindingCategory], ...]] = (
 # statements where Semgrep emits one finding per AST node). Without
 # ``end_line`` such legitimate distinct findings would silently
 # collapse to one.
-DedupKey: TypeAlias = tuple[str, str, int, int]
+type DedupKey = tuple[str, str, int, int]
 
 
 # ---------------------------------------------------------------------------
@@ -549,8 +549,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "lines_snippet": _truncate_text(record.get("lines_snippet")),
         "fingerprint": record.get("fingerprint"),
         "synthetic_id": _stable_hash(
-            f"{record.get('check_id', '')}::{record.get('path', '')}::"
-            f"{record.get('start_line', 0)}"
+            f"{record.get('check_id', '')}::{record.get('path', '')}::{record.get('start_line', 0)}"
         ),
     }
     cleaned: dict[str, Any] = {}
@@ -858,8 +857,7 @@ def _coerce_cwe(value: Any) -> int | None:
         return value
     if isinstance(value, str):
         candidate = value.strip().upper()
-        if candidate.startswith("CWE-"):
-            candidate = candidate[4:]
+        candidate = candidate.removeprefix("CWE-")
         digits: list[str] = []
         for ch in candidate:
             if ch.isdigit():

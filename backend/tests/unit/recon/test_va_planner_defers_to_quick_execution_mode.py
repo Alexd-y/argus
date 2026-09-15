@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
-
 from src.execution_mode.mode import ExecutionMode
 from src.quick.schemas import (
     QuickBudget,

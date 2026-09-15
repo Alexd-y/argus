@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.quick.budget import (
     BudgetExhaustedError,
     ConcurrencyLimitError,
@@ -14,7 +13,11 @@ from src.quick.budget import (
     normalize_host_key,
 )
 from src.quick.clock import FrozenClock
-from src.quick.profiles import DeploymentQuickClamps, TenantQuickLimits, load_quick_profiles
+from src.quick.profiles import (
+    DeploymentQuickClamps,
+    TenantQuickLimits,
+    load_quick_profiles,
+)
 from src.quick.resolver import QuickProfileResolver
 from src.quick.schemas import QuickBudgetKind, QuickProfileName
 

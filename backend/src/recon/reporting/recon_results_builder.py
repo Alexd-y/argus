@@ -42,7 +42,7 @@ def _derive_target_domain(recon_dir: Path) -> str:
     if scope_path.exists():
         try:
             text = scope_path.read_text(encoding="utf-8", errors="replace")
-            m = re.search(r"Target:\s*([^\s#\n]+)", text, re.I)
+            m = re.search(r"Target:\s*([^\s#\n]+)", text, re.IGNORECASE)
             if m:
                 return m.group(1).strip()
         except OSError:
@@ -51,7 +51,7 @@ def _derive_target_domain(recon_dir: Path) -> str:
     if targets_path.exists():
         try:
             text = targets_path.read_text(encoding="utf-8", errors="replace")
-            m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.I)
+            m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.IGNORECASE)
             if m:
                 return m.group(1).strip()
         except OSError:
@@ -260,11 +260,7 @@ def build_recon_results(recon_dir: Path, scan_id: str) -> ReconResults:
     dns = _aggregate_dns(recon_dir, target_domain)
     whois = _load_whois(recon_dir)
     ssl_certs = _load_ssl_certs(live_hosts)
-    tech_stack = (
-        _load_tech_stack(recon_dir, http_probe_path)
-        if http_probe_path.exists()
-        else []
-    )
+    tech_stack = _load_tech_stack(recon_dir, http_probe_path) if http_probe_path.exists() else []
     http_headers = _load_http_headers(live_hosts)
 
     return ReconResults(

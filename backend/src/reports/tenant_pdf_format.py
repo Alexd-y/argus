@@ -65,9 +65,7 @@ async def resolve_tenant_pdf_archival_format(
         return PDF_ARCHIVAL_FORMAT_DEFAULT
     try:
         result = await session.execute(
-            select(Tenant.pdf_archival_format).where(
-                cast(Tenant.id, String) == tenant_id
-            )
+            select(Tenant.pdf_archival_format).where(cast(Tenant.id, String) == tenant_id)
         )
         value = result.scalar_one_or_none()
     except Exception as exc:  # noqa: BLE001 — never break PDF rendering on lookup.

@@ -137,7 +137,7 @@ class ThreatModelInputBundle(BaseModel):
 
     # Raw recon data for AI consumption (from input_loader)
     priority_hypotheses: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
-    anomalies: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)  # noqa: RUF013
+    anomalies: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
     intel_findings: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
     api_surface: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
     endpoint_inventory: list[dict[str, Any]] = Field(default_factory=list, max_length=500)

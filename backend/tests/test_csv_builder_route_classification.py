@@ -20,7 +20,10 @@ def test_derive_classification_from_path() -> None:
     assert _derive_classification_from_path("/login") == "login_flow"
     assert _derive_classification_from_path("/signin") == "login_flow"
     assert _derive_classification_from_path("/admin") == "admin_flow"
-    assert _derive_classification_from_path("https://example.com/reset-password") == "password_reset_flow"
+    assert (
+        _derive_classification_from_path("https://example.com/reset-password")
+        == "password_reset_flow"
+    )
     assert _derive_classification_from_path("/contact") == "contact_flow"
     assert _derive_classification_from_path("/") == "public_page"
     assert _derive_classification_from_path("/robots.txt") == "public_page"
@@ -90,15 +93,35 @@ def test_build_route_classification_from_inventory_columns() -> None:
     ]
     csv_content = build_route_classification_from_inventory(rows)
     out = _csv_rows(csv_content)
-    expected_cols = {"route", "host", "classification", "discovery_source", "evidence_ref"}
+    expected_cols = {
+        "route",
+        "host",
+        "classification",
+        "discovery_source",
+        "evidence_ref",
+    }
     assert expected_cols.issubset(out[0].keys())
 
 
 def test_build_route_classification_from_inventory_deduplicates() -> None:
     """Same (route, host) appears only once."""
     rows = [
-        {"route_path": "/login", "url": "https://a.com/login", "host": "a.com", "classification": "login_flow", "discovery_source": "x", "evidence_ref": "1"},
-        {"route_path": "/login", "url": "https://a.com/login", "host": "a.com", "classification": "login_flow", "discovery_source": "y", "evidence_ref": "2"},
+        {
+            "route_path": "/login",
+            "url": "https://a.com/login",
+            "host": "a.com",
+            "classification": "login_flow",
+            "discovery_source": "x",
+            "evidence_ref": "1",
+        },
+        {
+            "route_path": "/login",
+            "url": "https://a.com/login",
+            "host": "a.com",
+            "classification": "login_flow",
+            "discovery_source": "y",
+            "evidence_ref": "2",
+        },
     ]
     csv_content = build_route_classification_from_inventory(rows)
     out = _csv_rows(csv_content)

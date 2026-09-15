@@ -153,14 +153,10 @@ def _coerce_payload(value: object) -> object:
                     f"audit payload key {key!r} must match ^[a-z][a-z0-9_]{{0,63}}$"
                 )
             if len(key) > _MAX_KEY_LEN:
-                raise AuditPayloadError(
-                    f"audit payload key {key!r} exceeds {_MAX_KEY_LEN} chars"
-                )
+                raise AuditPayloadError(f"audit payload key {key!r} exceeds {_MAX_KEY_LEN} chars")
             out[key] = _coerce_payload(raw)
         return out
-    raise AuditPayloadError(
-        f"audit payload contains unsupported type {type(value).__name__!r}"
-    )
+    raise AuditPayloadError(f"audit payload contains unsupported type {type(value).__name__!r}")
 
 
 def _utcnow() -> datetime:
@@ -195,9 +191,7 @@ class AuditEvent(BaseModel):
     actor_id: UUID | None = None
     decision_allowed: StrictBool
     failure_summary: StrictStr | None = Field(default=None, max_length=64)
-    prev_event_hash: StrictStr = Field(
-        default=GENESIS_HASH, min_length=64, max_length=64
-    )
+    prev_event_hash: StrictStr = Field(default=GENESIS_HASH, min_length=64, max_length=64)
     event_hash: StrictStr = Field(default="", max_length=64)
     payload: dict[str, object] = Field(default_factory=dict)
 
@@ -287,9 +281,7 @@ class InMemoryAuditSink:
     def append(self, event: AuditEvent) -> None:
         with self._lock:
             if event.event_id in self._seen_ids:
-                raise AuditChainError(
-                    f"duplicate audit event_id={event.event_id} rejected by sink"
-                )
+                raise AuditChainError(f"duplicate audit event_id={event.event_id} rejected by sink")
             self._seen_ids.add(event.event_id)
             self._events.setdefault(event.tenant_id, []).append(event)
 
@@ -422,9 +414,7 @@ class AuditLogger:
 # compute stays well under 100 ms and well within the 2 s p95 SLO.
 
 
-_AUDIT_LOG_CHAIN_MARKER_KEYS: Final[frozenset[str]] = frozenset(
-    {"_event_hash", "_prev_event_hash"}
-)
+_AUDIT_LOG_CHAIN_MARKER_KEYS: Final[frozenset[str]] = frozenset({"_event_hash", "_prev_event_hash"})
 
 
 @dataclass(frozen=True)
@@ -467,11 +457,7 @@ def _strip_chain_markers(details: object) -> object:
     """
     if not isinstance(details, Mapping):
         return details
-    return {
-        str(k): v
-        for k, v in details.items()
-        if str(k) not in _AUDIT_LOG_CHAIN_MARKER_KEYS
-    }
+    return {str(k): v for k, v in details.items() if str(k) not in _AUDIT_LOG_CHAIN_MARKER_KEYS}
 
 
 def _extract_chain_markers(details: object) -> tuple[str | None, str | None]:
@@ -513,9 +499,7 @@ def _canonical_audit_log_view(
             else None
         ),
         "user_id": (
-            str(getattr(row, "user_id", ""))
-            if getattr(row, "user_id", None) is not None
-            else None
+            str(getattr(row, "user_id", "")) if getattr(row, "user_id", None) is not None else None
         ),
         "action": getattr(row, "action", None),
         "resource_type": getattr(row, "resource_type", None),
@@ -543,9 +527,7 @@ def _compute_audit_log_hash(*, row: Any, prev_hash: str) -> str:
     would also shift the expected hash to match).
     """
     sanitized = _strip_chain_markers(getattr(row, "details", None))
-    canonical = _canonical_audit_log_view(
-        row=row, prev_hash=prev_hash, sanitized_details=sanitized
-    )
+    canonical = _canonical_audit_log_view(row=row, prev_hash=prev_hash, sanitized_details=sanitized)
     return hashlib.sha256(canonical).hexdigest()
 
 
