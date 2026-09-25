@@ -20,6 +20,7 @@ import src.db.models_recon  # noqa: F401 — register recon models in Base.metad
 import src.db.models_web_workbench  # noqa: F401 — register web workbench models in Base.metadata
 import src.execution_mode.models  # noqa: F401 — register execution-mode / LAB rows
 import src.quick.models  # noqa: F401 — register Quick execution-mode rows
+import src.cairn.models  # noqa: F401 — register Cairn blackboard models in Base.metadata
 
 config = context.config
 if config.config_file_name is not None:
