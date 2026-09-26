@@ -58,6 +58,7 @@ class LLMTask(Enum):
     CAIRN_REASON = "cairn_reason"
     CAIRN_EXPLORE = "cairn_explore"
     CAIRN_CONCLUDE = "cairn_conclude"
+    CAIRN_DIRECTIVE = "cairn_directive"
 
 
 _TASK_TO_ROLE: dict[LLMTask, str] = {
@@ -84,6 +85,7 @@ _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.CAIRN_REASON: "planner",
     LLMTask.CAIRN_EXPLORE: "planner",
     LLMTask.CAIRN_CONCLUDE: "planner",
+    LLMTask.CAIRN_DIRECTIVE: "planner",
 }
 
 

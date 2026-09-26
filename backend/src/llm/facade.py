@@ -151,6 +151,7 @@ _TASK_TO_PREFERRED_ALIAS: dict[LLMTask, str] = {
     LLMTask.CAIRN_REASON: "security_reasoner",
     LLMTask.CAIRN_EXPLORE: "security_reasoner",
     LLMTask.CAIRN_CONCLUDE: "security_reasoner",
+    LLMTask.CAIRN_DIRECTIVE: "security_reasoner",
 }
 
 # Pack §13 prompt ids attached when a response schema is requested.
