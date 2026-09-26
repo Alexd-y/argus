@@ -373,6 +373,53 @@ services:
       minio:
         condition: service_healthy
 
+  worker-cairn:
+    # Cairn blackboard engine — dispatcher tick (argus.cairn) + worker tasks
+    # (argus.cairn.workers). Long agent runs live on argus.cairn.workers so they
+    # cannot starve the tick. Inert unless CAIRN_ENABLED=true.
+    image: argus-backend
+    container_name: argus-worker-cairn
+    restart: unless-stopped
+    command: celery -A src.celery_app worker -l INFO -Q argus.cairn,argus.cairn.workers --concurrency 4
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
+      CAIRN_ENABLED: "${CAIRN_ENABLED:-false}"
+      CAIRN_CLI_DRIVERS_ENABLED: "${CAIRN_CLI_DRIVERS_ENABLED:-false}"
+      CAIRN_LOCAL_EXECUTION_ENABLED: "${CAIRN_LOCAL_EXECUTION_ENABLED:-false}"
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
+    volumes:
+      - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   worker-reports:
     image: argus-backend
     container_name: argus-worker-reports

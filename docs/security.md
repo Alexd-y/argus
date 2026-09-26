@@ -68,3 +68,40 @@ Without it, the vulnerability analysis pipeline cannot run security tools.
 - Out-of-scope targets: zero network requests. Absence of a finding is not evidence that a vulnerability is absent.
 
 See `docs/runbooks/quick-mode.md` and `ai_docs/develop/architecture/2026-08-16-adr-quick-execution-mode.md`.
+
+## Cairn execution model
+
+Cairn is a native port of the Cairn Fact–Intent blackboard search engine
+(AGPL-3.0). It is a second, non-deterministic scan engine alongside the linear
+8-phase pipeline. It is **off by default** (`CAIRN_ENABLED=false`); enabling it is
+a deliberate action.
+
+Security model and how the port differs from upstream:
+
+- **No `--dangerously-*` flags.** Upstream launches CLI agents with
+  `--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`
+  and a Kali container on `network_mode: host`. None of this is ported. Every tool
+  the agent runs passes `CairnToolExecutor`'s fail-closed gate chain: task
+  allowlist → `bash` only under `lab_unrestricted` → scope (`ScopeEngine`) →
+  `assert_execution_allowed` (LAB lease / boundary) → approval policy for
+  aggressive tools → budget → sandbox run → secret redaction → evidence.
+- **Hardened sandbox.** `SandboxExecutionBackend` uses the existing
+  `DockerLifecycleSandboxAdapter`: read-only rootfs, `cap_drop=ALL`,
+  `no-new-privileges`, mem/cpu/pids limits, tmpfs workspace, and a **dedicated
+  network — never host**.
+- **CLI parity drivers (claude/codex/pi)** and the **local host-process backend**
+  are fail-closed: only usable under `execution_mode=lab_unrestricted` AND their
+  explicit flags (`CAIRN_CLI_DRIVERS_ENABLED`, `CAIRN_LOCAL_EXECUTION_ENABLED`),
+  both default `false`. Local execution runs the agent with the current user's
+  privileges without a sandbox — a LAB-only convenience.
+- **Multitenancy + RLS.** Every `cairn_*` table carries `tenant_id` with FORCE
+  row-level security; no endpoint returns another tenant's data.
+- **WRB-only analysis.** All Cairn LLM tasks route to WhiteRabbitNeo with no cloud
+  fallback (`LLMTask.CAIRN_*` are absent from `_CLOUD_FALLBACK_TASKS`).
+- **Prompt-injection defense.** The graph is populated by external tool output and
+  is a prompt-injection vector; all untrusted content is wrapped in
+  `<untrusted_input>` before it reaches a model.
+- **Config invariant.** `CAIRN_INTENT_TIMEOUT_SEC` / `CAIRN_REASON_TIMEOUT_SEC`
+  must exceed `CAIRN_TICK_INTERVAL_SEC` (validated at startup, upstream D-02).
+
+Deliberate deviations from upstream are tracked in `docs/cairn_port_deviations.md`.

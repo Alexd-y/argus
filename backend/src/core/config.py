@@ -608,9 +608,107 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LAB_CLOUD_ALLOWED", "lab_cloud_allowed"),
     )
 
-    # Cairn worker-driver gating (full Cairn config block lands in Phase 10).
-    # CLI parity drivers (claude/codex/pi) are only usable under lab_unrestricted
-    # AND when this flag is on; default off keeps them fail-closed in production.
+    # ------------------------------------------------------------------
+    # Cairn blackboard engine (§12.1). OFF by default — enabling is deliberate.
+    # ------------------------------------------------------------------
+    cairn_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("CAIRN_ENABLED", "cairn_enabled"),
+    )
+    cairn_default_engine: str = Field(
+        default="pipeline",
+        validation_alias=AliasChoices("CAIRN_DEFAULT_ENGINE", "cairn_default_engine"),
+    )
+    cairn_tick_interval_sec: int = Field(
+        default=10,
+        validation_alias=AliasChoices("CAIRN_TICK_INTERVAL_SEC", "cairn_tick_interval_sec"),
+    )
+    cairn_intent_timeout_sec: int = Field(
+        default=900,
+        validation_alias=AliasChoices("CAIRN_INTENT_TIMEOUT_SEC", "cairn_intent_timeout_sec"),
+    )
+    cairn_reason_timeout_sec: int = Field(
+        default=900,
+        validation_alias=AliasChoices("CAIRN_REASON_TIMEOUT_SEC", "cairn_reason_timeout_sec"),
+    )
+    cairn_max_workers: int = Field(
+        default=8, validation_alias=AliasChoices("CAIRN_MAX_WORKERS", "cairn_max_workers")
+    )
+    cairn_max_running_projects: int = Field(
+        default=3,
+        validation_alias=AliasChoices("CAIRN_MAX_RUNNING_PROJECTS", "cairn_max_running_projects"),
+    )
+    cairn_max_project_workers: int = Field(
+        default=4,
+        validation_alias=AliasChoices("CAIRN_MAX_PROJECT_WORKERS", "cairn_max_project_workers"),
+    )
+    cairn_max_intents_per_reason: int = Field(
+        default=3,
+        validation_alias=AliasChoices(
+            "CAIRN_MAX_INTENTS_PER_REASON", "cairn_max_intents_per_reason"
+        ),
+    )
+    cairn_bootstrap_timeout_sec: int = Field(
+        default=1800,
+        validation_alias=AliasChoices("CAIRN_BOOTSTRAP_TIMEOUT_SEC", "cairn_bootstrap_timeout_sec"),
+    )
+    cairn_bootstrap_conclude_timeout_sec: int = Field(
+        default=300,
+        validation_alias=AliasChoices(
+            "CAIRN_BOOTSTRAP_CONCLUDE_TIMEOUT_SEC", "cairn_bootstrap_conclude_timeout_sec"
+        ),
+    )
+    cairn_reason_timeout_task_sec: int = Field(
+        default=600,
+        validation_alias=AliasChoices(
+            "CAIRN_REASON_TIMEOUT_TASK_SEC", "cairn_reason_timeout_task_sec"
+        ),
+    )
+    cairn_explore_timeout_sec: int = Field(
+        default=1800,
+        validation_alias=AliasChoices("CAIRN_EXPLORE_TIMEOUT_SEC", "cairn_explore_timeout_sec"),
+    )
+    cairn_explore_conclude_timeout_sec: int = Field(
+        default=300,
+        validation_alias=AliasChoices(
+            "CAIRN_EXPLORE_CONCLUDE_TIMEOUT_SEC", "cairn_explore_conclude_timeout_sec"
+        ),
+    )
+    cairn_worker_healthcheck: str = Field(
+        default="startup_only",
+        validation_alias=AliasChoices("CAIRN_WORKER_HEALTHCHECK", "cairn_worker_healthcheck"),
+    )
+    cairn_healthcheck_timeout_sec: int = Field(
+        default=20,
+        validation_alias=AliasChoices(
+            "CAIRN_HEALTHCHECK_TIMEOUT_SEC", "cairn_healthcheck_timeout_sec"
+        ),
+    )
+    cairn_unhealthy_backoff_sec: int = Field(
+        default=5,
+        validation_alias=AliasChoices("CAIRN_UNHEALTHY_BACKOFF_SEC", "cairn_unhealthy_backoff_sec"),
+    )
+    cairn_rejected_backoff_sec: int = Field(
+        default=5,
+        validation_alias=AliasChoices("CAIRN_REJECTED_BACKOFF_SEC", "cairn_rejected_backoff_sec"),
+    )
+    cairn_container_completed_action: str = Field(
+        default="remove",
+        validation_alias=AliasChoices(
+            "CAIRN_CONTAINER_COMPLETED_ACTION", "cairn_container_completed_action"
+        ),
+    )
+    cairn_max_graph_facts: int = Field(
+        default=500, validation_alias=AliasChoices("CAIRN_MAX_GRAPH_FACTS", "cairn_max_graph_facts")
+    )
+    cairn_max_graph_depth: int = Field(
+        default=25, validation_alias=AliasChoices("CAIRN_MAX_GRAPH_DEPTH", "cairn_max_graph_depth")
+    )
+    cairn_prompt_group: str = Field(
+        default="default", validation_alias=AliasChoices("CAIRN_PROMPT_GROUP", "cairn_prompt_group")
+    )
+    # CLI parity drivers (claude/codex/pi) — only usable under lab_unrestricted AND
+    # when this flag is on; default off keeps them fail-closed in production.
     cairn_cli_drivers_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("CAIRN_CLI_DRIVERS_ENABLED", "cairn_cli_drivers_enabled"),
@@ -623,6 +721,19 @@ class Settings(BaseSettings):
             "CAIRN_LOCAL_EXECUTION_ENABLED", "cairn_local_execution_enabled"
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_cairn_timeouts(self) -> Self:
+        """Port D-02: server timeouts must exceed the tick interval."""
+        if self.cairn_intent_timeout_sec <= self.cairn_tick_interval_sec:
+            raise ValueError(
+                "cairn_intent_timeout_sec must be greater than cairn_tick_interval_sec"
+            )
+        if self.cairn_reason_timeout_sec <= self.cairn_tick_interval_sec:
+            raise ValueError(
+                "cairn_reason_timeout_sec must be greater than cairn_tick_interval_sec"
+            )
+        return self
 
     # ARG-044 — Intelligence ingest (EPSS / KEV)
     # When True, the daily EPSS / KEV refresh tasks short-circuit and the
