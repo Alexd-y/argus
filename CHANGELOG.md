@@ -4,6 +4,36 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Cairn blackboard engine — native port (2026-09-26)
+
+Native port of the Cairn Fact–Intent blackboard search engine (AGPL-3.0) into ARGUS
+as a second, non-deterministic scan engine alongside the linear 8-phase pipeline.
+**Off by default** (`CAIRN_ENABLED=false`). Phases 1–12 landed:
+
+- **Data model + migration `066`:** 10 tenant-scoped `cairn_*` tables (String(36) PKs,
+  per-tenant FORCE RLS, fence tokens, durable task-run/backoff rows). Atomic scoped
+  ref-id generation (`proj_001`/`f001`/`i001`/`h001`).
+- **Async graph service:** full protocol invariants (create/claim/release/conclude/
+  reason-lease/complete/reopen/hints/settings/expiry) with 1:1 HTTP-status parity;
+  concurrency via `SELECT FOR UPDATE` + fence tokens (single-winner claim/reason).
+- **REST API** under `/api/v1/cairn` (17 routes, tenant auth, AuditLog, YAML/timeline export).
+- **Contracts + parser** (tolerant JSON extraction, reason/bootstrap/explore validators,
+  JSON schemas), **5 signed prompts** (WRB, RoE, conclude-override, untrusted_input).
+- **Worker drivers:** `WrbAgentDriver` (ReActAgent + WRB, no cloud fallback) + opt-in
+  CLI parity drivers with the upstream `--dangerously-*` flags removed.
+- **Execution runtime:** hardened `SandboxExecutionBackend` (dedicated network, not host)
+  + lab-only `LocalExecutionBackend` + `CairnToolExecutor` fail-closed gate chain
+  (allowlist → scope → lease gate → approval → budget → redaction → evidence).
+- **Celery dispatcher:** worker selection + backoff, task-selection decisions, worker-task
+  lifecycle with conclude-fallback, flag-gated tick.
+- **Pipeline seam + Fact→Finding bridge:** a fact with no artifact/evidence can never be
+  promoted above `SUSPECTED`; provenance links findings to the Cairn graph.
+- **Config** (`cairn_*` settings + `timeout > tick` validator), **compose** `worker-cairn`,
+  **Admin UI** (`/cairn` — project list, SVG Fact–Intent graph, hints, timeline).
+- **Tests:** 150 green (unit + `requires_postgres`), incl. RLS, concurrency, mock e2e.
+- Docs: `docs/cairn.md`, `docs/cairn_port_deviations.md`, `docs/third_party/cairn.md`,
+  `docs/security.md` (Cairn execution model). Attribution: AGPL-3.0, upstream v0.2.1.
+
 - **Security (SEC-001):** sanitized `infra/.env.example` provider placeholders — operators must still rotate keys and purge git history.
 
 ### Batch 5 orchestration — Webhook DLQ + Kyverno admission (2026-04-22)
