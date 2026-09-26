@@ -103,6 +103,19 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "schedule": _interval(seconds=30),
         "options": {"queue": "argus.scans"},
     },
+    # Cairn dispatcher tick (flag-gated by cairn_enabled; the task no-ops when
+    # disabled). Default 10s cadence; per-tenant timeouts are validated to exceed it.
+    "argus.cairn.tick": {
+        "task": "argus.cairn.tick",
+        "schedule": _interval(seconds=10),
+        "options": {"queue": "argus.cairn"},
+    },
+    # Cairn orphan-container / stale-task sweep — every 60s.
+    "argus.cairn.sweep": {
+        "task": "argus.cairn.sweep",
+        "schedule": _interval(seconds=60),
+        "options": {"queue": "argus.cairn"},
+    },
 }
 
 

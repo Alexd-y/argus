@@ -43,6 +43,10 @@ app = Celery(
         # WB-P4b — Web Workbench Intruder execution (high-volume send loop) on
         # its own dedicated queue so it cannot starve scan / report queues.
         "src.web_workbench.intruder.tasks",
+        # Cairn blackboard engine — dispatcher tick + worker tasks (flag-gated,
+        # cairn_enabled=False by default). Scheduler tasks on argus.cairn, worker
+        # tasks on argus.cairn.workers so long agent runs cannot starve the tick.
+        "src.cairn.tasks",
     ],
 )
 
@@ -94,6 +98,13 @@ app.conf.update(
         # WB-P4b — Intruder high-volume attack runner on an isolated queue so a
         # large attack cannot starve scan / report / tool queues.
         "argus.wb.intruder.run": {"queue": "argus.intruder.highvol"},
+        # Cairn dispatcher (scheduler) vs worker (long agent runs) queues.
+        "argus.cairn.tick": {"queue": "argus.cairn"},
+        "argus.cairn.sweep": {"queue": "argus.cairn"},
+        "argus.cairn.cleanup": {"queue": "argus.cairn"},
+        "argus.cairn.bootstrap": {"queue": "argus.cairn.workers"},
+        "argus.cairn.reason": {"queue": "argus.cairn.workers"},
+        "argus.cairn.explore": {"queue": "argus.cairn.workers"},
     },
     task_default_queue="argus.default",
 )
