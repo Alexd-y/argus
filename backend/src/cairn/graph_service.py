@@ -839,6 +839,29 @@ async def reopen_project(
 # --- hints -------------------------------------------------------------------
 
 
+async def stop_projects_for_scan(session: AsyncSession, tenant_id: str, scan_id: str) -> int:
+    """Move all active Cairn projects linked to ``scan_id`` to ``stopped`` (§11.4).
+
+    Also clears worker claims on open intents and the reason-lease, mirroring the
+    ``update_project_status`` stop path. Returns the number of projects stopped.
+    """
+    project_ids = [
+        pid
+        for (pid,) in (
+            await session.execute(
+                select(CairnProject.id).where(
+                    CairnProject.tenant_id == tenant_id,
+                    CairnProject.scan_id == scan_id,
+                    CairnProject.status == "active",
+                )
+            )
+        ).all()
+    ]
+    for pid in project_ids:
+        await update_project_status(session, tenant_id, pid, "stopped")
+    return len(project_ids)
+
+
 async def create_hint(
     session: AsyncSession,
     tenant_id: str,
@@ -890,6 +913,7 @@ __all__ = [
     "release_intent",
     "release_reason",
     "reopen_project",
+    "stop_projects_for_scan",
     "update_project_status",
     "update_project_title",
     "update_settings",

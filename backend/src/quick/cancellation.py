@@ -256,6 +256,16 @@ async def propagate_scan_cancellation(
                 "quick_task_cancel_failed",
                 extra={"event": "quick_task_cancel_failed", "scan_id": scan_id},
             )
+        try:
+            # §11.4 — a cancelled scan stops its linked Cairn project(s).
+            from src.cairn import graph_service as _cairn_gs
+
+            await _cairn_gs.stop_projects_for_scan(session, tenant_id, scan_id)
+        except Exception:  # noqa: BLE001 — missing cairn tables must not fail cancel
+            logger.warning(
+                "cairn_cancel_propagation_failed",
+                extra={"event": "cairn_cancel_propagation_failed", "scan_id": scan_id},
+            )
     revoked: tuple[str, ...] = ()
     celery_ok = True
     sandbox_ok = False
