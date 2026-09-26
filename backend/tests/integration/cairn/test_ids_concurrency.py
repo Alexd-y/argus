@@ -4,49 +4,26 @@ AC: 1000 concurrent increments produce 1000 unique refs. The atomic
 ``INSERT ... ON CONFLICT DO UPDATE RETURNING`` in ``src/cairn/ids.py`` must give
 every concurrent caller a distinct value, without a single-writer dispatcher.
 
-Run locally (PowerShell)::
-
-    docker run --rm -d --name argus-pg -p 55432:5432 -e POSTGRES_PASSWORD=argus `
-        -e POSTGRES_DB=argus_test postgres:15
-    $env:ARGUS_TEST_PG_DSN = "postgresql+asyncpg://postgres:argus@localhost:55432/argus_test"
-    $env:DATABASE_URL = $env:ARGUS_TEST_PG_DSN
-    .\.venv\Scripts\python.exe -m pytest tests/integration/cairn/test_ids_concurrency.py -m requires_postgres
+Uses the shared ``migrated_db`` / ``async_engine`` fixtures (migrations run in a
+sync fixture — never inside the running event loop of an async test).
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
-from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from src.cairn.ids import next_fact_ref
 
-pytestmark = pytest.mark.requires_postgres
+from .conftest import skip_without_pg
 
-_DSN = os.environ.get("ARGUS_TEST_PG_DSN", "")
-_BACKEND_ROOT = Path(__file__).resolve().parents[3]
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _require_dsn() -> None:
-    if not _DSN:
-        pytest.skip("ARGUS_TEST_PG_DSN not set")
+pytestmark = [pytest.mark.requires_postgres, skip_without_pg]
 
 
-def _alembic_config() -> Config:
-    cfg = Config(str(_BACKEND_ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", _DSN)
-    return cfg
-
-
-async def _seed_tenant_and_project(engine) -> tuple[str, str]:
+async def _seed_tenant_and_project(engine: AsyncEngine) -> tuple[str, str]:
     tenant_id = uuid.uuid4().hex
     project_id = uuid.uuid4().hex
     async with engine.begin() as conn:
@@ -54,6 +31,7 @@ async def _seed_tenant_and_project(engine) -> tuple[str, str]:
             text("INSERT INTO tenants (id, name) VALUES (:id, :name)"),
             {"id": tenant_id, "name": f"cairn-ids-{tenant_id[:8]}"},
         )
+        await conn.execute(text(f"SET app.current_tenant_id = '{tenant_id}'"))
         await conn.execute(
             text("""
                 INSERT INTO cairn_projects (id, ref, tenant_id, title, status)
@@ -64,25 +42,17 @@ async def _seed_tenant_and_project(engine) -> tuple[str, str]:
     return tenant_id, project_id
 
 
-@pytest.mark.requires_postgres
-async def test_1000_concurrent_fact_refs_are_unique() -> None:
-    command.upgrade(_alembic_config(), "head")
-    engine = create_async_engine(_DSN, pool_size=20, max_overflow=40, pool_pre_ping=True)
-    try:
-        tenant_id, project_id = await _seed_tenant_and_project(engine)
-        sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+async def test_1000_concurrent_fact_refs_are_unique(async_engine: AsyncEngine) -> None:
+    tenant_id, project_id = await _seed_tenant_and_project(async_engine)
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
 
-        async def _one() -> str:
-            async with sessionmaker() as session:
-                ref = await next_fact_ref(session, tenant_id, project_id)
-                await session.commit()
-                return ref
+    async def _one() -> str:
+        async with session_factory() as session, session.begin():
+            await session.execute(text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'"))
+            return await next_fact_ref(session, tenant_id, project_id)
 
-        refs = await asyncio.gather(*[_one() for _ in range(1000)])
-        assert len(refs) == 1000
-        assert len(set(refs)) == 1000, "duplicate refs generated under concurrency"
-        # Values form the contiguous set f001..f1000 (order irrelevant).
-        values = sorted(int(r[1:]) for r in refs)
-        assert values == list(range(1, 1001))
-    finally:
-        await engine.dispose()
+    refs = await asyncio.gather(*[_one() for _ in range(1000)])
+    assert len(refs) == 1000
+    assert len(set(refs)) == 1000, "duplicate refs generated under concurrency"
+    values = sorted(int(r[1:]) for r in refs)
+    assert values == list(range(1, 1001))

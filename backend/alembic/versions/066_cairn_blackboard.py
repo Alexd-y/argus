@@ -406,9 +406,11 @@ def upgrade() -> None:
         )
         op.create_index("ix_cairn_worker_backoff_until", "cairn_worker_backoff", ["blocked_until"])
 
-    # Row-level security — tenant isolation, mirrors migration 002.
+    # Row-level security — tenant isolation, mirrors migration 002 + the FORCE
+    # convention from 052+ (the table owner bypasses RLS unless FORCE is set).
     for table in _RLS_TABLES:
         op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        op.execute(f'ALTER TABLE "{table}" FORCE ROW LEVEL SECURITY')
         op.execute(f"""
             CREATE POLICY tenant_isolation ON "{table}"
             USING (tenant_id = current_setting('app.current_tenant_id', true)::text)
