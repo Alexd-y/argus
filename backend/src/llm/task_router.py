@@ -53,6 +53,11 @@ class LLMTask(Enum):
     QUICK_TRIAGE = "quick_triage"
     QUICK_CRITIC = "quick_critic"
     QUICK_REPORTER = "quick_reporter"
+    # Cairn blackboard engine — pentest analysis, WRB-only (no cloud fallback).
+    CAIRN_BOOTSTRAP = "cairn_bootstrap"
+    CAIRN_REASON = "cairn_reason"
+    CAIRN_EXPLORE = "cairn_explore"
+    CAIRN_CONCLUDE = "cairn_conclude"
 
 
 _TASK_TO_ROLE: dict[LLMTask, str] = {
@@ -75,6 +80,10 @@ _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.QUICK_TRIAGE: "planner",
     LLMTask.QUICK_CRITIC: "planner",
     LLMTask.QUICK_REPORTER: "report",
+    LLMTask.CAIRN_BOOTSTRAP: "planner",
+    LLMTask.CAIRN_REASON: "planner",
+    LLMTask.CAIRN_EXPLORE: "planner",
+    LLMTask.CAIRN_CONCLUDE: "planner",
 }
 
 

@@ -608,6 +608,22 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LAB_CLOUD_ALLOWED", "lab_cloud_allowed"),
     )
 
+    # Cairn worker-driver gating (full Cairn config block lands in Phase 10).
+    # CLI parity drivers (claude/codex/pi) are only usable under lab_unrestricted
+    # AND when this flag is on; default off keeps them fail-closed in production.
+    cairn_cli_drivers_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("CAIRN_CLI_DRIVERS_ENABLED", "cairn_cli_drivers_enabled"),
+    )
+    # Local (host-process) execution backend — only under lab_unrestricted; runs the
+    # agent with the current user's privileges WITHOUT a sandbox. Default off.
+    cairn_local_execution_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "CAIRN_LOCAL_EXECUTION_ENABLED", "cairn_local_execution_enabled"
+        ),
+    )
+
     # ARG-044 — Intelligence ingest (EPSS / KEV)
     # When True, the daily EPSS / KEV refresh tasks short-circuit and the
     # inline EPSS / KEV clients return ``None`` / ``False`` rather than

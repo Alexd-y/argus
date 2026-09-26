@@ -145,6 +145,12 @@ _TASK_TO_PREFERRED_ALIAS: dict[LLMTask, str] = {
     LLMTask.QUICK_TRIAGE: "quick_triage",
     LLMTask.QUICK_CRITIC: "quick_critic",
     LLMTask.QUICK_REPORTER: "quick_reporter",
+    # Cairn analysis tasks — WRB-first via security_reasoner; NEVER cloud (not in
+    # _CLOUD_FALLBACK_TASKS). Phase 15 remaps these to local qwythos/WRB chains.
+    LLMTask.CAIRN_BOOTSTRAP: "security_reasoner",
+    LLMTask.CAIRN_REASON: "security_reasoner",
+    LLMTask.CAIRN_EXPLORE: "security_reasoner",
+    LLMTask.CAIRN_CONCLUDE: "security_reasoner",
 }
 
 # Pack §13 prompt ids attached when a response schema is requested.
@@ -156,6 +162,10 @@ _SCHEMA_BOUND_PROMPT_IDS: dict[LLMTask, str] = {
     LLMTask.QUICK_TRIAGE: "quick_finding_triage_v1",
     LLMTask.QUICK_CRITIC: "quick_security_critic_v1",
     LLMTask.QUICK_REPORTER: "quick_reporter_v1",
+    LLMTask.CAIRN_BOOTSTRAP: "cairn_bootstrap_v1",
+    LLMTask.CAIRN_REASON: "cairn_reason_v1",
+    LLMTask.CAIRN_EXPLORE: "cairn_explore_v1",
+    LLMTask.CAIRN_CONCLUDE: "cairn_explore_conclude_v1",
 }
 
 _QUICK_TASKS: frozenset[LLMTask] = frozenset(
