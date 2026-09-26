@@ -288,8 +288,11 @@ class Settings(BaseSettings):
     # Opt-in + fail-soft: never breaks standard tier outputs. Requires a
     # configured report LLM provider; without one the release is an honest
     # incomplete draft, not a false final.
+    # Default ON (Phase 16 / operator requirement): every finding gets an LLM
+    # remediation plan + closure conclusion via the cloud report LLM. Set to false
+    # only for offline/air-gapped runs with no report LLM provider.
     valhalla_llm_remediation_enabled: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices(
             "ARGUS_VALHALLA_LLM_REMEDIATION",
             "valhalla_llm_remediation_enabled",

@@ -92,6 +92,9 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset(
         LLMTask.EXECUTIVE_SUMMARY,
         LLMTask.COST_SUMMARY,
         LLMTask.CLOSURE_ASSESSMENT,
+        # Remediation conclusions for found/exploited vulns use the cloud LLM API
+        # (operator requirement): richer, contract-abiding prose than the local 7B.
+        LLMTask.REMEDIATION_PLAN,
         LLMTask.PERPLEXITY_OSINT,
     }
 )

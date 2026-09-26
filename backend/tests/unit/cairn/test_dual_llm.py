@@ -34,6 +34,22 @@ def test_cloud_fallback_disabled_switch(monkeypatch) -> None:
     assert facade._cloud_fallback_allowed(LLMTask.CAIRN_REASON) is False
 
 
+def test_remediation_and_closure_conclusions_use_cloud_by_default(monkeypatch) -> None:
+    """Operator requirement: report conclusions on found/exploited vulns + remediation
+    conclusions route to the cloud LLM API by default."""
+    from src.llm import facade
+    from src.llm.task_router import LLMTask
+
+    monkeypatch.setattr(facade.settings, "llm_cloud_disabled", False, raising=False)
+    assert facade._cloud_fallback_allowed(LLMTask.REMEDIATION_PLAN) is True
+    assert facade._cloud_fallback_allowed(LLMTask.CLOSURE_ASSESSMENT) is True
+    assert facade._cloud_fallback_allowed(LLMTask.EXECUTIVE_SUMMARY) is True
+
+
+def test_valhalla_remediation_enabled_by_default() -> None:
+    assert Settings(_env_file=None).valhalla_llm_remediation_enabled is True
+
+
 def test_aws_dual_local_routing_yaml_is_valid() -> None:
     from src.llm.phase_routing import _VALID_FALLBACKS, _VALID_MODES
 
