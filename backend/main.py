@@ -30,6 +30,7 @@ from src.api.routers import (
     billing_webhook,
     bounty,
     cache,
+    cairn,
     execution_mode,
     findings,
     health,
@@ -51,6 +52,7 @@ from src.api.routers import (
     ws,
 )
 from src.api.routers.admin_gateway import router as admin_gateway_router
+from src.cairn.errors import CairnError
 from src.api.routers.analysis import router as analysis_router
 from src.api.routers.benchmarks import router as benchmarks_router
 from src.api.routers.binary_triage import router as binary_router
@@ -312,6 +314,8 @@ app.include_router(admin_password.router, prefix="/api/v1")
 app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(cairn.router, prefix="/api/v1/cairn", dependencies=tenant_auth)
+app.add_exception_handler(CairnError, cairn.cairn_error_handler)
 app.include_router(quick.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(quota.router, prefix="/api/v1", dependencies=tenant_auth)
 # Stripe webhook: no tenant auth — authenticity via signature verification.

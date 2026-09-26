@@ -209,6 +209,11 @@ async def _intent_for_update(
     return row
 
 
+async def intent_source_refs(session: AsyncSession, intent_id: str) -> list[str]:
+    """Public accessor for an intent's ordered ``from`` source refs."""
+    return await _source_refs(session, intent_id)
+
+
 async def _source_refs(session: AsyncSession, intent_id: str) -> list[str]:
     stmt = (
         select(CairnFact.ref)
@@ -880,6 +885,7 @@ __all__ = [
     "get_project",
     "get_settings",
     "heartbeat_reason",
+    "intent_source_refs",
     "list_projects",
     "release_intent",
     "release_reason",
