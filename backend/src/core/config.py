@@ -722,6 +722,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ------------------------------------------------------------------
+    # Phase 15 — AWS dual local LLM (WhiteRabbitNeo + qwythos).
+    # ------------------------------------------------------------------
+    # Fail-closed cloud switch: when True, cloud fallback is treated as empty for
+    # EVERY task (report tasks included), so a dual-local-LLM deployment never
+    # reaches a cloud adapter. Default False preserves existing behaviour; the AWS
+    # profile sets ARGUS_LLM_CLOUD_DISABLED=true.
+    llm_cloud_disabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ARGUS_LLM_CLOUD_DISABLED", "llm_cloud_disabled"),
+    )
+    # qwythos — the second local reasoner (structured / long-context). qwythos_url
+    # already exists above; these add model/context/key/timeout.
+    qwythos_model: str = Field(
+        default="Qwen/qwythos-32B",
+        validation_alias=AliasChoices("QWYTHOS_MODEL", "qwythos_model"),
+    )
+    qwythos_max_context: int = Field(
+        default=32768,
+        validation_alias=AliasChoices("QWYTHOS_MAX_CONTEXT", "qwythos_max_context"),
+    )
+    qwythos_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("QWYTHOS_API_KEY", "qwythos_api_key"),
+    )
+    qwythos_timeout_sec: int = Field(
+        default=1800,
+        validation_alias=AliasChoices("QWYTHOS_TIMEOUT_SEC", "qwythos_timeout_sec"),
+    )
+
     @model_validator(mode="after")
     def _validate_cairn_timeouts(self) -> Self:
         """Port D-02: server timeouts must exceed the tick interval."""

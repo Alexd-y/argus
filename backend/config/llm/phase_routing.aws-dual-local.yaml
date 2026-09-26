@@ -1,0 +1,90 @@
+# Phase-aware LLM routing — AWS dual-local profile (WhiteRabbitNeo + qwythos).
+#
+# Select with ARGUS_PHASE_ROUTING_CONFIG=config/llm/phase_routing.aws-dual-local.yaml
+# and ARGUS_PHASE_ROUTING_ENABLED=true. Combined with ARGUS_LLM_CLOUD_DISABLED=true,
+# no phase ever reaches a cloud adapter — both reasoners are local.
+#
+# Roles: WRB = offensive reasoner (exploitation, Cairn explore/bootstrap).
+#        qwythos = structured / long-context reasoner (planning, reason, directives,
+#        triage, JSON contracts, reports).
+version: 2026-09-argus-aws-dual-local-v1
+
+phases:
+  recon:
+    primary_alias: argus-planner-fast
+    mode: qwythos
+    fallback: wrb
+    evidence_contract: recon_digest_v1
+    degrade: use_primary_only
+
+  threat_modeling:
+    primary_alias: argus-planner-deep
+    mode: qwythos
+    fallback: wrb
+    reviewer_alias: argus-devsecops-local
+    evidence_contract: threat_model_input_v1
+    degrade: drop_review_first
+
+  vuln_analysis:
+    primary_alias: argus-planner-deep
+    mode: qwythos
+    fallback: wrb
+    reviewer_alias: argus-judge
+    evidence_contract: vuln_evidence_pack_v2
+    degrade: fast_without_review
+
+  exploitation:
+    primary_alias: argus-devsecops-local
+    mode: wrb
+    fallback: qwythos
+    evidence_contract: exploit_candidate_pack_v1
+    degrade: local_only
+
+  post_exploitation:
+    primary_alias: argus-devsecops-local
+    mode: wrb
+    fallback: qwythos
+    evidence_contract: post_exploit_impact_pack_v1
+    degrade: skip_review
+
+  reporting:
+    primary_alias: argus-report
+    mode: qwythos
+    fallback: wrb
+    evidence_contract: report_section_input_v1
+    degrade: concise_mode
+
+  quick_planner:
+    primary_alias: argus-planner-fast
+    mode: qwythos
+    fallback: none
+    evidence_contract: recon_digest_v1
+    degrade: deterministic_planner
+
+  quick_fingerprint:
+    primary_alias: argus-planner-fast
+    mode: qwythos
+    fallback: none
+    evidence_contract: recon_digest_v1
+    degrade: rules
+
+  quick_triage:
+    primary_alias: argus-planner-fast
+    mode: qwythos
+    fallback: none
+    evidence_contract: vuln_evidence_pack_v2
+    degrade: rules
+
+  quick_critic:
+    primary_alias: argus-planner-deep
+    mode: qwythos
+    fallback: none
+    evidence_contract: vuln_evidence_pack_v2
+    degrade: needs_verification
+
+  quick_reporter:
+    primary_alias: argus-report
+    mode: qwythos
+    fallback: none
+    evidence_contract: report_section_input_v1
+    degrade: template_renderer

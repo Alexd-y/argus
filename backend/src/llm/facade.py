@@ -96,6 +96,19 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset(
     }
 )
 
+
+def _cloud_fallback_allowed(task: LLMTask) -> bool:
+    """Whether cloud fallback is permitted for ``task``.
+
+    Phase 15 fail-closed switch: when ``settings.llm_cloud_disabled`` is on, the
+    cloud fallback set is treated as empty for EVERY task (report tasks included),
+    so an AWS dual-local-LLM deployment never reaches a cloud adapter.
+    """
+    if getattr(settings, "llm_cloud_disabled", False):
+        return False
+    return task in _CLOUD_FALLBACK_TASKS
+
+
 # Tasks that PREFER a cloud model: exploit/PoC payload generation requires strict,
 # valid-JSON output. The local WRB-7B frequently emits malformed payload JSON
 # (`wrb_payload_generation_failed`); cloud models honour the "return ONLY JSON"
@@ -420,7 +433,7 @@ async def _call_via_unified_gateway(
     )
     envelope = await gateway.generate(request)
 
-    if envelope.status == LlmResponseStatus.PROVIDER_ERROR and task in _CLOUD_FALLBACK_TASKS:
+    if envelope.status == LlmResponseStatus.PROVIDER_ERROR and _cloud_fallback_allowed(task):
         logger.info(
             "unified_gateway_provider_error_cloud_fallback",
             extra={
@@ -1270,7 +1283,7 @@ async def _call_llm_unified_impl(
                     },
                 )
                 # Cloud fallback only for report-supplement tasks
-                if task in _CLOUD_FALLBACK_TASKS:
+                if _cloud_fallback_allowed(task):
                     logger.info(
                         "whiterabbitneo_fallback_to_cloud",
                         extra={
@@ -1309,7 +1322,7 @@ async def _call_llm_unified_impl(
     # confidentiality invariant (WRB-001) that pentest analysis never leaves the
     # box. Exploit/PoC tasks reach this point only when no cloud path applied
     # earlier (no key, or ARGUS_EXPLOIT_LLM=wrb), so they fail closed too.
-    if task in _CLOUD_FALLBACK_TASKS:
+    if _cloud_fallback_allowed(task):
         logger.info(
             "whiterabbitneo_not_configured_using_cloud_fallback",
             extra={
@@ -1475,12 +1488,16 @@ async def call_llm_with_escalation(
         extra={
             "event": "confidence_escalation",
             "task": task.value,
-            "original_tier": escalation.original_tier.value
-            if hasattr(escalation.original_tier, "value")
-            else str(escalation.original_tier),
-            "escalated_tier": escalation.escalated_tier.value
-            if hasattr(escalation.escalated_tier, "value")
-            else str(escalation.escalated_tier),
+            "original_tier": (
+                escalation.original_tier.value
+                if hasattr(escalation.original_tier, "value")
+                else str(escalation.original_tier)
+            ),
+            "escalated_tier": (
+                escalation.escalated_tier.value
+                if hasattr(escalation.escalated_tier, "value")
+                else str(escalation.escalated_tier)
+            ),
             "confidence": confidence,
             "threshold": escalation.threshold,
             "scan_id": scan_id,
