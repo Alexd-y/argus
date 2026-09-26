@@ -178,6 +178,55 @@ def unclassified_findings_in_registry(findings: list[dict[str, Any]]) -> list[di
     return offenders
 
 
+def valhalla_release_blockers(
+    *,
+    snapshot: dict[str, Any],
+    sections: dict[str, Any],
+    report_text: str,
+    findings: list[dict[str, Any]],
+    requested_tier: str,
+    actual_tier: str,
+    llm_analysis_status: str,
+) -> list[str]:
+    """Aggregate the blocking rules that must prevent a Valhalla release (§20.11).
+
+    Returns a list of human-readable blocking reasons (empty == releasable). This is
+    additive: the pipeline/quality gate calls it to fail-closed instead of shipping a
+    defective report. Covers VP-01 (tier swap), VP-02 (placeholder), VP-04
+    (source/section mismatch), VP-05 (unclassified in registry) and §9 (LLM analysis
+    incomplete but release marked ready).
+    """
+    blockers: list[str] = []
+
+    # VP-01 — requested tier must equal the rendered tier.
+    if requested_tier.strip().lower() != actual_tier.strip().lower():
+        blockers.append(f"VP-01: requested tier '{requested_tier}' but report is '{actual_tier}'")
+
+    # VP-02 — placeholder / stop-list phrases.
+    for phrase in find_stop_list_violations(report_text):
+        blockers.append(f"VP-02: stop-list phrase present: '{phrase}'")
+
+    # VP-04 — a non-empty source with an empty section.
+    completeness = validate_valhalla_completeness(snapshot, sections)
+    for violation in completeness.violations:
+        blockers.append(f"VP-04: {violation.reason}")
+
+    # VP-05 — unclassified observations must not sit in the findings registry.
+    offenders = unclassified_findings_in_registry(findings)
+    if offenders:
+        blockers.append(
+            f"VP-05: {len(offenders)} unclassified observation(s) in the findings registry"
+        )
+
+    # §9 — LLM analysis must be complete for a ready release.
+    if llm_analysis_status.strip().lower() != "completed":
+        blockers.append(
+            f"LLM analysis not complete (status='{llm_analysis_status}') — release cannot be final"
+        )
+
+    return blockers
+
+
 __all__ = [
     "STOP_LIST_PHRASES",
     "VALHALLA_REQUIRED_SOURCES",
@@ -187,4 +236,5 @@ __all__ = [
     "find_stop_list_violations",
     "unclassified_findings_in_registry",
     "validate_valhalla_completeness",
+    "valhalla_release_blockers",
 ]

@@ -6,8 +6,48 @@ from src.reports.valhalla_completeness import (
     VALHALLA_REQUIRED_SOURCES,
     find_stop_list_violations,
     unclassified_findings_in_registry,
+    valhalla_release_blockers,
     validate_valhalla_completeness,
 )
+
+
+def _blockers(**over):
+    kwargs = {
+        "snapshot": {},
+        "sections": {},
+        "report_text": "",
+        "findings": [],
+        "requested_tier": "valhalla",
+        "actual_tier": "valhalla",
+        "llm_analysis_status": "completed",
+    }
+    kwargs.update(over)
+    return valhalla_release_blockers(**kwargs)
+
+
+def test_release_ok_when_all_clean() -> None:
+    assert _blockers() == []
+
+
+def test_release_blocks_on_tier_swap() -> None:
+    blockers = _blockers(actual_tier="midgard")
+    assert any("VP-01" in b for b in blockers)
+
+
+def test_release_blocks_on_placeholder() -> None:
+    blockers = _blockers(report_text="PoC details are available in Asgard / Valhalla reports.")
+    assert any("VP-02" in b for b in blockers)
+
+
+def test_release_blocks_on_incomplete_llm() -> None:
+    blockers = _blockers(llm_analysis_status="failed")
+    assert any("LLM analysis not complete" in b for b in blockers)
+
+
+def test_release_blocks_on_source_section_mismatch() -> None:
+    blockers = _blockers(snapshot={"tech_stack": ["nginx"]}, sections={"surface_inventory": ""})
+    assert any("VP-04" in b for b in blockers)
+
 
 # --- VP-04: source non-empty but section empty = release error ---------------
 
