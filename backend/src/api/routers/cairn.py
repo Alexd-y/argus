@@ -15,6 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -527,6 +528,136 @@ async def create_fact(
 
 
 # --- settings ----------------------------------------------------------------
+
+
+class _WorkerCreate(BaseModel):
+    name: str
+    type: str = "wrb"
+    task_types: list[str] = Field(default_factory=lambda: ["reason", "explore"])
+    max_running: int = 1
+    priority: int = 100
+    enabled: bool = True
+
+
+class _WorkerPatch(BaseModel):
+    task_types: list[str] | None = None
+    max_running: int | None = None
+    priority: int | None = None
+    enabled: bool | None = None
+
+
+def _worker_dict(w) -> dict[str, Any]:
+    return {
+        "id": w.id,
+        "name": w.name,
+        "type": w.type,
+        "task_types": w.task_types,
+        "max_running": w.max_running,
+        "priority": w.priority,
+        "enabled": w.enabled,
+    }
+
+
+@router.get("/workers")
+async def list_workers(tenant_id: str = Depends(get_current_tenant_id)) -> list[dict[str, Any]]:
+    from src.cairn.workers.models import CairnWorker
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        rows = (
+            (
+                await session.execute(
+                    select(CairnWorker)
+                    .where(CairnWorker.tenant_id == tenant_id)
+                    .order_by(CairnWorker.priority)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        await session.commit()
+        return [_worker_dict(w) for w in rows]
+
+
+@router.post("/workers", status_code=201)
+async def create_worker(
+    body: _WorkerCreate, tenant_id: str = Depends(get_current_tenant_id)
+) -> dict[str, Any]:
+    from src.cairn.workers.models import WORKER_TYPES, CairnWorker
+
+    if body.type not in WORKER_TYPES:
+        raise HTTPException(status_code=422, detail=f"type must be one of {WORKER_TYPES}")
+    if not body.task_types:
+        raise HTTPException(status_code=422, detail="task_types must not be empty")
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        worker = CairnWorker(
+            tenant_id=tenant_id,
+            name=body.name,
+            type=body.type,
+            task_types=body.task_types,
+            max_running=body.max_running,
+            priority=body.priority,
+            enabled=body.enabled,
+        )
+        session.add(worker)
+        await _audit(session, tenant_id, "cairn.worker.create", worker.id, {"name": body.name})
+        await session.commit()
+        return _worker_dict(worker)
+
+
+@router.patch("/workers/{worker_id}")
+async def update_worker(
+    worker_id: str, body: _WorkerPatch, tenant_id: str = Depends(get_current_tenant_id)
+) -> dict[str, Any]:
+    from src.cairn.workers.models import CairnWorker
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        worker = (
+            await session.execute(
+                select(CairnWorker).where(
+                    CairnWorker.tenant_id == tenant_id, CairnWorker.id == worker_id
+                )
+            )
+        ).scalar_one_or_none()
+        if worker is None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        if body.task_types is not None:
+            if not body.task_types:
+                raise HTTPException(status_code=422, detail="task_types must not be empty")
+            worker.task_types = body.task_types
+        if body.max_running is not None:
+            worker.max_running = body.max_running
+        if body.priority is not None:
+            worker.priority = body.priority
+        if body.enabled is not None:
+            worker.enabled = body.enabled
+        await session.commit()
+        return _worker_dict(worker)
+
+
+@router.delete("/workers/{worker_id}", status_code=204)
+async def delete_worker(
+    worker_id: str, tenant_id: str = Depends(get_current_tenant_id)
+) -> Response:
+    from src.cairn.workers.models import CairnWorker
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        worker = (
+            await session.execute(
+                select(CairnWorker).where(
+                    CairnWorker.tenant_id == tenant_id, CairnWorker.id == worker_id
+                )
+            )
+        ).scalar_one_or_none()
+        if worker is None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        await session.delete(worker)
+        await _audit(session, tenant_id, "cairn.worker.delete", worker_id)
+        await session.commit()
+        return Response(status_code=204)
 
 
 @router.get("/settings", response_model=Settings)

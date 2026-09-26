@@ -22,6 +22,7 @@ import src.execution_mode.models  # noqa: F401 — register execution-mode / LAB
 import src.quick.models  # noqa: F401 — register Quick execution-mode rows
 import src.cairn.models  # noqa: F401 — register Cairn blackboard models in Base.metadata
 import src.cairn.directives.models  # noqa: F401 — register Cairn directive model in Base.metadata
+import src.cairn.workers.models  # noqa: F401 — register Cairn worker-config model in Base.metadata
 
 config = context.config
 if config.config_file_name is not None:

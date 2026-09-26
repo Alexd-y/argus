@@ -106,4 +106,33 @@ export const cairnApi = {
       method: "POST",
       body: JSON.stringify({ content, creator }),
     }),
+
+  listWorkers: () => fetchV1<CairnWorker[]>("/cairn/workers"),
+
+  createWorker: (body: CairnWorkerCreate) =>
+    fetchV1<CairnWorker>("/cairn/workers", { method: "POST", body: JSON.stringify(body) }),
+
+  updateWorker: (id: string, body: Partial<Pick<CairnWorker, "enabled" | "priority" | "max_running" | "task_types">>) =>
+    fetchV1<CairnWorker>(`/cairn/workers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  deleteWorker: (id: string) => fetchV1<void>(`/cairn/workers/${id}`, { method: "DELETE" }),
+};
+
+export type CairnWorker = {
+  id: string;
+  name: string;
+  type: string;
+  task_types: string[];
+  max_running: number;
+  priority: number;
+  enabled: boolean;
+};
+
+export type CairnWorkerCreate = {
+  name: string;
+  type: string;
+  task_types: string[];
+  max_running?: number;
+  priority?: number;
+  enabled?: boolean;
 };
