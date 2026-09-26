@@ -581,6 +581,130 @@ async def update_settings(
 # --- export ------------------------------------------------------------------
 
 
+@router.get("/projects/{project_id}/directives")
+async def list_directives(
+    project_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> list[dict[str, Any]]:
+    from src.cairn.directives.models import CairnDirective
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        pid = await _resolve_project_id(session, tenant_id, project_id)
+        rows = (
+            (
+                await session.execute(
+                    select(CairnDirective)
+                    .where(CairnDirective.project_id == pid)
+                    .order_by(CairnDirective.priority_score.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        await session.commit()
+        return [
+            {
+                "id": d.id,
+                "ref": d.ref,
+                "kind": d.kind,
+                "title": d.title,
+                "directive_text": d.directive_text,
+                "focus": d.focus,
+                "success_criterion": d.success_criterion,
+                "proof_requirement": d.proof_requirement,
+                "intrusiveness": d.intrusiveness,
+                "priority_score": d.priority_score,
+                "status": d.status,
+                "intent_id": d.intent_id,
+            }
+            for d in rows
+        ]
+
+
+async def _get_directive_or_404(session: AsyncSession, tenant_id: str, project_id: str, did: str):
+    from src.cairn.directives.models import CairnDirective
+
+    row = (
+        await session.execute(
+            select(CairnDirective).where(
+                CairnDirective.tenant_id == tenant_id,
+                CairnDirective.project_id == project_id,
+                (CairnDirective.id == did) | (CairnDirective.ref == did),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise CairnNotFoundError("Directive not found")
+    return row
+
+
+@router.post("/projects/{project_id}/directives/{directive_id}/accept", response_model=Intent)
+async def accept_directive(
+    project_id: str,
+    directive_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> Intent:
+    """Accept a directive → create a Cairn intent from it (§18.8)."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        pid = await _resolve_project_id(session, tenant_id, project_id)
+        directive = await _get_directive_or_404(session, tenant_id, pid, directive_id)
+        from_refs = list((directive.basis or {}).get("fact_refs") or []) or ["origin"]
+        intent = await gs.create_intent(
+            session,
+            tenant_id,
+            pid,
+            from_refs=from_refs,
+            description=directive.directive_text,
+            creator="directive",
+        )
+        directive.status = "accepted"
+        directive.intent_id = intent.id
+        source_refs = await gs.intent_source_refs(session, intent.id)
+        await _audit(
+            session, tenant_id, "cairn.directive.accept", pid, {"directive": directive.ref}
+        )
+        await session.commit()
+        return _intent_schema(intent, source_refs, None)
+
+
+@router.post("/projects/{project_id}/directives/{directive_id}/reject", status_code=204)
+async def reject_directive(
+    project_id: str,
+    directive_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> Response:
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        pid = await _resolve_project_id(session, tenant_id, project_id)
+        directive = await _get_directive_or_404(session, tenant_id, pid, directive_id)
+        directive.status = "rejected"
+        await _audit(
+            session, tenant_id, "cairn.directive.reject", pid, {"directive": directive.ref}
+        )
+        await session.commit()
+        return Response(status_code=204)
+
+
+@router.get("/projects/{project_id}/directives/{directive_id}/export")
+async def export_directive(
+    project_id: str,
+    directive_id: str,
+    format: str = Query(default="text"),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> Response:
+    """Return the raw directive text, ready to paste into an external agent (§18.8)."""
+    if format != "text":
+        raise HTTPException(status_code=400, detail="Supported format: text")
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        pid = await _resolve_project_id(session, tenant_id, project_id)
+        directive = await _get_directive_or_404(session, tenant_id, pid, directive_id)
+        await session.commit()
+        return Response(content=directive.directive_text, media_type="text/plain")
+
+
 @router.get("/projects/{project_id}/export")
 async def export_project(
     project_id: str,

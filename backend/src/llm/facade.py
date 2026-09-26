@@ -183,6 +183,7 @@ _SCHEMA_BOUND_PROMPT_IDS: dict[LLMTask, str] = {
     LLMTask.CAIRN_REASON: "cairn_reason_v1",
     LLMTask.CAIRN_EXPLORE: "cairn_explore_v1",
     LLMTask.CAIRN_CONCLUDE: "cairn_explore_conclude_v1",
+    LLMTask.CAIRN_DIRECTIVE: "cairn_directive_v1",
 }
 
 _QUICK_TASKS: frozenset[LLMTask] = frozenset(
