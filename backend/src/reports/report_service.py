@@ -70,6 +70,7 @@ from src.reports.generators import (
     generate_json,
     generate_markdown,
     generate_pdf,
+    generate_xml,
 )
 from src.reports.junit_generator import generate_junit
 from src.reports.replay_command_sanitizer import SanitizeContext
@@ -391,6 +392,8 @@ class ReportService:
                 return generate_markdown(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.HTML:
                 return generate_html(data, tier=tier.value, jinja_context=jinja_context)
+            if fmt is ReportFormat.XML:
+                return generate_xml(data, jinja_context=jinja_context)
             if fmt is ReportFormat.PDF:
                 return generate_pdf(
                     data,

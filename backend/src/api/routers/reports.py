@@ -108,6 +108,7 @@ VALID_FORMATS = {
     "json",
     "csv",
     "md",
+    "xml",
     VALHALLA_SECTIONS_CSV_FORMAT,
     *_VALHALLA_LLM_FORMATS,
 }
@@ -117,6 +118,7 @@ CONTENT_TYPES = {
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
+    "xml": "application/xml; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
     **_VALHALLA_LLM_FORMATS,
 }

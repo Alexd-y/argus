@@ -1828,6 +1828,56 @@ def generate_valhalla_sections_csv(
     return buf.getvalue().encode("utf-8")
 
 
+_REPORT_XML_NS = "urn:argus:report:v1"
+
+
+def _xml_escape(text: str) -> str:
+    """Escape XML special characters (generation only; no parser involved)."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _xml_tag(name: str) -> str:
+    """Sanitize a dict key into a safe XML element name."""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]", "_", str(name))
+    if not cleaned or not re.match(r"[A-Za-z_]", cleaned[0]):
+        cleaned = f"_{cleaned}"
+    return cleaned
+
+
+def _value_to_xml(tag: str, value: Any) -> str:
+    """Serialize a JSON-ish value to an XML fragment (generation only, escaped)."""
+    safe = _xml_tag(tag)
+    if isinstance(value, Mapping):
+        inner = "".join(_value_to_xml(str(k), v) for k, v in value.items())
+        return f"<{safe}>{inner}</{safe}>"
+    if isinstance(value, (list, tuple)):
+        inner = "".join(_value_to_xml("item", item) for item in value)
+        return f"<{safe}>{inner}</{safe}>"
+    if value is None:
+        return f"<{safe}/>"
+    if isinstance(value, bool):
+        return f"<{safe}>{'true' if value else 'false'}</{safe}>"
+    return f"<{safe}>{_xml_escape(str(value))}</{safe}>"
+
+
+def generate_xml(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
+    """Generate a structured XML report — same content as JSON, XML projection (VP-10).
+
+    Reuses ``generate_json`` so the two formats are content-parallel (one snapshot →
+    multiple projections). Built by string assembly with XML-escaping — no XML parser
+    is involved, so there is no external-entity/XXE surface.
+    """
+    payload = json.loads(generate_json(data, jinja_context=jinja_context))
+    body = "".join(_value_to_xml(str(k), v) for k, v in payload.items())
+    doc = f'<?xml version="1.0" encoding="UTF-8"?>\n<report xmlns="{_REPORT_XML_NS}">{body}</report>'
+    return doc.encode("utf-8")
+
+
 def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
     """Generate JSON / JSOC report — full schema with brand, metadata, export_integrity, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation."""
     tech_sorted = sorted(str(t) for t in (data.technologies or []))
