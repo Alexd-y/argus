@@ -1,7 +1,7 @@
 """Render all canonical report formats from one immutable snapshot (R7).
 
 Given a :class:`ReportDocumentV1`, produce semantically-equivalent JSON / Markdown
-/ XML (always) and PDF (when an ``html_to_pdf`` renderer is supplied). Each
+/ XML / HTML (always) and PDF (when an ``html_to_pdf`` renderer is supplied). Each
 artifact carries the metadata required by the report contract (R7.10): format,
 scan_profile, snapshot_hash, generated_at, size, checksum, status.
 """
@@ -78,9 +78,9 @@ def render_canonical_bundle(
     scan_id: str | None = None,
     tenant_id: str | None = None,
 ) -> list[CanonicalArtifact]:
-    """Render json/md/xml (+ optional pdf) from a single snapshot.
+    """Render json/md/xml/html (+ optional pdf) from a single snapshot.
 
-    All formats derive from the same ``doc``; JSON/MD/XML are deterministic so
+    All formats derive from the same ``doc``; JSON/MD/XML/HTML are deterministic so
     re-rendering an unchanged snapshot yields identical bytes (R7.9 / P7).
     """
     emit_event(
@@ -93,10 +93,12 @@ def render_canonical_bundle(
 
     artifacts: list[CanonicalArtifact] = []
 
+    html_text = render_html(doc)
     text_renderers: list[tuple[str, str]] = [
         ("json", render_json(doc)),
         ("md", render_markdown(doc)),
         ("xml", render_xml(doc)),
+        ("html", html_text),
     ]
     for fmt, text in text_renderers:
         artifacts.append(_artifact(fmt, text.encode("utf-8"), doc))
@@ -110,11 +112,10 @@ def render_canonical_bundle(
         )
 
     if include_pdf:
-        html = render_html(doc)
         pdf_bytes: bytes | None = None
         if html_to_pdf is not None:
             try:
-                pdf_bytes = html_to_pdf(html)
+                pdf_bytes = html_to_pdf(html_text)
             except Exception:  # noqa: BLE001 — never break bundle on PDF failure
                 pdf_bytes = None
         if pdf_bytes:

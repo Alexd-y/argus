@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 from src.reports.canonical_bundle import bundle_formats, render_canonical_bundle
 from src.reports.snapshot_builder import build_snapshot_from_report_data
@@ -119,10 +120,10 @@ def test_coverage_split_tested_vs_not_assessed():
     assert "cap.xss" in doc.not_assessed_capabilities
 
 
-def test_bundle_emits_json_md_xml():
+def test_bundle_emits_json_md_xml_html():
     doc = _snapshot()
     artifacts = render_canonical_bundle(doc)
-    assert bundle_formats(artifacts) == {"json", "md", "xml"}
+    assert bundle_formats(artifacts) == {"json", "md", "xml", "html"}
     for a in artifacts:
         assert a.size == len(a.content)
         assert len(a.checksum) == 64
@@ -154,6 +155,26 @@ def test_bundle_pdf_via_injected_renderer():
     assert "pdf" in bundle_formats(artifacts)
     pdf = next(a for a in artifacts if a.format == "pdf")
     assert pdf.content.startswith(b"%PDF")
+
+
+_GOLDEN_DIR = Path(__file__).parent / "golden" / "canonical"
+
+
+def test_bundle_matches_golden_snapshot():
+    """Byte-for-byte golden lock on the deterministic 4-format canonical bundle.
+
+    Regenerate intentionally (after a reviewed report-format change) by writing each
+    ``render_canonical_bundle(_snapshot())`` artifact to ``golden/canonical/snapshot.<fmt>``.
+    """
+    doc = _snapshot()
+    artifacts = {a.format: a.content for a in render_canonical_bundle(doc)}
+    assert set(artifacts) == {"json", "md", "xml", "html"}
+    for fmt, content in artifacts.items():
+        golden = (_GOLDEN_DIR / f"snapshot.{fmt}").read_bytes()
+        assert content == golden, (
+            f"canonical {fmt} output drifted from golden; "
+            f"regenerate golden/canonical/snapshot.{fmt} if the change is intended"
+        )
 
 
 def test_bundle_pdf_absent_when_backend_unavailable():
