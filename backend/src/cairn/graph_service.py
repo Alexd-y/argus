@@ -839,6 +839,42 @@ async def reopen_project(
 # --- hints -------------------------------------------------------------------
 
 
+@dataclass(slots=True)
+class ProjectProgressSnapshot:
+    status: str
+    total_intents: int
+    concluded_intents: int
+
+
+async def project_progress_snapshot(
+    session: AsyncSession, tenant_id: str, project_id: str
+) -> ProjectProgressSnapshot:
+    """Return the project's status + intent counts for scan-progress mapping (§11.2)."""
+    project = await _get_project_or_404(session, tenant_id, project_id)
+    total = (
+        await session.execute(
+            select(func.count())
+            .select_from(CairnIntent)
+            .where(CairnIntent.project_id == project_id)
+        )
+    ).scalar_one()
+    concluded = (
+        await session.execute(
+            select(func.count())
+            .select_from(CairnIntent)
+            .where(
+                CairnIntent.project_id == project_id,
+                CairnIntent.concluded_at.is_not(None),
+            )
+        )
+    ).scalar_one()
+    return ProjectProgressSnapshot(
+        status=project.status,
+        total_intents=int(total),
+        concluded_intents=int(concluded),
+    )
+
+
 async def stop_projects_for_scan(session: AsyncSession, tenant_id: str, scan_id: str) -> int:
     """Move all active Cairn projects linked to ``scan_id`` to ``stopped`` (§11.4).
 
@@ -910,6 +946,8 @@ __all__ = [
     "heartbeat_reason",
     "intent_source_refs",
     "list_projects",
+    "project_progress_snapshot",
+    "ProjectProgressSnapshot",
     "release_intent",
     "release_reason",
     "reopen_project",

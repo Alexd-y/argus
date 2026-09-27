@@ -2424,11 +2424,12 @@ async def _ensure_cairn_engine_project(
     tenant_id: str,
     target: str,
     options: dict,
-) -> None:
-    """Create the Cairn project that drives an ``engine=cairn`` scan (best-effort).
+) -> str | None:
+    """Create/find the Cairn project that drives an ``engine=cairn`` scan (best-effort).
 
-    One project per scan; the beat tick (``argus.cairn.tick``) drives it. Never fails
-    the scan — a broken/absent Cairn subsystem falls back to reporting-only.
+    One project per scan; the beat tick (``argus.cairn.tick``) drives it. Returns the
+    project id (or ``None`` if the Cairn subsystem is unavailable) so the caller can
+    wait for it. Never fails the scan.
     """
     try:
         from sqlalchemy import select as _select
@@ -2447,9 +2448,9 @@ async def _ensure_cairn_engine_project(
             )
         ).scalar_one_or_none()
         if existing is not None:
-            return
+            return existing
         mode = extract_execution_mode(options if isinstance(options, dict) else {})
-        await _cairn_gs.create_project(
+        detail = await _cairn_gs.create_project(
             session,
             tenant_id,
             title=f"scan {scan_id}",
@@ -2463,11 +2464,81 @@ async def _ensure_cairn_engine_project(
             "cairn_engine_project_created",
             extra={"event": "cairn_engine_project_created", "scan_id": scan_id},
         )
+        return detail.project.id
     except Exception as exc:  # noqa: BLE001 — Cairn engine must never break a scan
         logger.warning(
             "cairn_engine_project_create_failed",
             extra={"event": "cairn_engine_project_create_failed", "scan_id": scan_id, "error": str(exc)},
         )
+        return None
+
+
+async def _run_cairn_engine_wait(
+    scan_id: str,
+    tenant_id: str,
+    project_id: str,
+) -> str:
+    """Wait for the Cairn project to reach a terminal state, mapping graph→scan progress.
+
+    Uses its own short-lived sessions (the beat tick writes concurrently). On timeout
+    the project is stopped so it does not run unbounded. Best-effort: any failure
+    returns ``"error"`` and lets the scan proceed to reporting.
+    """
+    try:
+        from src.cairn import graph_service as _cairn_gs
+        from src.db.session import (
+            create_task_engine_and_session,
+        )
+        from src.db.session import (
+            set_session_tenant as _set_tenant,
+        )
+        from src.orchestration.cairn_engine import await_cairn_project
+
+        poll = int(getattr(settings, "cairn_tick_interval_sec", 10)) or 10
+        deadline = float(getattr(settings, "cairn_explore_timeout_sec", 1800)) or 1800.0
+        engine, session_factory = create_task_engine_and_session()
+        try:
+
+            async def _get_state() -> tuple[str, int, int]:
+                async with session_factory() as s:
+                    await _set_tenant(s, tenant_id)
+                    snap = await _cairn_gs.project_progress_snapshot(s, tenant_id, project_id)
+                    return snap.status, snap.total_intents, snap.concluded_intents
+
+            async def _on_progress(progress: int) -> None:
+                async with session_factory() as s, s.begin():
+                    await _set_tenant(s, tenant_id)
+                    await _update_scan_phase_status(s, scan_id, "cairn", "running", progress)
+
+            async def _cancelled() -> bool:
+                async with session_factory() as s:
+                    await _set_tenant(s, tenant_id)
+                    return await scan_row_is_cancelled(s, scan_id)
+
+            reason = await await_cairn_project(
+                get_state=_get_state,
+                on_progress=_on_progress,
+                is_cancelled=_cancelled,
+                poll_interval=poll,
+                max_wait_seconds=deadline,
+            )
+            if reason in ("timeout", "cancelled"):
+                async with session_factory() as s, s.begin():
+                    await _set_tenant(s, tenant_id)
+                    await _cairn_gs.stop_projects_for_scan(s, tenant_id, scan_id)
+            logger.info(
+                "cairn_engine_wait_done",
+                extra={"event": "cairn_engine_wait_done", "scan_id": scan_id, "reason": reason},
+            )
+            return reason
+        finally:
+            await engine.dispose()
+    except Exception as exc:  # noqa: BLE001 — never block reporting on engine wait
+        logger.warning(
+            "cairn_engine_wait_failed",
+            extra={"event": "cairn_engine_wait_failed", "scan_id": scan_id, "error": str(exc)},
+        )
+        return "error"
 
 
 async def run_scan_state_machine(
@@ -2519,9 +2590,14 @@ async def run_scan_state_machine(
             logger.debug("scan_checkpoint_init_failed", extra={"error": str(_cp_exc)})
 
     # Mode-B: engine=cairn drives the whole scan via the Cairn blackboard; create
-    # the linked project once, then the phase loop below runs only reporting.
+    # the linked project once, wait for it to reach a terminal state (mapping graph
+    # progress onto Scan.progress), then the phase loop below runs only reporting.
     if _cairn_engine_active(options):
-        await _ensure_cairn_engine_project(session, scan_id, tenant_id, target, options)
+        _cairn_project_id = await _ensure_cairn_engine_project(
+            session, scan_id, tenant_id, target, options
+        )
+        if _cairn_project_id:
+            await _run_cairn_engine_wait(scan_id, tenant_id, _cairn_project_id)
 
     cancelled = False
     # 4. Phase loop
