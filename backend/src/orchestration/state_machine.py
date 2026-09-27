@@ -2400,6 +2400,76 @@ async def _finalize_scan(
 # ---------------------------------------------------------------------------
 
 
+def _cairn_engine_active(options: dict | None) -> bool:
+    """Whether the scan should run on the Cairn engine instead of the 8 phases.
+
+    Requires BOTH ``settings.cairn_enabled`` and ``scan_options.engine == "cairn"``
+    (both off by default) — so a normal ``engine=pipeline`` scan is never affected.
+    """
+    if not getattr(settings, "cairn_enabled", False):
+        return False
+    from src.orchestration.cairn_phase import cairn_engine_mode
+
+    return cairn_engine_mode(options) == "cairn"
+
+
+def _cairn_skips_phase(options: dict | None, phase: ScanPhase) -> bool:
+    """In Cairn-engine mode the blackboard search replaces every phase but reporting."""
+    return _cairn_engine_active(options) and phase is not ScanPhase.REPORTING
+
+
+async def _ensure_cairn_engine_project(
+    session: AsyncSession,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> None:
+    """Create the Cairn project that drives an ``engine=cairn`` scan (best-effort).
+
+    One project per scan; the beat tick (``argus.cairn.tick``) drives it. Never fails
+    the scan — a broken/absent Cairn subsystem falls back to reporting-only.
+    """
+    try:
+        from sqlalchemy import select as _select
+
+        from src.cairn import graph_service as _cairn_gs
+        from src.cairn.models import CairnProject
+        from src.db.session import set_session_tenant as _set_tenant
+        from src.orchestration.execution_mode_context import extract_execution_mode
+
+        await _set_tenant(session, tenant_id)
+        existing = (
+            await session.execute(
+                _select(CairnProject.id).where(
+                    CairnProject.tenant_id == tenant_id, CairnProject.scan_id == scan_id
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return
+        mode = extract_execution_mode(options if isinstance(options, dict) else {})
+        await _cairn_gs.create_project(
+            session,
+            tenant_id,
+            title=f"scan {scan_id}",
+            origin=target,
+            goal="Full autonomous penetration test of the target; prove exploitable findings with evidence.",
+            scan_id=scan_id,
+            execution_mode=getattr(mode, "value", "production"),
+        )
+        await session.commit()
+        logger.info(
+            "cairn_engine_project_created",
+            extra={"event": "cairn_engine_project_created", "scan_id": scan_id},
+        )
+    except Exception as exc:  # noqa: BLE001 — Cairn engine must never break a scan
+        logger.warning(
+            "cairn_engine_project_create_failed",
+            extra={"event": "cairn_engine_project_create_failed", "scan_id": scan_id, "error": str(exc)},
+        )
+
+
 async def run_scan_state_machine(
     session: AsyncSession,
     scan_id: str,
@@ -2448,6 +2518,11 @@ async def run_scan_state_machine(
         except Exception as _cp_exc:  # noqa: BLE001 — checkpoint must never block a scan
             logger.debug("scan_checkpoint_init_failed", extra={"error": str(_cp_exc)})
 
+    # Mode-B: engine=cairn drives the whole scan via the Cairn blackboard; create
+    # the linked project once, then the phase loop below runs only reporting.
+    if _cairn_engine_active(options):
+        await _ensure_cairn_engine_project(session, scan_id, tenant_id, target, options)
+
     cancelled = False
     # 4. Phase loop
     for order_index, phase in enumerate(PHASE_ORDER):
@@ -2464,6 +2539,19 @@ async def run_scan_state_machine(
 
         if phase in resume_plan and resume_plan.get(phase) == ResumeDecision.SKIP:
             logger.info("Skipping completed phase %s (resume)", phase.value)
+            continue
+
+        # Mode-B: the Cairn engine replaces discovery/analysis/exploitation; only
+        # reporting runs in the linear loop (guarded — no effect unless engine=cairn).
+        if _cairn_skips_phase(options, phase):
+            logger.info(
+                "phase_skipped_by_cairn_engine",
+                extra={
+                    "event": "phase_skipped_by_cairn_engine",
+                    "scan_id": scan_id,
+                    "phase": phase.value,
+                },
+            )
             continue
 
         progress = _phase_to_progress(phase)
