@@ -144,4 +144,36 @@ def bundle_formats(bundle: list[CanonicalArtifact]) -> set[str]:
     return {a.format for a in bundle}
 
 
-__all__ = ["CanonicalArtifact", "bundle_formats", "render_canonical_bundle"]
+#: Formats that MUST be present for an atomic Valhalla release (PDF is best-effort:
+#: it degrades to a manifest reason when the PDF backend is unavailable).
+REQUIRED_CANONICAL_FORMATS: tuple[str, ...] = ("json", "md", "xml", "html")
+
+
+def assert_canonical_parity(
+    bundle: list[CanonicalArtifact],
+    *,
+    required: tuple[str, ...] = REQUIRED_CANONICAL_FORMATS,
+) -> None:
+    """Atomic-parity gate (§20.9): all required formats present, one shared snapshot.
+
+    Raises ``ValueError`` if a required format is missing or the artifacts disagree on
+    ``snapshot_hash`` (which would mean they were not rendered from one snapshot). The
+    caller uses this to fail the release atomically instead of shipping a partial /
+    divergent set of formats.
+    """
+    present = bundle_formats(bundle)
+    missing = set(required) - present
+    if missing:
+        raise ValueError(f"canonical bundle missing required formats: {sorted(missing)}")
+    hashes = {a.snapshot_hash for a in bundle}
+    if len(hashes) > 1:
+        raise ValueError(f"canonical bundle formats disagree on snapshot_hash: {hashes}")
+
+
+__all__ = [
+    "REQUIRED_CANONICAL_FORMATS",
+    "CanonicalArtifact",
+    "assert_canonical_parity",
+    "bundle_formats",
+    "render_canonical_bundle",
+]
