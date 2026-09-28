@@ -4,6 +4,26 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — provability foundations (Part II: I/N/J) (2026-09-28)
+
+Pure, tested foundations for the "100% provable / senior" report contract (Part II).
+Wired where the data already exists; full 4-format rendering integration is staged with
+Phase C (ordered-section registry).
+
+- **Phase I — Claim contract (`src/reports/claims.py`):** `Claim` model + `ClaimType`,
+  `validate_claim` (evidence-required for asserted facts, derived_from for inferences,
+  certainty-modality ban in hypotheses, confidence-needs-calibration, validator registry
+  AC-01, reviewer required for high severity), `resolve_evidence_ids` (AC-02 scope check).
+- **Phase N — Prose gate (`src/reports/prose_gate.py`):** grouped stop-list (unfounded
+  escalation / empty recommendation / stub / false-negation-certainty / bureaucratese),
+  absolute-safety-claim block, paragraph-without-reference flag. Stop-list + absolute-safety
+  BLOCK rules are wired into the Valhalla release gate on the rendered text.
+- **Phase J — Class confirmation rules (`src/reports/poc_validation.py`):** per-class table
+  (XSS/SQLi/SSRF/RCE/CMDi/IDOR/BOLA/auth-bypass/rate-limit/CVE-version/TLS) that downgrades
+  unproven findings with a printed reason (reflection≠XSS, timing≠SQLi, banner≠CVE, …);
+  `resolve_confirmation_class` maps a finding title to its class.
+- **Tests:** `backend/tests/reports/test_valhalla_provability_part2.py` (20 cases).
+
 ### Valhalla report — empty single-page PDF fix (Part I: A/B/F/G) (2026-09-28)
 
 Fix for the Valhalla report shipping as a one-page PDF (header + title only, no

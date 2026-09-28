@@ -31,6 +31,8 @@ from src.reports.generators import (
     generate_valhalla_sections_csv,
     generate_xml,
 )
+from src.reports.prose_gate import blocking_violations as blocking_prose_violations
+from src.reports.prose_gate import evaluate_prose
 from src.reports.report_data_validation import (
     log_report_validation_failure,
     report_validation_failure_payload,
@@ -194,7 +196,7 @@ def _compute_valhalla_release_blockers(
         "completed" if str(valhalla_llm_status).strip().lower() == "ready" else valhalla_llm_status
     )
 
-    return valhalla_release_blockers(
+    blockers = valhalla_release_blockers(
         snapshot={},
         sections={},
         report_text=report_text,
@@ -203,6 +205,14 @@ def _compute_valhalla_release_blockers(
         actual_tier=actual_tier,
         llm_analysis_status=llm_analysis_status,
     )
+
+    # Phase N — prose discipline on the rendered text. Reference-requirement is off
+    # here (per-claim [CL-…]/[E-…] linking is Phase 14.3, not yet emitted); only the
+    # unconditional stop-list / absolute-safety BLOCK rules apply to current reports.
+    for pv in blocking_prose_violations(evaluate_prose(report_text, require_references=False)):
+        blockers.append(f"PROSE: {pv.rule}: {pv.detail}")
+
+    return blockers
 
 
 async def resolve_scan_id_for_report(
