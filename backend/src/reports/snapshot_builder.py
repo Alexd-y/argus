@@ -14,6 +14,7 @@ from typing import Any
 
 from src.core.config import settings
 from src.findings.severity import SeverityBand, normalize_severity
+from src.reports.engagement_builder import build_engagement_metadata, engagement_is_empty
 from src.reports.poc_validation import (
     evaluate_class_confirmation,
     resolve_confirmation_class,
@@ -27,6 +28,10 @@ from src.reports.report_document import (
     ReportSurfaceItem,
     ReportToolRun,
     build_report_document,
+)
+from src.reports.valhalla_narrative_builder import (
+    build_attack_narrative,
+    build_exploit_chains,
 )
 from src.reports.wstg_report import build_wstg_block
 
@@ -491,6 +496,13 @@ def build_snapshot_from_report_data(
     target = str(meta.get("target") or getattr(report_data, "target", "") or "")
     surface = _map_surface(report_data, target)
 
+    # Phase K — attack narrative + impact chains (proven vs hypothetical, FND-03).
+    attack_narrative = build_attack_narrative(findings)
+    exploit_chains = build_exploit_chains(findings)
+    # Phase L — engagement metadata for client log correlation.
+    engagement = build_engagement_metadata(meta)
+    engagement_arg = None if engagement_is_empty(engagement) else engagement
+
     return build_report_document(
         scan_id=str(meta.get("scan_id") or getattr(report_data, "scan_id", "") or "unknown"),
         tenant_id=str(meta.get("tenant_id") or getattr(report_data, "tenant_id", "") or "unknown"),
@@ -514,6 +526,9 @@ def build_snapshot_from_report_data(
         registry_versions=registry_versions or meta.get("registry_versions") or {},
         wstg=_build_wstg_block(report_data, scan_report_data, scan_meta=meta),
         surface_inventory=surface,
+        attack_narrative=attack_narrative,
+        exploit_chains=exploit_chains,
+        engagement=engagement_arg,
         generated_at=generated_at,
     )
 

@@ -8,7 +8,7 @@
 - started_at: `not_assessed`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `0eaea8906cbf2eceeac12b87eb7969c7431cc3880d0bab372540bd60b8827d77`
+- snapshot_hash: `ef3741f20ba54b6f64eef88fd31534e5fa8f627f2c687cd9e4a1dff48996300e`
 
 ## Report Passport
 
@@ -55,6 +55,10 @@
 - validator_id: `not_assessed`
 - raw_artifact_ref: `not_assessed`
 - evidence_ids: _none_
+
+## Attack Narrative
+
+1. **entry**: t (F-1)
 
 ## Evidence Inventory
 
