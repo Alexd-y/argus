@@ -4,6 +4,42 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — full contract: v2 document, LLM cards, provability (Phases C–P) (2026-09-29)
+
+Completed the remaining Valhalla report phases on top of the Part-I defect fix. All
+four formats now render from one ordered v2 document; verified end-to-end.
+
+- **Phase C — ReportDocumentV1 v2 + ordered section registry.** Snapshot extended
+  (additive) to the full contract: finding cards with PoC/remediation/closure/CVSS-
+  vector/claims, surface inventory, unconfirmed observations, test executions, attack
+  narrative, exploit chains, methodology, engagement, client impact, conclusions, and an
+  independent release passport (generation/llm_analysis/assessment_completeness/
+  evidence_integrity/review). `section_registry.py` defines one ordered section list all
+  four renderers walk; JSON/MD/XML/HTML extended accordingly.
+- **Phase D — findings + PoC from real data.** `snapshot_builder` maps
+  `Finding.proof_of_concept` + http_evidence into the PoC card, plus CVSS/OWASP/surface.
+  Phase J class-confirmation bar wired (downgrade unproven findings with a printed reason
+  under `valhalla_senior_poc_gate_enabled`, staged default False).
+- **Phase E.2–E.6 — mandatory LLM conclusions inside cards.** `valhalla_llm_merge.py`
+  projects the accepted LLM remediation/closure tree onto the finding cards and derives
+  the release-status fields; the pipeline re-emits the canonical bundle from the merged
+  snapshot so PDF/MD/JSON/XML carry the conclusions. Granular cloud carve-out (E.1) lets
+  report tasks reach the cloud even when analysis cloud is disabled.
+- **Part II K/L — attack narrative + engagement metadata.** Proven vs hypothetical
+  chains kept separate (FND-03); engagement parameters with password redaction.
+- **Part II M — independent verification kit.** ZIP (manifest+evidence+repro+checks+
+  README) sharing the report `snapshot_hash`, no secrets, non-exploiting checks script.
+- **Part II O/P — severity/CVSS/review gate + senior prompts v2.** High/critical need a
+  CVSS vector and human review; impact overclaims blocked; `REPORT_AI_SYSTEM_V2` senior
+  preamble selectable via `report_senior_prompts_v2_enabled` (staged).
+- **End-to-end verification.** In the `argus-backend` container with WeasyPrint, a
+  15-finding v2 snapshot renders an **18-page PDF** (was 1) carrying finding cards, PoC
+  canaries, CVSS vectors, remediation and the passport (`scripts/verify_v2_pdf_render.py`).
+  The real cloud report-LLM path engages correctly and is protected by the fail-closed
+  budget ledger (`scripts/verify_live_llm.py`).
+- New staged flags: `valhalla_senior_poc_gate_enabled`, `report_senior_prompts_v2_enabled`
+  (both default False). ~70 new unit tests; 668 report tests green.
+
 ### Valhalla report — granular cloud carve-out for report LLM (Phase E.1) (2026-09-28)
 
 `settings.llm_cloud_disabled` (fail-closed switch, WRB-001) previously disabled cloud
