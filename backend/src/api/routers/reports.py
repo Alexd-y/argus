@@ -101,6 +101,7 @@ _VALHALLA_LLM_FORMATS: dict[str, str] = {
     "valhalla_llm_html": "text/html; charset=utf-8",
     "valhalla_llm_pdf": "application/pdf",
     "valhalla_llm_manifest": "application/json; charset=utf-8",
+    "valhalla_verification_kit": "application/zip",
 }
 
 VALID_FORMATS = {

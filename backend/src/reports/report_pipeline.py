@@ -42,6 +42,7 @@ from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_completeness import valhalla_release_blockers
 from src.reports.valhalla_llm_merge import merge_llm_into_document
+from src.reports.verification_kit import build_verification_kit
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -681,6 +682,12 @@ async def run_generate_report_pipeline(
                 # leaves the un-merged canonical artifacts (emitted above) in place.
                 try:
                     merged_doc = merge_llm_into_document(vsnapshot, _vdoc)
+                    # Phase M — reference the independent verification kit from the
+                    # report, then render so the passport carries the ref. The kit is
+                    # built from and uploaded for this exact (final) snapshot below.
+                    merged_doc = merged_doc.model_copy(
+                        update={"verification_kit_ref": "valhalla_verification_kit"}
+                    ).finalized()
                     merged_completed_at = merged_doc.completed_at or ""
                     merged_artifacts = render_canonical_bundle(
                         merged_doc,
@@ -714,6 +721,40 @@ async def run_generate_report_pipeline(
                                 size_bytes=artifact.size,
                             )
                             generated[canon_fmt] = canon_key
+
+                    # Phase M — build + upload the independent verification kit from
+                    # the same final snapshot (shares snapshot_hash with the report).
+                    try:
+                        kit_bytes, _kit_manifest = build_verification_kit(merged_doc)
+                        kit_key = upload(
+                            tenant_id,
+                            scan_id,
+                            tier_str,
+                            report_id,
+                            "valhalla_verification_kit",
+                            kit_bytes,
+                            content_type="application/zip",
+                        )
+                        if kit_key:
+                            await _upsert_report_object(
+                                session,
+                                tenant_id=tenant_id,
+                                scan_id=scan_id,
+                                report_id=report_id,
+                                fmt="valhalla_verification_kit",
+                                object_key=kit_key,
+                                size_bytes=len(kit_bytes),
+                            )
+                            generated["valhalla_verification_kit"] = kit_key
+                    except Exception:  # noqa: BLE001 — kit is additive
+                        logger.warning(
+                            "valhalla_verification_kit_failed",
+                            extra={
+                                "event": "valhalla_verification_kit_failed",
+                                "report_id": report_id,
+                            },
+                        )
+
                     logger.info(
                         "canonical_snapshot_llm_merged",
                         extra={
