@@ -8,7 +8,7 @@
 - started_at: `not_assessed`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `118ff9bcd82a92ae6a44555bef1777409bbde90817982dd22fa92b5bd3d7fe03`
+- snapshot_hash: `0eaea8906cbf2eceeac12b87eb7969c7431cc3880d0bab372540bd60b8827d77`
 
 ## Report Passport
 
@@ -17,6 +17,12 @@
 - assessment_completeness: `unknown`
 - evidence_integrity: `unknown`
 - review_status: `not_required`
+
+## Attack Surface Inventory
+
+| Host | Port | Service | Version | Technology |
+|---|---|---|---|---|
+| example.com | not_assessed | not_assessed | not_assessed | not_assessed |
 
 ## Findings (3)
 

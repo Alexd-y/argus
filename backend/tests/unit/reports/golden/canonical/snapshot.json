@@ -141,9 +141,17 @@
   "schema_version": "v2",
   "scope_summary": {},
   "skipped_reasons": [],
-  "snapshot_hash": "118ff9bcd82a92ae6a44555bef1777409bbde90817982dd22fa92b5bd3d7fe03",
+  "snapshot_hash": "0eaea8906cbf2eceeac12b87eb7969c7431cc3880d0bab372540bd60b8827d77",
   "started_at": null,
-  "surface_inventory": [],
+  "surface_inventory": [
+    {
+      "host": "example.com",
+      "port": null,
+      "service": null,
+      "technology": null,
+      "version": null
+    }
+  ],
   "target": "https://example.com",
   "tenant_id": "tenant-1",
   "test_executions": [],

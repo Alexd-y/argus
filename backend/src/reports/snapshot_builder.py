@@ -14,15 +14,24 @@ from typing import Any
 
 from src.core.config import settings
 from src.findings.severity import SeverityBand, normalize_severity
+from src.reports.poc_validation import (
+    evaluate_class_confirmation,
+    resolve_confirmation_class,
+)
 from src.reports.report_document import (
     ReportCoverageItem,
     ReportDocumentV1,
     ReportEvidenceRef,
     ReportFinding,
+    ReportPoC,
+    ReportSurfaceItem,
     ReportToolRun,
     build_report_document,
 )
 from src.reports.wstg_report import build_wstg_block
+
+#: Provable verification statuses that a failed class-confirmation rule downgrades.
+_PROVABLE = frozenset({"confirmed", "exploitable"})
 
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
@@ -87,6 +96,56 @@ def _verification_status(finding: Any) -> str:
     return "not_assessed"
 
 
+def _map_poc(finding: Any) -> ReportPoC | None:
+    """Build a :class:`ReportPoC` from ``Finding.proof_of_concept`` + http_evidence.
+
+    Maps the canonical PoC keys (see poc_schema.PROOF_OF_CONCEPT_KEYS) onto the
+    snapshot's PoC card so payload / command / request / response / discriminator /
+    negative control survive into every format. Returns ``None`` when there is no PoC
+    material, so a finding without evidence renders no empty card.
+    """
+    poc = getattr(finding, "proof_of_concept", None)
+    if isinstance(poc, dict):
+        root = (
+            poc.get("proof_of_concept", poc)
+            if isinstance(poc.get("proof_of_concept"), dict)
+            else poc
+        )
+    else:
+        root = {}
+    http_ev = getattr(finding, "http_evidence", None)
+    if isinstance(http_ev, dict):
+        req = root.get("request") or http_ev.get("request") or http_ev.get("raw_request")
+        resp = root.get("response") or http_ev.get("response") or http_ev.get("raw_response")
+    else:
+        req = root.get("request")
+        resp = root.get("response") or root.get("response_snippet")
+
+    neg = None
+    if root.get("negative_control_url") or root.get("negative_control_result"):
+        neg = " ".join(
+            str(x)
+            for x in (root.get("negative_control_url"), root.get("negative_control_result"))
+            if x
+        )
+    fields = {
+        "tool": root.get("tool"),
+        "payload": root.get("payload") or root.get("payload_used") or root.get("payload_entered"),
+        "command": root.get("curl_command") or root.get("replay_command"),
+        "http_request": req,
+        "http_response": resp,
+        "observation": root.get("command_output") or root.get("cmd_output") or root.get("context"),
+        "oast_callback": root.get("oast_callback") or root.get("oast"),
+        "negative_control": neg,
+        "screenshot_ref": root.get("screenshot_key") or root.get("poc_screenshot_url"),
+        "discriminator": root.get("discriminator") or root.get("verification_method"),
+        "canary": root.get("canary"),
+    }
+    if not any(v for v in fields.values()):
+        return None
+    return ReportPoC(**{k: v for k, v in fields.items() if v})
+
+
 def _map_finding(
     finding: Any, index: int, *, evidence_keys: list[str] | None = None
 ) -> ReportFinding:
@@ -119,14 +178,39 @@ def _map_finding(
             )
     if not raw_ref and resolvable:
         raw_ref = resolvable[0]
+
+    title = str(getattr(finding, "title", "") or "Untitled finding")
+    owasp = getattr(finding, "owasp_category", None)
+    cvss_vector = getattr(finding, "cvss_vector", None)
+    cvss_score = getattr(finding, "cvss_score", None) or getattr(finding, "cvss", None)
+    poc = _map_poc(finding)
+    verification = _verification_status(finding)
+
+    # Phase J integration: enforce the per-class confirmation bar on real data. A
+    # provable finding whose PoC does not meet its class rule is downgraded to
+    # ``suspected`` and the reason is recorded for printing (prompt §15.2).
+    confirmation_class = None
+    downgrade_reason = None
+    cls = resolve_confirmation_class(f"{title} {cwe or ''}")
+    if cls is not None:
+        confirmation_class = cls.value
+        if settings.valhalla_senior_poc_gate_enabled and verification in _PROVABLE:
+            poc_payload = getattr(finding, "proof_of_concept", None) or {}
+            result = evaluate_class_confirmation(
+                cls, poc_payload if isinstance(poc_payload, dict) else {}
+            )
+            if not result.confirmed:
+                downgrade_reason = result.reason
+                verification = "suspected"
+
     return ReportFinding(
         finding_id=finding_id,
-        title=str(getattr(finding, "title", "") or "Untitled finding"),
+        title=title,
         severity=_severity(getattr(finding, "severity", "info")),
         category=getattr(finding, "category", None),
         cwe=str(cwe) if cwe else None,
         description=str(getattr(finding, "description", "") or ""),
-        verification_status=_verification_status(finding),
+        verification_status=verification,
         confidence=_confidence_float(getattr(finding, "confidence", None)),
         evidence_ids=[str(e) for e in evidence_refs],
         tool_run_id=(
@@ -136,6 +220,12 @@ def _map_finding(
         ),
         validator_id=str(validator) if validator else None,
         raw_artifact_ref=str(raw_ref) if raw_ref else None,
+        owasp_category=str(owasp) if owasp else None,
+        cvss_vector=str(cvss_vector) if cvss_vector else None,
+        cvss_score=float(cvss_score) if isinstance(cvss_score, (int, float)) else None,
+        confirmation_class=confirmation_class,
+        downgrade_reason=downgrade_reason,
+        poc=poc,
     )
 
 
@@ -325,6 +415,39 @@ def _evidence_entries_for_wstg(report_data: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _host_of(target: str) -> str:
+    raw = (target or "").strip()
+    if not raw:
+        return "unknown"
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]
+    return raw.split("/", 1)[0].split(":", 1)[0] or "unknown"
+
+
+def _map_surface(report_data: Any, target: str) -> list[ReportSurfaceItem]:
+    """Attack-surface inventory from technologies (+ target host).
+
+    Structured port/service data, when present on the finding/recon layer, is folded
+    in; otherwise each detected technology is attributed to the target host so the
+    inventory is honest (technology observed on host) rather than fabricated.
+    """
+    host = _host_of(target)
+    out: list[ReportSurfaceItem] = []
+    seen: set[tuple[str, str | None]] = set()
+    for tech in getattr(report_data, "technologies", None) or []:
+        tech_str = str(tech).strip()
+        if not tech_str:
+            continue
+        key = (host, tech_str)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(ReportSurfaceItem(host=host, technology=tech_str))
+    if not out:
+        out.append(ReportSurfaceItem(host=host))
+    return out
+
+
 def build_snapshot_from_report_data(
     report_data: Any,
     *,
@@ -365,6 +488,9 @@ def build_snapshot_from_report_data(
     not_assessed = [c.capability_id for c in coverage if c.status != "tested"]
     tested = [c.capability_id for c in coverage if c.status == "tested"]
 
+    target = str(meta.get("target") or getattr(report_data, "target", "") or "")
+    surface = _map_surface(report_data, target)
+
     return build_report_document(
         scan_id=str(meta.get("scan_id") or getattr(report_data, "scan_id", "") or "unknown"),
         tenant_id=str(meta.get("tenant_id") or getattr(report_data, "tenant_id", "") or "unknown"),
@@ -387,6 +513,7 @@ def build_snapshot_from_report_data(
         limitations=list(meta.get("limitations") or []),
         registry_versions=registry_versions or meta.get("registry_versions") or {},
         wstg=_build_wstg_block(report_data, scan_report_data, scan_meta=meta),
+        surface_inventory=surface,
         generated_at=generated_at,
     )
 

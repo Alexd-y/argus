@@ -312,6 +312,20 @@ class Settings(BaseSettings):
             "valhalla_release_blockers_enabled",
         ),
     )
+    # valhalla_senior_poc_gate_enabled — §15.2 per-class confirmation bar. When on, a
+    # provable finding whose PoC does not meet its class rule (e.g. XSS reflection
+    # without browser execution, SQLi timing without a boolean/error control) is
+    # downgraded from confirmed/exploitable to ``suspected`` with a printed reason.
+    # Staged rollout: default False so the base snapshot keeps the existing evidence-
+    # gate semantics until PoC payloads reliably carry discriminator/negative-control.
+    # ``confirmation_class`` is always recorded regardless of this flag.
+    valhalla_senior_poc_gate_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_VALHALLA_SENIOR_POC_GATE",
+            "valhalla_senior_poc_gate_enabled",
+        ),
+    )
     mcp_registrability_gate_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(
