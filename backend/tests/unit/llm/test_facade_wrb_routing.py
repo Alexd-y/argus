@@ -28,13 +28,18 @@ class TestCloudFallbackTasks:
         assert LLMTask.PERPLEXITY_OSINT in _CLOUD_FALLBACK_TASKS
 
     def test_pentest_tasks_are_not_cloud_fallback(self):
-        """Pentest analysis tasks must NOT have cloud fallback."""
+        """Pentest analysis tasks must NOT have cloud fallback.
+
+        NOTE: ``REMEDIATION_PLAN`` is intentionally NOT here — remediation conclusions
+        are a report-generation task routed to the cloud report LLM (commit 01c61f6,
+        prompt E.1), not a pentest analysis task. WRB-001 still forbids cloud for the
+        analysis tasks listed below.
+        """
         pentest_tasks = [
             LLMTask.ORCHESTRATION,
             LLMTask.THREAT_MODELING,
             LLMTask.ZERO_DAY_ANALYSIS,
             LLMTask.EXPLOIT_GENERATION,
-            LLMTask.REMEDIATION_PLAN,
             LLMTask.VALIDATION_ONESHOT,
             LLMTask.DEDUP_ANALYSIS,
             LLMTask.POC_GENERATION,

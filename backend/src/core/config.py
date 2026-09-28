@@ -750,6 +750,20 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("ARGUS_LLM_CLOUD_DISABLED", "llm_cloud_disabled"),
     )
+    # Granular exception to ``llm_cloud_disabled`` (WRB-001 vs. report generation).
+    # Report generation is an explicit carve-out: executive summary, cost summary,
+    # remediation plan and closure assessment are the mandatory Valhalla LLM outputs
+    # and are permitted on the cloud report LLM even when ``llm_cloud_disabled`` is on
+    # (which stays a hard fail-closed for pentest analysis tasks — those are never in
+    # the cloud-fallback set). Set False for a fully air-gapped deployment that must
+    # ship honest drafts instead of LLM conclusions.
+    llm_cloud_enabled_for_reports: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_LLM_CLOUD_ENABLED_FOR_REPORTS",
+            "llm_cloud_enabled_for_reports",
+        ),
+    )
     # qwythos — the second local reasoner (structured / long-context). qwythos_url
     # already exists above; these add model/context/key/timeout.
     qwythos_model: str = Field(

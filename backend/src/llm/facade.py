@@ -100,15 +100,34 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset(
 )
 
 
+#: Report-generation tasks that are a granular carve-out from ``llm_cloud_disabled``
+#: (prompt E.1). These are the mandatory Valhalla LLM outputs; they may reach the
+#: cloud report LLM even when cloud is disabled for pentest analysis. PERPLEXITY_OSINT
+#: is OSINT (no WRB internet) and is handled by its own routing, not here.
+_REPORT_CLOUD_TASKS: frozenset[LLMTask] = frozenset(
+    {
+        LLMTask.REPORT_SECTION,
+        LLMTask.EXECUTIVE_SUMMARY,
+        LLMTask.COST_SUMMARY,
+        LLMTask.CLOSURE_ASSESSMENT,
+        LLMTask.REMEDIATION_PLAN,
+    }
+)
+
+
 def _cloud_fallback_allowed(task: LLMTask) -> bool:
     """Whether cloud fallback is permitted for ``task``.
 
-    Phase 15 fail-closed switch: when ``settings.llm_cloud_disabled`` is on, the
-    cloud fallback set is treated as empty for EVERY task (report tasks included),
-    so an AWS dual-local-LLM deployment never reaches a cloud adapter.
+    Fail-closed switch (WRB-001): when ``settings.llm_cloud_disabled`` is on, pentest
+    analysis tasks never reach a cloud adapter (they are not in the fallback set to
+    begin with). Report generation is a **granular exception** (prompt E.1): the
+    mandatory Valhalla report tasks stay cloud-eligible when
+    ``settings.llm_cloud_enabled_for_reports`` is set, so disabling cloud for pentest
+    analysis does not silently blank the report's LLM conclusions.
     """
     if getattr(settings, "llm_cloud_disabled", False):
-        return False
+        reports_enabled = getattr(settings, "llm_cloud_enabled_for_reports", True)
+        return reports_enabled and task in _REPORT_CLOUD_TASKS
     return task in _CLOUD_FALLBACK_TASKS
 
 

@@ -4,6 +4,22 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — granular cloud carve-out for report LLM (Phase E.1) (2026-09-28)
+
+`settings.llm_cloud_disabled` (fail-closed switch, WRB-001) previously disabled cloud
+fallback for **every** task, silently blanking the Valhalla report's mandatory LLM
+conclusions on air-gapped/AWS deployments. Made granular per prompt E.1:
+
+- New flag `llm_cloud_enabled_for_reports` (default `True`).
+- `_cloud_fallback_allowed` now keeps the report tasks (`REPORT_SECTION`,
+  `EXECUTIVE_SUMMARY`, `COST_SUMMARY`, `CLOSURE_ASSESSMENT`, `REMEDIATION_PLAN`)
+  cloud-eligible even when cloud is disabled for pentest analysis — analysis tasks stay
+  fail-closed (they are not in the fallback set at all).
+- Fixed a stale test that asserted `REMEDIATION_PLAN` must not be cloud (it is a report
+  task since commit 01c61f6). `report_writer` registry alias confirmed to carry cloud
+  providers (`cloud_deepseek`, `cloud_openai`).
+- Tests: `tests/unit/llm/test_facade_report_cloud_carveout.py`.
+
 ### Valhalla report — provability foundations (Part II: I/N/J) (2026-09-28)
 
 Pure, tested foundations for the "100% provable / senior" report contract (Part II).
