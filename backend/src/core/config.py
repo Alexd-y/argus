@@ -326,6 +326,15 @@ class Settings(BaseSettings):
             "valhalla_senior_poc_gate_enabled",
         ),
     )
+    # report_senior_prompts_v2_enabled — Phase P senior report prompts (§21). Staged:
+    # default False keeps the validated legacy prompt until v2 is proven end-to-end.
+    report_senior_prompts_v2_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_REPORT_SENIOR_PROMPTS_V2",
+            "report_senior_prompts_v2_enabled",
+        ),
+    )
     mcp_registrability_gate_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

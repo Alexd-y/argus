@@ -42,6 +42,7 @@ from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_completeness import valhalla_release_blockers
 from src.reports.valhalla_llm_merge import merge_llm_into_document
+from src.reports.valhalla_severity_review_gate import severity_review_blockers
 from src.reports.verification_kit import build_verification_kit
 from src.services.reporting import ReportGenerator
 
@@ -213,6 +214,13 @@ def _compute_valhalla_release_blockers(
     # unconditional stop-list / absolute-safety BLOCK rules apply to current reports.
     for pv in blocking_prose_violations(evaluate_prose(report_text, require_references=False)):
         blockers.append(f"PROSE: {pv.rule}: {pv.detail}")
+
+    # Phase O — severity / CVSS / review consistency on the snapshot findings.
+    try:
+        snapshot = build_snapshot_from_report_data(report_data, scan_meta={"tier": actual_tier})
+        blockers.extend(severity_review_blockers(snapshot.findings))
+    except Exception:  # noqa: BLE001 — gate must not crash generation
+        pass
 
     return blockers
 
