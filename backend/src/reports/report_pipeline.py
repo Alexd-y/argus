@@ -41,6 +41,7 @@ from src.reports.report_data_validation import (
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_completeness import valhalla_release_blockers
+from src.reports.valhalla_llm_merge import merge_llm_into_document
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -672,6 +673,65 @@ async def run_generate_report_pipeline(
                     provider="facade",
                     model="report_writer",
                 )
+
+                # Phase E.4 — merge the accepted LLM remediation/closure INTO the
+                # canonical v2 snapshot so the mandatory conclusions print inside the
+                # finding cards of the primary PDF/MD/JSON/XML, then re-emit the
+                # canonical_* set from the enriched snapshot. Fail-soft: any error
+                # leaves the un-merged canonical artifacts (emitted above) in place.
+                try:
+                    merged_doc = merge_llm_into_document(vsnapshot, _vdoc)
+                    merged_completed_at = merged_doc.completed_at or ""
+                    merged_artifacts = render_canonical_bundle(
+                        merged_doc,
+                        include_pdf=True,
+                        html_to_pdf=lambda html: _snapshot_pdf_bytes(html, merged_completed_at),
+                        scan_id=scan_id,
+                        tenant_id=tenant_id,
+                    )
+                    assert_canonical_parity(merged_artifacts)
+                    for artifact in merged_artifacts:
+                        canon_fmt = f"canonical_{artifact.format}"
+                        canon_key = upload(
+                            tenant_id,
+                            scan_id,
+                            tier_str,
+                            report_id,
+                            canon_fmt,
+                            artifact.content,
+                            content_type=_CANONICAL_CONTENT_TYPES.get(
+                                canon_fmt, artifact.mime_type
+                            ),
+                        )
+                        if canon_key:
+                            await _upsert_report_object(
+                                session,
+                                tenant_id=tenant_id,
+                                scan_id=scan_id,
+                                report_id=report_id,
+                                fmt=canon_fmt,
+                                object_key=canon_key,
+                                size_bytes=artifact.size,
+                            )
+                            generated[canon_fmt] = canon_key
+                    logger.info(
+                        "canonical_snapshot_llm_merged",
+                        extra={
+                            "event": "canonical_snapshot_llm_merged",
+                            "report_id": report_id,
+                            "snapshot_hash": merged_doc.snapshot_hash,
+                            "llm_analysis_status": merged_doc.llm_analysis_status,
+                            "assessment_completeness": merged_doc.assessment_completeness,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 — merge is additive; keep base canon
+                    logger.warning(
+                        "canonical_snapshot_llm_merge_failed",
+                        extra={
+                            "event": "canonical_snapshot_llm_merge_failed",
+                            "report_id": report_id,
+                        },
+                    )
                 for vfmt, artifact in vrelease.artifacts.items():
                     llm_fmt = f"valhalla_llm_{vfmt}"
                     llm_key = upload(
