@@ -467,31 +467,79 @@
         }
 
         @media print {
-            body {
+            /*
+             * D1 root-cause fix: WeasyPrint does NOT fragment flex/grid
+             * containers across pages. Any flex/grid container with
+             * min-height:100vh collapses the whole document onto one page and
+             * clips overflow. In the print context every layout container that
+             * holds long content must become a plain block with auto height.
+             */
+            @page {
+                size: A4;
+                margin: 16mm 14mm 18mm 14mm;
+                @top-center {
+                    content: "Svalbard Security Inc. — Valhalla";
+                    font-family: "Consolas", "Courier New", monospace;
+                    font-size: 8px;
+                    color: #666;
+                }
+                @bottom-right {
+                    content: "Page " counter(page) " / " counter(pages);
+                    font-family: "Consolas", "Courier New", monospace;
+                    font-size: 8px;
+                    color: #666;
+                }
+            }
+            html, body {
                 background: #fff;
                 color: #111;
+                min-height: 0;
+                height: auto;
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
             }
-            .app-header, #sidebar, .rpt-footer {
-                position: static;
+            #app {
+                /* critical: a flex container is not fragmented page-by-page */
+                display: block;
+                min-height: 0;
+                height: auto;
             }
-            .main-container { display: block; }
-            #sidebar { display: none; }
+            .main-container {
+                display: block;
+                flex: none;
+                min-height: 0;
+            }
             #form-area {
+                display: block;
+                flex: none;
                 max-width: none;
-                padding: 18mm;
+                min-width: 0;
+                padding: 0;
             }
+            .app-header { display: block; position: static; }
+            #sidebar { display: none; }
+            .rpt-footer { display: block; position: static; }
             .panel, .valhalla-exec {
                 background: #fff;
                 border-color: #ccc;
                 color: #111;
+                /*
+                 * Long finding cards must be allowed to span pages. Forcing
+                 * page-break-inside:avoid on long sections provokes the engine
+                 * to push content out of the layout box (see prompt B.2).
+                 */
+                page-break-inside: auto;
+                break-inside: auto;
             }
+            h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
             table, th, td { border-color: #bbb; }
             th { background: #f2f2f2; color: #111; }
             pre, code {
                 background: #f7f7f7;
                 color: #111;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                white-space: pre-wrap;
             }
         }
     </style>

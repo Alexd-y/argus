@@ -38,6 +38,7 @@ from src.reports.generators import (
     generate_markdown,
     generate_pdf,
     generate_valhalla_sections_csv,
+    generate_xml,
 )
 from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.report_findings_scope import (
@@ -451,8 +452,17 @@ async def download_report(
                 content = generate_json(report_data, jinja_context=jctx)
             elif fmt == "md":
                 content = generate_markdown(report_data, jinja_context=jctx, tier=tier_str)
-            else:
+            elif fmt == "xml":
+                # D5 fix: XML must be real XML, not CSV under an application/xml MIME.
+                content = generate_xml(report_data, jinja_context=jctx)
+            elif fmt == "csv":
                 content = generate_csv(report_data, jinja_context=jctx)
+            else:
+                # No silent CSV substitution for unknown/unsupported formats.
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported format: {fmt}",
+                )
 
             try:
                 stored_key = upload_report_artifact(

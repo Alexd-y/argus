@@ -29,6 +29,7 @@ from src.reports.generators import (
     generate_technologies_csv,
     generate_tool_health_csv,
     generate_valhalla_sections_csv,
+    generate_xml,
 )
 from src.reports.report_data_validation import (
     log_report_validation_failure,
@@ -37,6 +38,7 @@ from src.reports.report_data_validation import (
 )
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
+from src.reports.valhalla_completeness import valhalla_release_blockers
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -94,8 +96,8 @@ class ReportGenerationError(Exception):
     """Raised when the report generation pipeline encounters a recoverable failure."""
 
 
-REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv", "md"})
-DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf", "md")
+REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv", "md", "xml"})
+DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf", "md", "xml")
 
 CONTENT_TYPES: dict[str, str] = {
     "pdf": "application/pdf",
@@ -103,6 +105,7 @@ CONTENT_TYPES: dict[str, str] = {
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
+    "xml": "application/xml; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
 
@@ -144,6 +147,62 @@ def normalize_generation_formats(
 
     out = [str(x).lower().strip() for x in raw if str(x).lower().strip() in REPORT_FORMAT_SET]
     return out if out else list(DEFAULT_REPORT_FORMATS)
+
+
+def _compute_valhalla_release_blockers(
+    *,
+    report_data: Any,
+    template_context: dict[str, Any],
+    requested_tier: str,
+    actual_tier: str,
+    valhalla_llm_status: str,
+) -> list[str]:
+    """Evaluate ``valhalla_release_blockers`` from the prod pipeline state (Phase G, D4).
+
+    Runs the rules that are correctly evaluable from the current release state:
+      * VP-01 — requested tier must equal the rendered tier;
+      * VP-02 — no stop-list / placeholder phrases in the rendered report text;
+      * VP-05 — no unclassified observation sits in the findings registry;
+      * §9   — mandatory LLM analysis must be complete for a ``ready`` release.
+
+    VP-04 (source-present/section-empty parity) needs the ordered-section registry
+    from Phase C to build a faithful ``sections`` map; until then ``snapshot`` and
+    ``sections`` are passed empty so ``validate_valhalla_completeness`` yields no
+    false positives. The manifest ``generation_status`` of the VH-LLM release is
+    ``ready`` on success; normalise it to the gate's ``completed`` vocabulary.
+    """
+    try:
+        report_text = generate_markdown(
+            report_data, jinja_context=template_context, tier=actual_tier
+        ).decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 — gate must not crash generation
+        report_text = ""
+
+    findings: list[dict[str, Any]] = []
+    for f in getattr(report_data, "findings", None) or []:
+        findings.append(
+            {
+                "cwe": getattr(f, "cwe", None),
+                "category": getattr(f, "owasp_category", None),
+                "owasp_category": getattr(f, "owasp_category", None),
+                "title": getattr(f, "title", "") or "",
+                "description": getattr(f, "description", "") or "",
+            }
+        )
+
+    llm_analysis_status = (
+        "completed" if str(valhalla_llm_status).strip().lower() == "ready" else valhalla_llm_status
+    )
+
+    return valhalla_release_blockers(
+        snapshot={},
+        sections={},
+        report_text=report_text,
+        findings=findings,
+        requested_tier=requested_tier,
+        actual_tier=actual_tier,
+        llm_analysis_status=llm_analysis_status,
+    )
 
 
 async def resolve_scan_id_for_report(
@@ -349,6 +408,10 @@ async def run_generate_report_pipeline(
             }
 
         generated: dict[str, str] = {}
+        # Phase G — track the Valhalla LLM analysis outcome so the release gate can
+        # fail-closed when mandatory analysis did not complete. "not_run" until the
+        # VH-LLM block sets it; only "completed" clears the LLM release blocker.
+        valhalla_llm_status: str = "not_run"
         # B6-T02 / T48 — resolve once per pipeline run; ``generate_pdf`` is the
         # only consumer (HTML/JSON/CSV ignore the flag) but we lift the lookup
         # out of the per-format branch to keep a single async query at the
@@ -376,6 +439,8 @@ async def run_generate_report_pipeline(
                 content = generate_markdown(
                     report_data, jinja_context=built.template_context, tier=tier_str
                 )
+            elif fmt == "xml":
+                content = generate_xml(report_data, jinja_context=built.template_context)
             else:
                 continue
             key = upload(
@@ -640,6 +705,7 @@ async def run_generate_report_pipeline(
                         size_bytes=len(manifest_bytes),
                     )
                     generated["valhalla_llm_manifest"] = manifest_key
+                valhalla_llm_status = str(vrelease.manifest.generation_status.value)
                 logger.info(
                     "valhalla_llm_release_emitted",
                     extra={
@@ -653,6 +719,7 @@ async def run_generate_report_pipeline(
                     },
                 )
             except Exception:  # noqa: BLE001 — VH-LLM deliverable is additive
+                valhalla_llm_status = "failed"
                 logger.warning(
                     "valhalla_llm_release_failed",
                     extra={
@@ -670,6 +737,37 @@ async def run_generate_report_pipeline(
         missing = expected_keys - set(generated.keys())
         if missing:
             raise RuntimeError(f"Missing outputs: {sorted(missing)}")
+
+        # Phase G — Valhalla fail-closed release gate. ``valhalla_release_blockers``
+        # was written (b866449) but never called from the prod path (diagnosis D4).
+        # Wire it here, before the release is marked ``ready``. Blockers are always
+        # computed and logged (observability); they *fail* the release only when
+        # ``valhalla_release_blockers_enabled`` is set — staged rollout so the gate
+        # does not regress releases in environments that do not yet satisfy the full
+        # completeness/LLM contract (Phases C–E). See config flag docstring.
+        if tier_str == "valhalla":
+            blockers = _compute_valhalla_release_blockers(
+                report_data=report_data,
+                template_context=built.template_context,
+                requested_tier=str(report.tier or tier_str),
+                actual_tier=tier_str,
+                valhalla_llm_status=valhalla_llm_status,
+            )
+            if blockers:
+                logger.warning(
+                    "valhalla_release_blockers_detected",
+                    extra={
+                        "event": "valhalla_release_blockers_detected",
+                        "report_id": report_id,
+                        "tenant_id": tenant_id,
+                        "scan_id": scan_id,
+                        "enforced": bool(settings.valhalla_release_blockers_enabled),
+                        "blockers": blockers,
+                        "blockers_n": len(blockers),
+                    },
+                )
+                if settings.valhalla_release_blockers_enabled:
+                    raise ReportGenerationError("Valhalla release blocked: " + "; ".join(blockers))
 
         await session.execute(
             update(Report)
@@ -746,4 +844,3 @@ async def run_generate_report_pipeline(
         with contextlib.suppress(Exception):
             await session.rollback()
     return {"status": "failed", "report_id": report_id, "error": "generation_failed"}
-

@@ -11,6 +11,29 @@
 
 ---
 
+## Valhalla PDF — print layout & branded layout decision (2026-09-28)
+
+The full Valhalla PDF is rendered from the **main document** template
+(`src/reports/templates/reports/valhalla.html.j2` → `valhalla_secreport_base.html.j2`),
+not from the branded `backend/templates/reports/valhalla/pdf_layout.html`.
+
+**Root-cause fix (D1):** the base template used a `min-height:100vh` flex layout. WeasyPrint
+does not fragment flex/grid containers across pages, so the whole report collapsed onto a single
+page and content overflowing the flex box was clipped. The `@media print` block now resets
+`#app`, `.main-container` and `#form-area` to plain block boxes (`display:block; flex:none;
+min-height:0; height:auto`), moves running headers/footers to `@page`/`counter(page)`, and allows
+long finding panels to paginate (`page-break-inside:auto`). See
+`docs/diagnostics/valhalla-empty-pdf-2026-09-28.md`.
+
+**Branded layout — Variant 1 (chosen):** `pdf_layout.html` remains an *executive brief* and is
+emitted as a **separate** artifact (`valhalla_llm_*` / executive companion). It is **not** the
+single source of the full Valhalla PDF, because by design it carries only leadership-level
+sections (no full finding cards / PoC). The branded branch is therefore not used for the full
+`tier=valhalla` PDF. Any future silent fallback to a different template on branded-render failure
+must be `generation_status=failed` with the error surfaced (no silent template substitution).
+
+---
+
 ## Why this exists
 
 The legacy `ReportGenerator` (RPT-003 → RPT-010) renders reports through

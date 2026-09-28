@@ -4,6 +4,31 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — empty single-page PDF fix (Part I: A/B/F/G) (2026-09-28)
+
+Fix for the Valhalla report shipping as a one-page PDF (header + title only, no
+findings/PoC/conclusions). Diagnosis in `docs/diagnostics/valhalla-empty-pdf-2026-09-28.md`.
+
+- **Phase A (diagnosis):** read-only reproduction script `backend/scripts/debug_valhalla_render.py`
+  (same path as prod: `build_report_export_payload` → `generate_*`), dumps all four formats +
+  structural `summary.json`. Root cause **D1 confirmed** in code.
+- **Phase B (D1 — root cause):** `@media print` in `valhalla_secreport_base.html.j2` now resets
+  `#app` / `.main-container` / `#form-area` to block boxes (`display:block; flex:none;
+  min-height:0; height:auto`). WeasyPrint does not fragment flex containers across pages, so the
+  previous `min-height:100vh` flex layout clipped all content onto page 1. Page headers/footers
+  moved to `@page`/`counter(page)`; `page-break-inside:auto` on long panels; `break-after:avoid`
+  on headings. `base/asgard/midgard` audited — no pathology (plain 960px block layout).
+- **Phase F (D5 — XML was CSV):** `download_report` now has explicit `xml`/`csv` branches and
+  returns **HTTP 400** for unknown formats instead of silently serving CSV under `application/xml`.
+  `xml` added to `REPORT_FORMAT_SET`, `DEFAULT_REPORT_FORMATS`, `CONTENT_TYPES` and the pipeline
+  generation loop so a stored XML artifact exists (no regenerate→CSV).
+- **Phase G (D4 — unwired gate):** `valhalla_release_blockers` is now called from the prod
+  pipeline before a Valhalla release is marked `ready` (`_compute_valhalla_release_blockers`).
+  Blockers are always logged; they fail the release when `valhalla_release_blockers_enabled=True`
+  (new flag, staged rollout default `False` until the Phase C ordered-section registry lands).
+- **Tests:** `backend/tests/reports/test_valhalla_print_layout_and_formats.py` — print-CSS static
+  guard, XML-not-CSV / unknown-format-400 branches, and gate-wired-into-pipeline regressions.
+
 ### Cairn blackboard engine — native port (2026-09-26)
 
 Native port of the Cairn Fact–Intent blackboard search engine (AGPL-3.0) into ARGUS
