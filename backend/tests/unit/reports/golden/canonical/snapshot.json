@@ -1,6 +1,11 @@
 {
+  "assessment_completeness": "unknown",
+  "attack_narrative": [],
   "budget_usage": {},
+  "claims": [],
+  "client_impact": null,
   "completed_at": "2026-01-01T00:10:00Z",
+  "conclusions": null,
   "coverage": [
     {
       "capability_id": "cap.sqli",
@@ -17,6 +22,8 @@
       "status": "not_assessed"
     }
   ],
+  "engagement": null,
+  "evidence_integrity": "unknown",
   "evidence_references": [
     {
       "description": null,
@@ -26,18 +33,32 @@
     }
   ],
   "execution_mode": "production",
+  "exploit_chains": [],
   "failures": [],
   "findings": [
     {
       "category": null,
+      "claims": [],
+      "closure": null,
       "confidence": 0.95,
+      "confirmation_class": null,
+      "cvss_score": null,
+      "cvss_vector": null,
+      "cvss_version": null,
       "cwe": "CWE-89",
       "description": "",
+      "downgrade_reason": null,
+      "established_or_hypothesis": null,
       "evidence_ids": [
         "E-1"
       ],
       "finding_id": "F-1",
+      "owasp_category": null,
+      "poc": null,
       "raw_artifact_ref": "E-1",
+      "remediation": null,
+      "review_status": "not_required",
+      "reviewer": null,
       "severity": "critical",
       "title": "t",
       "tool_run_id": "TR-1",
@@ -46,12 +67,25 @@
     },
     {
       "category": null,
+      "claims": [],
+      "closure": null,
       "confidence": 0.95,
+      "confirmation_class": null,
+      "cvss_score": null,
+      "cvss_vector": null,
+      "cvss_version": null,
       "cwe": null,
       "description": "",
+      "downgrade_reason": null,
+      "established_or_hypothesis": null,
       "evidence_ids": [],
       "finding_id": "F-2",
+      "owasp_category": null,
+      "poc": null,
       "raw_artifact_ref": null,
+      "remediation": null,
+      "review_status": "not_required",
+      "reviewer": null,
       "severity": "high",
       "title": "t",
       "tool_run_id": null,
@@ -60,12 +94,25 @@
     },
     {
       "category": null,
+      "claims": [],
+      "closure": null,
       "confidence": 0.5,
+      "confirmation_class": null,
+      "cvss_score": null,
+      "cvss_vector": null,
+      "cvss_version": null,
       "cwe": null,
       "description": "",
+      "downgrade_reason": null,
+      "established_or_hypothesis": null,
       "evidence_ids": [],
       "finding_id": "F-3",
+      "owasp_category": null,
+      "poc": null,
       "raw_artifact_ref": null,
+      "remediation": null,
+      "review_status": "not_required",
+      "reviewer": null,
       "severity": "low",
       "title": "t",
       "tool_run_id": null,
@@ -74,7 +121,10 @@
     }
   ],
   "generated_at": "2026-01-01T00:00:00+00:00",
+  "generation_status": "unknown",
   "limitations": [],
+  "llm_analysis_status": "not_run",
+  "methodology": [],
   "not_assessed_capabilities": [
     "cap.xss"
   ],
@@ -85,15 +135,18 @@
   "quick_profile": null,
   "registry_versions": {},
   "resolved_scan_mode": "standard",
+  "review_status": "not_required",
   "scan_id": "scan-1",
   "scan_profile": "light",
-  "schema_version": "v1",
+  "schema_version": "v2",
   "scope_summary": {},
   "skipped_reasons": [],
-  "snapshot_hash": "5c35d254497322e2c94a572f192a74e1abaff3a9be511da87279868adac85423",
+  "snapshot_hash": "118ff9bcd82a92ae6a44555bef1777409bbde90817982dd22fa92b5bd3d7fe03",
   "started_at": null,
+  "surface_inventory": [],
   "target": "https://example.com",
   "tenant_id": "tenant-1",
+  "test_executions": [],
   "tested_capabilities": [
     "cap.sqli"
   ],
@@ -108,6 +161,7 @@
       "tool_run_id": "TR-1"
     }
   ],
+  "unconfirmed_observations": [],
   "validation_errors": [
     {
       "code": "insufficient_evidence",
@@ -115,6 +169,7 @@
       "message": "Finding 'F-2' claimed 'confirmed' without a verifiable evidence chain (evidence→run/session); downgraded."
     }
   ],
+  "verification_kit_ref": null,
   "wstg": {
     "applicability_rules_version": "argus-wstg-cov-1",
     "applicable": 96,

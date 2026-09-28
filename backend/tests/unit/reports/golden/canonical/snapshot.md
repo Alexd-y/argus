@@ -7,8 +7,16 @@
 - nuclei_profile: `vuln_default`
 - started_at: `not_assessed`
 - completed_at: `2026-01-01T00:10:00Z`
-- schema_version: `v1`
-- snapshot_hash: `5c35d254497322e2c94a572f192a74e1abaff3a9be511da87279868adac85423`
+- schema_version: `v2`
+- snapshot_hash: `118ff9bcd82a92ae6a44555bef1777409bbde90817982dd22fa92b5bd3d7fe03`
+
+## Report Passport
+
+- generation_status: `unknown`
+- llm_analysis_status: `not_run`
+- assessment_completeness: `unknown`
+- evidence_integrity: `unknown`
+- review_status: `not_required`
 
 ## Findings (3)
 
@@ -41,6 +49,12 @@
 - validator_id: `not_assessed`
 - raw_artifact_ref: `not_assessed`
 - evidence_ids: _none_
+
+## Evidence Inventory
+
+| Evidence ID | Kind | Object Key | Description |
+|---|---|---|---|
+| `E-1` | http | `E-1` | not_assessed |
 
 ## Coverage
 

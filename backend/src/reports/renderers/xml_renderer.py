@@ -49,9 +49,69 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(fe, "tool_run_id", f.tool_run_id)
         _text(fe, "validator_id", f.validator_id)
         _text(fe, "raw_artifact_ref", f.raw_artifact_ref)
+        _text(fe, "owasp_category", f.owasp_category)
+        _text(fe, "cvss_version", f.cvss_version)
+        _text(fe, "cvss_vector", f.cvss_vector)
+        _text(fe, "cvss_score", f.cvss_score)
+        _text(fe, "established_or_hypothesis", f.established_or_hypothesis)
+        _text(fe, "confirmation_class", f.confirmation_class)
+        _text(fe, "downgrade_reason", f.downgrade_reason)
+        _text(fe, "review_status", f.review_status)
+        _text(fe, "reviewer", f.reviewer)
         ev = SubElement(fe, "evidence_ids")
         for eid in f.evidence_ids:
             _text(ev, "evidence_id", eid)
+        if f.poc is not None:
+            pe = SubElement(fe, "proof_of_concept")
+            for tag in (
+                "preconditions",
+                "tool",
+                "payload",
+                "command",
+                "http_request",
+                "http_response",
+                "discriminator",
+                "negative_control",
+                "canary",
+                "observation",
+                "oast_callback",
+                "observed_impact",
+                "potential_impact",
+                "blast_radius",
+                "timing",
+                "source",
+                "attempts",
+                "reproducibility",
+                "cleanup",
+                "client_repro",
+                "screenshot_ref",
+            ):
+                _text(pe, tag, getattr(f.poc, tag))
+            pev = SubElement(pe, "evidence_ids")
+            for eid in f.poc.evidence_ids:
+                _text(pev, "evidence_id", eid)
+        if f.remediation is not None:
+            re_ = SubElement(fe, "remediation")
+            re_.set("status", f.remediation.status)
+            for tag in (
+                "established_or_hypothesis",
+                "temporary_containment",
+                "permanent_fix",
+                "preventive_measures",
+                "component",
+                "rollout_order",
+                "rollback_risk",
+                "retest_plan",
+            ):
+                _text(re_, tag, getattr(f.remediation, tag))
+            crits = SubElement(re_, "acceptance_criteria")
+            for crit in f.remediation.acceptance_criteria:
+                _text(crits, "criterion", crit)
+        if f.closure is not None:
+            cl = SubElement(fe, "closure")
+            _text(cl, "permitted_status", f.closure.permitted_status)
+            for tag in ("what_verified", "what_not_verified", "residual_risk", "next_step"):
+                _text(cl, tag, getattr(f.closure, tag))
 
     tools_el = SubElement(root, "tool_runs")
     for t in doc.tool_runs:
@@ -143,8 +203,136 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(vee, "finding_id", ve.finding_id)
         _text(vee, "message", ve.message)
 
+    _render_v2_sections_xml(root, doc)
+
     xml_bytes = tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
+
+
+def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
+    """v2 doc-level sections: passport, conclusions, engagement, surface, narrative…"""
+    passport = SubElement(root, "passport")
+    passport.set("generation_status", doc.generation_status)
+    passport.set("llm_analysis_status", doc.llm_analysis_status)
+    passport.set("assessment_completeness", doc.assessment_completeness)
+    passport.set("evidence_integrity", doc.evidence_integrity)
+    passport.set("review_status", doc.review_status)
+    _text(passport, "verification_kit_ref", doc.verification_kit_ref)
+
+    if doc.conclusions is not None:
+        ce = SubElement(root, "conclusions")
+        _text(ce, "executive_summary", doc.conclusions.executive_summary)
+        _text(ce, "business_risk", doc.conclusions.business_risk)
+        _text(ce, "closure_summary", doc.conclusions.closure_summary)
+        pp = SubElement(ce, "priority_plan")
+        for item in doc.conclusions.priority_plan:
+            ie = SubElement(pp, "item")
+            _text(ie, "rationale", item.get("rationale") or item.get("reason"))
+            fids = SubElement(ie, "finding_ids")
+            for fid in item.get("finding_ids") or item.get("findings") or []:
+                _text(fids, "finding_id", fid)
+
+    if doc.engagement is not None:
+        e = doc.engagement
+        ee = SubElement(root, "engagement")
+        for tag, seq in (
+            ("testing_windows", e.testing_windows),
+            ("source_ips", e.source_ips),
+            ("user_agents", e.user_agents),
+            ("canaries", e.canaries),
+            ("oast_domains", e.oast_domains),
+            ("test_accounts", e.test_accounts),
+            ("roe_restrictions", e.roe_restrictions),
+            ("incidents", e.incidents),
+        ):
+            container = SubElement(ee, tag)
+            for val in seq:
+                _text(container, "item", val)
+        _text(ee, "run_profile", e.run_profile)
+        _text(ee, "execution_mode", e.execution_mode)
+        _text(ee, "tool_catalog_version", e.tool_catalog_version)
+        _text(ee, "time_source", e.time_source)
+
+    surface = SubElement(root, "surface_inventory")
+    for s in doc.surface_inventory:
+        se = SubElement(surface, "asset")
+        se.set("host", s.host)
+        _text(se, "port", s.port)
+        _text(se, "service", s.service)
+        _text(se, "version", s.version)
+        _text(se, "technology", s.technology)
+
+    unconf = SubElement(root, "unconfirmed_observations")
+    unconf.set("count", str(len(doc.unconfirmed_observations)))
+    for f in doc.unconfirmed_observations:
+        ue = SubElement(unconf, "observation")
+        ue.set("finding_id", f.finding_id)
+        ue.set("severity", f.severity)
+        _text(ue, "title", f.title)
+        _text(ue, "downgrade_reason", f.downgrade_reason)
+
+    tests = SubElement(root, "test_executions")
+    for t in doc.test_executions:
+        te = SubElement(tests, "test_execution")
+        te.set("test_id", t.test_id)
+        te.set("result", t.result)
+        _text(te, "control", t.control)
+        _text(te, "method", t.method)
+        _text(te, "executed_at", t.executed_at)
+
+    narrative = SubElement(root, "attack_narrative")
+    for step in sorted(doc.attack_narrative, key=lambda s: s.order_index):
+        ste = SubElement(narrative, "step")
+        ste.set("order_index", str(step.order_index))
+        ste.set("phase", step.phase)
+        _text(ste, "tactic", step.tactic)
+        _text(ste, "technique_id", step.technique_id)
+        _text(ste, "description", step.description)
+
+    chains = SubElement(root, "exploit_chains")
+    for ch in doc.exploit_chains:
+        che = SubElement(chains, "chain")
+        che.set("chain_id", ch.chain_id)
+        che.set("kind", ch.kind)
+        _text(che, "title", ch.title)
+        _text(che, "preconditions", ch.preconditions)
+        _text(che, "outcome", ch.outcome)
+        _text(che, "breaks_at", ch.breaks_at)
+        tv = SubElement(che, "to_verify")
+        for item in ch.to_verify:
+            _text(tv, "item", item)
+
+    method = SubElement(root, "methodology")
+    for m in doc.methodology:
+        me = SubElement(method, "framework")
+        me.set("name", m.framework)
+        me.set("applied", str(m.applied))
+        _text(me, "revision", m.revision)
+        _text(me, "notes", m.notes)
+
+    if doc.client_impact is not None:
+        c = doc.client_impact
+        cie = SubElement(root, "client_impact")
+        for tag, seq in (
+            ("created_artifacts", c.created_artifacts),
+            ("removed", c.removed),
+            ("not_removed", c.not_removed),
+        ):
+            container = SubElement(cie, tag)
+            for val in seq:
+                _text(container, "item", val)
+        _text(cie, "data_exfiltration", c.data_exfiltration)
+        _text(cie, "availability_impact", c.availability_impact)
+
+    claims = SubElement(root, "claims")
+    for cl in doc.claims:
+        cle = SubElement(claims, "claim")
+        cle.set("claim_id", cl.claim_id)
+        cle.set("claim_type", cl.claim_type)
+        _text(cle, "text", cl.text)
+        cev = SubElement(cle, "evidence_ids")
+        for eid in cl.evidence_ids:
+            _text(cev, "evidence_id", eid)
 
 
 __all__ = ["render_xml"]

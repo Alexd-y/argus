@@ -27,7 +27,7 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SNAPSHOT_SCHEMA_VERSION: Final[str] = "v1"
+SNAPSHOT_SCHEMA_VERSION: Final[str] = "v2"
 
 #: Canonical statuses used when data is missing — never invent content.
 NO_DATA_STATUSES: Final[frozenset[str]] = frozenset(
@@ -57,6 +57,199 @@ VerificationStatus = Literal[
 ]
 
 
+class ReportPoC(BaseModel):
+    """Proof-of-concept for a finding (v2, prompt §6/§15.1).
+
+    Carries both the Part-I evidence fields and the senior discriminator/negative-
+    control/canary fields. ``discriminator`` and ``negative_control`` are mandatory
+    for a ``confirmed_vulnerability`` claim; without them the status is downgraded to
+    ``observed`` (enforced by the class-rule table + release gate).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str | None = None
+    payload: str | None = None
+    command: str | None = None
+    http_request: str | None = None
+    http_response: str | None = None
+    observation: str | None = None
+    oast_callback: str | None = None
+    screenshot_ref: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    reproducibility: str | None = None  # confirmed | one-shot | not_reproduced
+    # Senior fields (§15.1)
+    preconditions: str | None = None
+    discriminator: str | None = None
+    negative_control: str | None = None
+    canary: str | None = None
+    timing: str | None = None
+    source: str | None = None  # source IP / sandbox
+    attempts: int | None = None
+    observed_impact: str | None = None
+    potential_impact: str | None = None
+    blast_radius: str | None = None
+    cleanup: str | None = None
+    client_repro: str | None = None
+
+
+class ReportRemediation(BaseModel):
+    """Per-finding remediation plan (v2, prompt §7 / E.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "not_generated"  # AnalysisStatus value
+    established_or_hypothesis: str | None = None
+    temporary_containment: str | None = None
+    permanent_fix: str | None = None
+    preventive_measures: str | None = None
+    component: str | None = None
+    rollout_order: str | None = None
+    rollback_risk: str | None = None
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    retest_plan: str | None = None
+
+
+class ReportClosure(BaseModel):
+    """Per-finding closure conclusion (v2, prompt §7 / E.3).
+
+    ``permitted_status`` is computed by the application (``compute_permitted_closure_
+    status``); the LLM may only downgrade it, never strengthen it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    permitted_status: str | None = None
+    what_verified: str | None = None
+    what_not_verified: str | None = None
+    residual_risk: str | None = None
+    next_step: str | None = None
+
+
+class ReportClaim(BaseModel):
+    """A claim projected into the snapshot (v2, prompt §14)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    claim_type: str
+    text: str
+    subject: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+    derived_from: list[str] = Field(default_factory=list)
+    limitations: str = ""
+    validator: str | None = None
+    reviewer: str | None = None
+
+
+class ReportSurfaceItem(BaseModel):
+    """One attack-surface entry: host/port/service/version/technology (v2, prompt §5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    host: str
+    port: int | None = None
+    service: str | None = None
+    version: str | None = None
+    technology: str | None = None
+
+
+class ReportTestExecution(BaseModel):
+    """An executed check, whether or not it yielded a finding (v2, prompt §15.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    test_id: str
+    control: str
+    method: str = ""
+    executed_at: str | None = None
+    result: str = "not_applicable"  # passed|failed|blocked|tool_failed|not_applicable|inconclusive
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class ReportAttackStep(BaseModel):
+    """One step in the attack narrative (v2, prompt §16)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    order_index: int = 0
+    phase: str = ""  # recon|entry|persistence|privesc|data_access
+    description: str = ""
+    tactic: str | None = None  # MITRE ATT&CK tactic
+    technique_id: str | None = None  # MITRE ATT&CK technique
+    claim_ids: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    timestamp: str | None = None
+
+
+class ReportExploitChain(BaseModel):
+    """A proven or hypothetical impact chain (v2, prompt §16, FND-03)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chain_id: str
+    kind: str = "hypothetical"  # proven | hypothetical
+    title: str = ""
+    steps: list[ReportAttackStep] = Field(default_factory=list)
+    preconditions: str | None = None
+    outcome: str | None = None
+    breaks_at: str | None = None
+    to_verify: list[str] = Field(default_factory=list)
+
+
+class ReportMethodologyRef(BaseModel):
+    """An applied methodology/framework with revision (v2, prompt §22)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    framework: str
+    revision: str | None = None
+    applied: bool = True
+    notes: str | None = None
+
+
+class EngagementMetadata(BaseModel):
+    """Engagement parameters for log correlation (v2, prompt §17 / Phase L)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    testing_windows: list[str] = Field(default_factory=list)
+    source_ips: list[str] = Field(default_factory=list)
+    user_agents: list[str] = Field(default_factory=list)
+    canaries: list[str] = Field(default_factory=list)
+    oast_domains: list[str] = Field(default_factory=list)
+    test_accounts: list[str] = Field(default_factory=list)  # aliases + roles, no passwords
+    run_profile: str | None = None
+    execution_mode: str | None = None
+    tool_catalog_version: str | None = None
+    roe_restrictions: list[str] = Field(default_factory=list)
+    incidents: list[str] = Field(default_factory=list)
+    time_source: str | None = None
+
+
+class ClientImpact(BaseModel):
+    """Impact on the client environment + cleanup proof (v2, prompt §20.3 / Phase O)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    created_artifacts: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    not_removed: list[str] = Field(default_factory=list)
+    data_exfiltration: str | None = None
+    availability_impact: str | None = None
+
+
+class ReportConclusions(BaseModel):
+    """Report-level LLM conclusions (v2, prompt §7 / E.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: str | None = None
+    business_risk: str | None = None
+    closure_summary: str | None = None
+    priority_plan: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ReportFinding(BaseModel):
     """One finding in the snapshot. Provable status requires evidence."""
 
@@ -78,6 +271,21 @@ class ReportFinding(BaseModel):
     tool_run_id: str | None = None
     validator_id: str | None = None
     raw_artifact_ref: str | None = None
+
+    # ---- v2 additions (all optional / defaulted → backward-compatible) ----
+    owasp_category: str | None = None
+    cvss_version: str | None = None
+    cvss_vector: str | None = None
+    cvss_score: float | None = None
+    established_or_hypothesis: str | None = None  # established | hypothesis
+    confirmation_class: str | None = None  # poc_validation.ConfirmationClass value
+    downgrade_reason: str | None = None  # why confirmed→observed (§15.2)
+    reviewer: str | None = None
+    review_status: str = "not_required"  # not_required|pending|approved|changes_requested
+    poc: ReportPoC | None = None
+    remediation: ReportRemediation | None = None
+    closure: ReportClosure | None = None
+    claims: list[ReportClaim] = Field(default_factory=list)
 
 
 class ReportToolRun(BaseModel):
@@ -179,6 +387,38 @@ class ReportDocumentV1(BaseModel):
     # Versions
     prompt_model_versions: dict[str, Any] = Field(default_factory=dict)
     registry_versions: dict[str, Any] = Field(default_factory=dict)
+
+    # ---- v2 additions (all optional / defaulted → backward-compatible) ----
+    #: Attack-surface inventory (hosts/ports/services/versions/technologies).
+    surface_inventory: list[ReportSurfaceItem] = Field(default_factory=list)
+    #: Observations that did not meet their class confirmation bar (kept out of the
+    #: findings registry; printed separately, prompt §6.D.1 / §15.2).
+    unconfirmed_observations: list[ReportFinding] = Field(default_factory=list)
+    #: Executed checks that produced no finding (prompt §15.3 — proves coverage).
+    test_executions: list[ReportTestExecution] = Field(default_factory=list)
+    #: Attack narrative (chronological, prompt §16 / Phase K).
+    attack_narrative: list[ReportAttackStep] = Field(default_factory=list)
+    #: Proven + hypothetical impact chains, kept separate (FND-03).
+    exploit_chains: list[ReportExploitChain] = Field(default_factory=list)
+    #: Applied methodologies with revisions (prompt §22).
+    methodology: list[ReportMethodologyRef] = Field(default_factory=list)
+    #: Engagement parameters for client log correlation (prompt §17 / Phase L).
+    engagement: EngagementMetadata | None = None
+    #: Impact on the client environment + cleanup proof (prompt §20.3 / Phase O).
+    client_impact: ClientImpact | None = None
+    #: Report-level LLM conclusions (executive/business-risk/closure/priority-plan).
+    conclusions: ReportConclusions | None = None
+    #: Doc-level claims (the narrative substrate, prompt §14).
+    claims: list[ReportClaim] = Field(default_factory=list)
+
+    # Release status model (prompt E.2 — independent fields, never conflated).
+    generation_status: str = "unknown"  # unknown|ready|partial|failed
+    llm_analysis_status: str = "not_run"  # not_run|completed|partial|failed
+    assessment_completeness: str = "unknown"  # complete|partial|incomplete|unknown
+    evidence_integrity: str = "unknown"  # verified|unverified|failed|unknown
+    review_status: str = "not_required"  # not_required|pending|approved|changes_requested
+    #: Reference (object key / path) to the independent verification kit (Phase M).
+    verification_kit_ref: str | None = None
 
     generated_at: str = ""
     snapshot_hash: str = ""
@@ -292,6 +532,23 @@ def build_report_document(
     prompt_model_versions: dict[str, Any] | None = None,
     registry_versions: dict[str, Any] | None = None,
     wstg: dict[str, Any] | None = None,
+    # ---- v2 pass-through (optional) ----
+    surface_inventory: list[ReportSurfaceItem] | None = None,
+    unconfirmed_observations: list[ReportFinding] | None = None,
+    test_executions: list[ReportTestExecution] | None = None,
+    attack_narrative: list[ReportAttackStep] | None = None,
+    exploit_chains: list[ReportExploitChain] | None = None,
+    methodology: list[ReportMethodologyRef] | None = None,
+    engagement: EngagementMetadata | None = None,
+    client_impact: ClientImpact | None = None,
+    conclusions: ReportConclusions | None = None,
+    claims: list[ReportClaim] | None = None,
+    generation_status: str = "unknown",
+    llm_analysis_status: str = "not_run",
+    assessment_completeness: str = "unknown",
+    evidence_integrity: str = "unknown",
+    review_status: str = "not_required",
+    verification_kit_ref: str | None = None,
     generated_at: datetime | None = None,
 ) -> ReportDocumentV1:
     """Assemble + finalize a canonical snapshot with the evidence gate applied."""
@@ -338,6 +595,22 @@ def build_report_document(
         prompt_model_versions=prompt_model_versions or {},
         registry_versions=registry_versions or {},
         wstg=wstg,
+        surface_inventory=list(surface_inventory or []),
+        unconfirmed_observations=list(unconfirmed_observations or []),
+        test_executions=list(test_executions or []),
+        attack_narrative=list(attack_narrative or []),
+        exploit_chains=list(exploit_chains or []),
+        methodology=list(methodology or []),
+        engagement=engagement,
+        client_impact=client_impact,
+        conclusions=conclusions,
+        claims=list(claims or []),
+        generation_status=generation_status,
+        llm_analysis_status=llm_analysis_status,
+        assessment_completeness=assessment_completeness,
+        evidence_integrity=evidence_integrity,
+        review_status=review_status,
+        verification_kit_ref=verification_kit_ref,
     )
     return doc.finalized(generated_at=generated_at)
 
@@ -345,11 +618,23 @@ def build_report_document(
 __all__ = [
     "NO_DATA_STATUSES",
     "SNAPSHOT_SCHEMA_VERSION",
+    "ClientImpact",
+    "EngagementMetadata",
+    "ReportAttackStep",
+    "ReportClaim",
+    "ReportClosure",
+    "ReportConclusions",
     "ReportCoverageItem",
     "ReportDocumentV1",
     "ReportEvidenceRef",
+    "ReportExploitChain",
     "ReportFailure",
     "ReportFinding",
+    "ReportMethodologyRef",
+    "ReportPoC",
+    "ReportRemediation",
+    "ReportSurfaceItem",
+    "ReportTestExecution",
     "ReportToolRun",
     "ReportValidationError",
     "VerificationStatus",
