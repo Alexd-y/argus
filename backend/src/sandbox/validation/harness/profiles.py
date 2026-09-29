@@ -10,10 +10,19 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
+from src.core.config import settings
+from src.sandbox.docker_gateway import DockerGatewayError, exec_in
+
 logger = logging.getLogger(__name__)
+
+# F-H01: message returned when a harness would otherwise execute an
+# attacker-influenceable reproducer on the host but the sandbox is unavailable.
+_SANDBOX_REQUIRED_MSG = (
+    "reproducer execution requires the argus-sandbox (SANDBOX_ENABLED=true); "
+    "refusing to run untrusted reproducer payload on the host"
+)
 
 
 class BaseHarness(ABC):
@@ -176,34 +185,41 @@ class CliHarness(BaseHarness):
         if not command:
             return {"stdout": "", "stderr": "No command", "exit_code": -1, "logs": logs}
 
+        # F-H01: the CLI reproducer `payload` is an attacker-influenceable shell
+        # command (derived from findings / LLM output). It MUST NOT run on the
+        # host. Execute it inside the segmented, unprivileged argus-sandbox via the
+        # single Docker gateway. `sh -c <command>` preserves legitimate pipe /
+        # redirect reproducer semantics, while the whole command is carried as ONE
+        # argv element — it cannot inject arguments into the `docker exec` itself.
+        # If the sandbox is unavailable we fail closed rather than fall back to the
+        # host shell (that fallback WAS the vulnerability).
+        if not settings.sandbox_enabled:
+            return {
+                "stdout": "",
+                "stderr": _SANDBOX_REQUIRED_MSG,
+                "exit_code": -1,
+                "logs": ["[CLI] sandbox disabled — fail-closed"],
+            }
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = await exec_in(
+                settings.sandbox_container_name,
+                ["sh", "-c", command],
+                timeout=float(min(timeout, 120)),
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=min(timeout, 120))
-            return {
-                "stdout": (stdout or b"").decode("utf-8", errors="replace")[:50000],
-                "stderr": (stderr or b"").decode("utf-8", errors="replace")[:10000],
-                "exit_code": proc.returncode or 0,
-                "logs": [f"[CLI] exit={proc.returncode}"],
-                "syscalls": [],
-            }
-        except TimeoutError:
+        except DockerGatewayError as exc:
             return {
                 "stdout": "",
-                "stderr": "Command timeout",
-                "exit_code": 124,
-                "logs": ["TIMEOUT"],
-            }
-        except Exception as exc:
-            return {
-                "stdout": "",
-                "stderr": str(exc),
+                "stderr": f"sandbox exec rejected: {exc}",
                 "exit_code": 1,
                 "logs": [f"ERROR: {exc}"],
             }
+        return {
+            "stdout": result.stdout[:50000],
+            "stderr": result.stderr[:10000],
+            "exit_code": result.exit_code,
+            "logs": [f"[CLI] exit={result.exit_code} (sandbox)"],
+            "syscalls": [],
+        }
 
 
 class LibraryHarness(BaseHarness):
@@ -227,40 +243,38 @@ class LibraryHarness(BaseHarness):
                 "logs": [],
             }
 
-        with TemporaryDirectory() as tmp:
-            script = Path(tmp) / "test_harness.py"
-            script.write_text(code, encoding="utf-8")
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "python3",
-                    str(script),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=min(timeout, 60)
-                )
-                return {
-                    "stdout": (stdout or b"").decode("utf-8", errors="replace")[:10000],
-                    "stderr": (stderr or b"").decode("utf-8", errors="replace")[:5000],
-                    "exit_code": proc.returncode or 0,
-                    "logs": [f"[LIB] exit={proc.returncode}"],
-                    "syscalls": [],
-                }
-            except TimeoutError:
-                return {
-                    "stdout": "",
-                    "stderr": "Library execution timeout",
-                    "exit_code": 124,
-                    "logs": [],
-                }
-            except Exception as exc:
-                return {
-                    "stdout": "",
-                    "stderr": str(exc),
-                    "exit_code": 1,
-                    "logs": [f"ERROR: {exc}"],
-                }
+        # F-H01: the library reproducer `payload` is attacker-influenceable Python.
+        # Previously it was written to a temp file and run with host `python3` —
+        # arbitrary code execution on the host. Run it inside the argus-sandbox via
+        # the gateway instead (`python3 -c <code>`; code carried as one argv
+        # element). Fail closed when the sandbox is unavailable.
+        if not settings.sandbox_enabled:
+            return {
+                "stdout": "",
+                "stderr": _SANDBOX_REQUIRED_MSG,
+                "exit_code": -1,
+                "logs": ["[LIB] sandbox disabled — fail-closed"],
+            }
+        try:
+            result = await exec_in(
+                settings.sandbox_container_name,
+                ["python3", "-c", code],
+                timeout=float(min(timeout, 60)),
+            )
+        except DockerGatewayError as exc:
+            return {
+                "stdout": "",
+                "stderr": f"sandbox exec rejected: {exc}",
+                "exit_code": 1,
+                "logs": [f"ERROR: {exc}"],
+            }
+        return {
+            "stdout": result.stdout[:10000],
+            "stderr": result.stderr[:5000],
+            "exit_code": result.exit_code,
+            "logs": [f"[LIB] exit={result.exit_code} (sandbox)"],
+            "syscalls": [],
+        }
 
 
 class BinaryHarness(BaseHarness):

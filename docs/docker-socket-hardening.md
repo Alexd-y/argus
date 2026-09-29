@@ -299,12 +299,10 @@ Staged hardening (F-H01). Each stage ships independently, in order:
     `api/routers/sandbox.py` exec ps, `quick/cancellation.py` exec pkill,
     `recon/sandbox_artifact_io.py` exec head -c). Each is listed with a reason;
     the guard prevents NEW direct usage and the stale-check keeps the list honest.
-  - **Separate finding flagged (out of F-H01 scope):**
-    `sandbox/validation/harness/profiles.py:180` runs a reproducer `payload` via
-    `asyncio.create_subprocess_shell`. If that payload is attacker-influenced and
-    executes on the host, it is a shell-injection RCE. Not changed here (list form
-    would break legitimate pipe/redirect reproducers, and its execution
-    environment/source needs a dedicated review) — tracked as its own item.
+  - **Related finding — FIXED (see Stage 6):** the validation harnesses ran
+    attacker-influenceable reproducer payloads on the host
+    (`profiles.py` `CliHarness` via `create_subprocess_shell`, `LibraryHarness`
+    via host `python3`). Now routed into the sandbox via the gateway, fail-closed.
 - **Stage 4 — purpose-built exec broker (DONE):**
   - New `backend/src/exec_broker/app.py` — a FastAPI service (`argus-exec-broker`)
     that is the only socket holder. Single `POST /v1/exec` accepting
@@ -338,6 +336,16 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   network with postgres/redis/minio; (5) `exploitation_executor.py` has no
   hardcoded `"argus-sandbox"` literal (its 28 literals migrated to
   `settings.sandbox_container_name`); (6) re-runs the Stage 3 AST gateway guard.
+- **Stage 6 — validation-harness host-execution fix (DONE):** the validation
+  harnesses no longer execute attacker-influenceable reproducer payloads on the
+  host. `CliHarness` (`create_subprocess_shell(payload)`) and `LibraryHarness`
+  (temp file + host `python3`) now run the payload inside the argus-sandbox via
+  the gateway (`sh -c <command>` / `python3 -c <code>`, payload as one argv
+  element so pipe/redirect semantics survive with no argv injection). Both fail
+  closed when `SANDBOX_ENABLED` is off rather than falling back to the host shell.
+  `BinaryHarness` keeps `file`/`strings` on a path via `create_subprocess_exec`
+  (argv, read-only tools — not shell injection). Test:
+  `tests/unit/sandbox/test_harness_sandbox_execution.py`.
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
 - **Residual:** container-create escape remains while `docker exec` is required
   (see §3). Full remediation is Stage 4 (exec broker) / §5 (k8s adapter /
