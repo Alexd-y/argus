@@ -4,6 +4,42 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — Part III: shipped-bundle defects R-01…R-20 (Phases S–V) (2026-09-29)
+
+Fixes derived from the actually-exported report bundle. All twenty defects become
+regression tests; the bundle scenario now yields an honest draft, never a ready release.
+
+- **Phase S — LLM failure diagnostics (R-01/R-02).** Classified failures
+  (`llm_not_invoked` / `llm_call_failed` / `llm_schema_invalid` / `llm_validation_rejected`)
+  via `LlmCallError`; structured `format_llm_error` lines (type/http/attempt/provider/model);
+  empty response = failed call; per-finding errors aggregated into the release manifest;
+  pre-flight health probe short-circuits N identical failures; summary provenance marked
+  `app_computed_no_llm_call`; `resolve_report_llm_identity` records the REAL provider/model
+  (not the `report_writer` alias); `manifest_consistency_errors` blocks failed-completeness
+  with empty errors.
+- **Phase T — prompt-artifact + output gate (R-03…R-12).** `prose_gate` blocks prompt
+  placeholders (`[Layer]`/`{{…}}`), echoed instructions, chat artifacts, questionnaire echoes,
+  raw JSON in a prose slot; `check_output_consistency` blocks invented chains (R-07), truncated
+  finding IDs (R-08), insecure verify flags `--insecure`/`-k`/`verify=False` (R-06), counter sum
+  mismatch (R-10) and WSTG coverage mismatch (R-12). Wired into the release gate.
+- **Phase U — snapshot completeness (R-13…R-19).** `ReportFinding`/`ReportToolRun`/
+  `ReportEvidenceRef` extended (object identity, CVSS, impact, exit_code/argv/timing, sha256/
+  collector/chain_hash); `snapshot_completeness_gate` enforces passport fields (R-13),
+  limitations-when-coverage-failed (R-14), tool_run timing/artifact (R-15), evidence hash/
+  timestamp (R-16), pseudo-evidence cap `tool:*`/`recon:*` (R-17), finding→tool_run link (R-18);
+  `completed_no_output` for empty successes; CVSS/OWASP preserved on transfer (R-19).
+- **Phase Q — 21-section registry + finding-count parity (R-11).** Full §26 section order;
+  `report_parity` blocks a main-md vs canonical finding-count divergence (the shipped 1-vs-9).
+- **Phase R — report layout (R-20).** Canonical HTML upgraded from a field dump to a real report:
+  cover with metric tiles + CONFIDENTIAL, `@page` running `Page N of M`, finding cards with
+  What We Found / Evidence / Recommended Remediation / Validation, discriminator + control.
+- **Phase V — PDF backend.** WeasyPrint print-safe stays mandatory default; opt-in
+  `ChromiumBackend` (`REPORT_PDF_BACKEND=chromium`) reproduces the reference layout 1:1, out of the
+  auto-fallback chain. Documented in `docs/report-service.md`.
+- **Verified:** 14-page WeasyPrint PDF with the new cover renders in the `argus-backend` container;
+  the shipped-bundle scenario produces an honest draft listing R-13/R-15/R-16/R-17 + R-01/R-02.
+  ~45 new Part-III tests; 714 report tests green.
+
 ### Valhalla report — full contract: v2 document, LLM cards, provability (Phases C–P) (2026-09-29)
 
 Completed the remaining Valhalla report phases on top of the Part-I defect fix. All
