@@ -10,6 +10,7 @@ with a mock and reusable from the pipeline with the real facade binding.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from src.reports.llm_remediation.builder import build_valhalla_llm_document
@@ -138,6 +139,7 @@ def generate_valhalla_llm_release(
     model: str = "unknown",
     cache: dict[str, Any] | None = None,
     locale: str = "ru",
+    health_probe: bool = False,
 ) -> tuple[ValhallaLlmDocument, ValhallaRelease]:
     """Run the analysis and build the multi-format release for a report.
 
@@ -158,6 +160,7 @@ def generate_valhalla_llm_release(
         closure_inputs=closure_inputs,
         allowed_evidence_ids=allowed_evidence,
         locale=locale,
+        health_probe=health_probe,
     )
     document = build_valhalla_llm_document(
         run_result,
@@ -166,8 +169,15 @@ def generate_valhalla_llm_release(
         canonical_snapshot_hash=canonical_snapshot_hash,
         locale=locale,
     )
+    failure_kinds = Counter(r.failure_kind for r in run_result.results if r.failure_kind)
     release = build_valhalla_release(
-        document, formats=formats, allow_incomplete_draft=allow_incomplete_draft
+        document,
+        formats=formats,
+        allow_incomplete_draft=allow_incomplete_draft,
+        analysis_errors=run_result.errors,
+        failure_kinds=dict(failure_kinds),
+        llm_provider=provider,
+        llm_model=model,
     )
     return document, release
 

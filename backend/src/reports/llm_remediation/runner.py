@@ -29,6 +29,7 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import ValidationError
@@ -80,6 +81,111 @@ class LlmTransientError(RuntimeError):
     """Raised by an ``LlmCallable`` to request a bounded retry with backoff."""
 
 
+class LlmNotInvokedError(RuntimeError):
+    """Raised by an ``LlmCallable`` when no provider could be invoked at all.
+
+    Typical causes: no configured provider for the report alias, cloud disabled
+    for report tasks, or the budget ledger denying a paid call. Distinct from a
+    call that was made and failed (prompt §28.2).
+    """
+
+
+class LlmFailureKind(StrEnum):
+    """Distinguishable reasons an LLM analysis did not produce an accepted result."""
+
+    NOT_INVOKED = "llm_not_invoked"
+    CALL_FAILED = "llm_call_failed"
+    SCHEMA_INVALID = "llm_schema_invalid"
+    VALIDATION_REJECTED = "llm_validation_rejected"
+
+
+class LlmCallError(RuntimeError):
+    """A classified, non-retryable LLM call failure carrying diagnostic detail."""
+
+    def __init__(self, failure_kind: LlmFailureKind, detail: str) -> None:
+        super().__init__(detail)
+        self.failure_kind = failure_kind
+        self.detail = detail
+
+
+#: Exception type-name fragments that mean "the provider was never reached".
+_NOT_INVOKED_MARKERS: tuple[str, ...] = (
+    "budget",
+    "notconfigured",
+    "not_configured",
+    "noprovider",
+    "no_provider",
+    "unavailable",
+    "disabled",
+)
+
+_MAX_ERROR_MESSAGE = 300
+
+
+def _http_status(exc: BaseException) -> str:
+    code = getattr(exc, "status_code", None)
+    if code is None:
+        response = getattr(exc, "response", None)
+        code = getattr(response, "status_code", None)
+    return str(code) if code is not None else "-"
+
+
+def _classify_exception(exc: BaseException) -> LlmFailureKind:
+    if isinstance(exc, LlmNotInvokedError):
+        return LlmFailureKind.NOT_INVOKED
+    haystack = f"{type(exc).__name__} {exc}".lower().replace(" ", "")
+    if any(marker in haystack for marker in _NOT_INVOKED_MARKERS):
+        return LlmFailureKind.NOT_INVOKED
+    return LlmFailureKind.CALL_FAILED
+
+
+def format_llm_error(
+    failure_kind: LlmFailureKind | str,
+    *,
+    stage: str,
+    exc: BaseException | None = None,
+    message: str = "",
+    attempt: int | None = None,
+    provider: str = _DEFAULT_PROVIDER,
+    model: str = _DEFAULT_MODEL,
+) -> str:
+    """Render one structured, log-safe diagnostic line for a failed LLM step."""
+    kind = failure_kind.value if isinstance(failure_kind, LlmFailureKind) else str(failure_kind)
+    text = message or (str(exc) if exc is not None else "")
+    text = " ".join(text.split())[:_MAX_ERROR_MESSAGE]
+    exc_type = type(exc).__name__ if exc is not None else "-"
+    http = _http_status(exc) if exc is not None else "-"
+    return (
+        f"{kind}: stage={stage} type={exc_type} http={http} "
+        f"attempt={attempt if attempt is not None else '-'} "
+        f"provider={provider} model={model} msg={text}"
+    )
+
+
+def classify_failure(errors: Sequence[str]) -> str | None:
+    """Return the dominant :class:`LlmFailureKind` value recorded in ``errors``."""
+    for kind in (
+        LlmFailureKind.NOT_INVOKED,
+        LlmFailureKind.CALL_FAILED,
+        LlmFailureKind.SCHEMA_INVALID,
+        LlmFailureKind.VALIDATION_REJECTED,
+    ):
+        if any(e.startswith(kind.value) for e in errors):
+            return kind.value
+    if any(e.startswith(("invented_", "clamped_")) for e in errors):
+        return LlmFailureKind.VALIDATION_REJECTED.value
+    return None
+
+
+#: Provenance for the deterministic, application-computed report summary.
+SUMMARY_PROVIDER = "argus_app"
+SUMMARY_MODEL = "deterministic_aggregation"
+SUMMARY_VALIDATION_STATUS = "app_computed_no_llm_call"
+
+PROBE_SYSTEM_PROMPT = 'You are a health probe. Reply with the single JSON object {"ok": true}.'
+PROBE_USER_PROMPT = 'Health check for the Valhalla report LLM phase. Return {"ok": true}.'
+
+
 @dataclass
 class FindingAnalysisResult:
     """Outcome of analysing a single finding."""
@@ -92,6 +198,7 @@ class FindingAnalysisResult:
     context_hash: str = ""
     errors: list[str] = field(default_factory=list)
     from_cache: bool = False
+    failure_kind: str | None = None
 
 
 @dataclass
@@ -101,6 +208,19 @@ class RemediationRunResult:
     results: list[FindingAnalysisResult] = field(default_factory=list)
     summary: ReportClosureSummary | None = None
     completeness: str = "incomplete"
+    #: Set when the pre-flight health probe failed and no per-finding call was made.
+    probe_error: str | None = None
+
+    @property
+    def errors(self) -> list[str]:
+        """Every per-finding diagnostic, prefixed with its finding id (for the manifest)."""
+        out: list[str] = []
+        if self.probe_error:
+            out.append(f"probe: {self.probe_error}")
+        for res in self.results:
+            for err in res.errors:
+                out.append(f"finding:{res.finding_id}: {err}")
+        return out
 
     @property
     def all_complete(self) -> bool:
@@ -160,17 +280,72 @@ def _call_with_retry(
     *,
     max_attempts: int,
     sleeper: Callable[[float], None],
+    provider: str = _DEFAULT_PROVIDER,
+    model: str = _DEFAULT_MODEL,
 ) -> str:
+    """Call the LLM with bounded retry; raise :class:`LlmCallError` on failure.
+
+    Only :class:`LlmTransientError` is retried. Any other exception is classified
+    (``llm_not_invoked`` vs ``llm_call_failed``) and surfaced with its type, HTTP
+    code, attempt, provider and model so the cause is never lost (prompt §28.1).
+    An empty response is a failed call, not an empty analysis.
+    """
     last: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
-            return llm_callable(system, user, kind)
+            raw = llm_callable(system, user, kind)
         except LlmTransientError as exc:  # bounded retry with backoff
             last = exc
-            logger.warning("LLM transient error (%s) attempt %d/%d", kind, attempt, max_attempts)
+            logger.warning(
+                "llm_remediation_transient_error",
+                extra={
+                    "event": "llm_remediation_transient_error",
+                    "stage": kind,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
+            )
             if attempt < max_attempts:
                 sleeper(min(2.0 ** (attempt - 1), 8.0))
-    raise LlmTransientError(str(last) if last else "LLM transient failure")
+            continue
+        except Exception as exc:  # noqa: BLE001 — classified, never swallowed
+            failure_kind = _classify_exception(exc)
+            raise LlmCallError(
+                failure_kind,
+                format_llm_error(
+                    failure_kind,
+                    stage=kind,
+                    exc=exc,
+                    attempt=attempt,
+                    provider=provider,
+                    model=model,
+                ),
+            ) from exc
+        if not (raw or "").strip():
+            raise LlmCallError(
+                LlmFailureKind.CALL_FAILED,
+                format_llm_error(
+                    LlmFailureKind.CALL_FAILED,
+                    stage=kind,
+                    message="empty_response",
+                    attempt=attempt,
+                    provider=provider,
+                    model=model,
+                ),
+            )
+        return raw
+    raise LlmCallError(
+        LlmFailureKind.CALL_FAILED,
+        format_llm_error(
+            LlmFailureKind.CALL_FAILED,
+            stage=kind,
+            exc=last,
+            message=f"transient_failure exhausted after {max_attempts} attempts: {last}",
+            attempt=max_attempts,
+            provider=provider,
+            model=model,
+        ),
+    )
 
 
 class RemediationRunner:
@@ -210,7 +385,7 @@ class RemediationRunner:
         attempts = self._max_repair_attempts + 1
         repair_note = ""
 
-        for _attempt in range(attempts):
+        for attempt in range(1, attempts + 1):
             try:
                 raw = _call_with_retry(
                     self._llm,
@@ -219,9 +394,11 @@ class RemediationRunner:
                     "remediation",
                     max_attempts=self._max_transient_attempts,
                     sleeper=self._sleeper,
+                    provider=self._provider,
+                    model=self._model,
                 )
-            except LlmTransientError as exc:
-                return None, [f"transient_failure: {exc}"]
+            except LlmCallError as exc:
+                return None, [exc.detail]
 
             try:
                 data = _parse_json(raw)
@@ -241,7 +418,16 @@ class RemediationRunner:
                     }
                 )
             except (json.JSONDecodeError, ValidationError) as exc:
-                errors = [f"schema_error: {exc}"]
+                errors = [
+                    format_llm_error(
+                        LlmFailureKind.SCHEMA_INVALID,
+                        stage="remediation",
+                        exc=exc,
+                        attempt=attempt,
+                        provider=self._provider,
+                        model=self._model,
+                    )
+                ]
                 repair_note = (
                     "\n\nПредыдущий ответ не прошёл валидацию схемы: "
                     f"{exc}. Верни строго валидный JSON по схеме."
@@ -256,7 +442,15 @@ class RemediationRunner:
                 return _downgrade_remediation(model_obj, ref_errors), ref_errors
             return model_obj, []
 
-        return None, errors or ["schema_error: exhausted repair attempts"]
+        return None, errors or [
+            format_llm_error(
+                LlmFailureKind.SCHEMA_INVALID,
+                stage="remediation",
+                message="exhausted repair attempts",
+                provider=self._provider,
+                model=self._model,
+            )
+        ]
 
     @staticmethod
     def _validate_remediation_refs(
@@ -290,7 +484,7 @@ class RemediationRunner:
         attempts = self._max_repair_attempts + 1
         repair_note = ""
 
-        for _attempt in range(attempts):
+        for attempt in range(1, attempts + 1):
             try:
                 raw = _call_with_retry(
                     self._llm,
@@ -299,9 +493,11 @@ class RemediationRunner:
                     "closure",
                     max_attempts=self._max_transient_attempts,
                     sleeper=self._sleeper,
+                    provider=self._provider,
+                    model=self._model,
                 )
-            except LlmTransientError as exc:
-                return None, [f"transient_failure: {exc}"]
+            except LlmCallError as exc:
+                return None, [exc.detail]
 
             try:
                 data = _parse_json(raw)
@@ -324,7 +520,16 @@ class RemediationRunner:
                     }
                 )
             except (json.JSONDecodeError, ValidationError) as exc:
-                errors = [f"schema_error: {exc}"]
+                errors = [
+                    format_llm_error(
+                        LlmFailureKind.SCHEMA_INVALID,
+                        stage="closure",
+                        exc=exc,
+                        attempt=attempt,
+                        provider=self._provider,
+                        model=self._model,
+                    )
+                ]
                 repair_note = (
                     "\n\nПредыдущий ответ не прошёл валидацию схемы: "
                     f"{exc}. Верни строго валидный JSON по схеме."
@@ -337,7 +542,15 @@ class RemediationRunner:
             problems = clamp_notes + ref_errors
             return model_obj, problems
 
-        return None, errors or ["schema_error: exhausted repair attempts"]
+        return None, errors or [
+            format_llm_error(
+                LlmFailureKind.SCHEMA_INVALID,
+                stage="closure",
+                message="exhausted repair attempts",
+                provider=self._provider,
+                model=self._model,
+            )
+        ]
 
     @staticmethod
     def _validate_closure_refs(
@@ -405,14 +618,20 @@ class RemediationRunner:
         )
         errors.extend(rem_errors)
 
-        closure, clo_errors = self._generate_closure(
-            ctx.payload,
-            context_hash=ctx.context_hash,
-            permitted=permitted.permitted_status,
-            known_evidence_ids=known_evidence,
-            known_retest_ids=known_retests,
-        )
-        errors.extend(clo_errors)
+        closure: FindingClosureConclusion | None = None
+        if classify_failure(rem_errors) == LlmFailureKind.NOT_INVOKED.value:
+            # The provider was never reached — a second (closure) call would fail
+            # for the same reason and only duplicate the diagnostic.
+            pass
+        else:
+            closure, clo_errors = self._generate_closure(
+                ctx.payload,
+                context_hash=ctx.context_hash,
+                permitted=permitted.permitted_status,
+                known_evidence_ids=known_evidence,
+                known_retest_ids=known_retests,
+            )
+            errors.extend(clo_errors)
 
         status = self._derive_status(remediation, closure, errors)
 
@@ -424,6 +643,11 @@ class RemediationRunner:
             permitted_status=permitted.permitted_status,
             context_hash=ctx.context_hash,
             errors=errors,
+            failure_kind=(
+                None
+                if status == AnalysisStatus.GENERATED_VALIDATED.value
+                else classify_failure(errors)
+            ),
         )
 
         if status == AnalysisStatus.GENERATED_VALIDATED.value:
@@ -448,6 +672,30 @@ class RemediationRunner:
             return remediation.analysis_status.value
         return AnalysisStatus.GENERATED_VALIDATED.value
 
+    # -- health probe -----------------------------------------------------
+
+    def probe(self) -> str | None:
+        """One cheap pre-flight call; return a diagnostic string on failure, else None.
+
+        Run before the per-finding pass so an unreachable/unconfigured provider is
+        reported once as ``llm_not_invoked`` / ``llm_call_failed`` with its real
+        cause, instead of N identical opaque ``failed`` findings (prompt §28.6).
+        """
+        try:
+            _call_with_retry(
+                self._llm,
+                PROBE_SYSTEM_PROMPT,
+                PROBE_USER_PROMPT,
+                "probe",
+                max_attempts=1,
+                sleeper=self._sleeper,
+                provider=self._provider,
+                model=self._model,
+            )
+        except LlmCallError as exc:
+            return exc.detail
+        return None
+
     # -- report pass ------------------------------------------------------
 
     def run(
@@ -460,12 +708,34 @@ class RemediationRunner:
         evidence_fragments: dict[str, dict[str, str]] | None = None,
         locale: str = "ru",
         build_summary: bool = True,
+        health_probe: bool = False,
     ) -> RemediationRunResult:
         """Analyse every finding (no hidden top-N; last items included, L28)."""
 
         allowed_evidence_ids = allowed_evidence_ids or {}
         evidence_fragments = evidence_fragments or {}
         results: list[FindingAnalysisResult] = []
+
+        if health_probe and findings:
+            probe_error = self.probe()
+            if probe_error is not None:
+                kind = classify_failure([probe_error]) or LlmFailureKind.CALL_FAILED.value
+                for finding in findings:
+                    fid = str(finding.get("finding_id") or finding.get("id") or "")
+                    results.append(
+                        FindingAnalysisResult(
+                            finding_id=fid,
+                            llm_analysis_status="failed",
+                            errors=[f"{kind}: stage=probe skipped per-finding call"],
+                            failure_kind=kind,
+                        )
+                    )
+                run_result = RemediationRunResult(
+                    results=results, completeness="failed", probe_error=probe_error
+                )
+                if build_summary:
+                    run_result.summary = self._synthesize_summary(results, report_meta)
+                return run_result
 
         for finding in findings:
             fid = str(finding.get("finding_id") or finding.get("id") or "")
@@ -529,13 +799,17 @@ class RemediationRunner:
                 "accepted": accepted,
             }
         )
+        # The report-wide summary is computed deterministically by the application
+        # from accepted per-finding analyses — no model call is made. Record that
+        # unambiguously instead of an alias-looking "facade/report_writer" pair
+        # (prompt §28.2, R-02).
         provenance = _make_provenance(
             prompt_version=SUMMARY_PROMPT_VERSION,
             schema_id=SUMMARY_SCHEMA_ID,
             input_hash=summary_hash,
-            validation_status="synthesized",
-            provider=self._provider,
-            model=self._model,
+            validation_status=SUMMARY_VALIDATION_STATUS,
+            provider=SUMMARY_PROVIDER,
+            model=SUMMARY_MODEL,
         )
         try:
             return ReportClosureSummary(
@@ -611,10 +885,18 @@ def make_retest_execution(
 
 
 __all__ = [
+    "SUMMARY_MODEL",
+    "SUMMARY_PROVIDER",
+    "SUMMARY_VALIDATION_STATUS",
     "FindingAnalysisResult",
+    "LlmCallError",
     "LlmCallable",
+    "LlmFailureKind",
+    "LlmNotInvokedError",
     "LlmTransientError",
     "RemediationRunResult",
     "RemediationRunner",
+    "classify_failure",
+    "format_llm_error",
     "make_retest_execution",
 ]

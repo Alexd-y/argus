@@ -644,6 +644,7 @@ async def run_generate_report_pipeline(
             try:
                 from src.reports.llm_remediation.facade_binding import (
                     build_facade_llm_callable,
+                    resolve_report_llm_identity,
                 )
                 from src.reports.llm_remediation.integration import (
                     generate_valhalla_llm_release,
@@ -673,14 +674,21 @@ async def run_generate_report_pipeline(
                     "scan_id": scan_id,
                     "target": vsnapshot.target,
                 }
+                # Phase S — record the REAL provider/model (not the alias), fail
+                # fast with llm_not_invoked when no provider is usable, and probe
+                # once before the per-finding pass (prompt §28.3/§28.6).
+                llm_identity = resolve_report_llm_identity()
                 _vdoc, vrelease = generate_valhalla_llm_release(
                     vfindings,
                     report_meta=vmeta,
-                    llm_callable=build_facade_llm_callable(scan_id=scan_id, tenant_id=tenant_id),
+                    llm_callable=build_facade_llm_callable(
+                        scan_id=scan_id, tenant_id=tenant_id, fail_if_unconfigured=True
+                    ),
                     formats=["json", "md", "xml", "html"],
                     canonical_snapshot_hash=vsnapshot.snapshot_hash,
-                    provider="facade",
-                    model="report_writer",
+                    provider=llm_identity.provider_id if llm_identity else "unresolved",
+                    model=llm_identity.model if llm_identity else "unresolved",
+                    health_probe=True,
                 )
 
                 # Phase E.4 — merge the accepted LLM remediation/closure INTO the

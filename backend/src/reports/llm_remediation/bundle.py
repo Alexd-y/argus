@@ -85,6 +85,11 @@ class ValhallaReleaseManifest(BaseModel):
     xml_valid: bool = False
     parity_ok: bool = False
     errors: list[str] = Field(default_factory=list)
+    #: Real provider/model resolved for the report LLM (never an alias, R-02).
+    llm_provider: str = ""
+    llm_model: str = ""
+    #: Count of findings per ``LlmFailureKind`` (llm_not_invoked / llm_call_failed / …).
+    failure_kinds: dict[str, int] = Field(default_factory=dict)
     # A content hash is integrity, not authenticity — documented, not a signature.
     hash_is_signature: bool = False
 
@@ -108,11 +113,36 @@ def _normalize_formats(formats: list[str] | None) -> list[str]:
     return list(dict.fromkeys(requested))
 
 
+def manifest_consistency_errors(manifest: ValhallaReleaseManifest) -> list[str]:
+    """Consistency rules for a manifest (prompt §28.1, §32).
+
+    An assessment that is not complete must explain itself: ``failed`` /
+    ``incomplete`` with an empty ``errors`` list is a blocking inconsistency — it is
+    exactly the opaque state observed in the shipped bundle (R-02).
+    """
+    problems: list[str] = []
+    if (
+        manifest.assessment_completeness is not AssessmentCompleteness.COMPLETE
+        and not manifest.errors
+    ):
+        problems.append(
+            "consistency: assessment_completeness="
+            f"{manifest.assessment_completeness.value} with no recorded errors"
+        )
+    if manifest.generation_status is GenerationStatus.READY and manifest.failure_kinds:
+        problems.append("consistency: ready release carries LLM failure kinds")
+    return problems
+
+
 def build_valhalla_release(
     doc: ValhallaLlmDocument,
     *,
     formats: list[str] | None = None,
     allow_incomplete_draft: bool = False,
+    analysis_errors: list[str] | None = None,
+    failure_kinds: dict[str, int] | None = None,
+    llm_provider: str = "",
+    llm_model: str = "",
 ) -> ValhallaRelease:
     """Render + validate all requested formats atomically.
 
@@ -123,7 +153,9 @@ def build_valhalla_release(
     """
 
     requested = _normalize_formats(formats)
-    errors: list[str] = []
+    # Per-finding LLM diagnostics first: the cause of an incomplete assessment must
+    # survive into the manifest instead of being dropped (R-01/R-02).
+    errors: list[str] = list(analysis_errors or [])
 
     text_formats = render_all_text_formats(doc)  # json/md/xml/html
 
@@ -179,7 +211,22 @@ def build_valhalla_release(
         xml_valid=xml_valid,
         parity_ok=parity_ok,
         errors=errors,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        failure_kinds=dict(failure_kinds or {}),
     )
+    consistency = manifest_consistency_errors(manifest)
+    if consistency:
+        manifest = manifest.model_copy(
+            update={
+                "errors": [*manifest.errors, *consistency],
+                "generation_status": (
+                    GenerationStatus.FAILED
+                    if manifest.generation_status is GenerationStatus.READY
+                    else manifest.generation_status
+                ),
+            }
+        )
     return ValhallaRelease(manifest=manifest, artifacts=artifacts)
 
 
@@ -191,4 +238,5 @@ __all__ = [
     "ValhallaRelease",
     "ValhallaReleaseManifest",
     "build_valhalla_release",
+    "manifest_consistency_errors",
 ]
