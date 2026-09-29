@@ -29,6 +29,11 @@ class StopGroup(StrEnum):
     STUB = "stub"
     FALSE_NEGATION_CERTAINTY = "false_negation_certainty"
     BUREAUCRATESE = "bureaucratese"
+    PROMPT_PLACEHOLDER = "prompt_placeholder"
+    PROMPT_INSTRUCTION = "prompt_instruction"
+    CHAT_ARTIFACT = "chat_artifact"
+    RAW_JSON = "raw_json"
+    QUESTIONNAIRE_ECHO = "questionnaire_echo"
 
 
 #: Grouped stop-list (§19.1). Matching is case-insensitive substring on normalized text.
@@ -79,6 +84,76 @@ _ABSOLUTE_SAFETY_RE = re.compile(
     r"|no\s+security\s+(?:issues|vulnerabilities)\s+(?:exist|remain)"
     r"|fully\s+secure)",
     re.IGNORECASE,
+)
+
+# --------------------------------------------------------------------------- #
+# Phase T (§29) — prompt-artifact and response-form validation.
+# The model answered, but its output was published unchecked. These patterns
+# block prompt placeholders, echoed prompt instructions, chat artifacts,
+# questionnaire echoes and raw JSON leaking into a prose slot (R-03…R-09).
+# --------------------------------------------------------------------------- #
+
+#: (StopGroup, compiled regex). Regex-based, unlike the substring STOP_LIST.
+_ARTIFACT_PATTERNS: tuple[tuple[StopGroup, re.Pattern[str]], ...] = (
+    # Unfilled prompt placeholders (§29.1).
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[Layer\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[Config/file\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[specific value\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[curl command\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[Quick Fix\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[Moderate\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[Complex Refactor\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[specific [^\]]*?\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[insert [^\]]*?\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\[TBD\]", re.IGNORECASE)),
+    (StopGroup.PROMPT_PLACEHOLDER, re.compile(r"\{\{.*?\}\}")),
+    # Prompt instructions returned as content (§29.1).
+    (StopGroup.PROMPT_INSTRUCTION, re.compile(r"Tag each fix", re.IGNORECASE)),
+    (
+        StopGroup.PROMPT_INSTRUCTION,
+        re.compile(r"Verification command \(curl or tool command\) for each fix", re.IGNORECASE),
+    ),
+    (
+        StopGroup.PROMPT_INSTRUCTION,
+        re.compile(r"Concrete configuration examples only for detected stack evidence", re.I),
+    ),
+    (
+        StopGroup.PROMPT_INSTRUCTION,
+        re.compile(r"Stack-neutral control if the stack is unknown", re.IGNORECASE),
+    ),
+    (StopGroup.PROMPT_INSTRUCTION, re.compile(r"^\s*Verification method:\s*$", re.MULTILINE)),
+    # Chat artifacts (§29.1).
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"I hope this", re.IGNORECASE)),
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"Let me know if", re.IGNORECASE)),
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"As an AI", re.IGNORECASE)),
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"\bI cannot\b", re.IGNORECASE)),
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"^\s*Certainly!", re.IGNORECASE | re.MULTILINE)),
+    (StopGroup.CHAT_ARTIFACT, re.compile(r"^\s*Here is\b", re.IGNORECASE | re.MULTILINE)),
+    # Echo of the prompt's numbered questionnaire instead of prose (§29.1).
+    (
+        StopGroup.QUESTIONNAIRE_ECHO,
+        re.compile(r"^\s*\d\.\s+(No|Yes|There (is|are) no)\b", re.MULTILINE),
+    ),
+    # Unescaped unicode escape sequences leaking from a JSON dump (§29.1).
+    (StopGroup.RAW_JSON, re.compile(r"\\u[0-9a-f]{4}", re.IGNORECASE)),
+)
+
+#: Verification-command flags that DISABLE the property being verified (R-06, §29.3).
+_INSECURE_FLAG_RE = re.compile(
+    r"(--insecure|(?<!\w)-k(?!\w)|--no-check-certificate|verify\s*=\s*False)",
+    re.IGNORECASE,
+)
+
+#: Chain-claim phrases — only admissible when a proven chain exists (R-07, §29.3).
+_CHAIN_CLAIM_RE = re.compile(
+    r"(can be chained|chained with|exploit chain|attack chain|цепочк)",
+    re.IGNORECASE,
+)
+
+#: A full-length UUID (finding_id) and a truncated UUID-looking token (R-08).
+_UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+_UUID_PREFIX_RE = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,11}\b", re.I
 )
 
 
@@ -134,16 +209,145 @@ def _is_methodological(paragraph: str) -> bool:
     return any(h in low for h in _METHODOLOGICAL_HINTS)
 
 
+def find_prompt_artifacts(text: str) -> list[tuple[StopGroup, str]]:
+    """Return (group, matched-fragment) for every prompt-artifact hit (§29.1)."""
+    hits: list[tuple[StopGroup, str]] = []
+    for group, pattern in _ARTIFACT_PATTERNS:
+        m = pattern.search(text or "")
+        if m:
+            hits.append((group, m.group(0).strip()[:80]))
+    return hits
+
+
+def is_raw_json_prose(text: str) -> bool:
+    """True when a prose slot's first non-empty char is ``{`` (a JSON dump, R-05)."""
+    stripped = (text or "").strip()
+    if not stripped:
+        return False
+    # Tolerate a leading ```json fence, then require the body to be a JSON object.
+    if stripped.startswith("```"):
+        stripped = stripped.split("\n", 1)[-1].strip() if "\n" in stripped else stripped
+    return stripped.startswith("{") and (":" in stripped)
+
+
+def insecure_verification_flags(text: str) -> list[str]:
+    """Return verification-command flags that disable the checked property (R-06)."""
+    return [m.group(0) for m in _INSECURE_FLAG_RE.finditer(text or "")]
+
+
+def truncated_finding_ids(text: str, known_finding_ids: set[str]) -> list[str]:
+    """Return UUID-looking tokens that are a *prefix* of a known id but not full (R-08)."""
+    full = set(_UUID_RE.findall(text or ""))
+    offenders: list[str] = []
+    for token in _UUID_PREFIX_RE.findall(text or ""):
+        if token in full or token in known_finding_ids:
+            continue
+        if any(fid.startswith(token) for fid in known_finding_ids):
+            offenders.append(token)
+    return offenders
+
+
+def _parse_counts(text: str) -> tuple[int, dict[str, int]] | None:
+    """Parse ``N finding(s) recorded`` + ``critical: X, high: Y…`` (R-10)."""
+    total_m = re.search(r"(\d+)\s+finding\(?s?\)?\s+recorded", text or "", re.IGNORECASE)
+    if not total_m:
+        return None
+    bands: dict[str, int] = {}
+    for band in ("critical", "high", "medium", "low", "informational", "info"):
+        bm = re.search(rf"{band}\s*:\s*(\d+)", text or "", re.IGNORECASE)
+        if bm:
+            bands[band] = int(bm.group(1))
+    if not bands:
+        return None
+    return int(total_m.group(1)), bands
+
+
+def check_output_consistency(
+    text: str,
+    *,
+    known_finding_ids: set[str] | None = None,
+    has_proven_chains: bool = False,
+    wstg_coverage_pct: float | None = None,
+    section: str = "",
+) -> list[ProseViolation]:
+    """Cross-check a model's text against report facts (§29.3, R-06…R-12).
+
+    * chain claims require a proven chain (R-07);
+    * finding ids must be full-length (R-08);
+    * a verification command must not disable the checked property (R-06);
+    * severity counters must sum to the stated total (R-10);
+    * a stated WSTG coverage must equal the canonical value (R-12).
+    """
+    known_finding_ids = known_finding_ids or set()
+    out: list[ProseViolation] = []
+    loc = section or "section"
+
+    if _CHAIN_CLAIM_RE.search(text or "") and not has_proven_chains:
+        out.append(
+            ProseViolation(
+                "chain_claim_without_proven_chain",
+                ProseSeverity.BLOCK,
+                f"chain claim in '{loc}' but no proven exploit chain exists (R-07)",
+            )
+        )
+
+    for token in truncated_finding_ids(text, known_finding_ids):
+        out.append(
+            ProseViolation(
+                "truncated_finding_id",
+                ProseSeverity.BLOCK,
+                f"truncated finding id '{token}' in '{loc}' (R-08)",
+            )
+        )
+
+    for flag in insecure_verification_flags(text):
+        out.append(
+            ProseViolation(
+                "insecure_verification_command",
+                ProseSeverity.BLOCK,
+                f"verification command in '{loc}' disables the checked property: '{flag}' (R-06)",
+            )
+        )
+
+    parsed = _parse_counts(text)
+    if parsed is not None:
+        total, bands = parsed
+        if sum(bands.values()) != total:
+            out.append(
+                ProseViolation(
+                    "counter_mismatch",
+                    ProseSeverity.BLOCK,
+                    f"severity counters sum to {sum(bands.values())} but total is {total} (R-10)",
+                )
+            )
+
+    if wstg_coverage_pct is not None:
+        for m in re.finditer(r"WSTG[^%\d]{0,40}?(\d+(?:\.\d+)?)\s*%", text or "", re.IGNORECASE):
+            stated = float(m.group(1))
+            if abs(stated - float(wstg_coverage_pct)) > 0.5:
+                out.append(
+                    ProseViolation(
+                        "wstg_coverage_mismatch",
+                        ProseSeverity.BLOCK,
+                        f"stated WSTG coverage {stated}% ≠ canonical {wstg_coverage_pct}% (R-12)",
+                    )
+                )
+
+    return out
+
+
 def evaluate_prose(
     text: str,
     *,
     section: str = "",
     require_references: bool = True,
+    slot_type: str = "prose",
 ) -> list[ProseViolation]:
-    """Evaluate a rendered section body against the prose gate (§19).
+    """Evaluate a rendered section body against the prose gate (§19, §29).
 
     ``require_references`` should be False for methodology / disclaimer sections where
-    reference-free prose is legitimate.
+    reference-free prose is legitimate. ``slot_type`` is ``prose`` | ``structured_json``
+    | ``table``; a ``prose`` slot that is a raw JSON document is rejected (R-05).
     """
     violations: list[ProseViolation] = []
 
@@ -153,6 +357,24 @@ def evaluate_prose(
                 rule=f"stop_list:{group.value}",
                 severity=ProseSeverity.BLOCK,
                 detail=f"stop-list phrase present in '{section or 'section'}': '{phrase}'",
+            )
+        )
+
+    for group, fragment in find_prompt_artifacts(text):
+        violations.append(
+            ProseViolation(
+                rule=f"prompt_artifact:{group.value}",
+                severity=ProseSeverity.BLOCK,
+                detail=f"prompt artifact in '{section or 'section'}': '{fragment}'",
+            )
+        )
+
+    if slot_type == "prose" and is_raw_json_prose(text):
+        violations.append(
+            ProseViolation(
+                rule="raw_json_in_prose_slot",
+                severity=ProseSeverity.BLOCK,
+                detail=f"prose slot '{section or 'section'}' contains a raw JSON document (R-05)",
             )
         )
 
@@ -200,7 +422,12 @@ __all__ = [
     "ProseViolation",
     "StopGroup",
     "blocking_violations",
+    "check_output_consistency",
     "evaluate_prose",
+    "find_prompt_artifacts",
     "find_stop_phrases",
     "has_reference",
+    "insecure_verification_flags",
+    "is_raw_json_prose",
+    "truncated_finding_ids",
 ]

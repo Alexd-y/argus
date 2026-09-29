@@ -32,7 +32,7 @@ from src.reports.generators import (
     generate_xml,
 )
 from src.reports.prose_gate import blocking_violations as blocking_prose_violations
-from src.reports.prose_gate import evaluate_prose
+from src.reports.prose_gate import check_output_consistency, evaluate_prose
 from src.reports.report_data_validation import (
     log_report_validation_failure,
     report_validation_failure_payload,
@@ -216,9 +216,26 @@ def _compute_valhalla_release_blockers(
         blockers.append(f"PROSE: {pv.rule}: {pv.detail}")
 
     # Phase O — severity / CVSS / review consistency on the snapshot findings.
+    # Phase T — model-output consistency on the rendered text (chain claims,
+    # truncated finding IDs, insecure verify commands, counters, WSTG coverage).
     try:
         snapshot = build_snapshot_from_report_data(report_data, scan_meta={"tier": actual_tier})
         blockers.extend(severity_review_blockers(snapshot.findings))
+        known_ids = {f.finding_id for f in snapshot.findings if f.finding_id}
+        has_proven = any(c.kind == "proven" for c in snapshot.exploit_chains)
+        wstg_pct = None
+        if isinstance(snapshot.wstg, dict):
+            raw_pct = snapshot.wstg.get("coverage_pct")
+            wstg_pct = float(raw_pct) if isinstance(raw_pct, (int, float)) else None
+        for cv in blocking_prose_violations(
+            check_output_consistency(
+                report_text,
+                known_finding_ids=known_ids,
+                has_proven_chains=has_proven,
+                wstg_coverage_pct=wstg_pct,
+            )
+        ):
+            blockers.append(f"OUTPUT: {cv.rule}: {cv.detail}")
     except Exception:  # noqa: BLE001 — gate must not crash generation
         pass
 
