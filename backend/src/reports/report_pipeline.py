@@ -38,6 +38,7 @@ from src.reports.report_data_validation import (
     report_validation_failure_payload,
     validate_report_data,
 )
+from src.reports.report_parity import count_findings_in_markdown, finding_count_parity
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.snapshot_completeness_gate import snapshot_release_blockers
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
@@ -239,6 +240,14 @@ def _compute_valhalla_release_blockers(
             blockers.append(f"OUTPUT: {cv.rule}: {cv.detail}")
         # Phase U — snapshot completeness + evidence-chain (R-13…R-18).
         blockers.extend(snapshot_release_blockers(snapshot))
+        # Phase Q — finding-count parity: main .md vs canonical snapshot (R-11).
+        counts: dict[str, int] = {
+            "snapshot": len(snapshot.findings) + len(snapshot.unconfirmed_observations)
+        }
+        md_count = count_findings_in_markdown(report_text)
+        if md_count is not None:
+            counts["main_md"] = md_count
+        blockers.extend(finding_count_parity(counts))
     except Exception:  # noqa: BLE001 — gate must not crash generation
         pass
 

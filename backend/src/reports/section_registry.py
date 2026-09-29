@@ -52,6 +52,12 @@ SECTION_ORDER: tuple[SectionSpec, ...] = (
         lambda d: _has(d.surface_inventory),
         "not_assessed",
     ),
+    SectionSpec(
+        "priority_findings", "Priority Findings", lambda d: _has(d.findings), "no_findings"
+    ),
+    SectionSpec(
+        "findings_by_asset", "Findings by Asset", lambda d: _has(d.findings), "no_findings"
+    ),
     SectionSpec("findings", "Findings", lambda d: _has(d.findings), "no_findings"),
     SectionSpec(
         "unconfirmed_observations",
@@ -80,6 +86,12 @@ SECTION_ORDER: tuple[SectionSpec, ...] = (
         "llm_not_generated",
     ),
     SectionSpec(
+        "retest_closure",
+        "Retest & Closure",
+        lambda d: any(f.closure is not None for f in d.findings),
+        "not_retested",
+    ),
+    SectionSpec(
         "evidence_inventory",
         "Evidence Inventory",
         lambda d: _has(d.evidence_references),
@@ -97,10 +109,37 @@ SECTION_ORDER: tuple[SectionSpec, ...] = (
     SectionSpec("limitations", "Limitations", lambda d: _has(d.limitations), "none"),
     SectionSpec("claims", "Claims Ledger", lambda d: _has(d.claims), "none"),
     SectionSpec(
+        "appendix_all_findings",
+        "Appendix A — All Findings",
+        lambda d: _has(d.findings),
+        "no_findings",
+    ),
+    SectionSpec(
+        "appendix_assets", "Appendix B — Assets & Subdomains", lambda _d: True, "not_assessed"
+    ),
+    SectionSpec(
+        "appendix_tool_runs",
+        "Appendix C — Tool Runs & Artifacts",
+        lambda d: _has(d.tool_runs),
+        "not_assessed",
+    ),
+    SectionSpec(
+        "appendix_verification_kit",
+        "Appendix D — Independent Verification Kit",
+        lambda d: bool(d.verification_kit_ref),
+        "not_generated",
+    ),
+    SectionSpec(
         "validation_errors",
         "Validation Notes",
         lambda d: _has(d.validation_errors),
         "none",
+    ),
+    SectionSpec(
+        "disclaimer",
+        "Methodology, Limits of Conclusions & Disclaimer",
+        lambda _d: True,
+        "present",
     ),
 )
 
