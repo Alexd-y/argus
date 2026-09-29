@@ -3,13 +3,14 @@
 # Purpose
 # -------
 # The base stack (docker-compose.yml) bind-mounts /var/run/docker.sock into
-# `backend`, `worker-scans`, and `worker-general` so the sandbox tool runner can
-# `docker exec` into the argus-sandbox container. A bind-mounted socket — even
+# `backend`, `worker-scans`, `worker-general`, and `worker-cairn` (four services)
+# so the sandbox tool runner can `docker exec` into the argus-sandbox container.
+# A bind-mounted socket — even
 # `:ro` — exposes the FULL Docker Engine API to those processes: the `:ro` flag
 # only makes the *socket file* read-only, not the API behind it. A compromised
 # worker can therefore reach the host daemon and escalate to the host.
 #
-# This overlay removes the raw socket bind mount from the three services and
+# This overlay removes the raw socket bind mount from all four services and
 # routes their Docker API traffic through a Tecnativa `docker-socket-proxy`
 # that sits on an internal-only network and allows a minimal endpoint set.
 #
@@ -19,6 +20,14 @@
 #
 # Requires Docker Compose v2.24.0+ (for the `!override` merge tag used to drop
 # the inherited socket bind mount).
+#
+# FOOTGUN — `volumes: !override []` -----------------------------------------
+# `!override []` replaces the ENTIRE volumes list inherited from the base file
+# with an empty list. Today the base services mount only the socket, so this is
+# exactly right. But if anyone later adds a *legitimate* volume (a cache dir, a
+# wordlist mount, ...) to backend / worker-* in the base file, this overlay will
+# SILENTLY drop it too, with no error. Any new base volume on these services
+# must be re-declared here explicitly. There is no compose-level guard for this.
 #
 # THREAT MODEL / RESIDUAL RISK  (read docs/docker-socket-hardening.md first)
 # -------------------------------------------------------------------------
@@ -113,6 +122,22 @@ services:
         condition: service_started
 
   worker-general:
+    volumes: !override []
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    networks:
+      - backend
+      - data
+      - docker-proxy
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+
+  worker-cairn:
+    # worker-cairn also bind-mounts the raw socket in the base file (it runs
+    # sandbox tools for CLI-driver / local-execution agent runs). It MUST be
+    # covered here too, otherwise applying this overlay leaves a fourth service
+    # holding a host-root primitive. See F-H01 fact #2.
     volumes: !override []
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375

@@ -35,9 +35,10 @@ is only permitted for API-key authenticated service accounts.
 
 ## Docker Socket Mount
 
-The `backend`, `worker-scans`, and `worker-general` services mount
-`/var/run/docker.sock:ro` (3 mount points) to orchestrate the argus-sandbox container for
+The `backend`, `worker-scans`, `worker-general`, and `worker-cairn` services mount
+`/var/run/docker.sock:ro` (4 mount points) to orchestrate the argus-sandbox container for
 security tool execution. The `sandbox` service itself does **not** receive the socket.
+See `docs/docker-socket-hardening.md` (F-H01) for the full analysis and the hardening overlay.
 
 ### Risk
 The `:ro` flag applies to the socket *file*, not to the Docker API reachable through it:

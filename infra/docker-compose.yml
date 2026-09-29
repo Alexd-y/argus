@@ -216,10 +216,16 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      # SECURITY: docker.sock read-only is sufficient for docker exec.
-      # exec_create + exec_start are read-only daemon operations.
-      # Code in sandbox_tool_runner.py only uses docker exec.
-      # K8s deployment should use k8s_adapter.py instead (no socket mount).
+      # SECURITY (F-H01, CWE-250): bind-mounting the Docker socket grants this
+      # service the FULL Docker Engine API == host root. The `:ro` flag only makes
+      # the socket *file* read-only; it is NOT a security boundary — the API behind
+      # it (POST /containers/create with a host bind + /start) stays fully usable,
+      # so any RCE in this process (incl. one delivered via hostile scan-target tool
+      # output) is equivalent to root on the host. exec_create/exec_start are NOT
+      # "read-only daemon operations". Apply infra/docker-compose.hardened.yml (or
+      # the exec broker) in any deployment with untrusted targets, and use
+      # k8s_adapter.py (no socket at all) in clusters.
+      # See docs/docker-socket-hardening.md.
       - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
@@ -296,6 +302,9 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
+      # SECURITY (F-H01, CWE-250): host-root primitive — `:ro` is not a boundary.
+      # Same warning as the `backend` service above; see docs/docker-socket-hardening.md
+      # and apply infra/docker-compose.hardened.yml (this service is covered there).
       - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
@@ -361,6 +370,9 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
+      # SECURITY (F-H01, CWE-250): host-root primitive — `:ro` is not a boundary.
+      # Same warning as the `backend` service above; see docs/docker-socket-hardening.md
+      # and apply infra/docker-compose.hardened.yml (this service is covered there).
       - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
@@ -408,6 +420,9 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
+      # SECURITY (F-H01, CWE-250): host-root primitive — `:ro` is not a boundary.
+      # Same warning as the `backend` service above; see docs/docker-socket-hardening.md
+      # and apply infra/docker-compose.hardened.yml (this service is covered there).
       - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend

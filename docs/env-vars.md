@@ -86,6 +86,15 @@ NVD, Exploit-DB — публичные, без ключей.
 | `OTEL_SERVICE_NAME` | Имя сервиса |
 | `LOG_LEVEL` | `INFO` \| `DEBUG` \| `WARN` \| `ERROR` |
 
+### 3.6 Docker / Sandbox execution
+
+| Variable | Default | Описание |
+|----------|---------|----------|
+| `ARGUS_DOCKER_SOCK` | `/var/run/docker.sock` | Путь к сокету Docker Engine на хосте, который бинд-маунтится в `backend`, `worker-scans`, `worker-general`, `worker-cairn` для `docker exec` в `argus-sandbox`. **Внимание (F-H01, CWE-250):** монтирование сокета даёт привилегию уровня хоста; `:ro` — не граница безопасности. Для недоверенных целей применяйте `infra/docker-compose.hardened.yml` (задаёт `DOCKER_HOST` на socket-proxy) или exec-брокер; см. `docs/docker-socket-hardening.md`. |
+| `DOCKER_HOST` | — (unset → прямой сокет) | Устанавливается оверлеем hardened в `tcp://docker-socket-proxy:2375`, чтобы перенаправить Docker API через фильтрующий прокси. |
+| `DOCKER_GID` | `999` | GID группы, владеющей `docker.sock` на хосте (rootful Docker). Должен совпадать с `stat -c '%g' /var/run/docker.sock`, иначе `docker exec` падает с permission denied. См. `infra/.env.example`. |
+| `ARGUS_WORKER_USER` | `1000:${DOCKER_GID}` | uid:gid процесса воркера. На rootless Podman-хостах — `0:0`. |
+
 ---
 
 ## 4. pentagi Backend (reference)
