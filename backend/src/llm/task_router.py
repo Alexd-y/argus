@@ -61,6 +61,21 @@ class LLMTask(Enum):
     CAIRN_DIRECTIVE = "cairn_directive"
 
 
+#: Cairn blackboard tasks are pentest analysis: WhiteRabbitNeo-only, never cloud
+#: (WRB-001). They are intentionally absent from the cloud ``ROUTING_TABLE`` and the
+#: cloud ``call_llm_for_task`` fails closed for them instead of defaulting to a cloud
+#: route. They run via ``WrbAgentDriver`` (local WRB) in the Cairn worker.
+WRB_ONLY_TASKS: frozenset[LLMTask] = frozenset(
+    {
+        LLMTask.CAIRN_BOOTSTRAP,
+        LLMTask.CAIRN_REASON,
+        LLMTask.CAIRN_EXPLORE,
+        LLMTask.CAIRN_CONCLUDE,
+        LLMTask.CAIRN_DIRECTIVE,
+    }
+)
+
+
 _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.ORCHESTRATION: "planner",
     LLMTask.THREAT_MODELING: "planner",
@@ -487,6 +502,13 @@ async def call_llm_for_task(
     """
     route = ROUTING_TABLE.get(task)
     if route is None:
+        # WRB-001 fail-closed: Cairn analysis tasks must never reach a cloud provider.
+        # Never silently default them to the ORCHESTRATION cloud route.
+        if task in WRB_ONLY_TASKS:
+            raise RuntimeError(
+                f"{task.value} is WhiteRabbitNeo-only (WRB-001); the cloud task router "
+                "must not be used for Cairn analysis tasks. Route via WrbAgentDriver."
+            )
         route = ROUTING_TABLE[LLMTask.ORCHESTRATION]
 
     attempts = _merge_route_with_global_chain(_build_attempts(route))

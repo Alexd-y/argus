@@ -57,7 +57,7 @@ import logging
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - fixed-argv latexmk invocation only; no shell, no user input
 import tempfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -220,7 +220,7 @@ def _build_latex_jinja_environment(template_dir: Path) -> Any:
     """
     from jinja2 import Environment, FileSystemLoader
 
-    env = Environment(
+    env = Environment(  # nosec B701 - LaTeX output (not HTML); values escaped via | latex_escape
         loader=FileSystemLoader([str(template_dir), str(_latex_root_directory())]),
         autoescape=False,
         trim_blocks=True,
@@ -600,9 +600,12 @@ class LatexBackend:
                 (tmp_dir / _PDFA_XMPDATA_FILENAME).write_text(xmpdata_content, encoding="utf-8")
 
             try:
-                result = subprocess.run(
+                # Resolve to a full path (fixes partial-path warning); is_available()
+                # already gates on latexmk presence, so the ``or`` is a safe fallback.
+                latexmk_bin = shutil.which("latexmk") or "latexmk"
+                result = subprocess.run(  # nosec B603 - fixed argv, no shell, no user input
                     [
-                        "latexmk",
+                        latexmk_bin,
                         engine_flag,
                         "-interaction=nonstopmode",
                         "-halt-on-error",

@@ -10,6 +10,7 @@ from src.llm.task_router import (
     _GLOBAL_LLM_FALLBACK_CHAIN,
     _TASK_TO_ROLE,
     ROUTING_TABLE,
+    WRB_ONLY_TASKS,
     LLMRoute,
     LLMTask,
     _call_route,
@@ -74,10 +75,10 @@ class TestLLMTaskEnum:
         assert LLMTask.QUICK_REPORTER.value == "quick_reporter"
         assert LLMTask.CLOSURE_ASSESSMENT.value == "closure_assessment"
 
-    def test_task_count_is_19(self):
-        # 18 original tasks + CLOSURE_ASSESSMENT (Valhalla LLM remediation/closure).
+    def test_task_count(self):
+        # 18 original + CLOSURE_ASSESSMENT + 5 Cairn blackboard tasks (WRB-only).
         tasks = list(LLMTask)
-        assert len(tasks) == 19
+        assert len(tasks) == 24
 
 
 class TestTaskToRoleMapping:
@@ -93,9 +94,9 @@ class TestTaskToRoleMapping:
     def test_task_to_role_mapping_semantically_correct(self):
         for task, expected_role in EXPECTED_ROLE_MAP.items():
             actual = _TASK_TO_ROLE.get(task)
-            assert actual == expected_role, (
-                f"{task.name} → expected '{expected_role}', got '{actual}'"
-            )
+            assert (
+                actual == expected_role
+            ), f"{task.name} → expected '{expected_role}', got '{actual}'"
 
     def test_planner_tasks_are_all_analytical(self):
         planner_tasks = [
@@ -128,10 +129,27 @@ class TestTaskToRoleMapping:
 
 
 class TestRoutingTable:
-    def test_routing_table_covers_all_tasks(self):
+    def test_routing_table_covers_all_cloud_routable_tasks(self):
+        # Cairn analysis tasks are WRB-only (WRB-001) and deliberately excluded from
+        # the cloud routing table; every other task must have an explicit route.
         all_tasks = set(LLMTask)
         routed_tasks = set(ROUTING_TABLE.keys())
-        assert routed_tasks == all_tasks, f"Missing routes: {all_tasks - routed_tasks}"
+        assert (
+            routed_tasks == all_tasks - WRB_ONLY_TASKS
+        ), f"Missing routes: {all_tasks - WRB_ONLY_TASKS - routed_tasks}"
+
+    def test_wrb_only_tasks_are_not_cloud_routed(self):
+        # WRB-001: no Cairn task may appear in the cloud routing table.
+        assert WRB_ONLY_TASKS
+        assert not (WRB_ONLY_TASKS & set(ROUTING_TABLE.keys()))
+
+    def test_cloud_router_fails_closed_for_wrb_only_task(self):
+        # A Cairn task must never fall through to a cloud default route.
+        import asyncio
+
+        for task in WRB_ONLY_TASKS:
+            with pytest.raises(RuntimeError, match="WhiteRabbitNeo-only"):
+                asyncio.run(call_llm_for_task(task, "probe"))
 
     def test_all_routes_are_llm_route_instances(self):
         for task, route in ROUTING_TABLE.items():
@@ -232,9 +250,9 @@ class TestPhaseToTaskMapping:
     def test_phase_to_task_maps_to_correct_tasks(self):
         for phase, expected_task in EXPECTED_PHASE_MAP.items():
             actual = _PHASE_TO_TASK.get(phase)
-            assert actual == expected_task, (
-                f"Phase '{phase}' → expected {expected_task.name}, got {actual}"
-            )
+            assert (
+                actual == expected_task
+            ), f"Phase '{phase}' → expected {expected_task.name}, got {actual}"
 
     def test_recon_phase_maps_to_orchestration(self):
         assert _PHASE_TO_TASK["recon"] == LLMTask.ORCHESTRATION
