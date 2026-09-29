@@ -305,7 +305,28 @@ Staged hardening (F-H01). Each stage ships independently, in order:
     executes on the host, it is a shell-injection RCE. Not changed here (list form
     would break legitimate pipe/redirect reproducers, and its execution
     environment/source needs a dedicated review) — tracked as its own item.
-- **Stage 4 — purpose-built exec broker (pending).**
+- **Stage 4 — purpose-built exec broker (DONE):**
+  - New `backend/src/exec_broker/app.py` — a FastAPI service (`argus-exec-broker`)
+    that is the only socket holder. Single `POST /v1/exec` accepting
+    `{container, argv[], workdir?, timeout, env?}`; `GET /health`. Server-side
+    re-validation: container ∈ static allowlist (`argus-sandbox`,
+    `argus-kali-runner`, `argus-lab-runner`), `argv` non-empty list of strings,
+    `argv[0]` ∈ `ALLOWED_TOOLS`, timeout clamped, stdout/stderr truncated at a
+    byte cap. **No create/start/commit/pull/build/volume/network endpoint exists**
+    — the escape that survives the Tecnativa proxy is unreachable by construction.
+  - The broker runs the exec through the single gateway (socket transport in the
+    broker container), so the daemon/CLI handles the hijacked exec stream and
+    stdout/stderr demux — the broker never proxies a raw upgraded socket, side-
+    stepping the §4 stream-hijack problem.
+  - Gateway `docker_transport="broker"` now POSTs to `EXEC_BROKER_URL/v1/exec`.
+  - `infra/docker-compose.broker.yml`: `argus-exec-broker` (socket, internal
+    `exec-broker` net, no published ports, `no-new-privileges`) + the four
+    exec-capable services switched to `volumes: !override []` +
+    `DOCKER_TRANSPORT=broker`. Apply EITHER this OR `docker-compose.hardened.yml`
+    (never both); hardened.yml remains the weaker fallback.
+  - Tests: `tests/unit/sandbox/test_exec_broker.py` (policy + no-create-surface,
+    no daemon) and `tests/integration/test_exec_broker_docker.py`
+    (`requires_docker`: real exec reaches a container; create/run endpoints 404).
 - **Stage 5 — structural regression tests (pending).**
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
 - **Residual:** container-create escape remains while `docker exec` is required

@@ -599,6 +599,30 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("DOCKER_HOST", "docker_host"),
     )
+    # F-H01 Stage 4 — argus-exec-broker (docker_transport="broker"). Base URL of
+    # the broker's HTTP API; the broker is the only holder of the socket and
+    # exposes a single POST /v1/exec with a server-side allowlist.
+    exec_broker_url: str = Field(
+        default="http://argus-exec-broker:8080",
+        validation_alias=AliasChoices("EXEC_BROKER_URL", "exec_broker_url"),
+    )
+    # Hard ceilings enforced by the broker (server side) and honoured by the
+    # gateway client. Output is truncated past the byte cap; timeout is clamped.
+    exec_broker_max_output_bytes: int = Field(
+        default=4 * 1024 * 1024,
+        ge=1024,
+        validation_alias=AliasChoices(
+            "EXEC_BROKER_MAX_OUTPUT_BYTES", "exec_broker_max_output_bytes"
+        ),
+    )
+    exec_broker_max_timeout_sec: float = Field(
+        default=600.0,
+        ge=1.0,
+        le=3600.0,
+        validation_alias=AliasChoices(
+            "EXEC_BROKER_MAX_TIMEOUT_SEC", "exec_broker_max_timeout_sec"
+        ),
+    )
     # Isolated LAB runner — never the production sandbox container.
     lab_runner_container_name: str = Field(
         default="argus-lab-runner",

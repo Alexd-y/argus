@@ -96,10 +96,32 @@ class TestExecInSync:
         assert result.exit_code == -1
         assert "timed out" in result.stderr.lower()
 
-    def test_broker_transport_not_yet_supported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_broker_transport_posts_to_broker(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict = {}
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict:
+                return {"exit_code": 0, "stdout": "broker-out", "stderr": "", "duration_s": 0.02}
+
+        def _fake_post(url, json, timeout):  # noqa: ANN001, A002
+            captured["url"] = url
+            captured["json"] = json
+            return _Resp()
+
         monkeypatch.setattr(docker_gateway.settings, "docker_transport", "broker", raising=False)
-        with pytest.raises(DockerGatewayError, match="broker"):
-            exec_in_sync("argus-sandbox", ["id"], timeout=5.0)
+        monkeypatch.setattr(
+            docker_gateway.settings, "exec_broker_url", "http://broker:8080", raising=False
+        )
+        monkeypatch.setattr(docker_gateway.httpx, "post", _fake_post)
+
+        result = exec_in_sync("argus-sandbox", ["nuclei", "-version"], timeout=5.0)
+        assert result.success and result.stdout == "broker-out"
+        assert captured["url"] == "http://broker:8080/v1/exec"
+        assert captured["json"]["container"] == "argus-sandbox"
+        assert captured["json"]["argv"] == ["nuclei", "-version"]
 
     def test_proxy_transport_sets_docker_host_env(
         self, monkeypatch: pytest.MonkeyPatch

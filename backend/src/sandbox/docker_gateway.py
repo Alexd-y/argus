@@ -36,6 +36,8 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+import httpx
+
 from src.core.config import settings
 from src.sandbox.templating import redact_argv_for_logging
 
@@ -129,6 +131,53 @@ def _subprocess_env() -> dict[str, str] | None:
     return overlay
 
 
+def _exec_via_broker(
+    container: str,
+    argv: list[str],
+    *,
+    workdir: str | None,
+    timeout: float,
+    env: Mapping[str, str] | None,
+) -> ExecResult:
+    """POST the exec request to the argus-exec-broker and adapt its response.
+
+    Validation still happens client-side (fail fast) and again server-side (the
+    broker never trusts the client). ``httpx`` is imported here-at-top of module.
+    """
+    _validate_container(container)
+    _validate_argv(argv)
+    _log_call(container, argv, "broker")
+
+    url = getattr(settings, "exec_broker_url", "http://argus-exec-broker:8080").rstrip("/")
+    payload: dict[str, object] = {"container": container, "argv": argv, "timeout": timeout}
+    if workdir:
+        payload["workdir"] = workdir
+    if env:
+        payload["env"] = dict(env)
+
+    start = time.perf_counter()
+    try:
+        resp = httpx.post(f"{url}/v1/exec", json=payload, timeout=timeout + 15.0)
+    except httpx.HTTPError as exc:
+        elapsed = time.perf_counter() - start
+        logger.warning(
+            "docker_gateway_broker_error",
+            extra={"event": "docker_gateway_broker_error", "error": str(exc)},
+        )
+        return ExecResult(-1, "", f"exec broker unreachable: {exc}", elapsed)
+
+    elapsed = time.perf_counter() - start
+    if resp.status_code != 200:
+        return ExecResult(-1, "", f"exec broker rejected request: HTTP {resp.status_code} {resp.text[:500]}", elapsed)
+    data = resp.json()
+    return ExecResult(
+        int(data.get("exit_code", -1)),
+        str(data.get("stdout", "")),
+        str(data.get("stderr", "")),
+        float(data.get("duration_s", elapsed)),
+    )
+
+
 def exec_in_sync(
     container: str,
     argv: list[str],
@@ -144,12 +193,9 @@ def exec_in_sync(
     """
     transport = getattr(settings, "docker_transport", "socket")
     if transport == "broker":
-        # Wired up in Stage 4 (argus-exec-broker). Until then, callers must run
-        # under socket/proxy transport.
-        raise DockerGatewayError(
-            "docker_transport='broker' requires the Stage 4 exec broker "
-            "(infra/docker-compose.broker.yml); not yet available"
-        )
+        # Stage 4: delegate to the argus-exec-broker over HTTP. The broker holds
+        # the socket and re-validates server-side; it exposes no raw Docker API.
+        return _exec_via_broker(container, argv, workdir=workdir, timeout=timeout, env=env)
 
     exec_argv = build_exec_argv(container, argv, workdir=workdir, env=env)
     _log_call(container, argv, transport)

@@ -1,0 +1,121 @@
+# ARGUS — Docker exec-broker overlay (F-H01 Stage 4)
+#
+# The STRONGEST of the shipped socket-hardening options. Use this instead of
+# docker-compose.hardened.yml when the deployment faces untrusted scan targets.
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.broker.yml up -d
+#
+# Why this over docker-compose.hardened.yml
+# -----------------------------------------
+# The Tecnativa socket-proxy (hardened.yml) filters by endpoint GROUP, so the
+# POST+CONTAINERS combination required for `docker exec` also permits
+# POST /containers/create — the container-escape primitive survives (see
+# docs/docker-socket-hardening.md §3). This broker exposes a SINGLE narrow verb
+# ("exec an allowlisted tool in an allowlisted container") and implements no
+# create/start/commit/pull/build/volume/network endpoint at all, so the escape
+# is unreachable by construction, not by allowlist.
+#
+# Apply EITHER this overlay OR docker-compose.hardened.yml, never both (both
+# rewire the same services' Docker access). hardened.yml remains the weaker
+# fallback for environments where running the broker service is not desired.
+#
+# Requires Docker Compose v2.24.0+ for the `!override` merge tag. The same
+# `!override []` silent-volume-drop footgun documented in hardened.yml applies:
+# any new base volume added to these services must be re-declared here.
+
+services:
+  argus-exec-broker:
+    # Reuse the backend image; run the broker ASGI app instead of the API.
+    image: argus-backend
+    container_name: argus-exec-broker
+    restart: unless-stopped
+    command: uvicorn src.exec_broker.app:app --host 0.0.0.0 --port 8080
+    env_file: .env
+    environment:
+      # The broker is the ONE process that talks to the real socket directly.
+      DOCKER_TRANSPORT: socket
+      SANDBOX_ENABLED: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Hardening: the broker needs the socket but nothing else.
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # The broker is the ONLY component that touches the real socket.
+      - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - exec-broker
+    # No ports: — reachable only from the internal exec-broker network.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\" || exit 1"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --- the four exec-capable services: drop the raw socket, talk to the broker ---
+  backend:
+    volumes: !override []
+    environment:
+      DOCKER_TRANSPORT: broker
+      EXEC_BROKER_URL: http://argus-exec-broker:8080
+    networks:
+      - backend
+      - data
+      - sandbox
+      - exec-broker
+    depends_on:
+      argus-exec-broker:
+        condition: service_started
+
+  worker-scans:
+    volumes: !override []
+    environment:
+      DOCKER_TRANSPORT: broker
+      EXEC_BROKER_URL: http://argus-exec-broker:8080
+    networks:
+      - backend
+      - data
+      - sandbox
+      - exec-broker
+    depends_on:
+      argus-exec-broker:
+        condition: service_started
+
+  worker-general:
+    volumes: !override []
+    environment:
+      DOCKER_TRANSPORT: broker
+      EXEC_BROKER_URL: http://argus-exec-broker:8080
+    networks:
+      - backend
+      - data
+      - sandbox
+      - exec-broker
+    depends_on:
+      argus-exec-broker:
+        condition: service_started
+
+  worker-cairn:
+    volumes: !override []
+    environment:
+      DOCKER_TRANSPORT: broker
+      EXEC_BROKER_URL: http://argus-exec-broker:8080
+    networks:
+      - backend
+      - data
+      - sandbox
+      - exec-broker
+    depends_on:
+      argus-exec-broker:
+        condition: service_started
+
+networks:
+  # Dedicated internal-only network carrying worker -> broker HTTP. The broker
+  # reaches the daemon via the mounted socket, NOT over this network, so it can
+  # stay fully internal with no published ports and no route to the host.
+  exec-broker:
+    driver: bridge
+    internal: true
