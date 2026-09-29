@@ -51,6 +51,8 @@ Security
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 import os
 import re
@@ -702,6 +704,76 @@ class LatexBackend:
         )
 
 
+class ChromiumBackend:
+    """Opt-in Chromium/Playwright backend (``REPORT_PDF_BACKEND=chromium``).
+
+    Reproduces the reference sample's layout one-to-one because Chromium fully
+    supports flex/grid and paged media. Selected ONLY when explicitly requested —
+    it is never in the automatic fallback chain (a browser in the prod path is a
+    deliberate operator choice; see docs/report-service.md, prompt §31 Variant 2).
+
+    Determinism/PDF-A caveats: version must be pinned; PDF/A needs a separate step
+    (the LaTeX backend remains the PDF/A path). Report rendering must not share a
+    container with untrusted target code.
+    """
+
+    name: ClassVar[str] = "chromium"
+
+    @staticmethod
+    def is_available() -> bool:
+        try:
+            from playwright.sync_api import sync_playwright  # noqa: F401
+        except Exception:  # noqa: BLE001 — optional dependency / no browser
+            return False
+        return True
+
+    def render(
+        self,
+        *,
+        html_content: str,
+        output_path: Path,
+        scan_completed_at: str,
+        base_url: str | None = None,
+        latex_template_content: str | None = None,
+        pdfa_mode: bool = False,
+        xmpdata_content: str | None = None,
+    ) -> bool:
+        del base_url, latex_template_content, pdfa_mode, xmpdata_content, scan_completed_at
+
+        def _run() -> bool:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(args=["--no-sandbox"])
+                try:
+                    page = browser.new_page()
+                    page.set_content(html_content, wait_until="networkidle")
+                    page.pdf(
+                        path=str(output_path),
+                        print_background=True,
+                        prefer_css_page_size=True,
+                    )
+                finally:
+                    browser.close()
+            return output_path.exists() and output_path.stat().st_size > 0
+
+        try:
+            # Playwright's sync API cannot run inside a live event loop; isolate it
+            # in a dedicated thread when one is running (mirrors call_llm_sync).
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return _run()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(_run).result(timeout=120.0)
+        except Exception as exc:  # noqa: BLE001 — never break the bundle on PDF failure
+            logger.warning(
+                "chromium_render_failed",
+                extra={"event": "chromium_render_failed", "error_type": type(exc).__name__},
+            )
+            return False
+
+
 class DisabledBackend:
     """Graceful no-op backend.
 
@@ -737,9 +809,12 @@ class DisabledBackend:
 # Registry keyed by ``REPORT_PDF_BACKEND`` env-var values. The order in
 # ``_FALLBACK_CHAIN`` is what :func:`get_active_backend` walks when the
 # requested backend is unavailable.
-_BACKEND_REGISTRY: Final[dict[str, type[WeasyPrintBackend | LatexBackend | DisabledBackend]]] = {
+_BACKEND_REGISTRY: Final[
+    dict[str, type[WeasyPrintBackend | LatexBackend | ChromiumBackend | DisabledBackend]]
+] = {
     WeasyPrintBackend.name: WeasyPrintBackend,
     LatexBackend.name: LatexBackend,
+    ChromiumBackend.name: ChromiumBackend,
     DisabledBackend.name: DisabledBackend,
 }
 

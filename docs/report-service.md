@@ -32,6 +32,27 @@ sections (no full finding cards / PoC). The branded branch is therefore not used
 `tier=valhalla` PDF. Any future silent fallback to a different template on branded-render failure
 must be `generation_status=failed` with the error surfaced (no silent template substitution).
 
+### PDF backend — WeasyPrint (default) vs Chromium (opt-in) — Phase V (§31)
+
+The reference sample (`security-assessment.pdf`) was produced by Chromium (`Skia/PDF`), whose
+flex/grid paged media "just works". ARGUS uses **WeasyPrint 70.0**, which does not fragment
+flex/grid containers across pages — the root cause of the one-page defect (D1). Decision:
+
+- **Variant 1 — WeasyPrint with print-safe CSS (default, mandatory).** All page layout is block +
+  table + `inline-block`; metric tiles are `inline-block`, never flex; running headers/footers use
+  `@page` + `counter(page)`/`counter(pages)` (`Page N of M`). Deterministic, no browser in the
+  contour, PDF/A stays available via the LaTeX backend. Implemented in the canonical
+  `renderers/html_renderer.py` and the Valhalla print CSS.
+- **Variant 2 — Chromium backend (opt-in, `REPORT_PDF_BACKEND=chromium`).** `ChromiumBackend`
+  (`pdf_backend.py`) renders via headless Chromium/Playwright with `print_background=True` and
+  `prefer_css_page_size=True`, reproducing the sample layout one-to-one. It is **not** in the
+  automatic fallback chain — an explicit operator choice. Caveats: pin the Chromium version for
+  determinism, PDF/A needs a separate step, and report rendering must not share a container with
+  untrusted target code.
+
+Either way: pages are numbered `Page N of M`; the header/footer carries brand + confidentiality;
+`raster_pdf_qa` runs before release; no mandatory element is clipped.
+
 ---
 
 ## Why this exists
