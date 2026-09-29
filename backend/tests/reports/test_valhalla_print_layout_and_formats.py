@@ -116,6 +116,20 @@ def test_release_blockers_wired_into_pipeline() -> None:
     assert "valhalla_release_blockers(" in helper_src
 
 
+def test_blockers_publish_honest_draft_not_hard_fail() -> None:
+    """§33: an enforced blocker publishes an honest draft, never discards artifacts."""
+    from src.core.config import settings
+
+    # Default posture is enforce-on.
+    assert settings.valhalla_release_blockers_enabled is True
+    pipeline_src = inspect.getsource(report_pipeline.run_generate_report_pipeline)
+    # Honest draft: status becomes 'draft' with recorded reasons, not a raised error.
+    assert 'release_status = "draft"' in pipeline_src
+    assert "honest_draft:" in pipeline_src
+    # The old hard-fail path (raise on blockers) must be gone.
+    assert 'raise ReportGenerationError("Valhalla release blocked' not in pipeline_src
+
+
 def test_compute_valhalla_release_blockers_flags_llm_and_tier() -> None:
     """The wired helper blocks on tier swap and incomplete mandatory LLM analysis."""
 

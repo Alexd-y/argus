@@ -88,6 +88,16 @@ def test_chain_claim_requires_proven_chain():
     assert not check_output_consistency(text, has_proven_chains=True)
 
 
+def test_chain_section_title_and_negative_do_not_trip_r07():
+    # Section headers and honest negatives must NOT be treated as chain claims.
+    for benign in (
+        "## Exploit Chain\n\nNo validated attack chain was demonstrated.",
+        "Impact Chains: none proven for this assessment.",
+        "Подтверждённых цепочек воздействия не получено.",
+    ):
+        assert not check_output_consistency(benign, has_proven_chains=False)
+
+
 # --------------------------------------------------------------------------- R-08
 def test_truncated_finding_id_rejected():
     text = f"See finding {_TRUNC_ID} for details."

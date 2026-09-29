@@ -298,15 +298,15 @@ class Settings(BaseSettings):
             "valhalla_llm_remediation_enabled",
         ),
     )
-    # valhalla_release_blockers_enabled — fail-closed release gate (Phase G). When
-    # enabled, ``valhalla_release_blockers`` is evaluated before a Valhalla release is
-    # marked ``ready``; any blocking reason fails the generation. Staged rollout:
-    # default False so the gate is wired into the prod path and observable (blockers
-    # are always logged) without regressing releases in environments that do not yet
-    # satisfy the full completeness/LLM contract (Phases C–E). Flip to True once those
-    # land. The regression test enables it explicitly.
+    # valhalla_release_blockers_enabled — fail-closed release gate (Phase G/§33). When
+    # enabled, ``valhalla_release_blockers`` (+ Phase O/T/U/Q rules) is evaluated before
+    # a Valhalla release is marked ``ready``. On any blocker the release is published as
+    # an **honest draft** (``generation_status='draft'``, artifacts still emitted, reasons
+    # recorded) — never ``ready`` and never a silent pass. Default True: a report that
+    # does not satisfy the completeness/evidence/LLM/review contract must not claim to be
+    # a finished assessment. Set False only for legacy/offline environments.
     valhalla_release_blockers_enabled: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices(
             "ARGUS_VALHALLA_RELEASE_BLOCKERS",
             "valhalla_release_blockers_enabled",

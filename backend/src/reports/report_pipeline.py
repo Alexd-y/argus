@@ -901,6 +901,15 @@ async def run_generate_report_pipeline(
         # ``valhalla_release_blockers_enabled`` is set — staged rollout so the gate
         # does not regress releases in environments that do not yet satisfy the full
         # completeness/LLM contract (Phases C–E). See config flag docstring.
+        # Phase G/§33 — Valhalla release gate. Blockers are always computed and logged.
+        # When enforcement is on (default), any blocker publishes an **honest draft**
+        # (``generation_status='draft'`` with reasons recorded) instead of ``ready`` —
+        # artifacts are already generated above, so nothing is discarded. This is the
+        # honest-draft contract (§E.2/§33): a report that fails the completeness/
+        # evidence/LLM/review contract must not claim to be a finished assessment, but
+        # is still available for review rather than thrown away.
+        release_status = "ready"
+        release_error: str | None = None
         if tier_str == "valhalla":
             blockers = _compute_valhalla_release_blockers(
                 report_data=report_data,
@@ -923,21 +932,25 @@ async def run_generate_report_pipeline(
                     },
                 )
                 if settings.valhalla_release_blockers_enabled:
-                    raise ReportGenerationError("Valhalla release blocked: " + "; ".join(blockers))
+                    release_status = "draft"
+                    release_error = ("honest_draft: " + "; ".join(blockers))[:4000]
 
         await session.execute(
             update(Report)
             .where(cast(Report.id, String) == report_id)
-            .values(generation_status="ready", last_error_message=None)
+            .values(generation_status=release_status, last_error_message=release_error)
         )
         await session.commit()
 
         completed: dict[str, Any] = {
-            "status": "completed",
+            "status": "completed" if release_status == "ready" else "draft",
             "report_id": report_id,
+            "generation_status": release_status,
             "formats": list(generated.keys()),
             "object_keys": generated,
         }
+        if release_error:
+            completed["release_blockers"] = release_error
         if tier_str == "valhalla":
             vctx = built.template_context.get("valhalla_context")
             if isinstance(vctx, dict):

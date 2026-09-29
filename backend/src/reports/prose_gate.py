@@ -145,8 +145,15 @@ _INSECURE_FLAG_RE = re.compile(
 )
 
 #: Chain-claim phrases — only admissible when a proven chain exists (R-07, §29.3).
+#: Deliberately narrow to *assertive* wording ("can be chained", "chained with X to …")
+#: so section titles ("Exploit Chain") and honest negatives ("no attack chain was
+#: demonstrated") do NOT trip the gate — only an actual claim of a chain does.
 _CHAIN_CLAIM_RE = re.compile(
-    r"(can be chained|chained with|exploit chain|attack chain|цепочк)",
+    r"(can be chained"
+    r"|chained (?:with|together|to)"
+    r"|chain(?:ed|ing)?\s+\w+(?:\s+\w+){0,6}\s+to\s+(?:create|achieve|escalate|gain|obtain)"
+    r"|по\s+цепочке"
+    r"|объединить\s+в\s+цепочк)",
     re.IGNORECASE,
 )
 

@@ -4,6 +4,35 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — enforce release gate by default (honest draft) (2026-09-29)
+
+`valhalla_release_blockers_enabled` now defaults to **True**. On any blocker the Valhalla
+release is published as an **honest draft** (`generation_status='draft'`, reasons in
+`last_error_message`, all artifacts still emitted) instead of `ready` — and never a hard
+error that discards artifacts (previous behaviour raised `ReportGenerationError`). This is
+the §33/§E.2 contract: a report that fails the completeness/evidence/LLM/review gate must
+not claim to be a finished assessment, but stays available for review.
+
+- Gate wiring changed from raise-on-blocker to draft-on-blocker in `run_generate_report_pipeline`.
+- Tightened the R-07 chain-claim detector to assertive wording only ("can be chained",
+  "chained with … to create") so section titles ("Exploit Chain") and honest negatives
+  ("no attack chain was demonstrated") no longer false-positive.
+- **Break-in on live infra:** `backend/scripts/obkatka_release_gate.py` seeds a scan + Valhalla
+  report + finding and runs the real pipeline against live Postgres/Redis/MinIO — result is an
+  honest draft with 16 artifacts (canonical + valhalla_llm + verification kit) and recorded
+  blockers (LLM incomplete, R-13 passport). 716 report tests green.
+
+### Security & routing — bandit High cleared; Cairn tasks WRB-only (2026-09-29)
+
+- `pdf_backend.py`: justified `# nosec` for the LaTeX Jinja env (B701 — LaTeX output escaped via
+  `|latex_escape`, not HTML) and the latexmk subprocess (B404/B603); latexmk resolved via
+  `shutil.which` for a full path (B607). High-severity bandit across `src/reports` is now **0**.
+- `task_router.py`: Cairn blackboard tasks are WhiteRabbitNeo-only (WRB-001) — new
+  `WRB_ONLY_TASKS`; `call_llm_for_task` fails closed for them instead of defaulting to the
+  ORCHESTRATION cloud route. Fixed the two stale tests (task count 19→24; routing-table invariant
+  now covers all cloud-routable tasks and asserts the WRB-only exclusion + fail-closed). 180 llm
+  tests green.
+
 ### Valhalla report — Part III: shipped-bundle defects R-01…R-20 (Phases S–V) (2026-09-29)
 
 Fixes derived from the actually-exported report bundle. All twenty defects become
