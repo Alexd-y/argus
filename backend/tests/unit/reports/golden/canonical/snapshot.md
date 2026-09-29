@@ -8,7 +8,7 @@
 - started_at: `not_assessed`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `ef3741f20ba54b6f64eef88fd31534e5fa8f627f2c687cd9e4a1dff48996300e`
+- snapshot_hash: `58400457c7f66b6179a198fa6f8c7035157700bbf3f0a7b3b7bd52533e59e778`
 
 ## Report Passport
 

@@ -39,6 +39,7 @@ from src.reports.report_data_validation import (
     validate_report_data,
 )
 from src.reports.snapshot_builder import build_snapshot_from_report_data
+from src.reports.snapshot_completeness_gate import snapshot_release_blockers
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_completeness import valhalla_release_blockers
 from src.reports.valhalla_llm_merge import merge_llm_into_document
@@ -236,6 +237,8 @@ def _compute_valhalla_release_blockers(
             )
         ):
             blockers.append(f"OUTPUT: {cv.rule}: {cv.detail}")
+        # Phase U — snapshot completeness + evidence-chain (R-13…R-18).
+        blockers.extend(snapshot_release_blockers(snapshot))
     except Exception:  # noqa: BLE001 — gate must not crash generation
         pass
 

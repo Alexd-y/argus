@@ -286,6 +286,24 @@ class ReportFinding(BaseModel):
     remediation: ReportRemediation | None = None
     closure: ReportClosure | None = None
     claims: list[ReportClaim] = Field(default_factory=list)
+    # ---- Phase U (§30.1): object identity + impact + acceptance/retest/priority ----
+    asset: str | None = None
+    ip: str | None = None
+    port: int | None = None
+    protocol: str | None = None
+    scheme: str | None = None
+    url: str | None = None
+    path: str | None = None
+    parameter: str | None = None
+    component: str | None = None
+    observed_version: str | None = None
+    wstg_test_ids: list[str] = Field(default_factory=list)
+    observed_impact: str | None = None
+    potential_impact: str | None = None
+    blast_radius: str | None = None
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    retest_plan: list[str] = Field(default_factory=list)
+    priority_rationale: str | None = None
 
 
 class ReportToolRun(BaseModel):
@@ -298,6 +316,11 @@ class ReportToolRun(BaseModel):
     raw_artifact_ref: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
+    # ---- Phase U (§30.1 item 4, R-15): provable execution log ----
+    exit_code: int | None = None
+    argv: str | None = None  # redacted
+    sandbox_id: str | None = None
+    source_ip: str | None = None
 
 
 class ReportCoverageItem(BaseModel):
@@ -316,6 +339,15 @@ class ReportEvidenceRef(BaseModel):
     kind: str = "artifact"
     object_key: str | None = None
     description: str | None = None
+    # ---- Phase U (§30.1 item 5, R-16): integrity + provenance of evidence ----
+    sha256: str | None = None
+    size: int | None = None
+    mime: str | None = None
+    collected_at_utc: str | None = None
+    collector: str | None = None  # tool + version
+    producer_tool_run_id: str | None = None
+    redaction_applied: bool | None = None
+    chain_hash: str | None = None
 
 
 class ReportFailure(BaseModel):

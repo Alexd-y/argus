@@ -29,6 +29,7 @@ from src.reports.report_document import (
     ReportToolRun,
     build_report_document,
 )
+from src.reports.snapshot_completeness_gate import is_pseudo_evidence
 from src.reports.valhalla_narrative_builder import (
     build_attack_narrative,
     build_exploit_chains,
@@ -208,6 +209,24 @@ def _map_finding(
                 downgrade_reason = result.reason
                 verification = "suspected"
 
+    # R-17 — pseudo-evidence (tool:*/recon:*) is not proof. A provable finding whose
+    # only evidence is pseudo (no resolvable artifact) is capped at ``suspected``.
+    ev_ids = [str(e) for e in evidence_refs]
+    only_pseudo = bool(ev_ids) and all(is_pseudo_evidence(e) for e in ev_ids) and not raw_ref
+    if verification in _PROVABLE and only_pseudo:
+        verification = "suspected"
+        downgrade_reason = downgrade_reason or "R-17: only pseudo-evidence (tool:*/recon:*)"
+
+    poc_obj = poc
+
+    def _fget(*names: str) -> Any:
+        for name in names:
+            val = getattr(finding, name, None)
+            if val not in (None, ""):
+                return val
+        return None
+
+    port_val = _fget("port")
     return ReportFinding(
         finding_id=finding_id,
         title=title,
@@ -217,7 +236,7 @@ def _map_finding(
         description=str(getattr(finding, "description", "") or ""),
         verification_status=verification,
         confidence=_confidence_float(getattr(finding, "confidence", None)),
-        evidence_ids=[str(e) for e in evidence_refs],
+        evidence_ids=ev_ids,
         tool_run_id=(
             (str(getattr(finding, "tool_run_id", "")) or None)
             if getattr(finding, "tool_run_id", None)
@@ -230,8 +249,26 @@ def _map_finding(
         cvss_score=float(cvss_score) if isinstance(cvss_score, (int, float)) else None,
         confirmation_class=confirmation_class,
         downgrade_reason=downgrade_reason,
-        poc=poc,
+        poc=poc_obj,
+        # Phase U (§30.1) — object identity + impact, mapped from the finding.
+        asset=_str_or_none(_fget("asset", "affected_asset", "affected_url", "url")),
+        ip=_str_or_none(_fget("ip", "ip_address")),
+        port=int(port_val) if isinstance(port_val, int) else None,
+        protocol=_str_or_none(_fget("protocol")),
+        scheme=_str_or_none(_fget("scheme")),
+        url=_str_or_none(_fget("url", "affected_url", "endpoint")),
+        path=_str_or_none(_fget("path")),
+        parameter=_str_or_none(_fget("parameter", "affected_parameter")),
+        component=_str_or_none(_fget("component", "affected_component")),
+        observed_version=_str_or_none(_fget("observed_version", "version")),
+        observed_impact=(poc_obj.observed_impact if poc_obj else None),
+        potential_impact=(poc_obj.potential_impact if poc_obj else None),
+        blast_radius=(poc_obj.blast_radius if poc_obj else None),
     )
+
+
+def _str_or_none(value: Any) -> str | None:
+    return str(value) if value not in (None, "") else None
 
 
 def _map_tool_runs(scan_report_data: Any) -> list[ReportToolRun]:
@@ -243,12 +280,29 @@ def _map_tool_runs(scan_report_data: Any) -> list[ReportToolRun]:
         tool_name = str(get("tool_name", "") or get("tool", "") or "unknown")
         if not tool_run_id:
             tool_run_id = f"TR-{tool_name}-{len(out) + 1}"
+        status_raw = str(get("status", "unknown") or "unknown")
+        raw_artifact_ref = _str_or_none(
+            get("raw_artifact_ref", None) or get("output_object_key", None)
+        )
+        parser_status = get("parser_status", None)
+        # R-15 — a "success" run with neither artifact nor parser output is not a
+        # meaningful success; record it honestly as completed_no_output.
+        if status_raw.lower() == "success" and not raw_artifact_ref and not parser_status:
+            status_raw = "completed_no_output"
+        exit_code = get("exit_code", None)
         out.append(
             ReportToolRun(
                 tool_run_id=tool_run_id,
                 tool_name=tool_name,
-                status=str(get("status", "unknown") or "unknown"),
-                parser_status=get("parser_status", None),
+                status=status_raw,
+                parser_status=parser_status,
+                raw_artifact_ref=raw_artifact_ref,
+                started_at=_str_or_none(get("started_at", None) or get("start_time", None)),
+                finished_at=_str_or_none(get("finished_at", None) or get("end_time", None)),
+                exit_code=int(exit_code) if isinstance(exit_code, int) else None,
+                argv=_str_or_none(get("argv", None) or get("command", None)),
+                sandbox_id=_str_or_none(get("sandbox_id", None)),
+                source_ip=_str_or_none(get("source_ip", None)),
             )
         )
     return out
@@ -321,6 +375,23 @@ def _map_evidence(report_data: Any) -> list[ReportEvidenceRef]:
                 kind=str(get("kind", "artifact") or "artifact"),
                 object_key=str(object_key) if object_key else None,
                 description=get("description", None),
+                # Phase U (§30.1 item 5, R-16): integrity + provenance.
+                sha256=_str_or_none(get("sha256", None) or get("hash", None)),
+                size=(get("size", None) if isinstance(get("size", None), int) else None),
+                mime=_str_or_none(get("mime", None) or get("content_type", None)),
+                collected_at_utc=_str_or_none(
+                    get("collected_at_utc", None) or get("created_at", None)
+                ),
+                collector=_str_or_none(get("collector", None) or get("producer_tool", None)),
+                producer_tool_run_id=_str_or_none(
+                    get("producer_tool_run_id", None) or get("tool_run_id", None)
+                ),
+                redaction_applied=(
+                    bool(get("redaction_applied"))
+                    if get("redaction_applied", None) is not None
+                    else None
+                ),
+                chain_hash=_str_or_none(get("chain_hash", None)),
             )
         )
     return out

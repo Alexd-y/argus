@@ -133,7 +133,9 @@ def test_compute_valhalla_release_blockers_flags_llm_and_tier() -> None:
     assert any("VP-01" in b for b in blockers), blockers
     assert any("LLM analysis not complete" in b for b in blockers), blockers
 
-    # LLM "ready" (→ normalised to completed) + matching tier + no findings → releasable.
+    # LLM "ready" (→ normalised to completed) + matching tier → the LLM and tier
+    # blockers are gone. (A bare stub still trips Phase U passport/completeness
+    # rules R-13…R-18, which is correct — those are asserted elsewhere.)
     ok = report_pipeline._compute_valhalla_release_blockers(
         report_data=_StubReportData(),
         template_context={},
@@ -141,4 +143,5 @@ def test_compute_valhalla_release_blockers_flags_llm_and_tier() -> None:
         actual_tier="valhalla",
         valhalla_llm_status="ready",
     )
-    assert ok == [], ok
+    assert not any("VP-01" in b for b in ok), ok
+    assert not any("LLM analysis not complete" in b for b in ok), ok
