@@ -327,7 +327,17 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   - Tests: `tests/unit/sandbox/test_exec_broker.py` (policy + no-create-surface,
     no daemon) and `tests/integration/test_exec_broker_docker.py`
     (`requires_docker`: real exec reaches a container; create/run endpoints 404).
-- **Stage 5 — structural regression tests (pending).**
+- **Stage 5 — structural regression tests (DONE):** `test_audit4_docker_security.py`
+  rewritten from substring-grep to structural checks (registers a YAML
+  constructor for the `!override`/`!reset` merge tags so it parses the overlays
+  without Docker): (1) every socket-mounting base service is covered by BOTH the
+  hardened and broker overlays (the subset test that would have caught
+  worker-cairn); (2) no service resolves to uid 0, including via the
+  `${ARGUS_WORKER_USER:-...}` default; (3) sandbox/kali-runner/lab-runner declare
+  `cap_drop:[ALL]` + `no-new-privileges` + a pids limit; (4) the sandbox shares no
+  network with postgres/redis/minio; (5) `exploitation_executor.py` has no
+  hardcoded `"argus-sandbox"` literal (its 28 literals migrated to
+  `settings.sandbox_container_name`); (6) re-runs the Stage 3 AST gateway guard.
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
 - **Residual:** container-create escape remains while `docker exec` is required
   (see §3). Full remediation is Stage 4 (exec broker) / §5 (k8s adapter /
