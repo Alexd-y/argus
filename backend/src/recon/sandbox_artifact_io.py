@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 
 from src.core.config import settings
+from src.sandbox.docker_gateway import DockerGatewayError, exec_in_sync_bytes
 
 logger = logging.getLogger(__name__)
 
 
 def read_sandbox_file_capped(remote_path: str, *, max_bytes: int) -> bytes:
-    """``head -c`` inside sandbox; empty if disabled, bad path, or error."""
+    """``head -c`` inside sandbox; empty if disabled, bad path, or error.
+
+    F-H01 Stage 3: routed through the single Docker gateway (binary capture).
+    """
     rp = (remote_path or "").strip()
     if not rp or not rp.startswith("/"):
         return b""
@@ -24,19 +27,17 @@ def read_sandbox_file_capped(remote_path: str, *, max_bytes: int) -> bytes:
     if not name:
         return b""
     try:
-        proc = subprocess.run(
-            ["docker", "exec", name, "head", "-c", str(cap), rp],
-            capture_output=True,
+        rc, stdout, _stderr = exec_in_sync_bytes(
+            name,
+            ["head", "-c", str(cap), rp],
             timeout=120,
-            shell=False,
-            check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as e:
+    except DockerGatewayError as e:
         logger.warning(
             "sandbox_file_read_failed",
             extra={"event": "sandbox_file_read_failed", "error_type": type(e).__name__},
         )
         return b""
-    if proc.returncode != 0:
+    if rc != 0:
         return b""
-    return proc.stdout or b""
+    return stdout or b""

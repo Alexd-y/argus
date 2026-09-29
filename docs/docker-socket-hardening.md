@@ -275,8 +275,8 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   deferred with a documented reason (§5a). Raw-socket tool validation is a
   staging step (§5a). Verified via `docker compose config`: sandbox shares no
   network with postgres/redis/minio.
-- **Stage 3 — single Docker chokepoint `docker_gateway.py` (PARTIAL — foundation
-  landed, migration ongoing):**
+- **Stage 3 — single Docker chokepoint `docker_gateway.py` (foundation landed;
+  full migration in Stage 7):**
   - New `backend/src/sandbox/docker_gateway.py`: the single module allowed to
     construct a Docker call. List-argv-only (shell string unrepresentable),
     transport-aware (`socket`/`proxy`/`broker`), validates container names,
@@ -291,14 +291,9 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   - AST guard `tests/test_audit_docker_gateway_ast.py`: fails if any module but
     the gateway imports the `docker` SDK or hands a subprocess call an argv whose
     first literal is `"docker"`; also fails on stale exempt entries.
-  - **Deviation from plan (per §9 stop-and-report):** `_DOCKER_GATEWAY_EXEMPT` is
-    NOT yet empty. Seven modules remain: three SDK users (`ephemeral_worker`,
-    `exploit_verification_microvm`, `docker_sandbox_adapter`) that need container
-    lifecycle verbs the exec-only gateway does not yet model, and four CLI callers
-    using non-exec verbs or special output handling (`lab/runner.py` inspect+guard,
-    `api/routers/sandbox.py` exec ps, `quick/cancellation.py` exec pkill,
-    `recon/sandbox_artifact_io.py` exec head -c). Each is listed with a reason;
-    the guard prevents NEW direct usage and the stale-check keeps the list honest.
+  - **Migration COMPLETE — `_DOCKER_GATEWAY_EXEMPT` is now EMPTY (see Stage 7).**
+    All former exempt modules route through the gateway; the AST guard passes with
+    zero exemptions.
   - **Related finding — FIXED (see Stage 6):** the validation harnesses ran
     attacker-influenceable reproducer payloads on the host
     (`profiles.py` `CliHarness` via `create_subprocess_shell`, `LibraryHarness`
@@ -346,6 +341,20 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   `BinaryHarness` keeps `file`/`strings` on a path via `create_subprocess_exec`
   (argv, read-only tools — not shell injection). Test:
   `tests/unit/sandbox/test_harness_sandbox_execution.py`.
+- **Stage 7 — complete the gateway migration; `_DOCKER_GATEWAY_EXEMPT` = ∅ (DONE):**
+  the gateway grew the surface the remaining callers needed —
+  `docker_client()` / `docker_sdk_available()` (the single `import docker`),
+  `inspect_format()` (docker inspect), `copy_to_container()` (docker cp),
+  `exec_in_sync_bytes()` (binary capture for `head -c`), and a `build_exec_argv`
+  `interactive` flag (`docker exec -i` for stdin). All seven previously-exempt
+  modules migrated: the three SDK users (`ephemeral_worker`,
+  `exploit_verification_microvm`, `docker_sandbox_adapter`) now obtain their
+  client via `docker_client()` and catch `DockerGatewayError`; the four CLI
+  callers (`lab/runner.py`, `api/routers/sandbox.py`, `quick/cancellation.py`,
+  `recon/sandbox_artifact_io.py`) route through the gateway helpers. The AST
+  guard now runs with an **empty** exempt list — no module but the gateway
+  imports the docker SDK or builds a raw `docker` argv. Affected unit tests
+  (cancellation, exploit-verification, gateway) updated to patch the gateway.
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
 - **Residual:** container-create escape remains while `docker exec` is required
   (see §3). Full remediation is Stage 4 (exec broker) / §5 (k8s adapter /

@@ -24,6 +24,14 @@ from src.lab.languages import (
 )
 from src.nuclei.profile_compiler import NucleiProfileCompiler
 
+# F-H01 Stage 3: docker access via the single gateway (never a raw docker argv).
+from src.sandbox.docker_gateway import (
+    build_exec_argv,
+    copy_to_container,
+    exec_in_sync,
+    inspect_format,
+)
+
 logger = logging.getLogger(__name__)
 
 _DOCKER_INSPECT_TIMEOUT_SEC = 5.0
@@ -76,20 +84,10 @@ def _timeout_sec(request: LabRunRequest) -> float:
 
 
 def _docker_inspect(container: str, format_expr: str) -> str | None:
-    try:
-        proc = subprocess.run(
-            ["docker", "inspect", "-f", format_expr, container],
-            capture_output=True,
-            text=True,
-            timeout=_DOCKER_INSPECT_TIMEOUT_SEC,
-            shell=False,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+    result = inspect_format(container, format_expr, timeout=_DOCKER_INSPECT_TIMEOUT_SEC)
+    if result.exit_code != 0:
         return None
-    if proc.returncode != 0:
-        return None
-    return (proc.stdout or "").strip()
+    return (result.stdout or "").strip()
 
 
 def lab_runner_container_running(container: str) -> bool:
@@ -101,20 +99,14 @@ def read_lab_namespace(container: str) -> str:
     label = _docker_inspect(container, f'{{{{index .Config.Labels "{_LAB_NAMESPACE_LABEL}"}}}}')
     if label:
         return label
-    try:
-        proc = subprocess.run(
-            ["docker", "exec", container, "printenv", "ARGUS_LAB_NAMESPACE"],
-            capture_output=True,
-            text=True,
-            timeout=_DOCKER_INSPECT_TIMEOUT_SEC,
-            shell=False,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+    result = exec_in_sync(
+        container,
+        ["printenv", "ARGUS_LAB_NAMESPACE"],
+        timeout=_DOCKER_INSPECT_TIMEOUT_SEC,
+    )
+    if result.exit_code != 0:
         return ""
-    if proc.returncode != 0:
-        return ""
-    return (proc.stdout or "").strip()
+    return (result.stdout or "").strip()
 
 
 def assert_lab_namespace(container: str, lease_namespace: str | None) -> None:
@@ -180,7 +172,7 @@ class IsolatedLabRunner:
         if is_nuclei_language(lang) or request.yaml_content:
             return self._execute_nuclei(request, container=container)
         if request.argv and not request.source:
-            argv = ["docker", "exec", container, *request.argv]
+            argv = build_exec_argv(container, list(request.argv))
             return self._run(argv, input_text=None, request=request, runner="docker")
         try:
             interp = interpreter_argv(lang, local=False)
@@ -194,7 +186,7 @@ class IsolatedLabRunner:
                 execution_time_sec=0.0,
                 error_code="unsupported_lab_language",
             )
-        argv = ["docker", "exec", "-i", container, *interp]
+        argv = build_exec_argv(container, list(interp), interactive=True)
         return self._run(argv, input_text=request.source, request=request, runner="docker")
 
     def _execute_local(self, request: LabRunRequest) -> LabRunResult:
@@ -263,7 +255,7 @@ class IsolatedLabRunner:
                 error_code="nuclei_compile_failed",
             )
         if container:
-            run_argv = ["docker", "exec", container, *argv]
+            run_argv = build_exec_argv(container, list(argv))
             runner = "docker"
         else:
             run_argv = argv
@@ -291,20 +283,9 @@ class IsolatedLabRunner:
         if not container:
             return host_path
         remote = f"/tmp/argus-lab-{suffix}"
-        try:
-            proc = subprocess.run(
-                ["docker", "cp", host_path, f"{container}:{remote}"],
-                capture_output=True,
-                text=True,
-                timeout=_DOCKER_INSPECT_TIMEOUT_SEC,
-                shell=False,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            Path(host_path).unlink(missing_ok=True)
-            return None
+        result = copy_to_container(host_path, container, remote, timeout=_DOCKER_INSPECT_TIMEOUT_SEC)
         Path(host_path).unlink(missing_ok=True)
-        if proc.returncode != 0:
+        if result.exit_code != 0:
             return None
         return remote
 

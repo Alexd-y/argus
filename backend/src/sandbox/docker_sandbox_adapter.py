@@ -37,10 +37,8 @@ from datetime import datetime
 from src.orchestration.observability import SANDBOX_FAILURES, metric_labels
 from src.orchestration.sandbox_lifecycle import ExecResult, SandboxCreateError
 
-try:  # docker SDK is an optional dependency (absent in offline/dev installs).
-    import docker
-except ImportError:  # pragma: no cover — exercised only where docker is absent
-    docker = None  # type: ignore[assignment]
+# F-H01 Stage 3: the docker SDK is reached only through the single gateway.
+from src.sandbox.docker_gateway import docker_client, docker_sdk_available
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +105,9 @@ class DockerLifecycleSandboxAdapter:
     def _get_client(self) -> object:
         if self._client is not None:
             return self._client
-        if docker is None:
+        if not docker_sdk_available():
             raise SandboxCreateError("docker SDK not installed — cannot create sandbox")
-        self._client = docker.from_env()
+        self._client = docker_client()
         return self._client
 
     async def create(self, task_id: str, owner_labels: dict[str, str]) -> str:

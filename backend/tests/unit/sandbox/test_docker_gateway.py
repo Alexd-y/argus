@@ -147,6 +147,79 @@ class TestExecInSync:
         assert captured["env"]["DOCKER_HOST"] == "tcp://docker-socket-proxy:2375"
 
 
+class _Proc:
+    def __init__(self, returncode=0, stdout="", stderr=""):  # noqa: ANN001
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class TestLifecycleHelpers:
+    def test_build_exec_argv_interactive(self) -> None:
+        assert docker_gateway.build_exec_argv("argus-sandbox", ["sh"], interactive=True) == [
+            "docker",
+            "exec",
+            "-i",
+            "argus-sandbox",
+            "sh",
+        ]
+
+    def test_inspect_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict = {}
+
+        def _fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return _Proc(0, "true", "")
+
+        monkeypatch.setattr(docker_gateway.subprocess, "run", _fake_run)
+        res = docker_gateway.inspect_format("argus-lab-runner", "{{.State.Running}}", timeout=5)
+        assert res.exit_code == 0 and res.stdout == "true"
+        assert captured["argv"] == [
+            "docker",
+            "inspect",
+            "-f",
+            "{{.State.Running}}",
+            "argus-lab-runner",
+        ]
+
+    def test_copy_to_container(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict = {}
+
+        def _fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return _Proc(0, "", "")
+
+        monkeypatch.setattr(docker_gateway.subprocess, "run", _fake_run)
+        res = docker_gateway.copy_to_container("/tmp/x.yaml", "argus-lab-runner", "/tmp/y.yaml")
+        assert res.exit_code == 0
+        assert captured["argv"] == [
+            "docker",
+            "cp",
+            "/tmp/x.yaml",
+            "argus-lab-runner:/tmp/y.yaml",
+        ]
+
+    def test_exec_in_sync_bytes_returns_raw_bytes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            docker_gateway.subprocess, "run", lambda *a, **k: _Proc(0, b"\x00\x01binary", b"")
+        )
+        monkeypatch.setattr(docker_gateway.settings, "docker_transport", "socket", raising=False)
+        rc, out, _err = docker_gateway.exec_in_sync_bytes(
+            "argus-sandbox", ["head", "-c", "8", "/f"], timeout=5
+        )
+        assert rc == 0 and out == b"\x00\x01binary"
+
+    def test_exec_in_sync_bytes_rejects_broker(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(docker_gateway.settings, "docker_transport", "broker", raising=False)
+        with pytest.raises(docker_gateway.DockerGatewayError):
+            docker_gateway.exec_in_sync_bytes("argus-sandbox", ["head"], timeout=5)
+
+    def test_docker_client_raises_when_sdk_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(docker_gateway, "_docker_sdk", None, raising=False)
+        with pytest.raises(docker_gateway.DockerGatewayError):
+            docker_gateway.docker_client()
+
+
 class TestContainerNameValidator:
     """F-H01 Stage 3: Settings must reject a malformed container name at load."""
 

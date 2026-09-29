@@ -36,6 +36,7 @@ from src.cache.tool_cache import (
 )
 from src.cache.tool_recovery import get_tool_recovery_system
 from src.core.config import settings
+from src.sandbox.docker_gateway import DockerGatewayError, exec_in_sync
 from src.tools.executor import execute_command_with_recovery
 from src.tools.guardrails.command_parser import ALLOWED_TOOLS, extract_tool_name
 
@@ -95,47 +96,14 @@ def _list_processes_impl() -> dict[str, Any]:
     """List processes from sandbox container (docker) or host OS."""
     container = (settings.sandbox_container_name or "").strip() or "argus-sandbox"
     if settings.sandbox_enabled and shutil.which("docker"):
+        # F-H01 Stage 3: docker exec routed through the single gateway.
         try:
-            proc = subprocess.run(
-                ["docker", "exec", container, "ps", "-eo", "pid=,comm=,args="],
-                capture_output=True,
-                text=True,
+            result = exec_in_sync(
+                container,
+                ["ps", "-eo", "pid=,comm=,args="],
                 timeout=20,
-                shell=False,
             )
-            if proc.returncode != 0:
-                logger.warning(
-                    "sandbox_ps_docker_failed",
-                    extra={
-                        "event": "argus.sandbox.ps_docker_failed",
-                        "returncode": proc.returncode,
-                    },
-                )
-                return {
-                    "success": False,
-                    "source": "docker",
-                    "processes": [],
-                    "detail": "Could not list processes in sandbox container",
-                }
-            processes = []
-            for line in (proc.stdout or "").splitlines():
-                row = _parse_ps_docker_line(line)
-                if row:
-                    processes.append(row)
-            return {
-                "success": True,
-                "source": "docker",
-                "processes": processes,
-                "detail": None,
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "source": "docker",
-                "processes": [],
-                "detail": "Process listing timed out",
-            }
-        except OSError:
+        except DockerGatewayError:
             logger.exception(
                 "sandbox_ps_docker_os_error",
                 extra={"event": "argus.sandbox.ps_docker_os_error"},
@@ -146,6 +114,31 @@ def _list_processes_impl() -> dict[str, Any]:
                 "processes": [],
                 "detail": "Process listing failed",
             }
+        if result.exit_code != 0:
+            logger.warning(
+                "sandbox_ps_docker_failed",
+                extra={
+                    "event": "argus.sandbox.ps_docker_failed",
+                    "returncode": result.exit_code,
+                },
+            )
+            return {
+                "success": False,
+                "source": "docker",
+                "processes": [],
+                "detail": "Could not list processes in sandbox container",
+            }
+        processes = []
+        for line in (result.stdout or "").splitlines():
+            row = _parse_ps_docker_line(line)
+            if row:
+                processes.append(row)
+        return {
+            "success": True,
+            "source": "docker",
+            "processes": processes,
+            "detail": None,
+        }
 
     try:
         if platform.system() == "Windows":
@@ -229,28 +222,10 @@ def _list_processes_impl() -> dict[str, Any]:
 def _kill_process_impl(pid: int) -> dict[str, Any]:
     container = (settings.sandbox_container_name or "").strip() or "argus-sandbox"
     if settings.sandbox_enabled and shutil.which("docker"):
+        # F-H01 Stage 3: docker exec routed through the single gateway.
         try:
-            proc = subprocess.run(
-                ["docker", "exec", container, "kill", "-9", str(pid)],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                shell=False,
-            )
-            if proc.returncode != 0:
-                return {
-                    "success": False,
-                    "source": "docker",
-                    "detail": "Kill signal was not acknowledged",
-                }
-            return {"success": True, "source": "docker", "detail": None}
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "source": "docker",
-                "detail": "Kill request timed out",
-            }
-        except OSError:
+            result = exec_in_sync(container, ["kill", "-9", str(pid)], timeout=15)
+        except DockerGatewayError:
             logger.exception(
                 "sandbox_kill_docker_os_error",
                 extra={"event": "argus.sandbox.kill_docker_os_error"},
@@ -260,6 +235,13 @@ def _kill_process_impl(pid: int) -> dict[str, Any]:
                 "source": "docker",
                 "detail": "Kill request failed",
             }
+        if result.exit_code != 0:
+            return {
+                "success": False,
+                "source": "docker",
+                "detail": "Kill signal was not acknowledged",
+            }
+        return {"success": True, "source": "docker", "detail": None}
 
     try:
         if platform.system() == "Windows":

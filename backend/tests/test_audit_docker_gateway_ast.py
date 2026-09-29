@@ -21,27 +21,12 @@ from pathlib import Path
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
 GATEWAY_REL = "sandbox/docker_gateway.py"
 
-# Modules that still construct Docker calls directly. F-H01 Stage 3 introduced
-# the gateway and migrated the primary chokepoint (recon/sandbox_tool_runner.py);
-# the remaining call sites are tracked here and migrated incrementally so each
-# move can be validated in isolation (see docs/docker-socket-hardening.md §6).
-# DO NOT add new entries — route new code through src.sandbox.docker_gateway.
-_DOCKER_GATEWAY_EXEMPT: frozenset[str] = frozenset(
-    {
-        # --- Python SDK users (docker.from_env) — need SDK-level container
-        # lifecycle (run/get/remove/exec_run), which the exec-only gateway does
-        # not yet cover. Migrate once the gateway grows a lifecycle surface.
-        "orchestration/ephemeral_worker.py",  # container run/get/remove
-        "orchestration/exploit_verification_microvm.py",  # run + exec_run (Stage 1 hardened)
-        "sandbox/docker_sandbox_adapter.py",  # lazy from_env() client
-        # --- CLI callers using non-exec verbs or special output handling that
-        # the current exec_in interface does not model:
-        "lab/runner.py",  # docker inspect + exec; preserves _PRODUCTION_SANDBOX_FORBIDDEN
-        "api/routers/sandbox.py",  # docker exec ps (admin/debug proc listing)
-        "quick/cancellation.py",  # docker exec pkill (scan cancellation)
-        "recon/sandbox_artifact_io.py",  # docker exec head -c (in-container output cap)
-    }
-)
+# F-H01 Stage 3 (completed): the exempt list is EMPTY. Every module in
+# backend/src reaches Docker exclusively through src.sandbox.docker_gateway
+# (exec_in / exec_in_sync / exec_in_sync_bytes for exec, docker_client for SDK
+# container lifecycle, inspect_format / copy_to_container for non-exec verbs).
+# DO NOT add entries — route new code through the gateway instead.
+_DOCKER_GATEWAY_EXEMPT: frozenset[str] = frozenset()
 
 _SUBPROCESS_CALLEES = {
     # subprocess.*

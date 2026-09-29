@@ -8,7 +8,6 @@ which imports this module.
 from __future__ import annotations
 
 import logging
-import subprocess
 import threading
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from src.db.models import Scan
 from src.quick.audit import emit_quick_audit_event
 from src.quick.models import QuickBudgetLeaseRow, QuickTaskRow
 from src.quick.schemas import QuickTaskStatus
+from src.sandbox.docker_gateway import DockerGatewayError, exec_in_sync
 
 logger = logging.getLogger(__name__)
 
@@ -134,30 +134,35 @@ def cancel_sandbox_for_scan(scan_id: str) -> bool:
     if not scan_id or not settings.sandbox_enabled:
         return False
     container = (settings.sandbox_container_name or "").strip() or "argus-sandbox"
+    # F-H01 Stage 3: docker exec routed through the single gateway. exit_code -1 is
+    # the gateway's sentinel for a transport-level timeout / OS error.
     try:
-        completed = subprocess.run(
-            ["docker", "exec", container, "pkill", "-TERM", "-f", scan_id],
-            capture_output=True,
-            text=True,
+        result = exec_in_sync(
+            container,
+            ["pkill", "-TERM", "-f", scan_id],
             timeout=5,
-            check=False,
-            shell=False,
         )
-        logger.info(
-            "quick_sandbox_cancel",
-            extra={
-                "event": "quick_sandbox_cancel",
-                "scan_id": scan_id,
-                "return_code": completed.returncode,
-            },
-        )
-        return True
-    except (subprocess.TimeoutExpired, OSError):
+    except DockerGatewayError:
         logger.warning(
             "quick_sandbox_cancel_failed",
             extra={"event": "quick_sandbox_cancel_failed", "scan_id": scan_id},
         )
         return False
+    if result.exit_code == -1:
+        logger.warning(
+            "quick_sandbox_cancel_failed",
+            extra={"event": "quick_sandbox_cancel_failed", "scan_id": scan_id},
+        )
+        return False
+    logger.info(
+        "quick_sandbox_cancel",
+        extra={
+            "event": "quick_sandbox_cancel",
+            "scan_id": scan_id,
+            "return_code": result.exit_code,
+        },
+    )
+    return True
 
 
 def revoke_scan_workers(

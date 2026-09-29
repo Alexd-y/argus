@@ -41,6 +41,13 @@ import httpx
 from src.core.config import settings
 from src.sandbox.templating import redact_argv_for_logging
 
+# The docker SDK is an optional dependency (absent in offline/dev installs). This
+# module is the ONE place in backend/src allowed to import it (F-H01 Stage 3).
+try:  # pragma: no cover - trivial import guard
+    import docker as _docker_sdk
+except ImportError:  # pragma: no cover - exercised only where docker is absent
+    _docker_sdk = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 # Docker container / name reference: first char alnum, then alnum plus _ . -
@@ -82,21 +89,95 @@ def _validate_argv(argv: list[str]) -> None:
         raise DockerGatewayError("argv must contain only strings (no shell string)")
 
 
+def docker_sdk_available() -> bool:
+    """True if the ``docker`` Python SDK is importable."""
+    return _docker_sdk is not None
+
+
+def docker_client() -> object:
+    """Return a ``docker.from_env()`` client — the single SDK entry point.
+
+    SDK-based callers (container lifecycle: run / get / stop / remove /
+    get_archive / list / exec_run) obtain their client here instead of importing
+    ``docker`` themselves, so the gateway stays the only module bound to the SDK.
+    Raises :class:`DockerGatewayError` when the SDK is unavailable so callers can
+    fail closed (or fall back to mock mode) without an ``ImportError`` of their own.
+    """
+    if _docker_sdk is None:
+        raise DockerGatewayError("docker SDK not installed")
+    return _docker_sdk.from_env()
+
+
+def copy_to_container(src_path: str, container: str, dest_path: str, *, timeout: float = 10.0) -> ExecResult:
+    """Run ``docker cp <src_path> <container>:<dest_path>`` — a non-exec verb.
+
+    Kept in the gateway so callers do not construct a raw ``docker`` argv. Honours
+    ``DOCKER_HOST``.
+    """
+    _validate_container(container)
+    argv = ["docker", "cp", src_path, f"{container}:{dest_path}"]
+    start = time.perf_counter()
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv list, shell=False, gateway-owned
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            shell=False,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return ExecResult(-1, "", "docker cp timed out", time.perf_counter() - start)
+    except OSError as exc:
+        return ExecResult(-1, "", f"docker cp failed: {exc}", time.perf_counter() - start)
+    return ExecResult(proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start)
+
+
+def inspect_format(container: str, fmt: str, *, timeout: float = 10.0) -> ExecResult:
+    """Run ``docker inspect -f <fmt> <container>`` — a non-exec daemon query.
+
+    Kept in the gateway so callers needing ``docker inspect`` (e.g. lab/runner)
+    do not construct a raw ``docker`` argv themselves. Honours ``DOCKER_HOST``.
+    """
+    _validate_container(container)
+    argv = ["docker", "inspect", "-f", fmt, container]
+    start = time.perf_counter()
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv list, shell=False, gateway-owned
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            shell=False,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return ExecResult(-1, "", "docker inspect timed out", time.perf_counter() - start)
+    except OSError as exc:
+        return ExecResult(-1, "", f"docker inspect failed: {exc}", time.perf_counter() - start)
+    return ExecResult(proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start)
+
+
 def build_exec_argv(
     container: str,
     argv: list[str],
     *,
     workdir: str | None = None,
     env: Mapping[str, str] | None = None,
+    interactive: bool = False,
 ) -> list[str]:
     """Build the ``docker exec`` argv for *argv* inside *container*.
 
     Pure/deterministic and side-effect free so it can be unit-tested and reused
-    by the availability probe. Never returns a shell string.
+    by the availability probe and by callers that must run the exec themselves
+    (e.g. stdin-piping). Never returns a shell string. ``interactive`` adds
+    ``-i`` so the caller can pipe stdin into the exec'd process.
     """
     _validate_container(container)
     _validate_argv(argv)
     parts: list[str] = ["docker", "exec"]
+    if interactive:
+        parts.append("-i")
     wd = (workdir or "").strip()
     if wd:
         parts.extend(["-w", wd])
@@ -227,6 +308,40 @@ def exec_in_sync(
 
     elapsed = time.perf_counter() - start
     return ExecResult(proc.returncode, proc.stdout or "", proc.stderr or "", elapsed)
+
+
+def exec_in_sync_bytes(
+    container: str,
+    argv: list[str],
+    *,
+    workdir: str | None = None,
+    timeout: float,
+    env: Mapping[str, str] | None = None,
+) -> tuple[int, bytes, bytes]:
+    """Like :func:`exec_in_sync` but captures **raw bytes** (no UTF-8 decode).
+
+    For tools whose output is binary (e.g. ``head -c`` reading a file). Returns
+    ``(exit_code, stdout, stderr)``. Socket/proxy transports only — binary
+    capture is not representable over the text/JSON broker transport.
+    """
+    transport = getattr(settings, "docker_transport", "socket")
+    if transport == "broker":
+        raise DockerGatewayError("binary capture is not supported over the broker transport")
+    exec_argv = build_exec_argv(container, argv, workdir=workdir, env=env)
+    _log_call(container, argv, transport)
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv list, shell=False, gateway-owned
+            exec_argv,
+            capture_output=True,
+            timeout=timeout,
+            shell=False,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return -1, b"", b"Command timed out"
+    except OSError as exc:
+        return -1, b"", f"Execution failed: {exc}".encode()
+    return proc.returncode, proc.stdout or b"", proc.stderr or b""
 
 
 async def exec_in(

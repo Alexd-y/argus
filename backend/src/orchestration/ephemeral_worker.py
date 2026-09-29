@@ -87,6 +87,9 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+# F-H01 Stage 3: the docker SDK is reached only through the single gateway.
+from src.sandbox.docker_gateway import DockerGatewayError, docker_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,9 +188,7 @@ class EphemeralWorkerPool:
         container_id: str | None = None
 
         try:
-            import docker
-
-            client = docker.from_env()
+            client = docker_client()
             container = client.containers.run(
                 image=spec.image,
                 name=container_name,
@@ -206,7 +207,7 @@ class EphemeralWorkerPool:
             )
             container_id = container.id
             logger.info("Docker container created: %s", container_id)
-        except ImportError as exc:
+        except DockerGatewayError as exc:
             if not self._mock_mode:
                 raise EphemeralWorkerError(
                     "Docker SDK not available — cannot provide an isolated "
@@ -233,14 +234,12 @@ class EphemeralWorkerPool:
         logger.info("Releasing ephemeral container %s", container_id)
 
         try:
-            import docker
-
-            client = docker.from_env()
+            client = docker_client()
             container = client.containers.get(container_id)
             container.stop(timeout=10)
             container.remove(force=True)
             logger.info("Docker container removed: %s", container_id)
-        except ImportError:
+        except DockerGatewayError:
             pass
         except Exception as docker_exc:
             logger.debug("Docker container removal failed: %s", docker_exc)
@@ -273,9 +272,7 @@ class EphemeralWorkerPool:
         artifact_keys: list[str] = []
 
         try:
-            import docker
-
-            client = docker.from_env()
+            client = docker_client()
             container = client.containers.get(container_id)
 
             bits, stat = container.get_archive("/workspace/artifacts/")
@@ -318,7 +315,7 @@ class EphemeralWorkerPool:
                 except ImportError:
                     logger.debug("MinIO upload not available — storing artifact keys only")
 
-        except ImportError:
+        except DockerGatewayError:
             logger.debug("Docker SDK not available — skipping artifact collection from container")
         except Exception as exc:
             logger.warning("Artifact collection from %s failed: %s", container_id, exc)

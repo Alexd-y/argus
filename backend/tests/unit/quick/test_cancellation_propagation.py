@@ -22,6 +22,7 @@ from src.quick.cancellation import (
     unregister_celery_task_id,
 )
 from src.quick.schemas import QuickTaskStatus
+from src.sandbox.docker_gateway import ExecResult
 
 _SCAN_ID = "eeeeeeee-ffff-0000-1111-222222222222"
 _TENANT_ID = "tenant-quick-004-cancel-01"
@@ -85,8 +86,9 @@ def test_revoke_celery_task_ids_uses_mock_control_never_raises() -> None:
 
 def test_cancel_sandbox_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cancel_mod.settings, "sandbox_enabled", False)
+    # F-H01 Stage 3: cancellation now routes docker exec through the gateway.
     ran = MagicMock()
-    monkeypatch.setattr(cancel_mod.subprocess, "run", ran)
+    monkeypatch.setattr(cancel_mod, "exec_in_sync", ran)
     assert cancel_sandbox_for_scan(_SCAN_ID) is False
     ran.assert_not_called()
 
@@ -94,18 +96,14 @@ def test_cancel_sandbox_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> 
 def test_cancel_sandbox_pkill_is_mocked(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cancel_mod.settings, "sandbox_enabled", True)
     monkeypatch.setattr(cancel_mod.settings, "sandbox_container_name", "argus-sandbox")
-    completed = MagicMock()
-    completed.returncode = 0
-    ran = MagicMock(return_value=completed)
-    monkeypatch.setattr(cancel_mod.subprocess, "run", ran)
+    ran = MagicMock(return_value=ExecResult(0, "", "", 0.0))
+    monkeypatch.setattr(cancel_mod, "exec_in_sync", ran)
     assert cancel_sandbox_for_scan(_SCAN_ID) is True
     ran.assert_called_once()
-    argv = ran.call_args.args[0]
-    assert argv[:3] == ["docker", "exec", "argus-sandbox"]
-    assert "pkill" in argv
-    assert "-TERM" in argv
-    assert _SCAN_ID in argv
-    assert ran.call_args.kwargs["shell"] is False
+    container = ran.call_args.args[0]
+    argv = ran.call_args.args[1]
+    assert container == "argus-sandbox"
+    assert argv == ["pkill", "-TERM", "-f", _SCAN_ID]
 
 
 def test_revoke_scan_workers_includes_registered_children(
@@ -133,9 +131,9 @@ async def test_propagate_marks_cancelled_revokes_and_does_not_delete_evidence(
 ) -> None:
     monkeypatch.setattr(cancel_mod.settings, "sandbox_enabled", True)
     monkeypatch.setattr(
-        cancel_mod.subprocess,
-        "run",
-        MagicMock(return_value=MagicMock(returncode=1)),
+        cancel_mod,
+        "exec_in_sync",
+        MagicMock(return_value=ExecResult(1, "", "", 0.0)),
     )
     celery = MagicMock()
     executed: list[str] = []

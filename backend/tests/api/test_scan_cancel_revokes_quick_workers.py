@@ -18,6 +18,7 @@ import pytest
 from src.api.routers.scans import cancel_scan
 from src.quick import cancellation as cancel_mod
 from src.quick.schemas import QuickTaskStatus
+from src.sandbox.docker_gateway import ExecResult
 
 _SCAN_ID = "abcdabcd-abcd-4000-8000-abcdabcdabcd"
 _TENANT_ID = "tenant-1"
@@ -77,8 +78,9 @@ async def test_cancel_scan_revokes_scan_and_quick_child_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cancel_mod.settings, "sandbox_enabled", True)
-    pkill = MagicMock(return_value=MagicMock(returncode=0))
-    monkeypatch.setattr(cancel_mod.subprocess, "run", pkill)
+    # F-H01 Stage 3: cancellation routes docker exec through the gateway.
+    pkill = MagicMock(return_value=ExecResult(0, "", "", 0.0))
+    monkeypatch.setattr(cancel_mod, "exec_in_sync", pkill)
 
     session = _session_with_running_scan()
     mock_session_ctx = AsyncMock()
