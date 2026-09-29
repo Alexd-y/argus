@@ -224,8 +224,16 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   `docs/env-vars.md`; §2 call-site table completed (CLI **and** SDK surfaces);
   `docs/security.md` corrected to 4 mount points; `!override []` footgun noted in
   the overlay header.
-- **Stage 1 — shell-injection primitive (pending):** `exploit_verification_microvm.py`
-  `exec_run(f"sh -c '{payload}'")` → list argv + container hardening.
+- **Stage 1 — shell-injection primitive (DONE):** `exploit_verification_microvm.py`
+  `exec_run(f"sh -c '{payload}'")` → `exec_run(["sh", "-c", payload])` (both exec
+  sites); the untrusted vulnerable-replica `containers.run` gained
+  `network_mode="none"`, `cap_drop=[ALL]` + minimal LAMP `cap_add`,
+  `no-new-privileges`, `pids_limit`, `mem_limit`, `nano_cpus`. `read_only=True`
+  and a forced `user` are deliberately NOT applied — the third-party LAMP replica
+  (DVWA/csrftester) needs a writable rootfs and root-initiated apache/mysql, so
+  those flags would break its own init (unlike the trusted worker image in
+  `ephemeral_worker.py`). Regression test:
+  `tests/unit/orchestration/test_exploit_verification_argv_injection.py`.
 - **Stage 2 — sandbox container + network segmentation (pending).**
 - **Stage 3 — single Docker chokepoint `docker_gateway.py` (pending).**
 - **Stage 4 — purpose-built exec broker (pending).**
