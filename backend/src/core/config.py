@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from typing import Literal, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -580,6 +581,24 @@ class Settings(BaseSettings):
 
     sandbox_container_name: str = "argus-sandbox"
     sandbox_enabled: bool = False  # Enable docker exec into sandbox when True
+
+    # F-H01 Stage 3 — Docker access transport for the single gateway
+    # (src/sandbox/docker_gateway.py):
+    #   socket : docker CLI against the mounted /var/run/docker.sock (default)
+    #   proxy  : docker CLI against DOCKER_HOST=tcp://docker-socket-proxy:2375
+    #            (docker-compose.hardened.yml)
+    #   broker : POST to the Stage 4 argus-exec-broker (docker-compose.broker.yml)
+    docker_transport: Literal["socket", "proxy", "broker"] = Field(
+        default="socket",
+        validation_alias=AliasChoices("DOCKER_TRANSPORT", "docker_transport"),
+    )
+    # Explicit DOCKER_HOST for the gateway's docker CLI. Usually unset (the CLI
+    # reads its own env); set it when the process must target a specific daemon
+    # endpoint (e.g. the socket proxy) regardless of ambient env.
+    docker_host: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("DOCKER_HOST", "docker_host"),
+    )
     # Isolated LAB runner — never the production sandbox container.
     lab_runner_container_name: str = Field(
         default="argus-lab-runner",
@@ -597,6 +616,25 @@ class Settings(BaseSettings):
             "lab_runner_timeout_sec",
         ),
     )
+
+    @field_validator(
+        "sandbox_container_name", "lab_runner_container_name", mode="after"
+    )
+    @classmethod
+    def _validate_container_name(cls, v: str) -> str:
+        """F-H01 Stage 3: reject non-conforming container names at startup.
+
+        A free-form container name flows straight into ``docker exec <name>``; a
+        value with shell metacharacters or whitespace could be abused. Docker's
+        own name rule is ``^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`` — anything else is
+        a hard failure at settings-load time rather than a runtime surprise.
+        """
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$", v or ""):
+            raise ValueError(
+                f"invalid container name {v!r}: must match "
+                r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$"
+            )
+        return v
     lab_script_capture_max_bytes: int = Field(
         default=65536,
         ge=1024,

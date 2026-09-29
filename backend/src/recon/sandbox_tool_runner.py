@@ -17,6 +17,7 @@ from typing import Any
 from src.core.config import settings
 from src.orchestration.signed_tool_runner import run_coro_sync, run_signed_tool
 from src.pipeline.contracts.tool_job import TargetKind
+from src.sandbox.docker_gateway import DockerGatewayError, build_exec_argv, exec_in_sync
 
 logger = logging.getLogger(__name__)
 
@@ -51,22 +52,17 @@ def check_tool_available(
 
     available = False
     if use_sandbox and settings.sandbox_enabled:
+        # F-H01 Stage 3: the `which` probe is a docker exec, so it goes through
+        # the single gateway (which owns transport + argv construction). The
+        # gateway swallows timeout/OSError into a non-success ExecResult.
         try:
-            proc = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    settings.sandbox_container_name,
-                    "which",
-                    tool_binary,
-                ],
-                capture_output=True,
-                text=True,
+            result = exec_in_sync(
+                settings.sandbox_container_name,
+                ["which", tool_binary],
                 timeout=_AVAILABILITY_CHECK_TIMEOUT,
-                shell=False,
             )
-            available = proc.returncode == 0 and bool(proc.stdout.strip())
-        except (subprocess.TimeoutExpired, OSError):
+            available = result.success and bool(result.stdout.strip())
+        except DockerGatewayError:
             logger.warning(
                 "tool_availability_check_failed",
                 extra={
@@ -119,14 +115,18 @@ def build_sandbox_exec_argv(
     use_sandbox: bool,
     sandbox_workdir: str | None = None,
 ) -> list[str]:
-    """Prefix *argv* with ``docker exec`` into the configured sandbox when requested."""
+    """Prefix *argv* with ``docker exec`` into the configured sandbox when requested.
+
+    F-H01 Stage 3: the ``docker exec`` argv shape is built by the single gateway
+    (:func:`src.sandbox.docker_gateway.build_exec_argv`) so there is one source of
+    truth for it. Public signature preserved — many tests monkeypatch this symbol.
+    """
     if use_sandbox and settings.sandbox_enabled:
-        parts: list[str] = ["docker", "exec"]
-        wd = (sandbox_workdir or "").strip()
-        if wd:
-            parts.extend(["-w", wd])
-        parts.append(settings.sandbox_container_name)
-        return parts + list(argv)
+        return build_exec_argv(
+            settings.sandbox_container_name,
+            list(argv),
+            workdir=sandbox_workdir,
+        )
     return list(argv)
 
 

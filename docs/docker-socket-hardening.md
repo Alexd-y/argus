@@ -275,7 +275,36 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   deferred with a documented reason (§5a). Raw-socket tool validation is a
   staging step (§5a). Verified via `docker compose config`: sandbox shares no
   network with postgres/redis/minio.
-- **Stage 3 — single Docker chokepoint `docker_gateway.py` (pending).**
+- **Stage 3 — single Docker chokepoint `docker_gateway.py` (PARTIAL — foundation
+  landed, migration ongoing):**
+  - New `backend/src/sandbox/docker_gateway.py`: the single module allowed to
+    construct a Docker call. List-argv-only (shell string unrepresentable),
+    transport-aware (`socket`/`proxy`/`broker`), validates container names,
+    audits every call via `redact_argv_for_logging`.
+  - `backend/src/core/config.py`: added `docker_transport`
+    (`Literal[socket|proxy|broker]`) and `docker_host`; added a `field_validator`
+    rejecting container names not matching `^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`
+    at startup (covers `sandbox_container_name` + `lab_runner_container_name`).
+  - Primary chokepoint `recon/sandbox_tool_runner.py` migrated: `build_sandbox_exec_argv`
+    and the `check_tool_available` probe now delegate to the gateway; public API
+    preserved (many tests monkeypatch these symbols).
+  - AST guard `tests/test_audit_docker_gateway_ast.py`: fails if any module but
+    the gateway imports the `docker` SDK or hands a subprocess call an argv whose
+    first literal is `"docker"`; also fails on stale exempt entries.
+  - **Deviation from plan (per §9 stop-and-report):** `_DOCKER_GATEWAY_EXEMPT` is
+    NOT yet empty. Seven modules remain: three SDK users (`ephemeral_worker`,
+    `exploit_verification_microvm`, `docker_sandbox_adapter`) that need container
+    lifecycle verbs the exec-only gateway does not yet model, and four CLI callers
+    using non-exec verbs or special output handling (`lab/runner.py` inspect+guard,
+    `api/routers/sandbox.py` exec ps, `quick/cancellation.py` exec pkill,
+    `recon/sandbox_artifact_io.py` exec head -c). Each is listed with a reason;
+    the guard prevents NEW direct usage and the stale-check keeps the list honest.
+  - **Separate finding flagged (out of F-H01 scope):**
+    `sandbox/validation/harness/profiles.py:180` runs a reproducer `payload` via
+    `asyncio.create_subprocess_shell`. If that payload is attacker-influenced and
+    executes on the host, it is a shell-injection RCE. Not changed here (list form
+    would break legitimate pipe/redirect reproducers, and its execution
+    environment/source needs a dedicated review) — tracked as its own item.
 - **Stage 4 — purpose-built exec broker (pending).**
 - **Stage 5 — structural regression tests (pending).**
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
