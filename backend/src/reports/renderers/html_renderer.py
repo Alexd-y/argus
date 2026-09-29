@@ -23,10 +23,13 @@ def _li(parts: list[str], label: str, value: object) -> None:
 
 
 def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportFinding
+    parts.append('<div class="finding-card">')
     parts.append(
         f'<h3 class="sev-{escape(f.severity)}">{escape(f.title)} '
-        f"— <code>{escape(f.finding_id)}</code></h3>"
+        f"— <code>{escape(f.finding_id)}</code> "
+        f"[{escape(f.severity)} · {escape(f.verification_status)}]</h3>"
     )
+    parts.append('<div class="card-sub">Metrics</div>')
     parts.append("<ul>")
     parts.append(f"<li>severity: <code>{escape(f.severity)}</code></li>")
     parts.append(f"<li>verification_status: <code>{escape(f.verification_status)}</code></li>")
@@ -51,8 +54,10 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
     parts.append(f"<li>evidence_ids: {ev}</li>")
     parts.append("</ul>")
     if f.description:
+        parts.append('<div class="card-sub">What We Found</div>')
         parts.append(f"<p>{escape(f.description)}</p>")
     if f.poc is not None:
+        parts.append('<div class="card-sub">Evidence</div>')
         parts.append("<h4>Proof of Concept</h4><ul>")
         p = f.poc
         for label, value in (
@@ -85,6 +90,7 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
         parts.append("</ul>")
     if f.remediation is not None:
         r = f.remediation
+        parts.append('<div class="card-sub">Recommended Remediation</div>')
         parts.append(f"<h4>Remediation (LLM) — status <code>{escape(r.status)}</code></h4><ul>")
         for label, value in (
             ("temporary_containment", r.temporary_containment),
@@ -101,6 +107,7 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
         parts.append("</ul>")
     if f.closure is not None:
         c = f.closure
+        parts.append('<div class="card-sub">Validation &amp; Closure</div>')
         parts.append(f"<h4>Closure (LLM) — status <code>{_na(c.permitted_status)}</code></h4><ul>")
         for label, value in (
             ("what_verified", c.what_verified),
@@ -110,6 +117,7 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
         ):
             _li(parts, label, value)
         parts.append("</ul>")
+    parts.append("</div>")
 
 
 def _render_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
@@ -265,18 +273,90 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
         parts.append("</ul>")
 
 
+def _severity_counts(doc: ReportDocumentV1) -> dict[str, int]:
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0}
+    for f in doc.findings:
+        band = (f.severity or "unknown").lower()
+        counts[band] = counts.get(band, 0) + 1
+    return counts
+
+
+#: Print-safe stylesheet (Phase R/V). Block/inline-block + table layout only — no
+#: flex/grid on content containers (WeasyPrint does not fragment those). Running
+#: ``Page N of M`` footer and a confidentiality header via ``@page``.
+_REPORT_CSS = (
+    "<style>"
+    "@page{size:A4;margin:16mm 14mm 18mm 14mm;"
+    "@top-center{content:'Svalbard Security Inc. — CONFIDENTIAL';font-size:8px;color:#666;}"
+    "@bottom-right{content:'Page ' counter(page) ' of ' counter(pages);font-size:8px;color:#666;}}"
+    "body{font-family:'Segoe UI',system-ui,sans-serif;color:#1a1a2e;margin:0;font-size:12px;}"
+    "h1,h2,h3,h4{color:#12122a;break-after:avoid;}"
+    "h2{border-bottom:1px solid #ddd;padding-bottom:.25rem;margin-top:1.4rem;}"
+    "code{background:#f2f2f2;padding:1px 4px;overflow-wrap:anywhere;word-break:break-word;}"
+    "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f7f7;padding:.5rem;}"
+    ".sev-critical{color:#b00020;}.sev-high{color:#d35400;}.sev-medium{color:#b8860b;}"
+    ".sev-low{color:#1b7a1b;}.sev-info{color:#2a6fb0;}"
+    "table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ccc;padding:4px 8px;"
+    "text-align:left;vertical-align:top;overflow-wrap:anywhere;}"
+    ".cover{page-break-after:always;padding:24mm 4mm;}"
+    ".cover h1{font-size:26px;margin:.2rem 0;}"
+    ".conf{display:inline-block;border:1px solid #b00020;color:#b00020;padding:2px 8px;"
+    "font-size:10px;letter-spacing:1px;margin-top:8px;}"
+    ".tiles{margin:16px 0;}"
+    ".tile{display:inline-block;border:1px solid #ccc;border-radius:6px;padding:10px 16px;"
+    "margin:4px 6px 4px 0;min-width:90px;text-align:center;}"
+    ".tile .n{display:block;font-size:22px;font-weight:800;}"
+    ".tile .l{display:block;font-size:9px;letter-spacing:1px;color:#555;text-transform:uppercase;}"
+    ".finding-card{border:1px solid #ddd;border-radius:6px;padding:12px 14px;margin:12px 0;"
+    "break-inside:auto;}"
+    ".card-sub{letter-spacing:2px;font-size:10px;color:#444;margin-top:8px;text-transform:uppercase;}"
+    "main{padding:0 4mm;}"
+    "</style>"
+)
+
+
+def _render_cover_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    counts = _severity_counts(doc)
+    total = len(doc.findings)
+    parts.append('<section class="cover">')
+    parts.append("<div>Svalbard Security Inc. · Valhalla External Security Assessment</div>")
+    parts.append(f"<h1>Security Assessment — {escape(doc.target)}</h1>")
+    parts.append(
+        f"<div>PREPARED FOR: <strong>{escape(doc.target)}</strong> · "
+        f"DATE: <code>{_na(doc.completed_at or doc.generated_at)}</code> · "
+        f"SCAN ID: <code>{escape(doc.scan_id)}</code></div>"
+    )
+    parts.append('<div class="tiles">')
+    for label, value in (
+        ("findings", total),
+        ("critical", counts["critical"]),
+        ("high", counts["high"]),
+        ("medium", counts["medium"]),
+    ):
+        parts.append(
+            f'<span class="tile"><span class="n">{value}</span>'
+            f'<span class="l">{label}</span></span>'
+        )
+    parts.append("</div>")
+    parts.append('<div class="conf">CONFIDENTIAL</div>')
+    parts.append(
+        f'<div style="margin-top:10px;font-size:10px;color:#666;">'
+        f"snapshot_hash <code>{escape(doc.snapshot_hash)}</code> · "
+        f"schema <code>{escape(doc.schema_version)}</code> · "
+        f"generation_status <code>{escape(doc.generation_status)}</code></div>"
+    )
+    parts.append("</section>")
+
+
 def render_html(doc: ReportDocumentV1) -> str:
     parts: list[str] = []
     parts.append("<!DOCTYPE html>")
     parts.append('<html lang="en"><head><meta charset="utf-8">')
     parts.append(f"<title>ARGUS Report — {escape(doc.target)}</title>")
-    parts.append(
-        "<style>body{font-family:sans-serif;margin:2rem;}"
-        "h1,h2,h3{color:#1a1a2e;}code{background:#f2f2f2;padding:1px 4px;}"
-        ".sev-critical{color:#b00020;}.sev-high{color:#d35400;}.sev-medium{color:#b8860b;}"
-        "table{border-collapse:collapse;}td,th{border:1px solid #ccc;padding:4px 8px;}</style>"
-    )
+    parts.append(_REPORT_CSS)
     parts.append("</head><body>")
+    _render_cover_html(parts, doc)
+    parts.append("<main>")
     parts.append(f"<h1>ARGUS Report — {escape(doc.target)}</h1>")
 
     parts.append('<ul class="meta">')
@@ -431,6 +511,7 @@ def render_html(doc: ReportDocumentV1) -> str:
             )
         parts.append("</ul>")
 
+    parts.append("</main>")
     parts.append("</body></html>")
     return "".join(parts)
 
