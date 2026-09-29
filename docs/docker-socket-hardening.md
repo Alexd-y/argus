@@ -175,6 +175,40 @@ In rough order of strength / effort:
    "run tool X with argv Y in argus-sandbox" and performs the `docker exec`
    itself, exposing zero raw Docker API. Highest assurance, most work.
 
+### 5a. Sandbox container hardening & segmentation (Stage 2)
+
+Applied to `sandbox`, `kali-runner` (base compose) and `lab-runner`
+(`docker-compose.lab-runner.yml`):
+
+- `user: "1000:1000"`, `security_opt: [no-new-privileges:true]`,
+  `cap_drop: [ALL]`, `cap_add: [NET_RAW]`, `deploy.resources.limits.pids: 512`.
+  `NET_RAW` is required for `nmap -sS/-sU` and `masscan`; `NET_ADMIN` is **not**
+  added (no shipped tool needs it — add back only on proof).
+- **Raw-socket validation (must run in staging, cannot be checked at
+  compose-parse time):** `nmap -sS -p80 127.0.0.1`, `nmap -sU -p53 127.0.0.1`,
+  `masscan -p80 127.0.0.1/32` inside the container. Running as uid 1000 with
+  `cap_add: NET_RAW` only works if the tool binaries carry file capabilities
+  (`setcap cap_net_raw+eip`) or the cap is made ambient; otherwise raw scans
+  silently degrade to connect-scan.
+- **`read_only` rootfs is deferred, NOT skipped.** The image is designed for it
+  (`Dockerfile.sandbox:72` anchors tool `$HOME` into writable `/tmp`; the
+  ephemeral kali-runner containers spawned by `ephemeral_worker.py` already run
+  `read_only=True`). Enabling it on the *standing* sandbox needs
+  `read_only: true` + `tmpfs: [/tmp, /workspace]` + `$HOME` anchoring and a full
+  end-to-end scan smoke run to confirm no active-scan tool (nuclei template
+  writes, sqlmap session files, ffuf output) needs an unexpected writable path.
+  Tracked as a staging-validated follow-up.
+
+**Network segmentation:** `sandbox` and `kali-runner` moved off the `data`
+bridge onto a dedicated `sandbox` bridge, so a compromised tool can no longer
+reach `postgres`/`redis`/`minio`/`adminer` directly. Exec-capable services
+(`backend`, `worker-scans`, `worker-general`, `worker-cairn`) also join
+`sandbox`; `docker exec` itself goes via the daemon socket and is unaffected by
+networking. `lab-runner` was already isolated on its own `lab` bridge. The
+sandbox's `depends_on: minio` is now startup-ordering only — with the sandbox
+off `data` it has no route to MinIO and needs none (artifacts are pulled out by
+the worker via the shared `sandbox_tmp` volume, never pushed by the sandbox).
+
 ---
 
 ## 6. Verify
@@ -234,7 +268,13 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   those flags would break its own init (unlike the trusted worker image in
   `ephemeral_worker.py`). Regression test:
   `tests/unit/orchestration/test_exploit_verification_argv_injection.py`.
-- **Stage 2 — sandbox container + network segmentation (pending).**
+- **Stage 2 — sandbox container + network segmentation (DONE):** `sandbox`,
+  `kali-runner`, `lab-runner` gained `user`, `cap_drop:[ALL]`+`NET_RAW`,
+  `no-new-privileges`, `pids:512`; `sandbox`/`kali-runner` moved to a dedicated
+  `sandbox` bridge off `data`; exec-capable workers joined `sandbox`. `read_only`
+  deferred with a documented reason (§5a). Raw-socket tool validation is a
+  staging step (§5a). Verified via `docker compose config`: sandbox shares no
+  network with postgres/redis/minio.
 - **Stage 3 — single Docker chokepoint `docker_gateway.py` (pending).**
 - **Stage 4 — purpose-built exec broker (pending).**
 - **Stage 5 — structural regression tests (pending).**

@@ -230,6 +230,9 @@ services:
     networks:
       - backend
       - data
+      # F-H01 Stage 2: reach the segmented sandbox/kali-runner (exec is via the
+      # socket; this covers any direct backend<->sandbox network path).
+      - sandbox
     # whiterabbitneo не в depends_on: иначе при долгой/сломанной загрузке GGUF не поднимаются
     # backend и nginx → на хосте нет API для Next.js (override: FastAPI на 127.0.0.1:8080).
     depends_on:
@@ -309,6 +312,9 @@ services:
     networks:
       - backend
       - data
+      # F-H01 Stage 2: reach the segmented sandbox/kali-runner (exec is via the
+      # socket; this covers any direct worker<->sandbox network path).
+      - sandbox
     depends_on:
       postgres:
         condition: service_healthy
@@ -377,6 +383,9 @@ services:
     networks:
       - backend
       - data
+      # F-H01 Stage 2: reach the segmented sandbox/kali-runner (exec is via the
+      # socket; this covers any direct worker<->sandbox network path).
+      - sandbox
     depends_on:
       postgres:
         condition: service_healthy
@@ -427,6 +436,9 @@ services:
     networks:
       - backend
       - data
+      # F-H01 Stage 2: reach the segmented sandbox/kali-runner (exec is via the
+      # socket; this covers any direct worker<->sandbox network path).
+      - sandbox
     depends_on:
       postgres:
         condition: service_healthy
@@ -616,11 +628,45 @@ services:
     # The image inherits Kali's default `bash` CMD which exits immediately without a
     # TTY, so the container would crash-loop — keep it alive explicitly.
     command: ["sleep", "infinity"]
+    # F-H01 Stage 2 container hardening. The image already runs as USER argus
+    # (uid 1000, Dockerfile.sandbox:33/244); these directives make the runtime
+    # guarantees explicit and defence-in-depth:
+    #   * cap_drop ALL + cap_add NET_RAW: nmap -sS/-sU and masscan need raw
+    #     sockets (CAP_NET_RAW). NET_ADMIN is deliberately NOT added — none of the
+    #     shipped scan tools require it; add it back only if a tool proves to.
+    #   * no-new-privileges: block setuid escalation from a compromised tool.
+    #   * pids_limit: cap fork-bomb blast radius.
+    # VALIDATION REQUIRED before prod (cannot be checked at compose-parse time):
+    #   docker exec argus-sandbox nmap -sS -p80 127.0.0.1
+    #   docker exec argus-sandbox nmap -sU -p53 127.0.0.1
+    #   docker exec argus-sandbox masscan -p80 127.0.0.1/32
+    # If raw scans silently fall back to connect-scan, the image must carry file
+    # capabilities (setcap cap_net_raw+eip on nmap/masscan) or the caps must be
+    # made ambient — running as uid 1000 needs one of those to *use* NET_RAW.
+    #
+    # read_only rootfs is NOT enabled here yet. The image is *designed* for it
+    # (Dockerfile.sandbox:72 anchors tool HOME into writable /tmp; ephemeral
+    # kali-runner containers already run read_only=True), but the STANDING sandbox
+    # runs the full active-scan toolset (nuclei template writes to $HOME, sqlmap
+    # session files, ffuf output). Enabling it requires `read_only: true` +
+    # `tmpfs: [/tmp, /workspace]` + HOME anchoring and a full end-to-end smoke run
+    # to confirm no tool needs an unexpected writable path. Track as a staging-
+    # validated follow-up (see docs/docker-socket-hardening.md §5a). NOT silently
+    # skipped — deferred with a documented reason.
+    user: "1000:1000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
     volumes:
       - ../plugins/exploit_scripts:/opt/exploit_scripts:ro
       - sandbox_tmp:/tmp/argus-sandbox
     networks:
-      - data
+      # Segmented off `data` (postgres/redis/minio/adminer) — see the `sandbox`
+      # network definition at the bottom of this file.
+      - sandbox
     deploy:
       resources:
         # Workers `docker exec` active-scan tools (nuclei, dalfox, sqlmap, …) into
@@ -633,10 +679,16 @@ services:
         limits:
           cpus: "${SANDBOX_CPU_LIMIT:-2.0}"
           memory: ${SANDBOX_MEMORY_LIMIT:-12288M}
+          pids: 512   # F-H01 Stage 2: fork-bomb cap (compose-spec form of pids_limit)
         reservations:
           cpus: "0.5"
           memory: 512M
     depends_on:
+      # F-H01 Stage 2: startup ORDERING only. Since Stage 2 the sandbox is no
+      # longer on the `data` network, so it has NO network route to MinIO and
+      # needs none: scan artifacts are pulled OUT of the sandbox by the worker
+      # (shared `sandbox_tmp` volume + `docker cp`), never pushed by the sandbox
+      # itself. Kept purely so the sandbox starts after the core stack is healthy.
       minio:
         condition: service_healthy
     healthcheck:
@@ -661,10 +713,20 @@ services:
     # Keep the standing container alive (EphemeralWorkerPool spawns its own per-scan
     # containers from this image; the long-lived one must not exit on Kali's bash CMD).
     command: ["sleep", "infinity"]
+    # F-H01 Stage 2 container hardening (see the `sandbox` service for the full
+    # rationale + the raw-socket validation commands). Same caveats apply.
+    user: "1000:1000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
     volumes:
       - sandbox_tmp:/tmp/argus-sandbox
     networks:
-      - data
+      # Segmented off `data` — same as the `sandbox` service.
+      - sandbox
     deploy:
       resources:
         # Ephemeral per-scan tool runner (fuzzing / symbolic / heavy exploitation).
@@ -673,6 +735,7 @@ services:
         limits:
           cpus: "${KALI_RUNNER_CPU_LIMIT:-2.0}"
           memory: ${KALI_RUNNER_MEMORY_LIMIT:-8192M}
+          pids: 512   # F-H01 Stage 2: fork-bomb cap (compose-spec form of pids_limit)
         reservations:
           cpus: "0.5"
           memory: 1024M
@@ -927,4 +990,12 @@ networks:
   backend:
     driver: bridge
   data:
+    driver: bridge
+  # F-H01 Stage 2: dedicated segment for the tool sandboxes. `sandbox` and
+  # `kali-runner` execute tools whose input/output is controlled by the attacked
+  # party, so they must NOT share the `data` bridge with postgres/redis/minio/
+  # adminer. Exec-capable workers (backend, worker-scans, worker-general,
+  # worker-cairn) also join this net so any direct worker<->sandbox traffic keeps
+  # working; `docker exec` itself goes via the daemon socket and is unaffected.
+  sandbox:
     driver: bridge
