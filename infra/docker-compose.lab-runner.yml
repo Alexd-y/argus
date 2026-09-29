@@ -18,15 +18,14 @@ services:
     container_name: argus-lab-runner
     restart: unless-stopped
     command: ["sleep", "infinity"]
-    # F-H01 Stage 2 container hardening (mirrors the `sandbox`/`kali-runner`
+    # F-H01 Stage 2/8 container hardening (mirrors the `sandbox`/`kali-runner`
     # services in docker-compose.yml). lab-runner is already network-isolated on
     # the dedicated `lab` bridge (never backend/data), so only the container-level
-    # directives are added here. Raw-socket tools (nmap -sS/-sU, masscan) need the
-    # NET_RAW capability; validate them inside the container before prod — see the
-    # sandbox service comments and docs/docker-socket-hardening.md §5a.
+    # directives are added here. no-new-privileges is omitted for the same reason
+    # as the sandbox: file-cap raw sockets (nmap -sS/-sU, masscan) as the non-root
+    # argus user are incompatible with no_new_privs. See the sandbox service
+    # comments and docs/docker-socket-hardening.md §5a.
     user: "1000:1000"
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:

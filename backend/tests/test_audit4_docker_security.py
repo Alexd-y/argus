@@ -163,10 +163,16 @@ def test_sandbox_services_are_hardened() -> None:
     for name, svc in targets.items():
         assert svc is not None, f"{name} service missing"
         assert svc.get("cap_drop") == ["ALL"], f"{name}: cap_drop must be [ALL]"
-        assert "no-new-privileges:true" in (svc.get("security_opt") or []), (
-            f"{name}: security_opt must include no-new-privileges:true"
-        )
+        assert svc.get("cap_add") == ["NET_RAW"], f"{name}: cap_add must be [NET_RAW]"
+        assert svc.get("user") == "1000:1000", f"{name}: must run as non-root 1000:1000"
         assert _pids_limit(svc) is not None, f"{name}: a pids limit must be set"
+        # F-H01 §5a (Stage 8): no-new-privileges is INTENTIONALLY absent on these
+        # tool containers — it disables file-capability elevation on execve, which
+        # is how nmap -sS/-sU and masscan get CAP_NET_RAW as the non-root argus
+        # user. Assert it is NOT set so the decision cannot silently regress.
+        assert "no-new-privileges:true" not in (svc.get("security_opt") or []), (
+            f"{name}: no-new-privileges must NOT be set (breaks file-cap raw sockets)"
+        )
 
 
 # --------------------------------------------------------------------------- #

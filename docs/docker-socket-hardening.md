@@ -175,29 +175,56 @@ In rough order of strength / effort:
    "run tool X with argv Y in argus-sandbox" and performs the `docker exec`
    itself, exposing zero raw Docker API. Highest assurance, most work.
 
-### 5a. Sandbox container hardening & segmentation (Stage 2)
+### 5a. Sandbox container hardening & segmentation (Stage 2, validated Stage 8)
 
 Applied to `sandbox`, `kali-runner` (base compose) and `lab-runner`
 (`docker-compose.lab-runner.yml`):
 
-- `user: "1000:1000"`, `security_opt: [no-new-privileges:true]`,
-  `cap_drop: [ALL]`, `cap_add: [NET_RAW]`, `deploy.resources.limits.pids: 512`.
-  `NET_RAW` is required for `nmap -sS/-sU` and `masscan`; `NET_ADMIN` is **not**
-  added (no shipped tool needs it — add back only on proof).
-- **Raw-socket validation (must run in staging, cannot be checked at
-  compose-parse time):** `nmap -sS -p80 127.0.0.1`, `nmap -sU -p53 127.0.0.1`,
-  `masscan -p80 127.0.0.1/32` inside the container. Running as uid 1000 with
-  `cap_add: NET_RAW` only works if the tool binaries carry file capabilities
-  (`setcap cap_net_raw+eip`) or the cap is made ambient; otherwise raw scans
-  silently degrade to connect-scan.
-- **`read_only` rootfs is deferred, NOT skipped.** The image is designed for it
-  (`Dockerfile.sandbox:72` anchors tool `$HOME` into writable `/tmp`; the
-  ephemeral kali-runner containers spawned by `ephemeral_worker.py` already run
-  `read_only=True`). Enabling it on the *standing* sandbox needs
-  `read_only: true` + `tmpfs: [/tmp, /workspace]` + `$HOME` anchoring and a full
-  end-to-end scan smoke run to confirm no active-scan tool (nuclei template
-  writes, sqlmap session files, ffuf output) needs an unexpected writable path.
-  Tracked as a staging-validated follow-up.
+- `user: "1000:1000"`, `cap_drop: [ALL]`, `cap_add: [NET_RAW]`,
+  `deploy.resources.limits.pids: 512`. `NET_RAW` is required for `nmap -sS/-sU`
+  and `masscan`; `NET_ADMIN` is **not** added — **validated**: `-sS`/`-sU` work
+  with `NET_RAW` alone.
+
+- **`no-new-privileges` is intentionally OMITTED (validated trade-off).** Live
+  testing established that raw-socket tools run as the non-root `argus` user only
+  via **file capabilities**, and that `no_new_privs` *disables* file-capability
+  elevation on `execve`. Since ARGUS runs tools via `docker exec` as uid 1000
+  (subject to the container's `no_new_privs`), the two are mutually exclusive.
+  Chosen resolution: keep non-root + file caps, drop `no-new-privileges`.
+  Residual risk is bounded — `cap_drop: ALL` leaves the capability **bounding
+  set empty except `NET_RAW`**, so a setuid binary could reach uid 0 but gains
+  **no** capabilities; combined with the non-root default, network segmentation,
+  pids cap and no host mounts, this is the accepted cost of functional SYN/UDP
+  scanning. (`docker-socket-proxy` and `argus-exec-broker` keep
+  `no-new-privileges` — they run no raw-socket tools.)
+
+- **File capabilities target the real ELF, not the wrapper.** Kali ships
+  `/usr/bin/nmap` as a *shell script* that execs `/usr/lib/nmap/nmap --privileged`;
+  the kernel ignores file caps on scripts. `Dockerfile.sandbox` installs
+  `libcap2-bin` and `setcap cap_net_raw+eip` **only on ELF binaries** (magic
+  `7f454c46`), explicitly including `/usr/lib/nmap/nmap`. Only `cap_net_raw` is
+  set — a file cap for a capability outside the container bounding set (e.g.
+  `cap_net_admin`) makes `execve` fail `EPERM`.
+
+- **Validated live (Stage 8), uid 1000 + `cap_drop ALL` + `NET_RAW`, no
+  `no-new-privileges`:**
+  - `docker exec … nmap -sS -p80 127.0.0.1` → `80/tcp closed http` ✓
+  - `docker exec … nmap -sU -p53 127.0.0.1` → `53/udp closed domain` ✓
+  - `docker exec … nuclei -version` → `v3.3.7` ✓
+  - `getent hosts postgres` / `redis` from inside the sandbox → both fail
+    (segmentation holds) ✓
+  - Proof that file caps are required: with the file cap present but
+    `no-new-privileges:true`, `nmap -sS` fails `Couldn't open a raw socket:
+    Operation not permitted`; removing `no-new-privileges` makes it succeed.
+  - **NB:** the file caps are baked by the image build — run
+    `docker compose build sandbox` after pulling this change so the running
+    container carries them.
+
+- **`read_only` rootfs is deferred, NOT skipped.** Confirmed at runtime that
+  nuclei writes to `/home/argus/.config/nuclei` — so the standing sandbox needs
+  a writable `$HOME`. Enabling `read_only` needs `read_only: true` +
+  `tmpfs: [/tmp, /workspace]` + `$HOME` anchoring and a full end-to-end scan
+  smoke run. Tracked as a staging-validated follow-up.
 
 **Network segmentation:** `sandbox` and `kali-runner` moved off the `data`
 bridge onto a dedicated `sandbox` bridge, so a compromised tool can no longer
@@ -355,6 +382,19 @@ Staged hardening (F-H01). Each stage ships independently, in order:
   guard now runs with an **empty** exempt list — no module but the gateway
   imports the docker SDK or builds a raw `docker` argv. Affected unit tests
   (cancellation, exploit-verification, gateway) updated to patch the gateway.
+- **Stage 8 — live-stand validation of the sandbox hardening (DONE):** brought up
+  the segmented sandbox and validated the §5a posture on a real daemon. Findings
+  that changed the design: (1) raw-socket tools need **file caps on the real ELF**
+  (`/usr/lib/nmap/nmap`, not the `/usr/bin/nmap` wrapper script) — added an
+  ELF-aware `setcap cap_net_raw+eip` step to `Dockerfile.sandbox`; (2)
+  `no-new-privileges` **disables** file-cap elevation on `execve` and is
+  incompatible with non-root file-cap raw sockets, so it was **removed** from
+  `sandbox`/`kali-runner`/`lab-runner` (kept on the proxy/broker) with a
+  documented, bounded trade-off. Validated: `nmap -sS`/`-sU` and `nuclei` work as
+  uid 1000; `postgres`/`redis` are unreachable from the sandbox (segmentation).
+  Stage 5 test #3 updated to assert the new posture (cap_drop ALL + NET_RAW +
+  non-root + pids, and that `no-new-privileges` is absent). `read_only` remains a
+  documented staging follow-up (nuclei writes to `$HOME`, confirmed at runtime).
 - **Overlay + runbook:** delivered (opt-in; no change to the default stack).
 - **Residual:** container-create escape remains while `docker exec` is required
   (see §3). Full remediation is Stage 4 (exec broker) / §5 (k8s adapter /

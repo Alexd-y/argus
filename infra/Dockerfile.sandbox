@@ -240,6 +240,39 @@ RUN mkdir -p /workspace/artifacts /tmp/argus-sandbox && chown -R argus:argus /wo
 # Security hardening
 RUN echo "argus ALL=(ALL) NOPASSWD: /usr/local/bin/argus-tool-check" > /etc/sudoers.d/argus
 
+# F-H01 Stage 2/8: file capabilities so raw-socket tools work as the non-root
+# `argus` user under `cap_drop: ALL` + `cap_add: NET_RAW`. A container cap_add of
+# NET_RAW only puts it in the bounding/permitted set; a non-root process gets it
+# in its EFFECTIVE set only via a file capability (or ambient caps, which compose
+# cannot express and `docker exec` does not inherit). We set ONLY cap_net_raw —
+# setting a capability NOT in the container bounding set (e.g. cap_net_admin)
+# would make execve fail EPERM.
+#
+# IMPORTANT: setcap must target the real ELF, not a wrapper script. Kali ships
+# /usr/bin/nmap as a shell script that execs /usr/lib/nmap/nmap --privileged;
+# file caps on scripts are ignored by the kernel. The helper below only caps
+# files whose magic is ELF (7f 45 4c 46) and explicitly includes the real nmap.
+#
+# NOTE: this requires the sandbox to run WITHOUT `no-new-privileges` — that flag
+# disables file-capability elevation on execve, which is exactly what makes these
+# tools work as non-root. See docs/docker-socket-hardening.md §5a for the
+# trade-off (cap_drop ALL keeps the bounding set empty except NET_RAW).
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcap2-bin; \
+    rm -rf /var/lib/apt/lists/*; \
+    capit() { \
+        f="$1"; [ -f "$f" ] || return 0; \
+        magic="$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')"; \
+        if [ "$magic" = "7f454c46" ]; then setcap cap_net_raw+eip "$f" && echo "setcap cap_net_raw -> $f"; \
+        else echo "skip (not ELF): $f"; fi; \
+    }; \
+    for b in nmap masscan naabu; do \
+        p="$(command -v "$b" 2>/dev/null || true)"; \
+        [ -n "$p" ] && capit "$(readlink -f "$p")"; \
+    done; \
+    capit /usr/lib/nmap/nmap
+
 WORKDIR /workspace
 USER argus
 

@@ -628,34 +628,33 @@ services:
     # The image inherits Kali's default `bash` CMD which exits immediately without a
     # TTY, so the container would crash-loop — keep it alive explicitly.
     command: ["sleep", "infinity"]
-    # F-H01 Stage 2 container hardening. The image already runs as USER argus
+    # F-H01 Stage 2/8 container hardening. The image already runs as USER argus
     # (uid 1000, Dockerfile.sandbox:33/244); these directives make the runtime
     # guarantees explicit and defence-in-depth:
     #   * cap_drop ALL + cap_add NET_RAW: nmap -sS/-sU and masscan need raw
     #     sockets (CAP_NET_RAW). NET_ADMIN is deliberately NOT added — none of the
-    #     shipped scan tools require it; add it back only if a tool proves to.
-    #   * no-new-privileges: block setuid escalation from a compromised tool.
-    #   * pids_limit: cap fork-bomb blast radius.
-    # VALIDATION REQUIRED before prod (cannot be checked at compose-parse time):
-    #   docker exec argus-sandbox nmap -sS -p80 127.0.0.1
-    #   docker exec argus-sandbox nmap -sU -p53 127.0.0.1
-    #   docker exec argus-sandbox masscan -p80 127.0.0.1/32
-    # If raw scans silently fall back to connect-scan, the image must carry file
-    # capabilities (setcap cap_net_raw+eip on nmap/masscan) or the caps must be
-    # made ambient — running as uid 1000 needs one of those to *use* NET_RAW.
+    #     shipped scan tools require it (validated: -sS/-sU work with NET_RAW only).
+    #   * pids_limit: cap fork-bomb blast radius (see deploy.resources.limits.pids).
     #
-    # read_only rootfs is NOT enabled here yet. The image is *designed* for it
-    # (Dockerfile.sandbox:72 anchors tool HOME into writable /tmp; ephemeral
-    # kali-runner containers already run read_only=True), but the STANDING sandbox
-    # runs the full active-scan toolset (nuclei template writes to $HOME, sqlmap
-    # session files, ffuf output). Enabling it requires `read_only: true` +
-    # `tmpfs: [/tmp, /workspace]` + HOME anchoring and a full end-to-end smoke run
-    # to confirm no tool needs an unexpected writable path. Track as a staging-
-    # validated follow-up (see docs/docker-socket-hardening.md §5a). NOT silently
-    # skipped — deferred with a documented reason.
+    # no-new-privileges is INTENTIONALLY OMITTED here. VALIDATED (Stage 8): the raw
+    # socket tools run as the non-root argus user only via FILE CAPABILITIES
+    # (setcap cap_net_raw+eip on the real ELF /usr/lib/nmap/nmap — the Kali
+    # /usr/bin/nmap is a wrapper script and file caps on scripts are ignored). The
+    # kernel's no_new_privs flag DISABLES file-capability elevation on execve, and
+    # `docker exec` (how ARGUS runs tools, as uid 1000) is subject to it — so
+    # no-new-privileges + non-root + file caps cannot coexist. Trade-off: cap_drop
+    # ALL keeps the capability bounding set empty except NET_RAW, so a setuid
+    # binary could reach uid 0 but gains NO capabilities; with the non-root default
+    # user, network segmentation, pids cap and no host mounts this is the accepted
+    # cost of functional SYN/UDP scanning. See docs/docker-socket-hardening.md §5a.
+    #
+    # read_only rootfs is NOT enabled here: the standing sandbox runs the full
+    # active-scan toolset (nuclei writes templates to $HOME/.config/nuclei —
+    # confirmed at runtime, sqlmap session files, ffuf output). Enabling it needs
+    # `read_only: true` + `tmpfs: [/tmp, /workspace]` + HOME anchoring and a full
+    # smoke run; tracked as a staging-validated follow-up (§5a). Deferred with a
+    # documented reason, not silently skipped.
     user: "1000:1000"
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -713,11 +712,11 @@ services:
     # Keep the standing container alive (EphemeralWorkerPool spawns its own per-scan
     # containers from this image; the long-lived one must not exit on Kali's bash CMD).
     command: ["sleep", "infinity"]
-    # F-H01 Stage 2 container hardening (see the `sandbox` service for the full
-    # rationale + the raw-socket validation commands). Same caveats apply.
+    # F-H01 Stage 2/8 container hardening (see the `sandbox` service for the full
+    # rationale). no-new-privileges is omitted for the same reason: file-cap raw
+    # sockets (nmap -sS/-sU, masscan) as the non-root argus user are incompatible
+    # with no_new_privs. Same trade-off/caveats apply.
     user: "1000:1000"
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
