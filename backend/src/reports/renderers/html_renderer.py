@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from html import escape
 
+from src.reports.renderers.markdown_renderer import severity_distribution
 from src.reports.report_document import ReportDocumentV1
 
 
@@ -397,6 +398,11 @@ def render_html(doc: ReportDocumentV1) -> str:
     if not doc.findings:
         parts.append("<p><em>not_assessed — no findings in this snapshot.</em></p>")
     else:
+        parts.append("<table><tr><th>Severity</th><th>Count</th><th>Findings</th></tr>")
+        for sev, ids in severity_distribution(doc):
+            cell = ", ".join(f"<code>{escape(i)}</code>" for i in ids) or "—"
+            parts.append(f"<tr><td>{escape(sev)}</td><td>{len(ids)}</td><td>{cell}</td></tr>")
+        parts.append("</table>")
         parts.append('<nav class="toc"><ol>')
         for f in doc.findings:
             parts.append(

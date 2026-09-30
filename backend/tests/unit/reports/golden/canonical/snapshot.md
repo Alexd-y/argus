@@ -25,6 +25,14 @@
 
 ## Findings (3)
 
+| Severity | Count | Findings |
+|---|---|---|
+| critical | 1 | `F-1` |
+| high | 1 | `F-2` |
+| medium | 0 | — |
+| low | 1 | `F-3` |
+| info | 0 | — |
+
 ### 01 · CRITICAL · confirmed — t
 `F-1`
 

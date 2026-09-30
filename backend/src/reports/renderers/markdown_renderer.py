@@ -27,6 +27,27 @@ def _kv(lines: list[str], label: str, value: object) -> None:
         lines.append(f"- {label}: `{value}`")
 
 
+_SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
+
+
+def severity_distribution(doc: ReportDocumentV1) -> list[tuple[str, list[str]]]:
+    """Single source of truth: ordered (severity, [finding_id…]) pairs (C-03/C-31)."""
+    buckets: dict[str, list[str]] = {s: [] for s in _SEVERITY_ORDER}
+    for f in doc.findings:
+        buckets.setdefault((f.severity or "info").lower(), []).append(f.finding_id)
+    return [(s, buckets[s]) for s in _SEVERITY_ORDER if s in buckets]
+
+
+def _render_severity_distribution_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """Severity distribution table listing finding ids per band (C-31)."""
+    lines.append("| Severity | Count | Findings |")
+    lines.append("|---|---|---|")
+    for sev, ids in severity_distribution(doc):
+        ids_cell = ", ".join(f"`{fid}`" for fid in ids) if ids else "—"
+        lines.append(f"| {sev} | {len(ids)} | {ids_cell} |")
+    lines.append("")
+
+
 def _cvss_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
     """CVSS table cell: score + vector, or a heuristic marker; None when absent (C-20/C-27)."""
     score = f.cvss_score
@@ -34,7 +55,11 @@ def _cvss_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
         return None
     if f.cvss_vector:
         ver = f.cvss_version or "CVSS"
-        return f"{score} ({ver}/{f.cvss_vector})" if ":" not in str(f.cvss_vector) else f"{score} ({f.cvss_vector})"
+        return (
+            f"{score} ({ver}/{f.cvss_vector})"
+            if ":" not in str(f.cvss_vector)
+            else f"{score} ({f.cvss_vector})"
+        )
     return f"{score} (severity_basis: heuristic — no vector)"
 
 
@@ -69,7 +94,9 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         lines.append(f"| CVSS | {cvss} |")
     if f.cwe:
         lines.append(f"| CWE | {_esc_md(f.cwe)} |")
-    lines.append(f"| OWASP | {_esc_md(f.owasp_category) if f.owasp_category else 'не сопоставлено'} |")
+    lines.append(
+        f"| OWASP | {_esc_md(f.owasp_category) if f.owasp_category else 'не сопоставлено'} |"
+    )
     asset = _asset_cell(f)
     if asset:
         lines.append(f"| Актив | {_esc_md(asset)} |")
@@ -367,6 +394,8 @@ def render_markdown(doc: ReportDocumentV1) -> str:
 
     lines.append(f"## Findings ({len(doc.findings)})")
     lines.append("")
+    if doc.findings:
+        _render_severity_distribution_md(lines, doc)
     if not doc.findings:
         lines.append("_not_assessed — no findings in this snapshot._")
     for i, f in enumerate(doc.findings, 1):

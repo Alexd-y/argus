@@ -379,3 +379,16 @@ def test_md_html_section_headers_equal():
     }
     blockers = [b for b in content_parity_blockers({"json": b'{"findings":[]}', **canon})]
     assert not any("section headers differ" in b for b in blockers), blockers
+
+
+def test_severity_distribution_lists_finding_ids():
+    from src.reports.renderers.markdown_renderer import severity_distribution
+
+    doc = _doc_with_finding()
+    dist = dict(severity_distribution(doc))
+    fid = doc.findings[0].finding_id
+    sev = doc.findings[0].severity.lower()
+    assert fid in dist[sev]
+    # C-31: the id appears in MD and HTML distribution tables (not a bare '—').
+    assert fid in render_markdown(doc)
+    assert fid in render_html(doc)
