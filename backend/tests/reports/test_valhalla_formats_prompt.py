@@ -208,3 +208,95 @@ def test_json_key_order_deterministic():
     assert render_json(doc) == render_json(doc)  # byte-stable
     js = render_json(doc)
     assert js.index('"$schema"') < js.index('"target"')
+
+
+# --------------------------------------------------------------------------- C-19
+def test_owasp_mapping_table_covers_known_classes():
+    from src.reports.owasp_classifier import classify_owasp
+
+    assert classify_owasp("CWE-319").startswith("A02")  # TLS/crypto → A02
+    assert classify_owasp("CWE-327").startswith("A02")
+    assert classify_owasp("CWE-693").startswith("A05")  # missing headers → A05
+    assert classify_owasp("CWE-89").startswith("A03")  # SQLi
+    assert classify_owasp("CWE-918").startswith("A10")  # SSRF
+    assert classify_owasp(None, "sqli").startswith("A03")  # class fallback
+    assert classify_owasp(None, None, "TLS misconfiguration").startswith("A02")
+    assert classify_owasp("CWE-99999") is None  # unmapped → None ("не сопоставлено")
+
+
+def _snapshot_from(finding_obj):
+    from src.reports.snapshot_builder import build_snapshot_from_report_data
+
+    class _RD:
+        findings = [finding_obj]
+        evidence = []
+        technologies = []
+        target = "https://alleksy.com"
+        scan_id = "s1"
+        tenant_id = "t1"
+
+    return build_snapshot_from_report_data(_RD(), scan_meta={"scan_id": "s1"})
+
+
+class _RawFinding:
+    def __init__(self, **kw):
+        self.finding_id = "F-1"
+        self.title = "x"
+        self.severity = "medium"
+        self.cwe = None
+        self.description = "d"
+        self.validation_status = "validated"
+        self.confidence = "confirmed"
+        self.evidence_refs = ["k1"]
+        self.source_tool = "web_vuln_heuristics"
+        self.proof_of_concept = None
+        self.owasp_category = None
+        self.__dict__.update(kw)
+
+
+# --------------------------------------------------------------------------- C-19 (wired)
+def test_owasp_reclassified_in_snapshot():
+    # A missing-headers finding wrongly labelled A02 in source is corrected to A05.
+    doc = _snapshot_from(
+        _RawFinding(cwe="CWE-693", owasp_category="A02:2021", title="Missing headers")
+    )
+    assert doc.findings[0].owasp_category.startswith("A05")
+
+
+# --------------------------------------------------------------------------- C-22
+def test_5xx_infrastructure_response_downgrades_to_inconclusive():
+    doc = _snapshot_from(
+        _RawFinding(
+            title="TLS/SSL configuration observation",
+            cwe="CWE-693",
+            cvss_score=5.3,
+            proof_of_concept={"response": "HTTP 530 Cloudflare Tunnel error"},
+        )
+    )
+    f = doc.findings[0]
+    assert f.verification_status == "inconclusive"
+    assert f.downgrade_reason == "target_unreachable_during_test"
+    assert f.cvss_score is None
+
+
+# --------------------------------------------------------------------------- C-21
+def test_discriminator_mismatch_dropped_for_non_xss():
+    doc = _snapshot_from(
+        _RawFinding(
+            title="Missing security headers",
+            cwe="CWE-693",
+            proof_of_concept={"discriminator": "http_reflection", "response": "HTTP 200"},
+        )
+    )
+    poc = doc.findings[0].poc
+    assert poc is None or poc.discriminator is None  # reflection discriminator dropped
+
+
+# --------------------------------------------------------------------------- C-30
+def test_single_step_chain_not_emitted():
+    from src.reports.report_document import ReportFinding as _RF
+    from src.reports.valhalla_narrative_builder import build_exploit_chains
+
+    # One suspected finding → no hypothetical one-step chain.
+    one = [_RF(finding_id="F-1", title="x", severity="medium", verification_status="suspected")]
+    assert build_exploit_chains(one) == []

@@ -97,22 +97,31 @@ def build_exploit_chains(findings: list[ReportFinding]) -> list[ReportExploitCha
         )
 
     suspected = [f for f in findings if f.verification_status == "suspected"]
-    for i, f in enumerate(suspected, 1):
+    # C-30 — a single-step "chain" that merely repeats a finding is not an impact chain.
+    # Only emit a hypothetical chain when there is genuine multi-step potential (>=2
+    # distinct proven/suspected steps of different phases); otherwise the section
+    # honestly reports no chains rather than fabricating one-step pseudo-chains.
+    if len(proven_steps) < 2 and len(suspected) < 2:
+        return chains
+    hyp_steps = [
+        ReportAttackStep(
+            order_index=i,
+            phase=_phase(f),
+            description=f"{f.title} ({f.finding_id})",
+        )
+        for i, f in enumerate(suspected, 1)
+    ]
+    distinct_phases = {s.phase for s in hyp_steps}
+    if len(hyp_steps) >= 2 and len(distinct_phases) >= 2:
         chains.append(
             ReportExploitChain(
-                chain_id=f"CH-hyp-{i}",
+                chain_id="CH-hyp-1",
                 kind="hypothetical",
-                title=f"Hypothetical: {f.title}",
-                steps=[
-                    ReportAttackStep(
-                        order_index=1,
-                        phase=_phase(f),
-                        description=f"{f.title} ({f.finding_id})",
-                    )
-                ],
+                title="Hypothetical multi-step path (unproven)",
+                steps=hyp_steps,
                 to_verify=[
-                    f.downgrade_reason
-                    or "Reproduce with a discriminator and a negative control before asserting."
+                    "Prove each transition with a discriminator and a negative control "
+                    "before asserting the chain."
                 ],
             )
         )

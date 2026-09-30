@@ -62,7 +62,7 @@ def test_poc_mapped_into_snapshot_finding():
     assert f.poc.http_request.startswith("GET /search")
     assert f.cvss_vector.startswith("AV:N")
     assert f.cvss_score == 9.8
-    assert f.owasp_category == "A03:2021"
+    assert f.owasp_category.startswith("A03")
     assert f.confirmation_class == "sqli"
 
 

@@ -49,9 +49,11 @@ VerificationStatus = Literal[
     "confirmed",
     "exploitable",
     "suspected",
+    "observed",
     "not_tested",
     "not_assessed",
     "insufficient_evidence",
+    "inconclusive",
     "out_of_scope",
     "false_positive",
 ]

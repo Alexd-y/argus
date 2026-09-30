@@ -53,7 +53,10 @@ def test_chains_separate_proven_from_hypothetical():
     findings = [
         _f("F-1", "confirmed", cls="auth_bypass", ev=["E1"]),
         _f("F-2", "confirmed", cls="sqli", ev=["E2"]),
-        _f("F-3", "suspected", cls="xss", downgrade="reflection is not execution"),
+        # C-30: a hypothetical chain requires 2+ suspected steps across distinct phases
+        # (a single one-step pseudo-chain that repeats a finding is not emitted).
+        _f("F-3", "suspected", cls="ssrf"),  # phase: entry
+        _f("F-4", "suspected", cls="sqli"),  # phase: data_access
     ]
     chains = build_exploit_chains(findings)
     kinds = {c.kind for c in chains}
@@ -62,9 +65,14 @@ def test_chains_separate_proven_from_hypothetical():
     proven = [c for c in chains if c.kind == "proven"][0]
     hyp = [c for c in chains if c.kind == "hypothetical"][0]
     assert len(proven.steps) >= 2
-    # Hypothetical chains never merge independent hypotheses (one finding each).
-    assert len(hyp.steps) == 1
+    # Hypothetical chain is multi-step (no single-step pseudo-chains, C-30).
+    assert len(hyp.steps) >= 2
     assert hyp.to_verify  # explicit "what to prove"
+
+
+def test_single_suspected_finding_yields_no_hypothetical_chain():
+    chains = build_exploit_chains([_f("F-3", "suspected", cls="xss")])
+    assert not any(c.kind == "hypothetical" for c in chains)
 
 
 def test_single_proven_finding_is_not_a_chain():

@@ -10,11 +10,13 @@ downgraded to ``insufficient_evidence`` instead of being fabricated.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.core.config import settings
 from src.findings.severity import SeverityBand, normalize_severity
 from src.reports.engagement_builder import build_engagement_metadata, engagement_is_empty
+from src.reports.owasp_classifier import classify_owasp, normalize_owasp_code
 from src.reports.poc_validation import (
     evaluate_class_confirmation,
     resolve_confirmation_class,
@@ -38,6 +40,20 @@ from src.reports.wstg_report import build_wstg_block
 
 #: Provable verification statuses that a failed class-confirmation rule downgrades.
 _PROVABLE = frozenset({"confirmed", "exploitable"})
+
+#: Infrastructure/gateway 5xx codes that indicate the origin was unreachable during
+#: the test (Cloudflare 52x/530, gateway 502/503/504). 500/501 are excluded: an app
+#: 500 (e.g. a DB error triggered by SQLi) can be legitimate evidence, not a limitation.
+_INFRA_5XX_RE = re.compile(r"\b(5\d\d)\b")
+_INFRA_5XX_CODES = frozenset({"502", "503", "504", "520", "521", "522", "523", "524", "530"})
+
+
+def _is_infra_5xx(poc) -> bool:  # noqa: ANN001 - ReportPoC | None
+    """True when the PoC's only HTTP evidence is an infrastructure 5xx (C-22)."""
+    if poc is None:
+        return False
+    resp = f"{poc.http_response or ''} {poc.observation or ''}"
+    return any(m.group(1) in _INFRA_5XX_CODES for m in _INFRA_5XX_RE.finditer(resp))
 
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
@@ -186,7 +202,6 @@ def _map_finding(
         raw_ref = resolvable[0]
 
     title = str(getattr(finding, "title", "") or "Untitled finding")
-    owasp = getattr(finding, "owasp_category", None)
     cvss_vector = getattr(finding, "cvss_vector", None)
     cvss_raw = getattr(finding, "cvss_score", None) or getattr(finding, "cvss", None)
     # C-20: 0.0 is not a CVSS assessment — treat it as "no score" (null), not a value.
@@ -221,7 +236,33 @@ def _map_finding(
         verification = "suspected"
         downgrade_reason = downgrade_reason or "R-17: only pseudo-evidence (tool:*/recon:*)"
 
+    # C-21 — discriminator must match the finding class. An ``http_reflection``
+    # discriminator on a non-XSS finding (e.g. missing headers, CWE-693) is a mapping
+    # error; drop it so the PoC is not rendered by the wrong (XSS) template.
     poc_obj = poc
+    if (
+        poc_obj is not None
+        and poc_obj.discriminator
+        and confirmation_class != "xss"
+        and "reflect" in poc_obj.discriminator.lower()
+    ):
+        poc_obj = poc_obj.model_copy(update={"discriminator": None})
+
+    # C-22 — an infrastructure-layer 5xx (e.g. Cloudflare 530: origin unreachable) is a
+    # test limitation, not proof of an application property. Such a finding becomes
+    # ``inconclusive`` and its CVSS is cleared.
+    cvss_score_final = cvss_score
+    if _is_infra_5xx(poc_obj):
+        verification = "inconclusive"
+        downgrade_reason = "target_unreachable_during_test"
+        cvss_score_final = None
+
+    # C-19 — OWASP category from an explicit CWE/class table, not the source heuristic
+    # (which mislabels TLS as A04 and headers as A02). Classifier wins; fall back to a
+    # normalised source value; else None → "не сопоставлено" in the report.
+    owasp = classify_owasp(cwe, confirmation_class, title) or normalize_owasp_code(
+        _str_or_none(getattr(finding, "owasp_category", None))
+    )
 
     def _fget(*names: str) -> Any:
         for name in names:
@@ -250,7 +291,7 @@ def _map_finding(
         raw_artifact_ref=str(raw_ref) if raw_ref else None,
         owasp_category=str(owasp) if owasp else None,
         cvss_vector=str(cvss_vector) if cvss_vector else None,
-        cvss_score=cvss_score,
+        cvss_score=cvss_score_final,
         confirmation_class=confirmation_class,
         downgrade_reason=downgrade_reason,
         poc=poc_obj,

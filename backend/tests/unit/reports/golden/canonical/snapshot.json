@@ -82,7 +82,7 @@
       "ip": null,
       "observed_impact": null,
       "observed_version": null,
-      "owasp_category": null,
+      "owasp_category": "A03:2021 — Injection",
       "parameter": null,
       "path": null,
       "poc": null,
@@ -214,7 +214,7 @@
   "schema_version": "v2",
   "scope_summary": {},
   "skipped_reasons": [],
-  "snapshot_hash": "58400457c7f66b6179a198fa6f8c7035157700bbf3f0a7b3b7bd52533e59e778",
+  "snapshot_hash": "549023acdf740d893298758b2b9c0a97f28619e4f231e5bb9ec4a3345c66004d",
   "started_at": null,
   "surface_inventory": [
     {

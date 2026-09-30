@@ -7,7 +7,7 @@
 - nuclei_profile: `vuln_default`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `58400457c7f66b6179a198fa6f8c7035157700bbf3f0a7b3b7bd52533e59e778`
+- snapshot_hash: `549023acdf740d893298758b2b9c0a97f28619e4f231e5bb9ec4a3345c66004d`
 
 ## Report Passport
 
@@ -31,7 +31,7 @@
 | | |
 |---|---|
 | CWE | CWE-89 |
-| OWASP | не сопоставлено |
+| OWASP | A03:2021 — Injection |
 | Статус верификации | confirmed |
 | Уверенность | 0.95 |
 | Evidence | `E-1` |
