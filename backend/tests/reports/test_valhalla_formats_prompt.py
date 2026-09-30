@@ -401,3 +401,26 @@ def test_legacy_valhalla_pdf_disabled_by_default():
     from src.core.config import Settings
 
     assert Settings().valhalla_legacy_pdf is False
+
+
+# --------------------------------------------------------------------------- Phase 7 (C-19 OWASP)
+def test_owasp_classifier_tls_and_headers_split():
+    from src.reports.owasp_classifier import classify_owasp
+
+    # C-19: TLS/crypto → A02, configuration/headers → A05 (the exact swap in the bug).
+    assert classify_owasp(cwe="CWE-319").startswith("A02")  # cleartext transport
+    assert classify_owasp(cwe=327).startswith("A02")  # broken crypto
+    assert classify_owasp(cwe="CWE-693").startswith("A05")  # missing headers
+    assert classify_owasp(cwe=89).startswith("A03")  # SQLi
+    assert classify_owasp(cwe=918).startswith("A10")  # SSRF
+    assert classify_owasp(cwe=None, confirmation_class=None, title="Weird") is None
+
+
+# --------------------------------------------------------------------------- Phase 8 (LLM guards)
+def test_prompt_placeholder_leak_blocked():
+    from src.reports.prose_gate import find_prompt_artifacts
+
+    # C-33: a prose slot containing an unfilled prompt placeholder is flagged.
+    for leak in ("[Layer]", "[Config/file]", "[specific value]", "[curl command]"):
+        assert find_prompt_artifacts(f"Remediation: {leak} must be set."), leak
+    assert not find_prompt_artifacts("Enable HSTS on the edge and set a strict CSP.")
