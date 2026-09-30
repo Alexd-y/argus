@@ -338,3 +338,44 @@ def test_content_parity_flags_internal_path():
     js = f'{{"findings": [], "unconfirmed_observations": [], "leak": "{leak}"}}'
     blockers = content_parity_blockers({"json": js.encode()})
     assert any("internal path" in b for b in blockers)
+
+
+# --------------------------------------------------------------------------- Phase 6 (HTML)
+def test_html_escapes_script_in_poc():
+    from src.reports.report_document import ReportPoC
+
+    doc = _doc_with_finding()
+    doc.findings[0].poc = ReportPoC(http_response="<script>alert(1)</script>")
+    html = render_html(doc)
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_html_is_self_contained():
+    html = render_html(_doc_with_finding()).lower()
+    # No external resource loading: no <link>, no @import, no <script>, no remote src/href.
+    assert "<link" not in html
+    assert "@import" not in html
+    assert "<script" not in html
+    assert 'src="http' not in html and "src='http" not in html
+    assert 'href="http' not in html and "href='http" not in html
+
+
+def test_html_has_finding_anchor_and_toc():
+    doc = _doc_with_finding()
+    html = render_html(doc)
+    fid = doc.findings[0].finding_id
+    assert f'id="finding-{fid}"' in html
+    assert f'href="#finding-{fid}"' in html
+
+
+def test_md_html_section_headers_equal():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    doc = _doc_with_finding()
+    canon = {
+        "md": render_markdown(doc).encode(),
+        "html": render_html(doc).encode(),
+    }
+    blockers = [b for b in content_parity_blockers({"json": b'{"findings":[]}', **canon})]
+    assert not any("section headers differ" in b for b in blockers), blockers

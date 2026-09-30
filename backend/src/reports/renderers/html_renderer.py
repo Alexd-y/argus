@@ -23,7 +23,7 @@ def _li(parts: list[str], label: str, value: object) -> None:
 
 
 def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportFinding
-    parts.append('<div class="finding-card">')
+    parts.append(f'<div class="finding-card" id="finding-{escape(f.finding_id)}">')
     parts.append(
         f'<h3 class="sev-{escape(f.severity)}">{escape(f.title)} '
         f"— <code>{escape(f.finding_id)}</code> "
@@ -396,6 +396,14 @@ def render_html(doc: ReportDocumentV1) -> str:
     parts.append(f"<h2>Findings ({len(doc.findings)})</h2>")
     if not doc.findings:
         parts.append("<p><em>not_assessed — no findings in this snapshot.</em></p>")
+    else:
+        parts.append('<nav class="toc"><ol>')
+        for f in doc.findings:
+            parts.append(
+                f'<li><a href="#finding-{escape(f.finding_id)}">{escape(f.title)}</a> '
+                f"<code>[{escape(f.severity)}]</code></li>"
+            )
+        parts.append("</ol></nav>")
     for f in doc.findings:
         _render_finding_html(parts, f)
 
