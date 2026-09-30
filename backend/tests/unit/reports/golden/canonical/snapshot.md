@@ -5,7 +5,6 @@
 - resolved_scan_mode: `standard`
 - execution_mode: `production`
 - nuclei_profile: `vuln_default`
-- started_at: `not_assessed`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
 - snapshot_hash: `58400457c7f66b6179a198fa6f8c7035157700bbf3f0a7b3b7bd52533e59e778`
@@ -26,35 +25,37 @@
 
 ## Findings (3)
 
-### t — `F-1`
-- severity: `critical`
-- verification_status: `confirmed`
-- confidence: `0.9500`
-- cwe: `CWE-89`
-- tool_run_id: `TR-1`
-- validator_id: `not_assessed`
-- raw_artifact_ref: `E-1`
-- evidence_ids: `E-1`
+### 01 · CRITICAL · confirmed — t
+`F-1`
 
-### t — `F-2`
-- severity: `high`
-- verification_status: `insufficient_evidence`
-- confidence: `0.9500`
-- cwe: `not_assessed`
-- tool_run_id: `not_assessed`
-- validator_id: `not_assessed`
-- raw_artifact_ref: `not_assessed`
-- evidence_ids: _none_
+| | |
+|---|---|
+| CWE | CWE-89 |
+| OWASP | не сопоставлено |
+| Статус верификации | confirmed |
+| Уверенность | 0.95 |
+| Evidence | `E-1` |
 
-### t — `F-3`
-- severity: `low`
-- verification_status: `not_tested`
-- confidence: `0.5000`
-- cwe: `not_assessed`
-- tool_run_id: `not_assessed`
-- validator_id: `not_assessed`
-- raw_artifact_ref: `not_assessed`
-- evidence_ids: _none_
+
+### 02 · HIGH · insufficient_evidence — t
+`F-2`
+
+| | |
+|---|---|
+| OWASP | не сопоставлено |
+| Статус верификации | insufficient_evidence |
+| Уверенность | 0.95 |
+
+
+### 03 · LOW · not_tested — t
+`F-3`
+
+| | |
+|---|---|
+| OWASP | не сопоставлено |
+| Статус верификации | not_tested |
+| Уверенность | 0.50 |
+
 
 ## Attack Narrative
 

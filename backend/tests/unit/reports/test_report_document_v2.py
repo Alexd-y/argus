@@ -203,7 +203,12 @@ def test_poc_remediation_closure_render_in_all_text_formats():
     xml = render_xml(doc)
     js = render_json(doc)
     for blob in (md, html, xml, js):
-        assert "Proof of Concept" in blob or "proof_of_concept" in blob or '"poc"' in blob
+        assert (
+            "Proof of Concept" in blob
+            or "proof_of_concept" in blob
+            or '"poc"' in blob
+            or "Доказательство" in blob
+        )
         assert "argus-canary-7f3a" in blob  # canary
         assert "parameterised" in blob.lower() or "parameterised queries" in blob  # remediation
         assert "not_retested" in blob  # closure permitted_status

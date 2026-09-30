@@ -14,91 +14,144 @@ def _na(value: object) -> str:
     return "not_assessed" if value in (None, "") else str(value)
 
 
+def _esc_md(value: object) -> str:
+    """Escape Markdown-significant chars in an inline value (C-28 §7.4)."""
+    text = str(value)
+    for ch in ("\\", "`", "|", "*", "_", "<"):
+        text = text.replace(ch, "\\" + ch)
+    return text.replace("\n", " ")
+
+
 def _kv(lines: list[str], label: str, value: object) -> None:
     if value not in (None, "", [], {}):
         lines.append(f"- {label}: `{value}`")
 
 
-def _render_finding_md(lines: list[str], f) -> None:  # noqa: ANN001 - ReportFinding
-    """Full vertical finding card (v2): identity, CVSS, PoC, remediation, closure."""
-    lines.append(f"### {f.title} — `{f.finding_id}`")
-    lines.append(f"- severity: `{f.severity}`")
-    lines.append(f"- verification_status: `{f.verification_status}`")
-    lines.append(f"- confidence: `{f.confidence:.4f}`")
-    lines.append(f"- cwe: `{_na(f.cwe)}`")
-    _kv(lines, "owasp_category", f.owasp_category)
+def _cvss_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
+    """CVSS table cell: score + vector, or a heuristic marker; None when absent (C-20/C-27)."""
+    score = f.cvss_score
+    if score is None:
+        return None
     if f.cvss_vector:
-        lines.append(f"- cvss: `{f.cvss_score}` `{f.cvss_version or ''}` `{f.cvss_vector}`")
-    _kv(lines, "established_or_hypothesis", f.established_or_hypothesis)
-    _kv(lines, "confirmation_class", f.confirmation_class)
-    _kv(lines, "downgrade_reason", f.downgrade_reason)
-    _kv(lines, "review_status", f.review_status if f.review_status != "not_required" else None)
-    _kv(lines, "reviewer", f.reviewer)
-    lines.append(f"- tool_run_id: `{_na(f.tool_run_id)}`")
-    lines.append(f"- validator_id: `{_na(f.validator_id)}`")
-    lines.append(f"- raw_artifact_ref: `{_na(f.raw_artifact_ref)}`")
-    ev = ", ".join(f"`{e}`" for e in f.evidence_ids) or "_none_"
-    lines.append(f"- evidence_ids: {ev}")
+        ver = f.cvss_version or "CVSS"
+        return f"{score} ({ver}/{f.cvss_vector})" if ":" not in str(f.cvss_vector) else f"{score} ({f.cvss_vector})"
+    return f"{score} (severity_basis: heuristic — no vector)"
+
+
+def _asset_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
+    host = f.asset or f.url
+    if not host:
+        return None
+    parts = str(host)
+    if f.port:
+        parts += f":{f.port}"
+    if f.scheme:
+        parts += f" ({f.scheme})"
+    return parts
+
+
+def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001 - ReportFinding
+    """Reference-layout finding card (C-28): identity, metrics table, narrative, PoC, plan.
+
+    No ``not_assessed`` filler rows and no internal storage paths (C-29): a field with
+    no value is omitted, and its absence is accounted for in the completeness section.
+    """
+    lines.append(
+        f"### {index:02d} · {f.severity.upper()} · {f.verification_status} — {_esc_md(f.title)}"
+    )
+    lines.append(f"`{f.finding_id}`")
+    lines.append("")
+    # Metrics table — only rows that carry a value.
+    lines.append("| | |")
+    lines.append("|---|---|")
+    cvss = _cvss_cell(f)
+    if cvss:
+        lines.append(f"| CVSS | {cvss} |")
+    if f.cwe:
+        lines.append(f"| CWE | {_esc_md(f.cwe)} |")
+    lines.append(f"| OWASP | {_esc_md(f.owasp_category) if f.owasp_category else 'не сопоставлено'} |")
+    asset = _asset_cell(f)
+    if asset:
+        lines.append(f"| Актив | {_esc_md(asset)} |")
+    lines.append(f"| Статус верификации | {f.verification_status} |")
+    lines.append(f"| Уверенность | {f.confidence:.2f} |")
+    if f.confirmation_class:
+        lines.append(f"| Класс | {_esc_md(f.confirmation_class)} |")
+    if f.downgrade_reason:
+        lines.append(f"| Понижение | {_esc_md(f.downgrade_reason)} |")
+    if f.review_status and f.review_status != "not_required":
+        lines.append(
+            f"| Ревью | {f.review_status}{(' · ' + _esc_md(f.reviewer)) if f.reviewer else ''} |"
+        )
+    if f.evidence_ids:
+        lines.append("| Evidence | " + ", ".join(f"`{e}`" for e in f.evidence_ids) + " |")
+    lines.append("")
     if f.description:
+        lines.append(f"**Что обнаружено.** {_esc_md(f.description)}")
+    impact = f.observed_impact or f.potential_impact
+    if impact:
+        lines.append(f"**Почему это важно.** {_esc_md(impact)}")
+    if f.description or impact:
         lines.append("")
-        lines.append(f.description)
     if f.poc is not None:
-        lines.append("")
-        lines.append("#### Proof of Concept")
+        lines.append("#### Доказательство")
         p = f.poc
         for label, value in (
-            ("preconditions", p.preconditions),
-            ("tool", p.tool),
-            ("payload", p.payload),
-            ("command", p.command),
-            ("http_request", p.http_request),
-            ("http_response", p.http_response),
-            ("discriminator", p.discriminator),
-            ("negative_control", p.negative_control),
-            ("canary", p.canary),
-            ("observation", p.observation),
-            ("oast_callback", p.oast_callback),
-            ("observed_impact", p.observed_impact),
-            ("potential_impact", p.potential_impact),
-            ("blast_radius", p.blast_radius),
-            ("timing", p.timing),
-            ("source", p.source),
-            ("attempts", p.attempts),
-            ("reproducibility", p.reproducibility),
-            ("cleanup", p.cleanup),
-            ("client_repro", p.client_repro),
-            ("screenshot_ref", p.screenshot_ref),
+            ("Предпосылки", p.preconditions),
+            ("Инструмент", p.tool),
+            ("Payload", p.payload),
+            ("Команда", p.command),
+            ("HTTP-запрос", p.http_request),
+            ("HTTP-ответ", p.http_response),
+            ("Дискриминатор", p.discriminator),
+            ("Негативный контроль", p.negative_control),
+            ("Канарейка", p.canary),
+            ("Наблюдение", p.observation),
+            ("OAST", p.oast_callback),
+            ("Наблюдаемое воздействие", p.observed_impact),
+            ("Потенциальное воздействие", p.potential_impact),
+            ("Blast radius", p.blast_radius),
+            ("Время", p.timing),
+            ("Источник", p.source),
+            ("Попытки", p.attempts),
+            ("Воспроизводимость", p.reproducibility),
         ):
-            _kv(lines, label, value)
+            if value not in (None, ""):
+                lines.append(f"- {label}: {_esc_md(value)}")
         if p.evidence_ids:
-            lines.append("- evidence_ids: " + ", ".join(f"`{e}`" for e in p.evidence_ids))
+            lines.append("- Evidence: " + ", ".join(f"`{e}`" for e in p.evidence_ids))
     if f.remediation is not None:
         r = f.remediation
         lines.append("")
-        lines.append(f"#### Remediation (LLM) — status `{r.status}`")
+        lines.append(f"#### План устранения (LLM · {r.status})")
         for label, value in (
-            ("temporary_containment", r.temporary_containment),
-            ("permanent_fix", r.permanent_fix),
-            ("preventive_measures", r.preventive_measures),
-            ("component", r.component),
-            ("rollout_order", r.rollout_order),
-            ("rollback_risk", r.rollback_risk),
-            ("retest_plan", r.retest_plan),
+            ("Сдерживание", r.temporary_containment),
+            ("Исправление", r.permanent_fix),
+            ("Превентивные меры", r.preventive_measures),
+            ("Компонент", r.component),
+            ("Порядок внедрения", r.rollout_order),
+            ("Риск отката", r.rollback_risk),
+            ("Ретест", r.retest_plan),
         ):
-            _kv(lines, label, value)
-        for i, crit in enumerate(r.acceptance_criteria, 1):
-            lines.append(f"- acceptance_criteria C-{i:02d}: {crit}")
+            if value not in (None, ""):
+                lines.append(f"- {label}: {_esc_md(value)}")
+        if r.acceptance_criteria:
+            lines.append("")
+            lines.append("#### Критерии приёмки")
+            for i, crit in enumerate(r.acceptance_criteria, 1):
+                lines.append(f"- C-{i:02d}: {_esc_md(crit)}")
     if f.closure is not None:
         c = f.closure
         lines.append("")
-        lines.append(f"#### Closure (LLM) — status `{_na(c.permitted_status)}`")
+        lines.append(f"#### Вывод о закрытии (LLM · {_na(c.permitted_status)})")
         for label, value in (
-            ("what_verified", c.what_verified),
-            ("what_not_verified", c.what_not_verified),
-            ("residual_risk", c.residual_risk),
-            ("next_step", c.next_step),
+            ("Проверено", c.what_verified),
+            ("Не проверено", c.what_not_verified),
+            ("Остаточный риск", c.residual_risk),
+            ("Следующий шаг", c.next_step),
         ):
-            _kv(lines, label, value)
+            if value not in (None, ""):
+                lines.append(f"- {label}: {_esc_md(value)}")
     lines.append("")
 
 
@@ -275,12 +328,17 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     lines.append(f"# ARGUS Report — {doc.target}")
     lines.append("")
     lines.append(f"- scan_id: `{doc.scan_id}`")
-    lines.append(f"- scan_profile: `{_na(doc.scan_profile)}`")
-    lines.append(f"- resolved_scan_mode: `{_na(doc.resolved_scan_mode)}`")
-    lines.append(f"- execution_mode: `{_na(doc.execution_mode)}`")
-    lines.append(f"- nuclei_profile: `{_na(doc.nuclei_profile)}`")
-    lines.append(f"- started_at: `{_na(doc.started_at)}`")
-    lines.append(f"- completed_at: `{_na(doc.completed_at)}`")
+    # Passport scalars — print only what was actually recorded (no not_assessed spam).
+    for label, value in (
+        ("scan_profile", doc.scan_profile),
+        ("resolved_scan_mode", doc.resolved_scan_mode),
+        ("execution_mode", doc.execution_mode),
+        ("nuclei_profile", doc.nuclei_profile),
+        ("started_at", doc.started_at),
+        ("completed_at", doc.completed_at),
+    ):
+        if value not in (None, ""):
+            lines.append(f"- {label}: `{value}`")
     lines.append(f"- schema_version: `{doc.schema_version}`")
     lines.append(f"- snapshot_hash: `{doc.snapshot_hash}`")
     lines.append("")
@@ -311,8 +369,8 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     lines.append("")
     if not doc.findings:
         lines.append("_not_assessed — no findings in this snapshot._")
-    for f in doc.findings:
-        _render_finding_md(lines, f)
+    for i, f in enumerate(doc.findings, 1):
+        _render_finding_md(lines, f, i)
 
     _render_unconfirmed_md(lines, doc)
     _render_test_executions_md(lines, doc)
