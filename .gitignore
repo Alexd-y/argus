@@ -131,3 +131,4 @@ z_analyze.md
 # Scratch / scan artifacts (never commit)
 _mig*.txt
 backend/nuclei_raw_matches.jsonl
+_external/
