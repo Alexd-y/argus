@@ -392,3 +392,12 @@ def test_severity_distribution_lists_finding_ids():
     # C-31: the id appears in MD and HTML distribution tables (not a bare '—').
     assert fid in render_markdown(doc)
     assert fid in render_html(doc)
+
+
+# --------------------------------------------------------------------------- Phase 1 (one report)
+def test_legacy_valhalla_pdf_disabled_by_default():
+    # C-01: by default the legacy valhalla.html.j2 PDF is retired; only the
+    # canonical bundle emits a single PDF. The flag exists for opt-in comparison.
+    from src.core.config import Settings
+
+    assert Settings().valhalla_legacy_pdf is False

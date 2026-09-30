@@ -313,6 +313,20 @@ class Settings(BaseSettings):
             "valhalla_release_blockers_enabled",
         ),
     )
+    # valhalla_legacy_pdf — Phase 1 (formats prompt). The canonical snapshot bundle
+    # (ReportDocumentV1 → renderers → ``canonical_pdf``) is the single source of truth
+    # for every Valhalla format including PDF. The legacy ``generators.generate_pdf`` /
+    # ``valhalla.html.j2`` path produced a *second*, divergent PDF (different brand,
+    # counts, WSTG %) shipped in the same bundle (C-01…C-09). Default False: for
+    # tier=valhalla the legacy ``pdf`` artifact is not generated, leaving exactly one
+    # PDF. Set True only to temporarily resurrect the legacy layout for comparison.
+    valhalla_legacy_pdf: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_VALHALLA_LEGACY_PDF",
+            "valhalla_legacy_pdf",
+        ),
+    )
     # valhalla_senior_poc_gate_enabled — §15.2 per-class confirmation bar. When on, a
     # provable finding whose PoC does not meet its class rule (e.g. XSS reflection
     # without browser execution, SQLi timing without a boolean/error control) is

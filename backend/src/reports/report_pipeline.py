@@ -491,6 +491,17 @@ async def run_generate_report_pipeline(
                     tier=tier_str,
                 )
             elif fmt == "pdf":
+                # Phase 1 (C-01): the canonical snapshot bundle emits the single
+                # Valhalla PDF (``canonical_pdf``). Skip the legacy ``valhalla.html.j2``
+                # PDF so the bundle never ships two competing, divergent PDFs. The
+                # legacy layout stays available behind ``valhalla_legacy_pdf`` and is
+                # only skipped when a canonical PDF will actually be produced.
+                if (
+                    tier_str == "valhalla"
+                    and not settings.valhalla_legacy_pdf
+                    and settings.canonical_report_snapshot_enabled
+                ):
+                    continue
                 content = generate_pdf(
                     report_data,
                     jinja_context=built.template_context,
@@ -902,6 +913,16 @@ async def run_generate_report_pipeline(
                 )
 
         expected_keys = set(fmt_list)
+        # Phase 1 (C-01): the legacy ``pdf`` is intentionally not generated for
+        # tier=valhalla (the canonical bundle emits the single PDF), so it must not
+        # be required in the completeness check.
+        _legacy_pdf_skipped = (
+            tier_str == "valhalla"
+            and not settings.valhalla_legacy_pdf
+            and settings.canonical_report_snapshot_enabled
+        )
+        if _legacy_pdf_skipped:
+            expected_keys.discard("pdf")
         if tier_str == "valhalla" and "csv" in expected_keys:
             expected_keys.add(VALHALLA_SECTIONS_CSV_FORMAT)
         # Every requested format must be produced; the Valhalla CSV path additionally emits
