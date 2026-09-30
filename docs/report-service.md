@@ -963,6 +963,33 @@ Remove-Item Env:\REPORT_PDF_BACKEND
 
 ---
 
+## Canonical Valhalla formats (v2 snapshot) — schemas & parity gate
+
+The four canonical Valhalla formats (`json`/`md`/`xml`/`html`) plus `canonical_pdf`
+are all rendered from **one** `ReportDocumentV1` v2 snapshot. There is a single PDF:
+the legacy `generators.generate_pdf` path is retired for `tier=valhalla` behind
+`settings.valhalla_legacy_pdf` (default `False`).
+
+Versioned schemas live in `backend/config/schemas/` (a repo file, not a code string):
+
+- `valhalla_report_v2.schema.json` — JSON Schema (Draft 2020-12), `$id`
+  `urn:argus:valhalla-report:v2:json`; validated by
+  `src/reports/renderers/report_json_schema.validate_valhalla_report_json`.
+- `valhalla_report_v2.xsd` — XML Schema for namespace `urn:argus:valhalla-report:v2`;
+  validated by `src/reports/renderers/report_xml_schema.validate_valhalla_report_xml`
+  (lxml, network/DTD disabled). Untrusted XML is parsed via `safe_parse_xml`
+  (defusedxml — DTD/entities rejected).
+
+**Content parity gate (4+1).** `src/reports/report_content_parity.content_parity_blockers`
+compares the rendered projections — finding count / id set / per-field
+(`severity`/`verification_status`) between JSON (authoritative) and XML, finding-id
+presence + count headers in MD/HTML, MD↔HTML section-header equality, and rejects any
+internal storage path leaking into a client format (C-29). It is wired into
+`_compute_valhalla_release_blockers` as `PARITY:` blockers, so a divergence publishes an
+honest draft and never reaches `ready`.
+
+---
+
 ## Related docs
 
 - [`docs/reporting.md`](./reporting.md) — legacy RPT-003 → RPT-010 batched

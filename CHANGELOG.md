@@ -4,6 +4,41 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Valhalla report — four canonical formats hardened (formats prompt C-01…C-36) (2026-09-29)
+
+One document, four byte-stable projections, one blocking parity gate. Closes the format-layer
+defects where the bundle shipped two divergent PDFs and the four canonical formats leaked
+internal paths, dumped raw fields and disagreed on counts.
+
+- **Phase 1 (C-01):** `settings.valhalla_legacy_pdf` (default **False**). For `tier=valhalla`
+  the legacy `generators.generate_pdf` / `valhalla.html.j2` PDF is no longer produced — the
+  canonical snapshot bundle emits the single `canonical_pdf`, so a bundle never ships two
+  competing PDFs. `expected_keys` drops `pdf` when the legacy path is skipped.
+- **Phase 3 (JSON):** versioned JSON Schema `backend/config/schemas/valhalla_report_v2.schema.json`
+  + `$schema`/`schema_version` stamped; `report_json_schema.validate_valhalla_report_json`
+  (jsonschema Draft2020); byte-stable `sort_keys`; CVSS `0.0 → null`.
+- **Phase 4 (XML):** namespace `urn:argus:valhalla-report:v2` + `xsi:nil` (empty ≠ absent);
+  XSD `valhalla_report_v2.xsd`; `report_xml_schema.validate_valhalla_report_xml` (lxml,
+  no-network/no-DTD) and XXE-safe `safe_parse_xml` (defusedxml).
+- **Phase 5 (Markdown, C-27/C-28):** fixed the empty-backtick CVSS bug; reference-layout finding
+  card (metrics table → *Что обнаружено* → *Доказательство* → *План устранения* → *Критерии
+  приёмки* → *Ретест* → *Вывод о закрытии*); no `not_assessed` dump; Markdown-significant chars
+  escaped.
+- **Phase 6 (HTML, C-28):** self-contained (no external resources), finding anchors + TOC,
+  PoC `<script>` fully escaped, MD↔HTML section-header parity.
+- **Phase 7 (semantics):** OWASP classifier from an explicit CWE/class table (C-19: TLS/crypto→A02,
+  headers→A05); reflection discriminator dropped for non-XSS (C-21); infra 5xx (Cloudflare 52x/530,
+  gateway 502-504) → `inconclusive` + `target_unreachable_during_test`, CVSS nulled (C-22);
+  single-step pseudo-chains suppressed (C-30); severity-distribution table lists `finding_id`s (C-31).
+- **Phase 8 (LLM, C-32/C-33):** `errors[]` populated on `failed`; `prose_gate` blocks unfilled
+  placeholders (`[Layer]`/`[Config/file]`/`[specific value]`/`[curl command]`).
+- **Phase 9 (parity gate 4+1, C-01…C-09/C-29):** `report_content_parity.content_parity_blockers`
+  compares JSON (authoritative) vs XML (id set + per-field), MD/HTML (ids + count headers),
+  MD↔HTML section headers, and flags internal storage-path leaks; wired into the release gate as
+  `PARITY:` honest-draft blockers (a mismatch never reaches `ready`).
+- **Phase 10:** regression suite `tests/reports/test_valhalla_formats_prompt.py` (C-19/21/22/27/28/
+  30/31/33 + parity + Phase 1/3/4). Full `tests/reports` + `tests/unit/reports` green.
+
 ### Valhalla report — enforce release gate by default (honest draft) (2026-09-29)
 
 `valhalla_release_blockers_enabled` now defaults to **True**. On any blocker the Valhalla
