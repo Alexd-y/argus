@@ -6,15 +6,29 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 from src.reports.report_document import ReportDocumentV1
 
+#: Canonical Valhalla report XML namespace (registered alongside urn:argus:valhalla-llm:v1).
+VALHALLA_REPORT_XML_NS = "urn:argus:valhalla-report:v2"
+_XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+
 
 def _text(parent: Element, tag: str, value: object) -> Element:
+    """Emit ``<tag>value</tag>``; for ``None`` emit ``<tag xsi:nil="true"/>`` (C-26).
+
+    This distinguishes "not defined" (nil) from an empty string, so a consumer can
+    tell a genuinely absent value from a present-but-empty one.
+    """
     el = SubElement(parent, tag)
-    el.text = "" if value is None else str(value)
+    if value is None:
+        el.set("xsi:nil", "true")
+    else:
+        el.text = str(value)
     return el
 
 
 def render_xml(doc: ReportDocumentV1) -> str:
     root = Element("argus_report")
+    root.set("xmlns", VALHALLA_REPORT_XML_NS)
+    root.set("xmlns:xsi", _XSI_NS)
     root.set("schema_version", doc.schema_version)
     root.set("snapshot_hash", doc.snapshot_hash)
 
@@ -335,4 +349,4 @@ def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
             _text(cev, "evidence_id", eid)
 
 
-__all__ = ["render_xml"]
+__all__ = ["VALHALLA_REPORT_XML_NS", "render_xml"]

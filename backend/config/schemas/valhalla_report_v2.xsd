@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Valhalla canonical report — XML Schema v2.
+  Namespace: urn:argus:valhalla-report:v2 (registered alongside urn:argus:valhalla-llm:v1).
+
+  Design: the root attributes and the <findings> element are strictly typed
+  (severity / verification_status enums, decimal confidence, required finding_id);
+  the remaining top-level containers are validated lax (processContents="lax") so the
+  schema is a real, versioned contract without being brittle against additive fields.
+  Consumers distinguish "not defined" (xsi:nil="true") from a present empty value.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:argus:valhalla-report:v2"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           targetNamespace="urn:argus:valhalla-report:v2"
+           elementFormDefault="qualified">
+
+  <xs:simpleType name="severityType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="critical"/>
+      <xs:enumeration value="high"/>
+      <xs:enumeration value="medium"/>
+      <xs:enumeration value="low"/>
+      <xs:enumeration value="info"/>
+      <xs:enumeration value="unknown"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="verificationStatusType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="confirmed"/>
+      <xs:enumeration value="exploitable"/>
+      <xs:enumeration value="suspected"/>
+      <xs:enumeration value="observed"/>
+      <xs:enumeration value="not_tested"/>
+      <xs:enumeration value="not_assessed"/>
+      <xs:enumeration value="insufficient_evidence"/>
+      <xs:enumeration value="inconclusive"/>
+      <xs:enumeration value="out_of_scope"/>
+      <xs:enumeration value="false_positive"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="confidenceType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:element name="findings">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="finding" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="finding_id" type="xs:string" use="required"/>
+            <xs:attribute name="severity" type="severityType" use="required"/>
+            <xs:attribute name="verification_status" type="verificationStatusType" use="required"/>
+            <xs:attribute name="confidence" type="confidenceType" use="optional"/>
+            <xs:anyAttribute processContents="skip"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="count" type="xs:nonNegativeInteger" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="argus_report">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="schema_version" type="xs:string" use="required"/>
+      <xs:attribute name="snapshot_hash" type="xs:string" use="required"/>
+      <xs:anyAttribute processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

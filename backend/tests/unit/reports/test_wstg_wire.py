@@ -114,7 +114,10 @@ def test_xml_contains_wstg_element_when_present(_flag_on):
         scan_report_data=_SRD(["nmap", "nuclei"]),
     )
     root = fromstring(render_xml(doc))
-    we = root.find("wstg")
+    we = next(
+        (el for el in root.iter() if isinstance(el.tag, str) and el.tag.endswith("wstg")),
+        None,
+    )
     assert we is not None
     assert we.get("version") == "4.2"
     assert we.get("gate_passed") is not None
@@ -125,7 +128,9 @@ def test_xml_omits_wstg_element_when_absent(_flag_off):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
     )
     root = fromstring(render_xml(doc))
-    assert root.find("wstg") is None
+    assert not any(
+        isinstance(el.tag, str) and el.tag.endswith("wstg") for el in root.iter()
+    )
 
 
 def test_html_contains_wstg_section_when_present(_flag_on):

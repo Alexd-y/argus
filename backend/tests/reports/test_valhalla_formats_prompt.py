@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from src.reports.renderers import render_html, render_markdown, render_xml
+from src.reports.renderers import render_html, render_json, render_markdown, render_xml
 from src.reports.report_document import ReportFinding, ReportPoC, build_report_document
 
 _TS = datetime(2026, 1, 1, tzinfo=UTC)
@@ -100,3 +100,45 @@ def test_html_and_xml_still_render_finding():
     xml = render_xml(doc)
     assert "a9caa12d-55d8-5857-a001-c1f0710e3781" in html
     assert "a9caa12d-55d8-5857-a001-c1f0710e3781" in xml
+
+
+# --------------------------------------------------------------------------- C-25
+def test_xml_has_namespace_and_validates_against_xsd():
+    from src.reports.renderers.report_xml_schema import validate_valhalla_report_xml
+    from src.reports.renderers.xml_renderer import VALHALLA_REPORT_XML_NS
+
+    xml = render_xml(_doc_with_finding())
+    assert f'xmlns="{VALHALLA_REPORT_XML_NS}"' in xml
+    errors = validate_valhalla_report_xml(xml)
+    assert errors == [], errors
+
+
+# --------------------------------------------------------------------------- C-26
+def test_xml_nil_vs_absent_semantics():
+    # cvss_version is None → element carries xsi:nil, distinguishable from empty.
+    xml = render_xml(_doc_with_finding(cvss_version=None))
+    assert "xsi:nil" in xml
+
+
+def test_xml_field_parity_with_json():
+    import json as _json
+
+    doc = _doc_with_finding()
+    data = _json.loads(render_json(doc))
+    f = data["findings"][0]
+    xml = render_xml(doc)
+    # Every non-empty scalar the JSON carries for the finding appears in the XML.
+    for key in ("cvss_vector", "cwe", "owasp_category"):
+        if f.get(key):
+            assert str(f[key]) in xml, key
+
+
+def test_xml_parser_rejects_external_entities():
+    from src.reports.renderers.report_xml_schema import XmlSecurityError, safe_parse_xml
+
+    xxe = "<?xml version='1.0'?><!DOCTYPE r [<!ENTITY x SYSTEM 'file:///etc/passwd'>]>" "<r>&x;</r>"
+    try:
+        safe_parse_xml(xxe)
+        raise AssertionError("XXE was not blocked")
+    except XmlSecurityError:
+        pass

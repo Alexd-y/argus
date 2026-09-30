@@ -236,7 +236,11 @@ def test_four_format_finding_parity():
     fid = data["findings"][0]["finding_id"]
     snap = data["snapshot_hash"]
     root = fromstring(render_xml(doc))
-    x_ids = {fe.get("finding_id") for fe in root.iter("finding")}
+    x_ids = {
+        fe.get("finding_id")
+        for fe in root.iter()
+        if isinstance(fe.tag, str) and fe.tag.endswith("finding")
+    }
     assert fid in x_ids
     for blob in (render_markdown(doc), render_html(doc), render_xml(doc)):
         assert fid in blob

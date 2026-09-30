@@ -6,6 +6,19 @@ import json
 from datetime import UTC, datetime
 from xml.etree.ElementTree import fromstring
 
+
+def _parse_xml_no_ns(xml_text: str):
+    """Parse canonical XML and strip the default namespace so ``.iter('finding')`` works.
+
+    The canonical report XML now declares ``xmlns=urn:argus:valhalla-report:v2`` (C-25),
+    which namespaces every element. Tests match by local name, so drop the prefix.
+    """
+    root = fromstring(xml_text)
+    for el in root.iter():
+        if isinstance(el.tag, str) and el.tag.startswith("{"):
+            el.tag = el.tag.split("}", 1)[1]
+    return root
+
 import pytest
 from src.reports.renderers import render_html, render_json, render_markdown, render_xml
 from src.reports.report_document import (
@@ -105,7 +118,7 @@ def test_no_confirmed_finding_without_evidence_in_any_format():
             assert f["evidence_ids"], f"{f['finding_id']} confirmed without evidence"
 
     # XML (structural): every finding presented confirmed/exploitable has evidence.
-    root = fromstring(render_xml(doc))
+    root = _parse_xml_no_ns(render_xml(doc))
     for fe in root.iter("finding"):
         if fe.get("verification_status") in ("confirmed", "exploitable"):
             eids = [e.text for e in fe.find("evidence_ids").iter("evidence_id")]
@@ -127,7 +140,7 @@ def test_json_xml_structural_parity():
     doc = _sample_doc()
     j_ids, j_sev, j_ev, j_cov, j_hash = _json_sets(doc)
 
-    root = fromstring(render_xml(doc))
+    root = _parse_xml_no_ns(render_xml(doc))
     x_ids = {fe.get("finding_id") for fe in root.iter("finding")}
     x_sev = sorted(fe.get("severity") for fe in root.iter("finding"))
     x_ev = {
@@ -164,7 +177,7 @@ def test_findings_count_parity_across_formats():
     doc = _sample_doc()
     data = json.loads(render_json(doc))
     n = len(data["findings"])
-    root = fromstring(render_xml(doc))
+    root = _parse_xml_no_ns(render_xml(doc))
     assert int(root.find("findings").get("count")) == n
     md = render_markdown(doc)
     assert f"## Findings ({n})" in md
