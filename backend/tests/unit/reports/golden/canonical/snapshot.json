@@ -1,4 +1,5 @@
 {
+  "$schema": "urn:argus:valhalla-report:v2:json",
   "assessment_completeness": "unknown",
   "attack_narrative": [
     {

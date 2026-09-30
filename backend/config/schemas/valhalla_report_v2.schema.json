@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:argus:valhalla-report:v2:json",
+  "title": "Valhalla canonical report v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "scan_id",
+    "tenant_id",
+    "target",
+    "snapshot_hash",
+    "findings",
+    "generation_status"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "v2" },
+    "scan_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "target": { "type": "string" },
+    "snapshot_hash": { "type": "string" },
+    "generation_status": {
+      "type": "string",
+      "enum": ["unknown", "ready", "partial", "draft", "failed"]
+    },
+    "llm_analysis_status": { "type": "string" },
+    "assessment_completeness": { "type": "string" },
+    "evidence_integrity": { "type": "string" },
+    "review_status": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "unconfirmed_observations": { "type": "array" },
+    "claims": { "type": "array" },
+    "limitations": { "type": "array" },
+    "test_executions": { "type": "array" },
+    "methodology": { "type": "array" },
+    "attack_narrative": { "type": "array" },
+    "exploit_chains": { "type": "array" },
+    "surface_inventory": { "type": "array" },
+    "tool_runs": { "type": "array" },
+    "coverage": { "type": "array" },
+    "evidence_references": { "type": "array" }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["finding_id", "title", "severity", "verification_status"],
+      "properties": {
+        "finding_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info", "unknown"]
+        },
+        "verification_status": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "exploitable",
+            "suspected",
+            "observed",
+            "not_tested",
+            "not_assessed",
+            "insufficient_evidence",
+            "inconclusive",
+            "out_of_scope",
+            "false_positive"
+          ]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cvss_score": {
+          "type": ["number", "null"],
+          "description": "CVSS base score > 0, or null. 0.0 is not a valid assessment (C-20).",
+          "exclusiveMinimum": 0
+        },
+        "cvss_vector": { "type": ["string", "null"] },
+        "cvss_version": { "type": ["string", "null"] },
+        "owasp_category": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

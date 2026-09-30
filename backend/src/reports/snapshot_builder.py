@@ -188,7 +188,11 @@ def _map_finding(
     title = str(getattr(finding, "title", "") or "Untitled finding")
     owasp = getattr(finding, "owasp_category", None)
     cvss_vector = getattr(finding, "cvss_vector", None)
-    cvss_score = getattr(finding, "cvss_score", None) or getattr(finding, "cvss", None)
+    cvss_raw = getattr(finding, "cvss_score", None) or getattr(finding, "cvss", None)
+    # C-20: 0.0 is not a CVSS assessment — treat it as "no score" (null), not a value.
+    cvss_score = (
+        float(cvss_raw) if isinstance(cvss_raw, (int, float)) and float(cvss_raw) > 0.0 else None
+    )
     poc = _map_poc(finding)
     verification = _verification_status(finding)
 
@@ -246,7 +250,7 @@ def _map_finding(
         raw_artifact_ref=str(raw_ref) if raw_ref else None,
         owasp_category=str(owasp) if owasp else None,
         cvss_vector=str(cvss_vector) if cvss_vector else None,
-        cvss_score=float(cvss_score) if isinstance(cvss_score, (int, float)) else None,
+        cvss_score=cvss_score,
         confirmation_class=confirmation_class,
         downgrade_reason=downgrade_reason,
         poc=poc_obj,

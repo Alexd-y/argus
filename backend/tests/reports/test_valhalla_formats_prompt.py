@@ -142,3 +142,69 @@ def test_xml_parser_rejects_external_entities():
         raise AssertionError("XXE was not blocked")
     except XmlSecurityError:
         pass
+
+
+# --------------------------------------------------------------------------- Phase 3 (JSON)
+def test_json_has_schema_ref_and_validates():
+    import json as _json
+
+    from src.reports.renderers.json_renderer import VALHALLA_REPORT_JSON_SCHEMA_ID
+    from src.reports.renderers.report_json_schema import validate_valhalla_report_json
+
+    doc = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://alleksy.com",
+        findings=[
+            ReportFinding(
+                finding_id="F-1",
+                title="t",
+                severity="medium",
+                verification_status="suspected",
+                confidence=0.95,
+                cvss_score=5.3,
+            )
+        ],
+        generation_status="ready",
+        generated_at=_TS,
+    )
+    js = render_json(doc)
+    data = _json.loads(js)
+    assert data["$schema"] == VALHALLA_REPORT_JSON_SCHEMA_ID
+    assert validate_valhalla_report_json(js) == []
+
+
+# --------------------------------------------------------------------------- C-20
+def test_cvss_zero_is_null():
+    from src.reports.snapshot_builder import build_snapshot_from_report_data
+
+    class _F:
+        finding_id = "F-1"
+        title = "x"
+        severity = "info"
+        cwe = None
+        description = "d"
+        validation_status = "unverified"
+        confidence = "possible"
+        evidence_refs = []
+        proof_of_concept = None
+        cvss_score = 0.0
+        cvss_vector = None
+
+    class _RD:
+        findings = [_F()]
+        evidence = []
+        technologies = []
+        target = "https://x"
+        scan_id = "s1"
+        tenant_id = "t1"
+
+    doc = build_snapshot_from_report_data(_RD(), scan_meta={"scan_id": "s1"})
+    assert doc.findings[0].cvss_score is None  # 0.0 is not a valid CVSS assessment
+
+
+def test_json_key_order_deterministic():
+    doc = _doc_with_finding()
+    assert render_json(doc) == render_json(doc)  # byte-stable
+    js = render_json(doc)
+    assert js.index('"$schema"') < js.index('"target"')
