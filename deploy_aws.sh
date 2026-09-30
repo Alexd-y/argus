@@ -43,40 +43,6 @@ docker compose version >/dev/null 2>&1 || die "docker compose v2 plugin required
 [ -f "$ENV_FILE" ]     || die "missing $ENV_FILE"
 ok "docker + compose + files present"
 
-# --- 1. Ensure the CAIRN_* block exists (idempotent, secure defaults) ------
-if ! grep -q '^CAIRN_ENABLED=' "$ENV_FILE"; then
-  log "CAIRN_* block absent — appending secure defaults to $ENV_FILE"
-  cat >> "$ENV_FILE" <<'EOF'
-
-# --- Cairn blackboard engine (OFF by default) ---
-CAIRN_ENABLED=false
-CAIRN_DEFAULT_ENGINE=pipeline
-CAIRN_TICK_INTERVAL_SEC=10
-CAIRN_INTENT_TIMEOUT_SEC=900
-CAIRN_REASON_TIMEOUT_SEC=900
-CAIRN_MAX_WORKERS=8
-CAIRN_MAX_RUNNING_PROJECTS=3
-CAIRN_MAX_PROJECT_WORKERS=4
-CAIRN_MAX_INTENTS_PER_REASON=3
-CAIRN_BOOTSTRAP_TIMEOUT_SEC=1800
-CAIRN_BOOTSTRAP_CONCLUDE_TIMEOUT_SEC=300
-CAIRN_REASON_TIMEOUT_TASK_SEC=600
-CAIRN_EXPLORE_TIMEOUT_SEC=1800
-CAIRN_EXPLORE_CONCLUDE_TIMEOUT_SEC=300
-CAIRN_WORKER_HEALTHCHECK=startup_only
-CAIRN_HEALTHCHECK_TIMEOUT_SEC=20
-CAIRN_UNHEALTHY_BACKOFF_SEC=5
-CAIRN_REJECTED_BACKOFF_SEC=5
-CAIRN_CONTAINER_COMPLETED_ACTION=remove
-CAIRN_MAX_GRAPH_FACTS=500
-CAIRN_MAX_GRAPH_DEPTH=25
-CAIRN_PROMPT_GROUP=default
-CAIRN_CLI_DRIVERS_ENABLED=false
-CAIRN_LOCAL_EXECUTION_ENABLED=false
-EOF
-  ok "appended CAIRN_* defaults"
-fi
-
 # --- 2. Sanitize env (CRLF from Windows edits + trailing spaces) -----------
 log "Sanitizing $ENV_FILE (CRLF / trailing whitespace)"
 sed -i 's/\r$//' "$ENV_FILE"

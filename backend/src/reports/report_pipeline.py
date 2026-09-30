@@ -240,6 +240,23 @@ def _compute_valhalla_release_blockers(
             blockers.append(f"OUTPUT: {cv.rule}: {cv.detail}")
         # Phase U — snapshot completeness + evidence-chain (R-13…R-18).
         blockers.extend(snapshot_release_blockers(snapshot))
+        # Phase 9 — content parity across the four canonical formats + no internal
+        # paths (C-01…C-09/C-29): render the four projections from the snapshot and
+        # compare their content (counts, id set, per-field, section headers).
+        try:
+            from src.reports.renderers import render_html, render_json, render_markdown, render_xml
+            from src.reports.report_content_parity import content_parity_blockers
+
+            canon = {
+                "json": render_json(snapshot).encode("utf-8"),
+                "md": render_markdown(snapshot).encode("utf-8"),
+                "xml": render_xml(snapshot).encode("utf-8"),
+                "html": render_html(snapshot).encode("utf-8"),
+            }
+            for pb in content_parity_blockers(canon):
+                blockers.append(f"PARITY: {pb}")
+        except Exception:  # noqa: BLE001 — parity check must not crash generation
+            pass
         # Phase Q — finding-count parity: main .md vs canonical snapshot (R-11).
         counts: dict[str, int] = {
             "snapshot": len(snapshot.findings) + len(snapshot.unconfirmed_observations)

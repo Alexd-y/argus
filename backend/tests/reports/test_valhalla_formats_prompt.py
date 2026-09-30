@@ -300,3 +300,41 @@ def test_single_step_chain_not_emitted():
     # One suspected finding → no hypothetical one-step chain.
     one = [_RF(finding_id="F-1", title="x", severity="medium", verification_status="suspected")]
     assert build_exploit_chains(one) == []
+
+
+# --------------------------------------------------------------------------- Phase 9 (parity)
+def test_content_parity_clean_bundle_has_no_blockers():
+    from src.reports.renderers import render_html, render_json, render_markdown, render_xml
+    from src.reports.report_content_parity import content_parity_blockers
+
+    doc = _doc_with_finding()
+    canon = {
+        "json": render_json(doc).encode(),
+        "md": render_markdown(doc).encode(),
+        "xml": render_xml(doc).encode(),
+        "html": render_html(doc).encode(),
+    }
+    assert content_parity_blockers(canon) == []
+
+
+def test_content_parity_detects_finding_id_divergence():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    js = '{"findings": [{"finding_id": "A", "severity": "high", "verification_status": "suspected"}], "unconfirmed_observations": []}'
+    xml = (
+        '<argus_report xmlns="urn:argus:valhalla-report:v2" schema_version="v2" '
+        'snapshot_hash="h"><findings count="1">'
+        '<finding finding_id="B" severity="high" verification_status="suspected"/>'
+        "</findings></argus_report>"
+    )
+    blockers = content_parity_blockers({"json": js.encode(), "xml": xml.encode()})
+    assert any("finding_id set differs" in b for b in blockers)
+
+
+def test_content_parity_flags_internal_path():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    leak = "00000000-0000-0000-0000-000000000001/d6fdd027-ecec-4791-aed2-ef21025d1c7f/poc/x.json"
+    js = f'{{"findings": [], "unconfirmed_observations": [], "leak": "{leak}"}}'
+    blockers = content_parity_blockers({"json": js.encode()})
+    assert any("internal path" in b for b in blockers)
