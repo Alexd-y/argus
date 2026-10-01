@@ -1014,9 +1014,7 @@ async def execute_threat_modeling_run(
                 content_type = (
                     "text/markdown"
                     if filename.endswith(".md")
-                    else "text/csv"
-                    if filename.endswith(".csv")
-                    else "application/json"
+                    else "text/csv" if filename.endswith(".csv") else "application/json"
                 )
                 await create_artifact(
                     db,

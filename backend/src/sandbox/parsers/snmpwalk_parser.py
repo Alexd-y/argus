@@ -203,9 +203,11 @@ def _truncate(value: str) -> str:
 
 def _build_record(summary: dict[str, Any]) -> dict[str, Any]:
     return {
-        "kind": "snmpwalk_default_community"
-        if summary["default_community"]
-        else "snmpwalk_info_disclosure",
+        "kind": (
+            "snmpwalk_default_community"
+            if summary["default_community"]
+            else "snmpwalk_info_disclosure"
+        ),
         "default_community": bool(summary["default_community"]),
         "community_hint": summary["community_hint"],
         "interfaces": summary["interfaces"],

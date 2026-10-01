@@ -7,7 +7,9 @@ from src.tools.guardrails.rate_limiter import RateLimiter
 __all__ = ["DomainValidator", "IPValidator", "RateLimiter", "validate_target_for_tool"]
 
 
-def validate_target_for_tool(target: str, tool_name: str) -> dict:  # noqa: ARG001 - retained for signature/API compatibility
+def validate_target_for_tool(
+    target: str, tool_name: str  # noqa: ARG001 - retained for signature/API compatibility
+) -> dict:
     """
     Validate target (IP or domain) before tool execution.
     Handles comma/space-separated targets.

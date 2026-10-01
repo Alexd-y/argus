@@ -43,7 +43,9 @@ class ToolAdapter(abc.ABC):
     def supported_stages(self) -> list[int]:
         """Recon stages this tool supports."""
 
-    async def validate_config(self, config: dict[str, Any]) -> bool:  # noqa: ARG002 - adapter base-class default signature
+    async def validate_config(
+        self, config: dict[str, Any]  # noqa: ARG002 - adapter base-class default signature
+    ) -> bool:
         """Validate tool-specific configuration. Override for custom validation."""
         return True
 

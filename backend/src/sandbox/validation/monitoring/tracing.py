@@ -132,7 +132,9 @@ class NetworkPolicyEnforcer:
     """Enforces network allowlist for validation environments."""
 
     @staticmethod
-    def default_deny_iptables(container_id: str) -> list[str]:  # noqa: ARG004 - iptables backend interface signature
+    def default_deny_iptables(
+        container_id: str,  # noqa: ARG004 - iptables backend interface signature
+    ) -> list[str]:
         """Generate iptables commands for default-deny + allowlist DNS."""
         return [
             "iptables -P INPUT DROP",
@@ -143,7 +145,9 @@ class NetworkPolicyEnforcer:
         ]
 
     @staticmethod
-    def allow_outbound(container_id: str, domains: list[str]) -> list[str]:  # noqa: ARG004 - iptables backend interface signature
+    def allow_outbound(
+        container_id: str, domains: list[str]  # noqa: ARG004 - iptables backend interface signature
+    ) -> list[str]:
         """Generate iptables allow rules for specific domains."""
         rules = []
         for domain in domains:

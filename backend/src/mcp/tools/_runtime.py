@@ -214,9 +214,7 @@ async def run_tool[T](
             final_status = (
                 "unauthorized"
                 if isinstance(exc, AuthenticationError)
-                else "forbidden"
-                if isinstance(exc, AuthorizationError)
-                else "error"
+                else "forbidden" if isinstance(exc, AuthorizationError) else "error"
             )
             failure_summary, _ = _classify_failure(exc)
             try:

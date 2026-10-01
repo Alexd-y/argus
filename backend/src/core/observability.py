@@ -949,7 +949,7 @@ class _NoopTracer:
     def start_as_current_span(
         self,
         _name: str,
-        attributes: Mapping[str, Any] | None = None,  # noqa: ARG002 - retained for signature/API compatibility
+        attributes: Mapping[str, Any] | None = None,  # noqa: ARG002
         **_kwargs: Any,
     ) -> Generator[_NoopSpan, None, None]:
         yield _NoopSpan()

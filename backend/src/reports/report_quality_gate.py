@@ -1296,9 +1296,9 @@ def _build_active_injection_table_rows(
             "family": fam,
             "assessed": assessed,
             "tool": _tool_label_for_family(fs),
-            "status": "findings_recorded"
-            if fs
-            else ("not_run" if assessed == "no" else "no_findings"),
+            "status": (
+                "findings_recorded" if fs else ("not_run" if assessed == "no" else "no_findings")
+            ),
             "surfaces_tested": _unique_surfaces_for_family(fs) if fs else 0,
             "evidence_ids": list(
                 dict.fromkeys(

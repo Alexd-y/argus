@@ -283,7 +283,9 @@ class IsolatedLabRunner:
         if not container:
             return host_path
         remote = f"/tmp/argus-lab-{suffix}"
-        result = copy_to_container(host_path, container, remote, timeout=_DOCKER_INSPECT_TIMEOUT_SEC)
+        result = copy_to_container(
+            host_path, container, remote, timeout=_DOCKER_INSPECT_TIMEOUT_SEC
+        )
         Path(host_path).unlink(missing_ok=True)
         if result.exit_code != 0:
             return None

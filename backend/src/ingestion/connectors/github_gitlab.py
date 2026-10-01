@@ -415,17 +415,23 @@ class GitLabConnector(BaseRepoConnector):
                 number=mr.get("iid", 0),
                 title=mr.get("title", ""),
                 body=(mr.get("description") or ""),
-                author=mr.get("author", {}).get("username", "")
-                if isinstance(mr.get("author"), dict)
-                else "",
+                author=(
+                    mr.get("author", {}).get("username", "")
+                    if isinstance(mr.get("author"), dict)
+                    else ""
+                ),
                 base_branch=mr.get("target_branch", ""),
                 head_branch=mr.get("source_branch", ""),
-                base_sha=mr.get("diff_refs", {}).get("base_sha", "")
-                if isinstance(mr.get("diff_refs"), dict)
-                else "",
-                head_sha=mr.get("diff_refs", {}).get("head_sha", "")
-                if isinstance(mr.get("diff_refs"), dict)
-                else "",
+                base_sha=(
+                    mr.get("diff_refs", {}).get("base_sha", "")
+                    if isinstance(mr.get("diff_refs"), dict)
+                    else ""
+                ),
+                head_sha=(
+                    mr.get("diff_refs", {}).get("head_sha", "")
+                    if isinstance(mr.get("diff_refs"), dict)
+                    else ""
+                ),
                 state=mr.get("state", ""),
                 created_at=_parse_gitlab_date(mr.get("created_at")),
                 updated_at=_parse_gitlab_date(mr.get("updated_at")),
@@ -507,17 +513,23 @@ class GitLabConnector(BaseRepoConnector):
             number=mr.get("iid", 0),
             title=mr.get("title", title),
             body=mr.get("description", body),
-            author=mr.get("author", {}).get("username", "")
-            if isinstance(mr.get("author"), dict)
-            else "",
+            author=(
+                mr.get("author", {}).get("username", "")
+                if isinstance(mr.get("author"), dict)
+                else ""
+            ),
             base_branch=mr.get("target_branch", base_branch),
             head_branch=mr.get("source_branch", head_branch),
-            base_sha=mr.get("diff_refs", {}).get("base_sha", "")
-            if isinstance(mr.get("diff_refs"), dict)
-            else "",
-            head_sha=mr.get("diff_refs", {}).get("head_sha", "")
-            if isinstance(mr.get("diff_refs"), dict)
-            else "",
+            base_sha=(
+                mr.get("diff_refs", {}).get("base_sha", "")
+                if isinstance(mr.get("diff_refs"), dict)
+                else ""
+            ),
+            head_sha=(
+                mr.get("diff_refs", {}).get("head_sha", "")
+                if isinstance(mr.get("diff_refs"), dict)
+                else ""
+            ),
             state=mr.get("state", "opened"),
             web_url=mr.get("web_url", ""),
         )

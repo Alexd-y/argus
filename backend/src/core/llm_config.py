@@ -75,7 +75,9 @@ def get_llm_client() -> Callable[[str, dict], str]:
 
     client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/"))
 
-    def call_llm(prompt: str, context: dict) -> str:  # noqa: ARG001 - retained for signature/API compatibility
+    def call_llm(
+        prompt: str, context: dict  # noqa: ARG001 - retained for signature/API compatibility
+    ) -> str:
         """Sync LLM call. context is passed for future use (e.g. model override)."""
         try:
             messages: list[dict[str, str]] = [{"role": "user", "content": prompt}]

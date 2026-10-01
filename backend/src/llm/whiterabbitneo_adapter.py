@@ -119,9 +119,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         payload: dict[str, Any] = {
             "model": model or WRB_DEFAULT_MODEL,
             "messages": messages,
-            "temperature": self._temperature
-            if temperature is None
-            else max(0.0, float(temperature)),
+            "temperature": (
+                self._temperature if temperature is None else max(0.0, float(temperature))
+            ),
             "max_tokens": max_tokens,
         }
         if self._seed is not None:

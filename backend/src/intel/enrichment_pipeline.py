@@ -143,9 +143,9 @@ async def run_enrichment_pipeline(
                 finding["validation_status"] = result.status
                 finding["validation_confidence"] = result.confidence
                 if result.poc_command:
-                    finding.setdefault("proof_of_concept", {})["validation_poc"] = (
-                        result.poc_command
-                    )
+                    finding.setdefault("proof_of_concept", {})[
+                        "validation_poc"
+                    ] = result.poc_command
                 if result.exploit_public:
                     finding["exploit_public"] = True
                     finding["exploit_sources"] = result.exploit_sources
@@ -173,13 +173,13 @@ async def run_enrichment_pipeline(
                 fid = str(finding.get("finding_id") or finding.get("id") or "")
                 if fid in poc_map:
                     poc_result = poc_map[fid]
-                    finding.setdefault("proof_of_concept", {})["generated_poc"] = (
-                        poc_result.poc_code
-                    )
+                    finding.setdefault("proof_of_concept", {})[
+                        "generated_poc"
+                    ] = poc_result.poc_code
                     if poc_result.playwright_script:
-                        finding["proof_of_concept"]["playwright_script"] = (
-                            poc_result.playwright_script
-                        )
+                        finding["proof_of_concept"][
+                            "playwright_script"
+                        ] = poc_result.playwright_script
             stats["pocs_generated"] = len(pocs)
         except Exception as exc:
             logger.warning(

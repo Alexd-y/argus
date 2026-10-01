@@ -155,7 +155,12 @@ class JiraAdapter(NotifierBase):
                 merged[severity] = value
         return merged
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
+    def _describe_target(
+        self,
+        *,
+        event: NotificationEvent,
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
+    ) -> str:
         site_url = self._resolve_site_url()
         if event.severity not in _NOTIFY_SEVERITIES:
             raise _AdapterDisabled(

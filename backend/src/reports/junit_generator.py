@@ -301,7 +301,9 @@ def generate_junit(data: ReportData) -> bytes:
     # ``minidom.parseString`` here is operating on bytes WE just produced — no
     # external entity surface area exists. Pretty-printing yields stable
     # 2-space indentation that downstream consumers and snapshot tests prefer.
-    pretty = minidom.parseString(raw).toprettyxml(  # nosec B318 — input is our own emission, no external XML
+    pretty = minidom.parseString(
+        raw
+    ).toprettyxml(  # nosec B318 — input is our own emission, no external XML
         indent="  ", encoding="utf-8"
     )
     return bytes(pretty)

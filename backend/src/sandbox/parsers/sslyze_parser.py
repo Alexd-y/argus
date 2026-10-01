@@ -230,9 +230,11 @@ def _build_finding(category: FindingCategory, cvss_score: float) -> FindingDTO:
         cwe=[326, 327],
         cvss_v3_vector=SENTINEL_CVSS_VECTOR,
         cvss_v3_score=cvss_score,
-        confidence=ConfidenceLevel.LIKELY
-        if category == FindingCategory.MISCONFIG
-        else ConfidenceLevel.CONFIRMED,
+        confidence=(
+            ConfidenceLevel.LIKELY
+            if category == FindingCategory.MISCONFIG
+            else ConfidenceLevel.CONFIRMED
+        ),
         owasp_wstg=["WSTG-CRYP-01", "WSTG-CRYP-02"],
     )
 

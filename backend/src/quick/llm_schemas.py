@@ -249,7 +249,9 @@ def tool_id_is_catalog_safe(tool_id: str, catalog: frozenset[str]) -> bool:
     return normalized in allowed
 
 
-def _record_failure(schema_id: str, task: str) -> None:  # noqa: ARG001 - retained for signature/API compatibility
+def _record_failure(
+    schema_id: str, task: str  # noqa: ARG001 - retained for signature/API compatibility
+) -> None:
     record_llm_schema_failure(
         alias="quick",
         provider="quick_llm",

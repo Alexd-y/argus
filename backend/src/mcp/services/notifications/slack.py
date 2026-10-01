@@ -68,7 +68,12 @@ class SlackNotifier(NotifierBase):
         env_value = os.environ.get(SLACK_WEBHOOK_URL_ENV, "").strip()
         return env_value
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
+    def _describe_target(
+        self,
+        *,
+        event: NotificationEvent,  # noqa: ARG002 - NotificationChannel interface signature
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
+    ) -> str:
         url = self._resolve_url()
         if not url:
             raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))

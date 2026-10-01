@@ -254,7 +254,9 @@ class SourceAnalyzer:
 
         return sources[:500]
 
-    def _identify_auth_patterns(self, repo: Path, language: str) -> list[dict[str, Any]]:  # noqa: ARG002 - retained for signature/API compatibility
+    def _identify_auth_patterns(
+        self, repo: Path, language: str  # noqa: ARG002 - retained for signature/API compatibility
+    ) -> list[dict[str, Any]]:
         """Identify authentication/authorization patterns in the codebase."""
         patterns: list[dict[str, Any]] = []
         auth_files = [

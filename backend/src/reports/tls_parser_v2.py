@@ -117,7 +117,11 @@ def parse_sslscan_output(stdout: str) -> TlsAnalysis:
     return analysis
 
 
-def parse_openssl_output(cert_pem: str, protocols: str, ciphers: str) -> TlsAnalysis:  # noqa: ARG001 - retained for signature/API compatibility
+def parse_openssl_output(
+    cert_pem: str,  # noqa: ARG001 - retained for signature/API compatibility
+    protocols: str,
+    ciphers: str,  # noqa: ARG001 - retained for signature/API compatibility
+) -> TlsAnalysis:
     analysis = TlsAnalysis(domain="")
 
     for line in protocols.split("\n"):
@@ -138,7 +142,9 @@ def parse_openssl_output(cert_pem: str, protocols: str, ciphers: str) -> TlsAnal
     return analysis
 
 
-def extract_value(line: str, key: str) -> str:  # noqa: ARG001 - retained for signature/API compatibility
+def extract_value(
+    line: str, key: str  # noqa: ARG001 - retained for signature/API compatibility
+) -> str:
     if ":" in line:
         parts = line.split(":", 1)
         if len(parts) > 1:

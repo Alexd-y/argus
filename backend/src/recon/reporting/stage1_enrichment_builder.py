@@ -783,9 +783,9 @@ def _build_redirect_clusters(
                     "source_url": source_url,
                     "status": status,
                     "redirect_target": redirect_target,
-                    "redirect_target_host": urlparse(redirect_target).netloc
-                    if redirect_target
-                    else "",
+                    "redirect_target_host": (
+                        urlparse(redirect_target).netloc if redirect_target else ""
+                    ),
                     "redirect_path": redirect_path,
                     "cluster_size": len(rows),
                     "shared_with_root": shared_with_root,
@@ -1667,9 +1667,11 @@ def build_stage1_enrichment_artifacts(
                                 "path": parsed_api.path or "/",
                                 "full_url": full_url,
                                 "source": "js_api_ref",
-                                "api_type": "graphql"
-                                if "graphql" in (parsed_api.path or "").lower()
-                                else "rest_like",
+                                "api_type": (
+                                    "graphql"
+                                    if "graphql" in (parsed_api.path or "").lower()
+                                    else "rest_like"
+                                ),
                                 "method_hint": "unknown",
                                 "schema_hint": "unknown",
                                 "auth_boundary_hint": (
@@ -3025,9 +3027,11 @@ def build_stage1_enrichment_artifacts(
                 "posture": (
                     "strong"
                     if int(row.get("security_header_score", "0") or 0) >= 5
-                    else "moderate"
-                    if int(row.get("security_header_score", "0") or 0) >= 3
-                    else "weak"
+                    else (
+                        "moderate"
+                        if int(row.get("security_header_score", "0") or 0) >= 3
+                        else "weak"
+                    )
                 ),
                 "confidence": 0.76,
                 "evidence_refs": [

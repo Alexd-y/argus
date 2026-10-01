@@ -195,9 +195,9 @@ class QuickProfileResolver:
             crawl_depth=crawl_depth,
             severity_floor=request.severity_floor or defaults.severity_floor,
             enable_ai=defaults.enable_ai if request.enable_ai is None else request.enable_ai,
-            enable_oast=defaults.enable_oast
-            if request.enable_oast is None
-            else request.enable_oast,
+            enable_oast=(
+                defaults.enable_oast if request.enable_oast is None else request.enable_oast
+            ),
             enable_headless_on_signal=(
                 defaults.enable_headless_on_signal
                 if request.enable_headless_on_signal is None

@@ -633,9 +633,7 @@ class Settings(BaseSettings):
         default=600.0,
         ge=1.0,
         le=3600.0,
-        validation_alias=AliasChoices(
-            "EXEC_BROKER_MAX_TIMEOUT_SEC", "exec_broker_max_timeout_sec"
-        ),
+        validation_alias=AliasChoices("EXEC_BROKER_MAX_TIMEOUT_SEC", "exec_broker_max_timeout_sec"),
     )
     # Isolated LAB runner — never the production sandbox container.
     lab_runner_container_name: str = Field(
@@ -655,9 +653,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    @field_validator(
-        "sandbox_container_name", "lab_runner_container_name", mode="after"
-    )
+    @field_validator("sandbox_container_name", "lab_runner_container_name", mode="after")
     @classmethod
     def _validate_container_name(cls, v: str) -> str:
         """F-H01 Stage 3: reject non-conforming container names at startup.
@@ -669,10 +665,10 @@ class Settings(BaseSettings):
         """
         if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$", v or ""):
             raise ValueError(
-                f"invalid container name {v!r}: must match "
-                r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$"
+                f"invalid container name {v!r}: must match " r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$"
             )
         return v
+
     lab_script_capture_max_bytes: int = Field(
         default=65536,
         ge=1024,

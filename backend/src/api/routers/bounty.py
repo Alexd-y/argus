@@ -71,7 +71,7 @@ async def _get_session():
 @router.post("/ingest", response_model=BountyScope)
 async def ingest_bounty_scope(
     request: ScopeIngestRequest,
-    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001 - FastAPI route signature; param bound by the framework
+    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> BountyScope:
     """Parse bug bounty scope from JSON, raw text, or platform slug."""
     return ingest_scope(request)
@@ -80,7 +80,7 @@ async def ingest_bounty_scope(
 @router.post("/plan", response_model=BountyPlanResponse)
 async def generate_bounty_plan(
     request: ScopeIngestRequest,
-    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001 - FastAPI route signature; param bound by the framework
+    tenant_id: str = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> BountyPlanResponse:
     """Generate a phased test plan from bug bounty scope."""
     scope = ingest_scope(request)

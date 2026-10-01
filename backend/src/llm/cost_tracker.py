@@ -181,20 +181,24 @@ class ScanCostTracker:
                 }
                 for k, v in by_phase.items()
             },
-            "cheapest_call": {
-                "model": cheapest.model,
-                "cost": round(cheapest.cost_usd, 6),
-                "task": cheapest.task,
-            }
-            if cheapest
-            else None,
-            "most_expensive_call": {
-                "model": most_expensive.model,
-                "cost": round(most_expensive.cost_usd, 6),
-                "task": most_expensive.task,
-            }
-            if most_expensive
-            else None,
+            "cheapest_call": (
+                {
+                    "model": cheapest.model,
+                    "cost": round(cheapest.cost_usd, 6),
+                    "task": cheapest.task,
+                }
+                if cheapest
+                else None
+            ),
+            "most_expensive_call": (
+                {
+                    "model": most_expensive.model,
+                    "cost": round(most_expensive.cost_usd, 6),
+                    "task": most_expensive.task,
+                }
+                if most_expensive
+                else None
+            ),
         }
 
     def to_dict(self) -> dict[str, Any]:

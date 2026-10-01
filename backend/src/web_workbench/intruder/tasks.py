@@ -189,7 +189,11 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
 
 
 @app.task(name=TASK_NAME, bind=True, max_retries=0)
-def run_intruder_attack(self: Any, tenant_id: str, attack_id: str) -> dict[str, Any]:  # noqa: ARG001 - Celery bound-task signature (bind=True)
+def run_intruder_attack(
+    self: Any,  # noqa: ARG001 - Celery bound-task signature (bind=True)
+    tenant_id: str,
+    attack_id: str,
+) -> dict[str, Any]:
     """Celery entrypoint — execute (or resume) an attack. See module docstring."""
     try:
         return asyncio.run(_execute(tenant_id, attack_id))

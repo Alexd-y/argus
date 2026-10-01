@@ -67,9 +67,12 @@ def generate_test_plan(
         phase = TestPlanPhase(
             phase=phase_num,
             name=f"{surface_type.value.replace('_', ' ').title()} Testing",
-            priority="HIGH"
-            if surface_type in (SurfaceType.AUTH_SYSTEM, SurfaceType.API, SurfaceType.ADMIN_PANEL)
-            else "MEDIUM",
+            priority=(
+                "HIGH"
+                if surface_type
+                in (SurfaceType.AUTH_SYSTEM, SurfaceType.API, SurfaceType.ADMIN_PANEL)
+                else "MEDIUM"
+            ),
             surfaces=[s.surface_type.value for s in matching],
             steps=matching[0].test_steps,
             recommended_scan_options=matching[0].recommended_scan_options,

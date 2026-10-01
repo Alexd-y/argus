@@ -88,10 +88,12 @@ def compute_eval_delta(
             after.get("validated_finding_rate", 0) - before.get("validated_finding_rate", 0),
             3,
         ),
-        verdict="pass"
-        if after.get("overall_f1", 0) >= before.get("overall_f1", 0) - 0.02
-        and after.get("false_positive_rate", 0) <= before.get("false_positive_rate", 0) + 0.03
-        else "block",
+        verdict=(
+            "pass"
+            if after.get("overall_f1", 0) >= before.get("overall_f1", 0) - 0.02
+            and after.get("false_positive_rate", 0) <= before.get("false_positive_rate", 0) + 0.03
+            else "block"
+        ),
     )
 
 

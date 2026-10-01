@@ -108,7 +108,9 @@ def docker_client() -> object:
     return _docker_sdk.from_env()
 
 
-def copy_to_container(src_path: str, container: str, dest_path: str, *, timeout: float = 10.0) -> ExecResult:
+def copy_to_container(
+    src_path: str, container: str, dest_path: str, *, timeout: float = 10.0
+) -> ExecResult:
     """Run ``docker cp <src_path> <container>:<dest_path>`` — a non-exec verb.
 
     Kept in the gateway so callers do not construct a raw ``docker`` argv. Honours
@@ -130,7 +132,9 @@ def copy_to_container(src_path: str, container: str, dest_path: str, *, timeout:
         return ExecResult(-1, "", "docker cp timed out", time.perf_counter() - start)
     except OSError as exc:
         return ExecResult(-1, "", f"docker cp failed: {exc}", time.perf_counter() - start)
-    return ExecResult(proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start)
+    return ExecResult(
+        proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start
+    )
 
 
 def inspect_format(container: str, fmt: str, *, timeout: float = 10.0) -> ExecResult:
@@ -155,7 +159,9 @@ def inspect_format(container: str, fmt: str, *, timeout: float = 10.0) -> ExecRe
         return ExecResult(-1, "", "docker inspect timed out", time.perf_counter() - start)
     except OSError as exc:
         return ExecResult(-1, "", f"docker inspect failed: {exc}", time.perf_counter() - start)
-    return ExecResult(proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start)
+    return ExecResult(
+        proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start
+    )
 
 
 def build_exec_argv(
@@ -249,7 +255,12 @@ def _exec_via_broker(
 
     elapsed = time.perf_counter() - start
     if resp.status_code != 200:
-        return ExecResult(-1, "", f"exec broker rejected request: HTTP {resp.status_code} {resp.text[:500]}", elapsed)
+        return ExecResult(
+            -1,
+            "",
+            f"exec broker rejected request: HTTP {resp.status_code} {resp.text[:500]}",
+            elapsed,
+        )
     data = resp.json()
     return ExecResult(
         int(data.get("exit_code", -1)),

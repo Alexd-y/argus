@@ -219,8 +219,8 @@ class ABACEngine:
         kill_switch_checker: Callable[[str, str], bool] | None = None,
         rate_limiter: Callable[[str], bool] | None = None,
     ) -> None:
-        self._kill_switch = kill_switch_checker or (lambda t, u: False)  # noqa: ARG005 - retained for signature/API compatibility
-        self._rate_limiter = rate_limiter or (lambda u: True)  # noqa: ARG005 - retained for signature/API compatibility
+        self._kill_switch = kill_switch_checker or (lambda t, u: False)  # noqa: ARG005
+        self._rate_limiter = rate_limiter or (lambda u: True)  # noqa: ARG005
         self._elevations: dict[str, float] = {}  # user_id → elevation_expiry
 
     def evaluate(self, request: AccessRequest) -> AccessDecision:
@@ -317,7 +317,7 @@ def generate_session_watermark(request: AccessRequest) -> str:
 def check_device_posture(
     user_agent: str = "",
     ip_address: str = "",
-    known_device_ids: set[str] | None = None,  # noqa: ARG001 - retained for signature/API compatibility
+    known_device_ids: set[str] | None = None,  # noqa: ARG001
 ) -> bool:
     """Basic device posture check."""
     return bool(user_agent and ip_address)

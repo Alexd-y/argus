@@ -480,9 +480,7 @@ class VerifierAgent(BaseAgent):
             (
                 e.model_dump(mode="json", exclude_none=True)
                 if isinstance(e, OASTInteraction)
-                else dict(e)
-                if isinstance(e, dict)
-                else None
+                else dict(e) if isinstance(e, dict) else None
             )
             for e in oast_evidence
         ]

@@ -182,7 +182,9 @@ except Exception:  # pragma: no cover — defensive
 
 
 @beat_init.connect
-def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None:  # noqa: ARG001 - Celery task/signal signature
+def _hydrate_redbeat_on_beat_startup(
+    sender: Any = None, **_kwargs: Any  # noqa: ARG001 - Celery task/signal signature
+) -> None:
     """Rehydrate RedBeat from the DB on beat startup.
 
     Idempotent — :func:`src.scheduling.redbeat_loader.sync_all_from_db`

@@ -54,7 +54,9 @@ class AuthTestingContextV2(BaseModel):
     tools_used: list[str] = []
 
 
-def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTestingContextV2:  # noqa: ARG001 - retained for signature/API compatibility
+def build_auth_testing_context(
+    scenario: str, findings: list[dict]  # noqa: ARG001 - retained for signature/API compatibility
+) -> AuthTestingContextV2:
     context = AuthTestingContextV2(
         testing_methodology="OWASP WSTG + PTES",
         tools_used=["nuclei", "sqlmap", "dalfox"],
@@ -85,7 +87,9 @@ def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTesti
     return context
 
 
-def build_idor_tests(endpoint: str, target_field: str) -> dict:  # noqa: ARG001 - retained for signature/API compatibility
+def build_idor_tests(
+    endpoint: str, target_field: str  # noqa: ARG001 - retained for signature/API compatibility
+) -> dict:
     return {
         "endpoint": endpoint,
         "original_value": "user-001",

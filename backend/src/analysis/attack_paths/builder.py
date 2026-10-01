@@ -87,7 +87,7 @@ class RiskScore:
 
 def build_attack_path(
     finding: dict[str, Any],
-    knowledge_graph_nodes: list[dict[str, Any]] | None = None,  # noqa: ARG001 - retained for signature/API compatibility
+    knowledge_graph_nodes: list[dict[str, Any]] | None = None,  # noqa: ARG001
 ) -> AttackPath:
     """Build attack path from finding + knowledge graph context.
 
@@ -118,9 +118,11 @@ def build_attack_path(
         path.nodes.append(
             PathNode(
                 id="n2",
-                node_type=PathNodeType.AUTH_BYPASS
-                if "auth" in str(finding.get("cwe", "")).lower()
-                else PathNodeType.DATA_FLOW,
+                node_type=(
+                    PathNodeType.AUTH_BYPASS
+                    if "auth" in str(finding.get("cwe", "")).lower()
+                    else PathNodeType.DATA_FLOW
+                ),
                 label=f"{finding.get('cwe', '')}: {sink[:80]}",
                 file_path=finding.get("file_path", ""),
                 line_start=(finding.get("line_start", 0) or 0) + 1,
@@ -292,7 +294,10 @@ def _estimate_impact(finding: dict[str, Any]) -> float:
     return sev_scores.get(severity, 5.0)
 
 
-def _calculate_business_impact(finding: dict[str, Any], ctx: dict[str, Any]) -> float:  # noqa: ARG001 - retained for signature/API compatibility
+def _calculate_business_impact(
+    finding: dict[str, Any],  # noqa: ARG001 - retained for signature/API compatibility
+    ctx: dict[str, Any],
+) -> float:
     data_classification = ctx.get("data_classification", "internal")
     exposure = ctx.get("exposure", "internal")
     user_base = ctx.get("user_base", 1.0)

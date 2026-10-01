@@ -168,9 +168,11 @@ async def run_passive_subdomain_sandbox_bundle(
                 password_audit_opt_in=False,
                 timeout_sec=t_out,
                 scan_options=options if isinstance(options, dict) else None,
-                engagement_id=str(options.get("engagement_id")).strip()
-                if isinstance(options, dict) and options.get("engagement_id")
-                else None,
+                engagement_id=(
+                    str(options.get("engagement_id")).strip()
+                    if isinstance(options, dict) and options.get("engagement_id")
+                    else None
+                ),
             )
         except Exception:
             logger.warning(

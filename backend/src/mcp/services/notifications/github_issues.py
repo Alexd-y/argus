@@ -99,7 +99,12 @@ class GitHubIssuesNotifier(NotifierBase):
             return self._explicit_repo
         return os.environ.get(GITHUB_REPOSITORY_ENV, "").strip()
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
+    def _describe_target(
+        self,
+        *,
+        event: NotificationEvent,  # noqa: ARG002 - NotificationChannel interface signature
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
+    ) -> str:
         repo = self._resolve_repo()
         if not repo:
             raise _AdapterDisabled(reason="missing_secret", target_redacted=hash_target(""))

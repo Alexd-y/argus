@@ -62,7 +62,12 @@ class ScopeValidator:
             is_in_scope=False, reason=f"No matching include rule for: {value}"
         )
 
-    def _matches_rule(self, value: str, value_type: str, rule: ScopeRule) -> bool:  # noqa: ARG002 - retained for signature/API compatibility
+    def _matches_rule(
+        self,
+        value: str,
+        value_type: str,  # noqa: ARG002 - retained for signature/API compatibility
+        rule: ScopeRule,
+    ) -> bool:
         """Check if value matches a specific scope rule."""
         if rule.value_type == "domain":
             return self._match_domain(value, rule.pattern)

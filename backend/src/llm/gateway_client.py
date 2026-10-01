@@ -101,9 +101,11 @@ class GatewayClient:
                 pass
             raise GatewayClientError(
                 detail.get("code") if isinstance(detail, dict) else "llm_policy_denied",
-                detail.get("message")
-                if isinstance(detail, dict)
-                else "LLM request denied by policy",
+                (
+                    detail.get("message")
+                    if isinstance(detail, dict)
+                    else "LLM request denied by policy"
+                ),
                 detail.get("details") if isinstance(detail, dict) else {},
             )
 

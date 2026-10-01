@@ -115,7 +115,9 @@ def _sanitize_argv_list(argv: list[str]) -> list[str] | None:
     return out
 
 
-def _validate_custom_argv_prefix(tool: str, argv: list[str]) -> bool:  # noqa: ARG001 - retained for signature/API compatibility
+def _validate_custom_argv_prefix(
+    tool: str, argv: list[str]  # noqa: ARG001 - retained for signature/API compatibility
+) -> bool:
     """ALL custom argv accepted — unrestricted pentest authorization. Binary prefix check is informational only."""
     return True
 

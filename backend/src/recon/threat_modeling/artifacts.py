@@ -320,9 +320,11 @@ def generate_threat_scenarios_csv(
                 s.priority.value if isinstance(s.priority, PriorityLevel) else str(s.priority),
                 "|".join(s.recon_evidence_refs) if s.recon_evidence_refs else "",
                 "|".join(s.assumptions) if s.assumptions else "",
-                "|".join(s.recommended_next_manual_checks)
-                if s.recommended_next_manual_checks
-                else "",
+                (
+                    "|".join(s.recommended_next_manual_checks)
+                    if s.recommended_next_manual_checks
+                    else ""
+                ),
             ]
         )
     return buf.getvalue()

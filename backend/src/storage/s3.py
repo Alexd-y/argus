@@ -33,7 +33,8 @@ _client = None
 
 def _invalidate_s3_client_after_empty_put(body_len: int) -> None:
     """Сбросить клиент после PUT с пустым телом: MinIO + urllib3 дают битое соединение в пуле
-    (HeaderParsingError / MissingHeaderBodySeparatorDefect на следующем ответе). См. minio#6540, boto3#3757."""
+    (HeaderParsingError / MissingHeaderBodySeparatorDefect на следующем ответе). См. minio#6540, boto3#3757.
+    """
     global _client
     if body_len == 0:
         _client = None

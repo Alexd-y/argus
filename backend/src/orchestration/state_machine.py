@@ -1237,9 +1237,11 @@ async def _build_phase_input(
         input_data = {
             "target": target,
             "options": options,
-            "source_analysis": ctx.source_out.model_dump()
-            if ctx.source_out and not ctx.source_out.skipped
-            else None,
+            "source_analysis": (
+                ctx.source_out.model_dump()
+                if ctx.source_out and not ctx.source_out.skipped
+                else None
+            ),
         }
     elif phase == ScanPhase.QUICK_FUZZ:
         input_data = {
@@ -1250,9 +1252,11 @@ async def _build_phase_input(
     elif phase == ScanPhase.THREAT_MODELING:
         input_data = {
             "assets": ctx.recon_out.assets if ctx.recon_out else [],
-            "source_analysis": ctx.source_out.model_dump()
-            if ctx.source_out and not ctx.source_out.skipped
-            else None,
+            "source_analysis": (
+                ctx.source_out.model_dump()
+                if ctx.source_out and not ctx.source_out.skipped
+                else None
+            ),
             "quick_fuzz_findings": ctx.quick_fuzz_out.findings if ctx.quick_fuzz_out else [],
             "quick_fuzz_candidates": ctx.quick_fuzz_out.candidates if ctx.quick_fuzz_out else [],
         }
@@ -1291,12 +1295,14 @@ async def _build_phase_input(
         input_data = {
             "exploits": ctx.exploit_out.exploits if ctx.exploit_out else [],
             "evidence": ctx.exploit_out.evidence if ctx.exploit_out else [],
-            "evidence_tiers": {
-                k: int(v) if hasattr(v, "__int__") else v
-                for k, v in (ctx.exploit_out.evidence_tiers or {}).items()
-            }
-            if ctx.exploit_out
-            else {},
+            "evidence_tiers": (
+                {
+                    k: int(v) if hasattr(v, "__int__") else v
+                    for k, v in (ctx.exploit_out.evidence_tiers or {}).items()
+                }
+                if ctx.exploit_out
+                else {}
+            ),
         }
     elif phase == ScanPhase.REPORTING:
         input_data = {
@@ -2468,7 +2474,11 @@ async def _ensure_cairn_engine_project(
     except Exception as exc:  # noqa: BLE001 — Cairn engine must never break a scan
         logger.warning(
             "cairn_engine_project_create_failed",
-            extra={"event": "cairn_engine_project_create_failed", "scan_id": scan_id, "error": str(exc)},
+            extra={
+                "event": "cairn_engine_project_create_failed",
+                "scan_id": scan_id,
+                "error": str(exc),
+            },
         )
         return None
 

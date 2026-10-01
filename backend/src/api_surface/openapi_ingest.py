@@ -440,9 +440,11 @@ def ingest_openapi(
             source_ref = f"{method} {path}"
             path_params = _parse_parameters(
                 document,
-                operation.get("parameters")
-                if isinstance(operation.get("parameters"), list)
-                else [],
+                (
+                    operation.get("parameters")
+                    if isinstance(operation.get("parameters"), list)
+                    else []
+                ),
                 mode=resolved_mode,
                 warnings=warnings,
                 source_ref=source_ref,
@@ -486,14 +488,18 @@ def ingest_openapi(
             id=document_id or str(uuid4()),
             tenant_id=tenant_id,
             asset_id=asset_id,
-            title=str(document.get("info", {}).get("title"))
-            if isinstance(document.get("info"), dict)
-            and isinstance(document["info"].get("title"), str)
-            else None,
-            version=str(document.get("info", {}).get("version"))
-            if isinstance(document.get("info"), dict)
-            and isinstance(document["info"].get("version"), str)
-            else None,
+            title=(
+                str(document.get("info", {}).get("title"))
+                if isinstance(document.get("info"), dict)
+                and isinstance(document["info"].get("title"), str)
+                else None
+            ),
+            version=(
+                str(document.get("info", {}).get("version"))
+                if isinstance(document.get("info"), dict)
+                and isinstance(document["info"].get("version"), str)
+                else None
+            ),
             spec_version=spec_version,
             servers=servers,
             endpoints=tuple(endpoints),

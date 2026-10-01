@@ -56,11 +56,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {"en": _EN}
 SUPPORTED_LANGUAGES: frozenset[str] = frozenset({"en"})
 
 
-def get_translations(language: str = "en") -> dict[str, str]:  # noqa: ARG001 - reserved for future locale support; API compatibility
+def get_translations(
+    language: str = "en",  # noqa: ARG001 - reserved for future locale support; API compatibility
+) -> dict[str, str]:
     """Return the English translation dict. ``language`` param kept for backward compat."""
     return _EN
 
 
-def t(key: str, language: str = "en") -> str:  # noqa: ARG001 - reserved for future locale support; API compatibility
+def t(
+    key: str,
+    language: str = "en",  # noqa: ARG001 - reserved for future locale support; API compatibility
+) -> str:
     """Look up a single translation key. Always returns English. Falls back to the key itself."""
     return _EN.get(key, key)

@@ -195,8 +195,7 @@ _SECRET_PATTERNS: Final[tuple[tuple[str, Pattern[str], str], ...]] = (
     (
         "azure_kv",
         re.compile(
-            r"(?i)\b(azure[_\-][A-Za-z0-9_\-]*(?:secret|key|token))\s*[=:]\s*"
-            r"([^\s&'\"\[]{8,})"
+            r"(?i)\b(azure[_\-][A-Za-z0-9_\-]*(?:secret|key|token))\s*[=:]\s*" r"([^\s&'\"\[]{8,})"
         ),
         rf"\1={REDACTED_AZURE_KEY}",
     ),
@@ -251,8 +250,7 @@ _SECRET_PATTERNS: Final[tuple[tuple[str, Pattern[str], str], ...]] = (
     (
         "nt_lm_hash_kv",
         re.compile(
-            r"(?i)\b(nt[_\-]?hash|lm[_\-]?hash|nthash|lmhash)\s*[=:]\s*"
-            r"([a-fA-F0-9]{32})"
+            r"(?i)\b(nt[_\-]?hash|lm[_\-]?hash|nthash|lmhash)\s*[=:]\s*" r"([a-fA-F0-9]{32})"
         ),
         rf"\1={REDACTED_NT_HASH}",
     ),

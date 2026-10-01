@@ -103,7 +103,12 @@ class _RateBucket:
 _rate_limit_map: OrderedDict[str, _RateBucket] = OrderedDict()
 
 
-def _check_rate_limit(ip: str, key: str, capacity: int = 5, window: float = 300.0) -> None:  # noqa: ARG001 - FastAPI route signature; param bound by the framework
+def _check_rate_limit(
+    ip: str,  # noqa: ARG001 - FastAPI route signature; param bound by the framework
+    key: str,
+    capacity: int = 5,
+    window: float = 300.0,
+) -> None:
     now = time.monotonic()
     bucket = _rate_limit_map.get(key)
     if bucket is None:

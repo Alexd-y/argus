@@ -251,9 +251,9 @@ def build_scan_artifacts_section_context(
                 "file_name": file_name,
                 "key": key,
                 "size": int(row.get("size") or 0),
-                "last_modified": format_created_at_iso_z(lm)
-                if lm is not None
-                else format_created_at_iso_z(None),
+                "last_modified": (
+                    format_created_at_iso_z(lm) if lm is not None else format_created_at_iso_z(None)
+                ),
                 "download_url": get_presigned_url_by_key(key),
             }
         )
@@ -912,9 +912,9 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             "found": rob.found,
             "disallowed_paths_sample": (rob.disallowed_paths_sample or [])[:12],
             "sitemap_hints": (rob.sitemap_hints or [])[:8],
-            "raw_excerpt": _truncate_report_text(rob.raw_excerpt or "", 600)
-            if rob.raw_excerpt
-            else None,
+            "raw_excerpt": (
+                _truncate_report_text(rob.raw_excerpt or "", 600) if rob.raw_excerpt else None
+            ),
         },
         "sitemap": {
             "found": sm.found,
@@ -1048,31 +1048,37 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
                 "finding_id": _truncate_report_text(x.finding_id or "", 256),
                 "title": _truncate_report_text(x.title or "", 300),
                 "parameter": _truncate_report_text(x.parameter or "", 256) if x.parameter else None,
-                "payload_entered": _truncate_report_text(
-                    x.payload_entered or "", _VALHALLA_AI_POC_MAX_LEN
-                )
-                if x.payload_entered
-                else None,
-                "payload_reflected": _truncate_report_text(
-                    x.payload_reflected or "", _VALHALLA_AI_POC_MAX_LEN
-                )
-                if x.payload_reflected
-                else None,
-                "payload_used": _truncate_report_text(
-                    x.payload_used or "", _VALHALLA_AI_POC_MAX_LEN
-                )
-                if x.payload_used
-                else None,
-                "reflection_context": _truncate_report_text(x.reflection_context or "", 400)
-                if x.reflection_context
-                else None,
-                "verification_method": _truncate_report_text(x.verification_method or "", 128)
-                if x.verification_method
-                else None,
+                "payload_entered": (
+                    _truncate_report_text(x.payload_entered or "", _VALHALLA_AI_POC_MAX_LEN)
+                    if x.payload_entered
+                    else None
+                ),
+                "payload_reflected": (
+                    _truncate_report_text(x.payload_reflected or "", _VALHALLA_AI_POC_MAX_LEN)
+                    if x.payload_reflected
+                    else None
+                ),
+                "payload_used": (
+                    _truncate_report_text(x.payload_used or "", _VALHALLA_AI_POC_MAX_LEN)
+                    if x.payload_used
+                    else None
+                ),
+                "reflection_context": (
+                    _truncate_report_text(x.reflection_context or "", 400)
+                    if x.reflection_context
+                    else None
+                ),
+                "verification_method": (
+                    _truncate_report_text(x.verification_method or "", 128)
+                    if x.verification_method
+                    else None
+                ),
                 "verified_via_browser": x.verified_via_browser,
-                "browser_alert_text": _truncate_report_text(x.browser_alert_text or "", 400)
-                if x.browser_alert_text
-                else None,
+                "browser_alert_text": (
+                    _truncate_report_text(x.browser_alert_text or "", 400)
+                    if x.browser_alert_text
+                    else None
+                ),
                 "artifact_keys": [
                     _truncate_report_text(k, 512) for k in (x.artifact_keys or [])[:16] if k
                 ],

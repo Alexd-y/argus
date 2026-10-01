@@ -82,8 +82,7 @@ _DOMAIN_RE: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 _ZIP_MARKER_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?:Compressing output into|Wrote)\s+"
-    r"(?P<zip>(?:[A-Za-z]:\\|/)?[^\s\"']+\.zip)",
+    r"(?:Compressing output into|Wrote)\s+" r"(?P<zip>(?:[A-Za-z]:\\|/)?[^\s\"']+\.zip)",
     re.IGNORECASE,
 )
 _COUNT_RE: Final[re.Pattern[str]] = re.compile(

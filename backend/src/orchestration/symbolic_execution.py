@@ -146,7 +146,9 @@ def generate_angr_stub(
     )
 
 
-def _parse_angr_output(stdout: str, stderr: str) -> SymbolicExecutionResult:  # noqa: ARG001 - retained for signature/API compatibility
+def _parse_angr_output(
+    stdout: str, stderr: str  # noqa: ARG001 - retained for signature/API compatibility
+) -> SymbolicExecutionResult:
     """Parse angr script output for vulnerability evidence."""
     vulnerable = False
     input_values: dict[str, Any] = {}

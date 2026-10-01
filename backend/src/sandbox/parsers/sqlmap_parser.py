@@ -173,8 +173,7 @@ _TESTING_TARGET_RE: Final[re.Pattern[str]] = re.compile(
 # ``the back-end DBMS is MySQL`` (post-detection) and
 # ``[CRITICAL] back-end DBMS is MySQL`` variants.
 _DBMS_RE: Final[re.Pattern[str]] = re.compile(
-    rf"{_LEADING}{_TS_PREFIX}{_LEVEL_PREFIX}(?:the\s+)?"
-    r"back-end DBMS is\s+(?P<dbms>.+?)\s*$",
+    rf"{_LEADING}{_TS_PREFIX}{_LEVEL_PREFIX}(?:the\s+)?" r"back-end DBMS is\s+(?P<dbms>.+?)\s*$",
     re.IGNORECASE,
 )
 

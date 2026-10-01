@@ -116,7 +116,9 @@ async def _run_job(job_id: str) -> dict[str, Any]:
 
 
 @app.task(name="argus.recon_job", bind=True, max_retries=3)
-def run_recon_job(self, job_id: str) -> dict:  # noqa: ARG001 - Celery bound-task signature (bind=True)
+def run_recon_job(
+    self, job_id: str  # noqa: ARG001 - Celery bound-task signature (bind=True)
+) -> dict:
     """Celery task entry point for recon job execution."""
     logger.info("Recon job task received", extra={"job_id": job_id})
     return asyncio.run(_run_job(job_id))

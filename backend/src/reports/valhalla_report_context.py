@@ -2612,13 +2612,15 @@ def _tech_rows_from_recon(
                 cat = (
                     "web_server"
                     if it in ("platform", "server", "web_server")
-                    else "cms"
-                    if it == "cms"
-                    else "framework"
-                    if "framework" in it
-                    else "javascript"
-                    if "js" in it or "javascript" in it
-                    else "technology"
+                    else (
+                        "cms"
+                        if it == "cms"
+                        else (
+                            "framework"
+                            if "framework" in it
+                            else "javascript" if "js" in it or "javascript" in it else "technology"
+                        )
+                    )
                 )
                 val = str(ent.get("value") or "").strip()
                 host = str(ent.get("host") or "").strip()
@@ -4697,9 +4699,9 @@ def _merge_outdated_rows(
                 merged[key] = OutdatedComponentRow(
                     component=cur.component,
                     installed_version=cur.installed_version or r.installed_version,
-                    latest_stable=cur.latest_stable
-                    if (cur.latest_stable or "") != "—"
-                    else r.latest_stable,
+                    latest_stable=(
+                        cur.latest_stable if (cur.latest_stable or "") != "—" else r.latest_stable
+                    ),
                     support_status=cur.support_status or r.support_status,
                     cves=cves,
                     source=cur.source or r.source,
@@ -7381,13 +7383,13 @@ def build_valhalla_report_context(
         ),
         remediation_matrix=build_remediation_matrix_rows(
             finding_dicts,
-            tech_stack_structured=structured.model_dump()
-            if hasattr(structured, "model_dump")
-            else {},
+            tech_stack_structured=(
+                structured.model_dump() if hasattr(structured, "model_dump") else {}
+            ),
             ssl_tls_analysis=ssl_out.model_dump() if hasattr(ssl_out, "model_dump") else {},
-            security_headers_analysis=sec_hdr.model_dump()
-            if hasattr(sec_hdr, "model_dump")
-            else {},
+            security_headers_analysis=(
+                sec_hdr.model_dump() if hasattr(sec_hdr, "model_dump") else {}
+            ),
         ),
         ownership_evidence=build_ownership_evidence(
             target_url=target_guess,
@@ -7484,9 +7486,11 @@ def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str,
         "gate_counts": gate_counts,
         "critical_high": critical_high_gates,
         "all_critical_high_validated": validated_required,
-        "score": 100
-        if validated_required
-        else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
+        "score": (
+            100
+            if validated_required
+            else sum(gate_counts.get(g, 0) for g in ("validated", "observed"))
+        ),
     }
 
 
@@ -7534,9 +7538,9 @@ def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]
                 "finding_id": fid[:64],
                 "title": title[:256],
                 "severity": severity,
-                "evidence_classification": classification.upper()
-                if classification
-                else "INCONCLUSIVE",
+                "evidence_classification": (
+                    classification.upper() if classification else "INCONCLUSIVE"
+                ),
                 "evidence_quality": quality,
                 "confidence": confidence,
                 "gap_type": gap_type,
@@ -7771,9 +7775,11 @@ def build_wstg_gap_closure_commands(
                 "test_name": test_name,
                 "category": category,
                 "status": status,
-                "current_tools": ", ".join(existing_tools)
-                if isinstance(existing_tools, list)
-                else str(existing_tools),
+                "current_tools": (
+                    ", ".join(existing_tools)
+                    if isinstance(existing_tools, list)
+                    else str(existing_tools)
+                ),
                 "recommended_command": cmd,
                 "expected_output": "Evidence that test was performed with tool output or manual validation",
                 "priority": "HIGH" if status == "not_covered" else "MEDIUM",
@@ -7782,7 +7788,11 @@ def build_wstg_gap_closure_commands(
     return commands[:64]
 
 
-def _wstg_command_for_test(test_id: str, _name: str, category: str) -> str:  # noqa: ARG001 - retained for signature/API compatibility
+def _wstg_command_for_test(
+    test_id: str,
+    _name: str,
+    category: str,  # noqa: ARG001 - retained for signature/API compatibility
+) -> str:
     tid = test_id.upper()
     if tid.startswith("WSTG-INFO"):
         return "subfinder -d TARGET; amass enum -d TARGET; whatweb TARGET_URL; curl -sS TARGET_URL/robots.txt"
@@ -7845,9 +7855,9 @@ def build_credential_exposure_from_hibp(
                     "sample_type": str(b.get("sample_type", "password_sample")),
                     "hibp_range_prefix": str(b.get("prefix", "") or "")[:5],
                     "pwned_count": int(b.get("pwned_count", b.get("count", 0)) or 0),
-                    "matched": "yes"
-                    if int(b.get("pwned_count", b.get("count", 0)) or 0) > 0
-                    else "no",
+                    "matched": (
+                        "yes" if int(b.get("pwned_count", b.get("count", 0)) or 0) > 0 else "no"
+                    ),
                     "account_or_email": str(
                         b.get("email", b.get("account", "masked@***")) or "masked@***"
                     ),

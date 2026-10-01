@@ -272,7 +272,11 @@ def _iter_results_array(
             yield normalised
 
 
-def _iter_legacy_envelope(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:  # noqa: ARG001 - retained for signature/API compatibility
+def _iter_legacy_envelope(
+    payload: dict[str, Any],
+    *,
+    tool_id: str,  # noqa: ARG001 - retained for signature/API compatibility
+) -> Iterable[dict[str, Any]]:
     cloud = _string_field(payload, "cloud")
     regions = payload.get("regions")
     if not isinstance(regions, dict):

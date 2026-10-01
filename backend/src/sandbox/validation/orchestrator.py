@@ -174,7 +174,9 @@ class ValidationOrchestrator:
 
         return await asyncio.gather(*[_validate_one(f) for f in findings])
 
-    async def _provision_environment(self, config: ValidationConfig) -> dict[str, Any]:  # noqa: ARG002 - retained for signature/API compatibility
+    async def _provision_environment(
+        self, config: ValidationConfig  # noqa: ARG002 - retained for signature/API compatibility
+    ) -> dict[str, Any]:
         """Provision isolated environment (container or VM)."""
         env_id = str(uuid.uuid4())[:8]
         return {

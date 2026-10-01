@@ -67,8 +67,7 @@ _RELAY_OK_RE: Final[re.Pattern[str]] = re.compile(
 # NTDS / SAM dump line:
 #   ``Administrator:500:LM:NT:::``
 _NTDS_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?P<user>[^:\s]+):(?P<rid>\d+):"
-    r"(?P<lm>[a-fA-F0-9]{32}):(?P<nt>[a-fA-F0-9]{32}):::\s*$"
+    r"^(?P<user>[^:\s]+):(?P<rid>\d+):" r"(?P<lm>[a-fA-F0-9]{32}):(?P<nt>[a-fA-F0-9]{32}):::\s*$"
 )
 
 

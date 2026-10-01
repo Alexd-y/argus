@@ -621,9 +621,9 @@ def build_report_data_from_scan_findings(
                 exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
                 exploit_summary=getattr(f, "exploit_summary", None),
                 owasp_category=parse_owasp_category(f.owasp_category),
-                proof_of_concept=f.proof_of_concept
-                if isinstance(f.proof_of_concept, dict)
-                else None,
+                proof_of_concept=(
+                    f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None
+                ),
                 confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
                 validation_status=_effective_validation_status(
                     f,
@@ -1298,9 +1298,11 @@ def _finding_to_dict(
         "exact_remediation": _safe_attr(
             f,
             "fix_action",
-            getattr(f, "remediation", None)
-            if isinstance(getattr(f, "remediation", None), str)
-            else "",
+            (
+                getattr(f, "remediation", None)
+                if isinstance(getattr(f, "remediation", None), str)
+                else ""
+            ),
         )
         or "",
         "verification_command": _safe_attr(f, "verification_command") or "",
@@ -1663,9 +1665,9 @@ def build_valhalla_report_payload(
         "evidence_inventory": _canonical_json_nested(evidence_inv),
         "tool_health_summary": _canonical_json_nested(tool_health),
         "port_exposure": _canonical_json_nested(port_exposure),
-        "credential_exposure": _canonical_json_nested(credential_exposure)
-        if credential_exposure
-        else None,
+        "credential_exposure": (
+            _canonical_json_nested(credential_exposure) if credential_exposure else None
+        ),
         "auth_testing": _canonical_json_nested(auth_testing) if auth_testing else None,
         "wstg_coverage": _canonical_json_nested(wstg) if wstg else None,
         "threat_modeling_ref": _canonical_json_nested(threat_modeling_ref),
@@ -1739,9 +1741,11 @@ def _build_valhalla_report_context(
                 "gate_counts": gate_counts,
                 "critical_high": critical_high_gates,
                 "all_critical_high_validated": all_validated,
-                "score": 100
-                if all_validated
-                else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
+                "score": (
+                    100
+                    if all_validated
+                    else sum(gate_counts.get(g, 0) for g in ("validated", "observed"))
+                ),
             },
             "xss_structured": [
                 r.model_dump(mode="json")
@@ -1834,10 +1838,7 @@ _REPORT_XML_NS = "urn:argus:report:v1"
 def _xml_escape(text: str) -> str:
     """Escape XML special characters (generation only; no parser involved)."""
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -1874,7 +1875,9 @@ def generate_xml(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
     """
     payload = json.loads(generate_json(data, jinja_context=jinja_context))
     body = "".join(_value_to_xml(str(k), v) for k, v in payload.items())
-    doc = f'<?xml version="1.0" encoding="UTF-8"?>\n<report xmlns="{_REPORT_XML_NS}">{body}</report>'
+    doc = (
+        f'<?xml version="1.0" encoding="UTF-8"?>\n<report xmlns="{_REPORT_XML_NS}">{body}</report>'
+    )
     return doc.encode("utf-8")
 
 
@@ -2106,36 +2109,42 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
         ],
         "infra_recommendations": _canonical_json_nested(
             generate_infra_recommendations(
-                tech_stack=jinja_context.get(
-                    "valhalla_context", None
-                ).tech_stack_structured.model_dump()
-                if isinstance(jinja_context, dict)
-                and hasattr(jinja_context.get("valhalla_context", None), "tech_stack_structured")
-                else {},
+                tech_stack=(
+                    jinja_context.get("valhalla_context", None).tech_stack_structured.model_dump()
+                    if isinstance(jinja_context, dict)
+                    and hasattr(
+                        jinja_context.get("valhalla_context", None), "tech_stack_structured"
+                    )
+                    else {}
+                ),
                 findings=[_finding_to_dict(f) for f in findings_ordered],
-                ssl_tls=jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
-                if isinstance(jinja_context, dict)
-                and hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
-                else {},
-                security_headers=jinja_context.get(
-                    "valhalla_context", None
-                ).security_headers_analysis.model_dump()
-                if isinstance(jinja_context, dict)
-                and hasattr(
-                    jinja_context.get("valhalla_context", None),
-                    "security_headers_analysis",
-                )
-                else {},
+                ssl_tls=(
+                    jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
+                    if isinstance(jinja_context, dict)
+                    and hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
+                    else {}
+                ),
+                security_headers=(
+                    jinja_context.get(
+                        "valhalla_context", None
+                    ).security_headers_analysis.model_dump()
+                    if isinstance(jinja_context, dict)
+                    and hasattr(
+                        jinja_context.get("valhalla_context", None),
+                        "security_headers_analysis",
+                    )
+                    else {}
+                ),
             )
         ),
         "truthfulness_metrics": build_truthfulness_metrics(
             findings=[_finding_to_dict(f) for f in findings_ordered],
             ai_sections=ai_sections or {},
-            coverage_pct=float(
-                (jinja_context.get("wstg_coverage") or {}).get("coverage_percentage", 0) or 0
-            )
-            if isinstance(jinja_context, dict)
-            else 0.0,
+            coverage_pct=(
+                float((jinja_context.get("wstg_coverage") or {}).get("coverage_percentage", 0) or 0)
+                if isinstance(jinja_context, dict)
+                else 0.0
+            ),
         ),
         "timeline": timeline,
         "phase_outputs": phase_outputs,
@@ -2423,9 +2432,11 @@ def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
             _safe_attr(
                 f,
                 "fix_action",
-                getattr(f, "remediation", None)
-                if isinstance(getattr(f, "remediation", None), str)
-                else "",
+                (
+                    getattr(f, "remediation", None)
+                    if isinstance(getattr(f, "remediation", None), str)
+                    else ""
+                ),
             )
             or "",
             _safe_attr(f, "verification_command") or "",
@@ -2570,11 +2581,7 @@ def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
         prio = (
             "CRITICAL"
             if sev == "critical"
-            else "HIGH"
-            if sev == "high"
-            else "MEDIUM"
-            if sev == "medium"
-            else "LOW"
+            else "HIGH" if sev == "high" else "MEDIUM" if sev == "medium" else "LOW"
         )
         writer.writerow(
             [
@@ -2594,9 +2601,11 @@ def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
                 _safe_attr(
                     f,
                     "fix_action",
-                    getattr(f, "remediation", None)
-                    if isinstance(getattr(f, "remediation", None), str)
-                    else "",
+                    (
+                        getattr(f, "remediation", None)
+                        if isinstance(getattr(f, "remediation", None), str)
+                        else ""
+                    ),
                 )
                 or "NOT_ASSESSED",
                 prio,
@@ -2613,7 +2622,7 @@ def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
 def generate_technologies_csv(
     data: ReportData,
     *,
-    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001
 ) -> bytes:
     """Generate technologies.csv — verified technology stack with detection sources."""
     buf = io.StringIO()
@@ -2669,7 +2678,7 @@ def generate_technologies_csv(
 def generate_outdated_components_csv(
     data: ReportData,
     *,
-    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001
 ) -> bytes:
     """Generate outdated_components.csv — EOL/CVE risk for detected components."""
     buf = io.StringIO()
@@ -2734,7 +2743,7 @@ def generate_outdated_components_csv(
 def generate_tool_health_csv(
     data: ReportData,
     *,
-    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001
 ) -> bytes:
     """Generate tool_health.csv — per-capability execution status."""
     buf = io.StringIO()
@@ -2856,14 +2865,14 @@ def generate_export_validation_report(
             "cross_format_consistent": ok,
         },
         "section_status": {
-            "executive_summary": "PRESENT"
-            if (data.executive_summary or "").strip()
-            else "NOT_ASSESSED",
+            "executive_summary": (
+                "PRESENT" if (data.executive_summary or "").strip() else "NOT_ASSESSED"
+            ),
             "findings": "PRESENT" if findings_count > 0 else "NOT_ASSESSED",
             "remediation": "PRESENT" if data.remediation else "NOT_ASSESSED",
-            "technologies": "PRESENT"
-            if (getattr(data, "technologies", None) or [])
-            else "NOT_ASSESSED",
+            "technologies": (
+                "PRESENT" if (getattr(data, "technologies", None) or []) else "NOT_ASSESSED"
+            ),
             "timeline": "PRESENT" if (getattr(data, "timeline", None) or []) else "NOT_ASSESSED",
         },
         "evidence_integrity": {
@@ -2940,9 +2949,9 @@ def generate_html(
             tech_stack=vc if isinstance(vc, dict) else {},
             findings=findings,
             ssl_tls=vc.get("ssl_tls_analysis", {}) if isinstance(vc, dict) else {},
-            security_headers=vc.get("security_headers_analysis", {})
-            if isinstance(vc, dict)
-            else {},
+            security_headers=(
+                vc.get("security_headers_analysis", {}) if isinstance(vc, dict) else {}
+            ),
         )
 
     html_str = render_tier_report_html(eff_tier, ctx)

@@ -178,9 +178,11 @@ async def run_threat_modeling(
         version="1.0",
         commit_sha=commit_sha,
         assets=[
-            Asset(**a)
-            if isinstance(a, dict)
-            else Asset(name=str(a), asset_type="unknown", sensitivity="internal")
+            (
+                Asset(**a)
+                if isinstance(a, dict)
+                else Asset(name=str(a), asset_type="unknown", sensitivity="internal")
+            )
             for a in data.get("assets", [])
         ],
         attack_surfaces=[

@@ -90,8 +90,7 @@ _SHARE_HEADER_RE: Final[re.Pattern[str]] = re.compile(
 )
 # Three-column rows whose Type is one of the well-known SMB types.
 _SHARE_ROW_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?P<share>\S+)\s+(?P<type>Disk|IPC|Printer|Disk\(IPC\))\s*"
-    r"(?P<comment>.*?)\s*$",
+    r"^\s*(?P<share>\S+)\s+(?P<type>Disk|IPC|Printer|Disk\(IPC\))\s*" r"(?P<comment>.*?)\s*$",
     re.IGNORECASE,
 )
 _SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"^\s*---+\s+---+(?:\s+---+)?\s*$")

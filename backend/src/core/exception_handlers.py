@@ -93,7 +93,9 @@ async def contract_validation_exception_handler(
     )
 
 
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:  # noqa: ARG001 - retained for signature/API compatibility
+async def generic_exception_handler(
+    request: Request, exc: Exception  # noqa: ARG001 - retained for signature/API compatibility
+) -> JSONResponse:
     """Catch all unhandled exceptions; return generic message, log details internally."""
     logger.exception(
         "Unhandled exception",

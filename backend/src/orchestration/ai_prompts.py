@@ -644,9 +644,9 @@ async def ai_post_exploitation(
         )
         return PostExploitationOutput(
             lateral=data.get("lateral", []) if isinstance(data.get("lateral"), list) else [],
-            persistence=data.get("persistence", [])
-            if isinstance(data.get("persistence"), list)
-            else [],
+            persistence=(
+                data.get("persistence", []) if isinstance(data.get("persistence"), list) else []
+            ),
         )
     except Exception:
         logger.exception("post_exploitation_llm_failed")

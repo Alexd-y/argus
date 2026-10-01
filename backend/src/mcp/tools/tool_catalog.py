@@ -45,7 +45,9 @@ def register(mcp: FastMCP) -> None:
     async def tool_catalog_list(
         payload: ToolCatalogListInput, ctx: MCPContext | None = None
     ) -> ToolCatalogListResult:
-        async def body(call: MCPCallContext) -> ToolCatalogListResult:  # noqa: ARG001 - retained for signature/API compatibility
+        async def body(
+            call: MCPCallContext,  # noqa: ARG001 - retained for signature/API compatibility
+        ) -> ToolCatalogListResult:
             return svc_list_catalog(
                 category=payload.category,
                 risk_level=payload.risk_level,

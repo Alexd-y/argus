@@ -55,6 +55,7 @@ def _is_infra_5xx(poc) -> bool:  # noqa: ANN001 - ReportPoC | None
     resp = f"{poc.http_response or ''} {poc.observation or ''}"
     return any(m.group(1) in _INFRA_5XX_CODES for m in _INFRA_5XX_RE.finditer(resp))
 
+
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
     "exploitable": 0.98,

@@ -146,9 +146,9 @@ def build_finding_context(
         "finding": {
             "description": redact_text(str(finding.get("description") or "")),
             "expected_security_property": finding.get("expected_security_property"),
-            "root_cause_established": finding.get("root_cause")
-            if finding.get("root_cause")
-            else "unknown",
+            "root_cause_established": (
+                finding.get("root_cause") if finding.get("root_cause") else "unknown"
+            ),
             "demonstrated": finding.get("demonstrated"),
             "hypothesis": finding.get("hypothesis"),
             "existing_recommendations": _redact_obj(finding.get("existing_recommendations") or []),

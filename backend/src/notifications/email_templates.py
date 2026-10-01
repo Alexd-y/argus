@@ -30,7 +30,11 @@ def _wrap(title: str, body_html: str) -> str:
     )
 
 
-def report_ready_email(target: str, scan_id: str, view_url: str) -> tuple[str, str, str]:  # noqa: ARG001 - retained for signature/API compatibility
+def report_ready_email(
+    target: str,
+    scan_id: str,  # noqa: ARG001 - retained for signature/API compatibility
+    view_url: str,
+) -> tuple[str, str, str]:
     """Email sent when a scan report is ready to view."""
     safe_target = escape(target)
     safe_url = escape(view_url, quote=True)

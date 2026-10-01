@@ -529,12 +529,12 @@ def _auth_profile_from_scan_options(
         "password_field": password_field or "password",
         "username_present": bool(raw.get("username") or raw.get("email")),
         "password_present": bool(raw.get("password")),
-        "headers_present": sorted(str(k)[:80] for k in headers)
-        if isinstance(headers, dict)
-        else [],
-        "cookies_present": sorted(str(k)[:80] for k in cookies)
-        if isinstance(cookies, dict)
-        else [],
+        "headers_present": (
+            sorted(str(k)[:80] for k in headers) if isinstance(headers, dict) else []
+        ),
+        "cookies_present": (
+            sorted(str(k)[:80] for k in cookies) if isinstance(cookies, dict) else []
+        ),
     }
 
 
@@ -2795,9 +2795,9 @@ async def run_vuln_analysis(
                                 llm_output.findings.append(
                                     {
                                         "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
-                                        "severity": "high"
-                                        if _fc.crash_type == "crash"
-                                        else "medium",
+                                        "severity": (
+                                            "high" if _fc.crash_type == "crash" else "medium"
+                                        ),
                                         "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
                                         "source": "fuzzing",
                                         "cwe": "CWE-20",
@@ -3698,9 +3698,11 @@ async def run_reporting(
         post_exploitation=post_exploitation,
         report_context=report_context,
         scope_config=scope_config,
-        source_analysis=source_analysis.model_dump()
-        if hasattr(source_analysis, "model_dump")
-        else source_analysis,
+        source_analysis=(
+            source_analysis.model_dump()
+            if hasattr(source_analysis, "model_dump")
+            else source_analysis
+        ),
     )
     report_out = await ai_reporting(inp, scan_id=scan_id, scan_options=scan_options)
     report_out.coverage_results = snapshot_coverage_dicts(scan_id)

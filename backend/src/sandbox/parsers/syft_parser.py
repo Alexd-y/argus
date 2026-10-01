@@ -160,7 +160,9 @@ def _emit(
     return [finding for _, finding, _ in keyed]
 
 
-def _build_finding(record: dict[str, Any]) -> FindingDTO:  # noqa: ARG001 - retained for signature/API compatibility
+def _build_finding(
+    record: dict[str, Any],  # noqa: ARG001 - retained for signature/API compatibility
+) -> FindingDTO:
     return make_finding_dto(
         category=FindingCategory.SUPPLY_CHAIN,
         cwe=[1395],

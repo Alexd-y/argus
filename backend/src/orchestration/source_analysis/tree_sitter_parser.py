@@ -274,9 +274,11 @@ class TreeSitterParser:
                                     "line_number": node.start_point[0] + 1,
                                     "sink_type": sink_type,
                                     "code_snippet": text[:200],
-                                    "severity": "high"
-                                    if sink_type in ("sql_query", "command_exec")
-                                    else "medium",
+                                    "severity": (
+                                        "high"
+                                        if sink_type in ("sql_query", "command_exec")
+                                        else "medium"
+                                    ),
                                     "parser": "tree_sitter",
                                 }
                             )
@@ -401,9 +403,11 @@ class TreeSitterParser:
                                 "line_number": line_no,
                                 "sink_type": sink_type,
                                 "code_snippet": line.strip()[:200],
-                                "severity": "high"
-                                if sink_type in ("sql_query", "command_exec")
-                                else "medium",
+                                "severity": (
+                                    "high"
+                                    if sink_type in ("sql_query", "command_exec")
+                                    else "medium"
+                                ),
                             }
                         )
 

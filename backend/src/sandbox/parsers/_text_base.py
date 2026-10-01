@@ -126,14 +126,12 @@ _ADDRESS_RE: Final[re.Pattern[str]] = re.compile(
 # walking HAR files where the response/request headers can carry
 # session tokens.
 _COOKIE_HEADER_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?P<key>(?:^|\b)(?:Cookie|Set-Cookie)\s*[:=]\s*)"
-    r"(?P<value>[^\r\n]+)",
+    r"(?P<key>(?:^|\b)(?:Cookie|Set-Cookie)\s*[:=]\s*)" r"(?P<value>[^\r\n]+)",
     re.IGNORECASE,
 )
 # HTTP ``Authorization:`` headers + bare ``Bearer <token>`` strings.
 _AUTH_HEADER_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?P<key>(?:^|\b)Authorization\s*[:=]\s*)"
-    r"(?P<value>[^\r\n]+)",
+    r"(?P<key>(?:^|\b)Authorization\s*[:=]\s*)" r"(?P<value>[^\r\n]+)",
     re.IGNORECASE,
 )
 _BEARER_TOKEN_RE: Final[re.Pattern[str]] = re.compile(

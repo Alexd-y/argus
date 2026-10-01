@@ -133,12 +133,12 @@ async def get_admin_profile(
         role=admin_user.role,
         tenant_id=admin_user.tenant_id,
         mfa_enabled=admin_user.mfa_enabled,
-        created_at=format_created_at_iso_z(admin_user.created_at)
-        if admin_user.created_at
-        else None,
-        disabled_at=format_created_at_iso_z(admin_user.disabled_at)
-        if admin_user.disabled_at
-        else None,
+        created_at=(
+            format_created_at_iso_z(admin_user.created_at) if admin_user.created_at else None
+        ),
+        disabled_at=(
+            format_created_at_iso_z(admin_user.disabled_at) if admin_user.disabled_at else None
+        ),
     )
 
 
