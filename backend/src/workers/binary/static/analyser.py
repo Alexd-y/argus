@@ -263,7 +263,7 @@ async def analyse_binary(
         file_path=file_path,
         file_size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
-        md5=hashlib.md5(data).hexdigest(),
+        md5=hashlib.md5(data, usedforsecurity=False).hexdigest(),
         format=_detect_binary_format(data),
         strings_all_count=0,
     )

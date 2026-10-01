@@ -25,8 +25,8 @@ cd backend && ruff check src/ --fix
 # Format
 cd backend && black src/
 
-# Security scan
-cd backend && bandit -r src/
+# Security scan (SAST) — use the project config so the documented baseline applies
+cd backend && bandit -c pyproject.toml -r src/
 
 # DB migrations (apply)
 cd backend && alembic upgrade head

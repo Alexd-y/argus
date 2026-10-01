@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from typing import Any
 
+from defusedxml.ElementTree import fromstring as _safe_xml_fromstring
+
 from src.core.config import settings
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.recon.mcp.policy import evaluate_kal_mcp_policy
@@ -53,7 +55,7 @@ def parse_nmap_xml_stdout(xml_text: str) -> dict[str, Any]:
     if not raw:
         return {"hosts": [], "note": "empty_xml"}
     try:
-        root = ET.fromstring(raw)
+        root = _safe_xml_fromstring(raw)  # defusedxml: XXE-safe parse
     except ET.ParseError:
         return {"hosts": [], "note": "invalid_xml"}
 

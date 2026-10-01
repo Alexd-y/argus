@@ -4,6 +4,24 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### SAST — bandit baseline + fixes; `bandit -c pyproject.toml -r src/` clean (2026-10-02)
+
+- **Real fixes (gate kept live, not skipped):** `B324` md5→`usedforsecurity=False`
+  (binary ID); `B314` nmap/XML parsed via `defusedxml` (XXE-safe) in
+  `findings/normalizer.py` + `recon/nmap_recon_cycle.py`; `B306`
+  `tempfile.mktemp`→`NamedTemporaryFile` in `sandbox/playwright_adapter.py`;
+  `B310` https-only scheme guard before `urlopen` in `tools/wordlists/registry.py`;
+  `B704` inline `# nosec` — report Markdown is `nh3.clean()` allowlist-sanitized before `Markup()`.
+- **Documented baseline skips** in `backend/pyproject.toml` `[tool.bandit]` for
+  classes inherent to a pentest engine (`B501` TLS-verify-off scanners, `B603`/`B607`
+  tool orchestration, `B404`/`B405`/`B406` subprocess/xml imports, `B311` non-crypto
+  random, `B101`/`B110`/`B112`, `B108`/`B104`) and vetted false positives (`B105`/`B106`
+  are enum/constant/wordlist NAMES — real secrets covered by gitleaks).
+- **Gate command** documented as `bandit -c pyproject.toml -r src/` (bare invocation does
+  not read the config). Rationale in `docs/security.md` "SAST — Bandit baseline";
+  `CLAUDE.md` updated. Result: **0 findings** at the gate; targeted module tests + reports
+  suite green (345 passed).
+
 ### Valhalla report — four canonical formats hardened (formats prompt C-01…C-36) (2026-09-29)
 
 One document, four byte-stable projections, one blocking parity gate. Closes the format-layer

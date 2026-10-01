@@ -180,9 +180,12 @@ class PlaywrightAdapter:
         if not self._session.is_running:
             await self._start_session()
         script = self._generate_script(request)
-        script_path = Path(tempfile.mktemp(suffix=".mjs", prefix="argus_pw_"))
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".mjs", prefix="argus_pw_", delete=False, encoding="utf-8"
+        ) as _tf:
+            _tf.write(script)
+        script_path = Path(_tf.name)
         try:
-            script_path.write_text(script, encoding="utf-8")
             return await self._run_in_sandbox(script_path, request)
         finally:
             if script_path.exists():
@@ -284,9 +287,12 @@ class PlaywrightAdapter:
         )
 
         script = "\n".join(script_lines)
-        script_path = Path(tempfile.mktemp(suffix=".mjs", prefix="argus_login_"))
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".mjs", prefix="argus_login_", delete=False, encoding="utf-8"
+        ) as _tf:
+            _tf.write(script)
+        script_path = Path(_tf.name)
         try:
-            script_path.write_text(script, encoding="utf-8")
             return await self._run_in_sandbox(
                 script_path, BrowserRequest(action="login_flow", url=url)
             )

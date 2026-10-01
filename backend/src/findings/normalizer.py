@@ -47,6 +47,8 @@ from urllib.parse import urlparse
 from uuid import UUID, uuid5
 from xml.etree import ElementTree as ET
 
+from defusedxml.ElementTree import fromstring as _safe_xml_fromstring
+
 from src.core.observability import record_finding_emitted
 from src.findings.lifecycle_bridge import FindingIngestContext, FindingLifecycleBridge
 from src.pipeline.contracts.finding_dto import (
@@ -252,7 +254,7 @@ def _strategy_nmap_xml(raw: bytes, ctx: NormalizationContext) -> list[Normalized
         )
         return []
     try:
-        root = ET.fromstring(raw)
+        root = _safe_xml_fromstring(raw)  # defusedxml: XXE-safe parse
     except ET.ParseError:
         _logger.warning(
             "normalizer.nmap_xml.malformed",

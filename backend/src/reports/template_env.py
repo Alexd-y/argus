@@ -85,7 +85,7 @@ def _md_filter(text: str) -> Markup:
         link_rel="noopener noreferrer",
         url_schemes={"http", "https", "mailto"},
     )
-    return Markup(safe_html)
+    return Markup(safe_html)  # nosec B704 - safe_html is nh3.clean() allowlist-sanitized above
 
 
 _ENV_CACHE: dict[str, Environment] = {}

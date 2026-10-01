@@ -9,6 +9,34 @@ All API endpoints (except `/health` and `/metrics`) require authentication via:
 Tenant isolation enforced via JWT `tenant_id` claim. `X-Tenant-ID` header override
 is only permitted for API-key authenticated service accounts.
 
+## SAST — Bandit baseline
+
+Run the scan with the project config so the documented baseline applies:
+
+```bash
+cd backend && bandit -c pyproject.toml -r src/   # exit 0 == gate clean
+```
+
+The config lives in `backend/pyproject.toml` `[tool.bandit]`. Policy:
+
+- **Dangerous classes are FIXED in code and kept live (never skipped)** so a new
+  occurrence re-triggers the gate:
+  - `B324` — `hashlib.md5(..., usedforsecurity=False)` for non-crypto binary IDs.
+  - `B314` — nmap/XML output parsed via `defusedxml` (XXE-safe), not stdlib `ET.fromstring`.
+  - `B306` — generated sandbox scripts use `NamedTemporaryFile`, not `tempfile.mktemp`.
+  - `B310` — wordlist fetch validates an `https://` scheme before `urlopen` (inline `# nosec`).
+  - `B704` — report Markdown passes through `nh3.clean()` allowlist before `Markup()` (inline `# nosec`).
+- **Inherent-to-domain classes are skipped with rationale** (see the commented
+  `skips` list): `B501` (scanners must reach targets with invalid/self-signed TLS),
+  `B603`/`B607` (the engine orchestrates external tools via list-form argv, broker-gated),
+  `B404`/`B405`/`B406` (subprocess / xml imports; XML parsing is defused), `B311`
+  (non-crypto randomness), `B101`/`B110`/`B112` (asserts / best-effort try blocks),
+  `B108`/`B104` (container tmp paths / bind-all), and `B105`/`B106` (all current hits are
+  enum/constant/wordlist NAMES, not credentials — real secrets are covered by gitleaks).
+
+A bare `bandit -r src/` does **not** read the config and will re-report the baseline;
+always pass `-c pyproject.toml`.
+
 ## MCP Server Security
 
 - Auth: Bearer token via `MCP_AUTH_TOKEN` environment variable

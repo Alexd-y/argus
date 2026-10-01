@@ -164,9 +164,12 @@ class WordlistRegistry:
         if not entry.fetch_url:
             raise WordlistError(f"wordlist {entry.id!r} has no fetch_url")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        # nosec B310 — fetch_url is a catalog-controlled https raw file, not user input.
+        if not str(entry.fetch_url).lower().startswith("https://"):
+            raise WordlistError(f"wordlist {entry.id!r} fetch_url must be https")
         req = urllib.request.Request(entry.fetch_url, headers={"User-Agent": "argus-wordlist"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(  # nosec B310 - https-only scheme validated above
+            req, timeout=30
+        ) as resp:
             payload = resp.read(_MAX_FETCH_BYTES + 1)
         if len(payload) > _MAX_FETCH_BYTES:
             raise WordlistError(f"wordlist {entry.id!r} exceeds {_MAX_FETCH_BYTES} bytes cap")
