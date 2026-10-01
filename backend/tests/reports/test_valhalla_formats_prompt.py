@@ -377,7 +377,7 @@ def test_md_html_section_headers_equal():
         "md": render_markdown(doc).encode(),
         "html": render_html(doc).encode(),
     }
-    blockers = [b for b in content_parity_blockers({"json": b'{"findings":[]}', **canon})]
+    blockers = content_parity_blockers({"json": b'{"findings":[]}', **canon})
     assert not any("section headers differ" in b for b in blockers), blockers
 
 
@@ -424,3 +424,292 @@ def test_prompt_placeholder_leak_blocked():
     for leak in ("[Layer]", "[Config/file]", "[specific value]", "[curl command]"):
         assert find_prompt_artifacts(f"Remediation: {leak} must be set."), leak
     assert not find_prompt_artifacts("Enable HSTS on the edge and set a strict CSP.")
+
+
+# ===========================================================================
+# §12 — remaining named regression tests (close the explicit coverage gap).
+# The behaviour already exists (326 green reports tests); these pin the exact
+# C-xx acceptance names the prompt requires.
+# ===========================================================================
+
+
+def _multi_finding_doc():
+    """A two-finding snapshot used by the cross-format parity tests."""
+    return build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://alleksy.com",
+        findings=[
+            ReportFinding(
+                finding_id="F-1",
+                title="Missing HTTP security response headers",
+                severity="medium",
+                verification_status="suspected",
+                confidence=0.9,
+                cwe="CWE-693",
+                owasp_category="A05:2021",
+                cvss_score=5.3,
+                cvss_version="3.1",
+                cvss_vector="AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+            ),
+            ReportFinding(
+                finding_id="F-2",
+                title="Weak TLS configuration",
+                severity="low",
+                verification_status="observed",
+                confidence=0.6,
+                cwe="CWE-327",
+                owasp_category="A02:2021",
+            ),
+        ],
+        generated_at=_TS,
+    )
+
+
+# --------------------------------------------------------------------------- Phase 9 parity
+def test_finding_id_set_identical_across_formats():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    doc = _multi_finding_doc()
+    canon = {
+        "json": render_json(doc).encode(),
+        "md": render_markdown(doc).encode(),
+        "xml": render_xml(doc).encode(),
+        "html": render_html(doc).encode(),
+    }
+    blockers = content_parity_blockers(canon)
+    assert not any("finding_id set differs" in b for b in blockers), blockers
+    for fid in ("F-1", "F-2"):
+        for fmt in canon:
+            assert fid in canon[fmt].decode(), (fmt, fid)
+
+
+def test_owasp_category_identical_across_formats():
+    doc = _multi_finding_doc()
+    for fmt in (render_json(doc), render_markdown(doc), render_xml(doc)):
+        assert "A05:2021" in fmt
+        assert "A02:2021" in fmt
+    assert "A05:2021" in render_html(doc)
+
+
+def test_unconfirmed_count_parity():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    doc = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://alleksy.com",
+        findings=[ReportFinding(finding_id="F-1", title="x", severity="medium", confidence=0.9)],
+        unconfirmed_observations=[
+            ReportFinding(finding_id="U-1", title="probe", severity="info"),
+            ReportFinding(finding_id="U-2", title="probe2", severity="info"),
+        ],
+        generated_at=_TS,
+    )
+    md = render_markdown(doc)
+    assert "## Unconfirmed Observations (2)" in md
+    blockers = content_parity_blockers({"json": render_json(doc).encode(), "md": md.encode()})
+    assert not any("unconfirmed count" in b for b in blockers), blockers
+
+
+def test_exactly_one_pdf_in_bundle():
+    from src.reports.canonical_bundle import REQUIRED_CANONICAL_FORMATS, render_canonical_bundle
+
+    doc = _doc_with_finding()
+    bundle = render_canonical_bundle(
+        doc, include_pdf=True, html_to_pdf=lambda _html: b"%PDF-1.4 single"
+    )
+    assert sum(1 for a in bundle if a.format == "pdf") == 1  # C-01: one PDF, never two
+    assert set(REQUIRED_CANONICAL_FORMATS).issubset({a.format for a in bundle})
+
+
+# --------------------------------------------------------------------------- Phase 3 JSON
+def test_canonical_payload_byte_stable():
+    doc1 = _multi_finding_doc()
+    doc2 = _multi_finding_doc()
+    # Hash excludes generated_at/snapshot_hash → identical input ⇒ identical hash.
+    assert doc1.compute_hash() == doc2.compute_hash()
+    assert render_json(doc1) == render_json(doc2)
+
+
+def test_no_internal_paths_in_client_json():
+    from src.reports.report_content_parity import content_parity_blockers
+
+    doc = _multi_finding_doc()
+    js = render_json(doc)
+    # No tenant_id/object_key UUID-path leaks into the client JSON (C-29).
+    assert not any("internal path" in b for b in content_parity_blockers({"json": js.encode()}))
+
+
+def test_null_vs_not_applicable_vs_unknown_distinct():
+    import json as _json
+
+    from src.reports.report_document import NO_DATA_STATUSES
+
+    # The three "no data" meanings are modelled distinctly, never one shared null.
+    assert {"not_assessed", "out_of_scope"} <= NO_DATA_STATUSES
+    # JSON keeps an unset scalar as literal null (not the MD "не сопоставлено" filler).
+    doc = _doc_with_finding(owasp_category=None, cvss_score=None, cvss_vector=None)
+    data = _json.loads(render_json(doc))
+    assert data["findings"][0]["owasp_category"] is None
+    assert "не сопоставлено" in render_markdown(doc)  # renderer-side marker, not in JSON
+
+
+# --------------------------------------------------------------------------- Phase 2 containers
+def test_passport_required_fields_not_empty():
+    from src.reports.snapshot_completeness_gate import passport_blockers
+
+    bare = _doc_with_finding()
+    assert passport_blockers(bare)  # C-17: empty passport blocks release
+    filled = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://alleksy.com",
+        execution_mode="production",
+        scan_profile="deep",
+        resolved_scan_mode="deep",
+        started_at="2026-01-01T00:00:00+00:00",
+        registry_versions={"tools": "1.0"},
+        scope_summary={"in_scope": ["alleksy.com"]},
+        findings=[ReportFinding(finding_id="F-1", title="x", severity="info")],
+        generated_at=_TS,
+    )
+    assert passport_blockers(filled) == []
+
+
+def test_limitations_nonempty_when_gate_failed():
+    from src.reports.snapshot_completeness_gate import limitations_blockers
+
+    failed = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        wstg={"coverage_gate_passed": False},
+        limitations=[],
+        generated_at=_TS,
+    )
+    assert limitations_blockers(failed)  # C-11
+    ok = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        wstg={"coverage_gate_passed": False},
+        limitations=["WSTG coverage below threshold (2% of catalogue)."],
+        generated_at=_TS,
+    )
+    assert limitations_blockers(ok) == []
+
+
+def test_md_limitations_not_none_when_present():
+    # C-11 / §7.5: a populated limitations section never prints the "_none_" placeholder.
+    doc = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        limitations=["Target returned HTTP 530 during the test window."],
+        generated_at=_TS,
+    )
+    md = render_markdown(doc)
+    section = md.split("## Limitations", 1)[1]
+    assert "Target returned HTTP 530" in section
+    assert "_none_" not in section.split("##", 1)[0]
+
+
+# --------------------------------------------------------------------------- Phase 7 semantics
+def test_evidence_reference_has_hash_and_timestamp():
+    from src.reports.report_document import ReportEvidenceRef
+    from src.reports.snapshot_completeness_gate import evidence_blockers
+
+    missing = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        evidence_references=[ReportEvidenceRef(evidence_id="E-1", object_key="poc/x.json")],
+        generated_at=_TS,
+    )
+    assert evidence_blockers(missing)  # C-23: no sha256/collected_at
+    full = build_report_document(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        evidence_references=[
+            ReportEvidenceRef(
+                evidence_id="E-1",
+                object_key="poc/x.json",
+                sha256="a" * 64,
+                size=128,
+                mime="application/json",
+                collected_at_utc="2026-01-01T00:00:00+00:00",
+                collector="web_vuln_heuristics/1.0",
+            )
+        ],
+        generated_at=_TS,
+    )
+    assert evidence_blockers(full) == []
+
+
+def test_pseudo_evidence_moved_to_producer_hint():
+    from src.reports.report_document import ReportDocumentV1
+    from src.reports.snapshot_completeness_gate import (
+        finding_chain_blockers,
+        finding_has_only_pseudo_evidence,
+        is_pseudo_evidence,
+    )
+
+    assert is_pseudo_evidence("tool:testssl") is True
+    assert is_pseudo_evidence("recon:asnmap") is True
+    assert is_pseudo_evidence("E-001") is False
+    f = ReportFinding(
+        finding_id="F-1",
+        title="x",
+        severity="medium",
+        verification_status="confirmed",
+        evidence_ids=["tool:testssl"],
+    )
+    assert finding_has_only_pseudo_evidence(f) is True
+    doc = ReportDocumentV1(scan_id="s1", tenant_id="t1", target="https://x", findings=[f])
+    assert any("R-17" in b for b in finding_chain_blockers(doc))  # C-23: pseudo ≠ evidence
+
+
+# --------------------------------------------------------------------------- Phase 8 LLM
+def test_numbers_in_llm_text_are_substituted_not_generated():
+    from src.reports.prose_gate import ProseSeverity, check_output_consistency
+
+    # A model that invents its own severity totals is caught (R-10) — the app, not the
+    # model, owns the numbers. Consistent counts pass; an inconsistent total blocks.
+    bad = check_output_consistency(
+        "9 finding(s) recorded (critical: 0, high: 0, medium: 1, low: 0, info: 0)."
+    )
+    assert any(v.rule == "counter_mismatch" and v.severity is ProseSeverity.BLOCK for v in bad)
+    good = check_output_consistency(
+        "9 finding(s) recorded (critical: 0, high: 0, medium: 3, low: 4, info: 2)."
+    )
+    assert not any(v.rule == "counter_mismatch" for v in good)
+
+
+def test_errors_populated_when_llm_failed():
+    from src.reports.llm_remediation.bundle import GenerationStatus
+    from src.reports.llm_remediation.integration import generate_valhalla_llm_release
+    from src.reports.llm_remediation.runner import LlmNotInvokedError
+
+    def unavailable(system_prompt: str, user_prompt: str, kind: str) -> str:
+        raise LlmNotInvokedError("budget ledger unavailable — denying paid cloud call")
+
+    _doc, release = generate_valhalla_llm_release(
+        [
+            {
+                "finding_id": "F-1",
+                "title": "x",
+                "severity": "medium",
+                "verification_status": "suspected",
+            }
+        ],
+        report_meta={"report_id": "R", "report_version": "v", "target": "alleksy.com"},
+        llm_callable=unavailable,
+        provider="cloud_deepseek",
+        model="deepseek-chat",
+        health_probe=True,
+    )
+    # C-32: a failed LLM pass never ships silently — errors[] is non-empty, not ready.
+    assert release.manifest.generation_status is not GenerationStatus.READY
+    assert release.manifest.errors

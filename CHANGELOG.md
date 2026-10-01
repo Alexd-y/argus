@@ -38,6 +38,12 @@ internal paths, dumped raw fields and disagreed on counts.
   `PARITY:` honest-draft blockers (a mismatch never reaches `ready`).
 - **Phase 10:** regression suite `tests/reports/test_valhalla_formats_prompt.py` (C-19/21/22/27/28/
   30/31/33 + parity + Phase 1/3/4). Full `tests/reports` + `tests/unit/reports` green.
+- **Phase 10 (coverage completion):** added the remaining §12 named regression tests so every
+  acceptance C-xx has an explicit anchor — cross-format `finding_id`/OWASP parity, exactly-one-PDF
+  (C-01), unconfirmed-count parity (C-04), byte-stable `canonical_payload` + no internal paths in
+  client JSON (C-29), passport/limitations container gates (C-11/C-17), evidence hash+timestamp and
+  pseudo-evidence → `producer_hint` (C-23), LLM counter-substitution (R-10) and non-empty
+  `errors[]` on LLM failure (C-32). `tests/reports` now 340 passed / 1 skipped.
 
 ### Valhalla report — enforce release gate by default (honest draft) (2026-09-29)
 
