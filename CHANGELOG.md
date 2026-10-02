@@ -4,6 +4,25 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### MCP — fix FastMCP context detection (resource registration + OpenAPI spec) (2026-10-02)
+
+- **Root cause:** `src/mcp/context.py` aliased the FastMCP context as a PEP 695
+  `type MCPContext = Context[Any, Any, Any]`. The current MCP SDK's
+  `find_context_parameter` recognizes an injected context only when the resolved
+  annotation arg passes `inspect.isclass(...)`; a `TypeAliasType`/subscripted generic
+  fails that check, so `ctx` (a) broke resource URI-template registration
+  (`Mismatch between URI parameters {scan_id} and function parameters {scan_id, ctx}`,
+  which crashed `build_app` and every test that builds the MCP app) and (b) leaked into
+  tool/resource input schemas.
+- **Fix:** bind the alias directly to the class — `MCPContext = Context` (plain
+  assignment, documented) — so `ctx` is recognized across tools/resources/prompts.
+- **OpenAPI spec regenerated:** `docs/mcp-server-openapi.yaml` rebuilt via
+  `python -m scripts.export_mcp_openapi`. Removes the erroneous `ctx`/`MCPContext`
+  input leak and picks up the current `ReportFormat` enum (`xml` + `valhalla_llm_*`)
+  that had drifted while `build_app` was broken (the drift gate could not run).
+- Re-enables `tests/test_mcp_tools_have_docstrings.py` (27 passed) and
+  `tests/integration/mcp/test_openapi_export_stable.py`; broader MCP suite green (930).
+
 ### SAST — bandit baseline + fixes; `bandit -c pyproject.toml -r src/` clean (2026-10-02)
 
 - **Real fixes (gate kept live, not skipped):** `B324` md5→`usedforsecurity=False`

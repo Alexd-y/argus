@@ -23,7 +23,6 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
 
 from mcp.server.fastmcp import Context
 
@@ -32,13 +31,17 @@ from src.mcp.auth import MCPAuthContext, authenticate
 
 _logger = logging.getLogger(__name__)
 
-type MCPContext = Context[Any, Any, Any]
-"""Concrete Context alias used across the MCP layer.
-
-The framework's :class:`Context` carries three opaque generics
-(``ServerSessionT`` / ``LifespanContextT`` / ``RequestT``) that we never
-inspect; aliasing them to ``Any`` keeps ``mypy --strict`` happy without
-forcing every call site to thread phantom type parameters."""
+# NB: a *plain assignment* alias (``MCPContext = Context``), NOT a PEP 695
+# ``type MCPContext = ...`` statement and NOT a subscripted ``Context[Any, Any, Any]``.
+# FastMCP's ``find_context_parameter`` recognizes an injected context only when the
+# resolved annotation arg passes ``inspect.isclass(...)`` + ``issubclass(..., Context)``.
+# A PEP 695 ``type`` alias resolves (via ``get_type_hints``) to a ``TypeAliasType`` and a
+# subscripted generic resolves to a ``_GenericAlias`` — both fail ``inspect.isclass``, so
+# the context param would (a) leak into tool/resource input schemas and (b) break
+# resource URI-template registration (``Mismatch between URI parameters … and function
+# parameters``). Binding the name directly to the class keeps ``ctx`` recognized.
+MCPContext = Context
+"""Concrete Context alias used across the MCP layer (bound to the bare class)."""
 
 
 @dataclass(frozen=True, slots=True)
