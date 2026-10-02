@@ -4,6 +4,18 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Tests — complete package structure to end duplicate-basename collisions (2026-10-02)
+
+- Added the 39 missing `tests/**/__init__.py` so every test directory is a package
+  (the tree already had 80). Fixes the pytest "import file mismatch" that errored
+  full-suite collection when same-named files were collected together — notably
+  `test_schemas.py` in `tests/unit/quick` and `tests/unit/reports/llm_remediation`
+  (both previously imported as the bare module `test_schemas`). Also removes the latent
+  risk for the other 21 duplicate basenames (`test_context.py`, `test_integration.py`,
+  `test_runner.py`, `test_redaction.py`, …). Full `pytest --collect-only` now reports
+  **0 collection errors** (19 239 collected); the three `test_schemas.py` + the
+  `llm_remediation` duplicates run together (117 passed).
+
 ### MCP — fix FastMCP context detection (resource registration + OpenAPI spec) (2026-10-02)
 
 - **Root cause:** `src/mcp/context.py` aliased the FastMCP context as a PEP 695
