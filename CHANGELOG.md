@@ -4,6 +4,18 @@ All notable changes to ARGUS platform are documented in this file.
 
 ## [Unreleased]
 
+### Tests — align dual-LLM cloud-switch test with the report carve-out (2026-10-02)
+
+- `tests/unit/cairn/test_dual_llm.py::test_cloud_fallback_disabled_switch` was written
+  for the original "master kill switch" design and asserted that `llm_cloud_disabled=True`
+  blocks cloud for **all** tasks including report sections. The later granular carve-out
+  (commit `501b6de`, prompt E.1) made cloud fallback exist **only** for report sections:
+  `llm_cloud_disabled` is the pentest-analysis fail-closed switch, while report tasks stay
+  cloud-eligible under `llm_cloud_enabled_for_reports`. Updated the test to match the
+  implemented (and intended) behaviour — report tasks remain cloud-eligible when the
+  pentest switch is on, Cairn/pentest analysis never is, and revoking
+  `llm_cloud_enabled_for_reports` locks reports down too. Code behaviour unchanged.
+
 ### Tests — complete package structure to end duplicate-basename collisions (2026-10-02)
 
 - Added the 39 missing `tests/**/__init__.py` so every test directory is a package

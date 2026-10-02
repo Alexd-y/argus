@@ -27,8 +27,17 @@ def test_cloud_fallback_disabled_switch(monkeypatch) -> None:
     # ... and Cairn analysis tasks never do.
     assert facade._cloud_fallback_allowed(LLMTask.CAIRN_REASON) is False
 
-    # With the fail-closed switch on, NO task reaches cloud — report tasks included.
+    # The pentest fail-closed switch (``llm_cloud_disabled``) preserves the report
+    # carve-out (prompt E.1): cloud fallback exists ONLY to serve report sections, so
+    # report tasks stay cloud-eligible while pentest/Cairn analysis never reaches cloud.
     monkeypatch.setattr(facade.settings, "llm_cloud_disabled", True, raising=False)
+    monkeypatch.setattr(facade.settings, "llm_cloud_enabled_for_reports", True, raising=False)
+    assert facade._cloud_fallback_allowed(LLMTask.REPORT_SECTION) is True
+    assert facade._cloud_fallback_allowed(LLMTask.EXECUTIVE_SUMMARY) is True
+    assert facade._cloud_fallback_allowed(LLMTask.CAIRN_REASON) is False
+
+    # Explicitly revoking the report carve-out locks cloud down for report tasks too.
+    monkeypatch.setattr(facade.settings, "llm_cloud_enabled_for_reports", False, raising=False)
     assert facade._cloud_fallback_allowed(LLMTask.REPORT_SECTION) is False
     assert facade._cloud_fallback_allowed(LLMTask.EXECUTIVE_SUMMARY) is False
     assert facade._cloud_fallback_allowed(LLMTask.CAIRN_REASON) is False
