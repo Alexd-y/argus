@@ -153,9 +153,11 @@ def build_fuzz_harness_prompt(
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug(
+                    "build_fuzz_harness_prompt: suppressed best-effort error", exc_info=True
+                )
     except Exception:
-        pass
+        logger.debug("build_fuzz_harness_prompt: suppressed best-effort error", exc_info=True)
     return FUZZ_SYSTEM_PROMPT, FUZZ_USER_TEMPLATE.format(
         language=language,
         target=target,

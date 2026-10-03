@@ -299,7 +299,7 @@ async def analyse_binary(
                         vsize = struct.unpack("<I", data[off + 8 : off + 12])[0]
                         meta.sections.append({"name": name, "virtual_size": vsize})
         except Exception:
-            pass
+            logger.debug("analyse_binary: suppressed best-effort error", exc_info=True)
     elif meta.format == BinaryFormat.ELF:
         try:
             elf_class = data[4]
@@ -319,7 +319,7 @@ async def analyse_binary(
                 data[24 : 24 + (4 if data[4] == 1 else 8)],
             )[0]
         except Exception:
-            pass
+            logger.debug("analyse_binary: suppressed best-effort error", exc_info=True)
 
     # Strings
     all_strings = _extract_strings(data)

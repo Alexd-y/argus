@@ -82,9 +82,9 @@ def build_detection_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug("build_detection_prompt: suppressed best-effort error", exc_info=True)
     except Exception:
-        pass
+        logger.debug("build_detection_prompt: suppressed best-effort error", exc_info=True)
     user = DE_USER_TEMPLATE.format(findings_json=findings_json[:50000])
     return DE_SYSTEM_PROMPT, user
 

@@ -122,9 +122,9 @@ def build_autopatch_prompt(
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug("build_autopatch_prompt: suppressed best-effort error", exc_info=True)
     except Exception:
-        pass
+        logger.debug("build_autopatch_prompt: suppressed best-effort error", exc_info=True)
     return AUTOPATCH_SYSTEM_PROMPT, AUTOPATCH_USER_TEMPLATE.format(
         cwe=cwe,
         description=description,
@@ -225,7 +225,7 @@ async def verify_patch_in_sandbox(
                 if result.returncode == 0:
                     syntax_ok = True
             except Exception:
-                pass
+                logger.debug("verify_patch_in_sandbox: suppressed best-effort error", exc_info=True)
 
             if syntax_ok:
                 syntax_argv = _syntax_check_argv(candidate.file_path, target_path)

@@ -109,7 +109,7 @@ async def _run_job(job_id: str) -> dict[str, Any]:
                 await update_job_status(db, job_id, "failed", error_message=str(e))
                 await db.commit()
         except Exception:
-            pass
+            logger.warning("_run_job: failed to record state", exc_info=True)
         return {"error": str(e)}
     finally:
         await engine.dispose()

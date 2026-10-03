@@ -107,9 +107,9 @@ def build_symbolic_prompt(request: SymbolicExecutionRequest) -> tuple[str, str]:
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug("build_symbolic_prompt: suppressed best-effort error", exc_info=True)
     except Exception:
-        pass
+        logger.debug("build_symbolic_prompt: suppressed best-effort error", exc_info=True)
     return SYMBOLIC_SYSTEM_PROMPT, SYMBOLIC_USER_TEMPLATE.format(
         binary_path=request.binary_path,
         source_function=request.source_function,
@@ -177,7 +177,7 @@ def _parse_angr_output(
                 raw = line.split("Input:", 1)[1].strip()
                 input_values["concrete_input"] = raw
             except Exception:
-                pass
+                logger.debug("_parse_angr_output: suppressed best-effort error", exc_info=True)
         if line.startswith("Constraint:"):
             try:
                 parts = line.split(":", 1)
@@ -189,7 +189,7 @@ def _parse_angr_output(
                     )
                 )
             except Exception:
-                pass
+                logger.debug("_parse_angr_output: suppressed best-effort error", exc_info=True)
 
     return SymbolicExecutionResult(
         vulnerable=vulnerable,

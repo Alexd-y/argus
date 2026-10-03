@@ -951,7 +951,7 @@ def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
                 )
                 filtered += 1
             except Exception:
-                pass
+                logger.debug("_apply_scope_filter: suppressed best-effort error", exc_info=True)
 
     if filtered:
         logger.info(
@@ -1010,7 +1010,7 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 )
                 downgraded += 1
             except Exception:
-                pass
+                logger.debug("_apply_evidence_gate: suppressed best-effort error", exc_info=True)
     if downgraded:
         logger.info(
             "evidence_gate_applied",
@@ -1036,7 +1036,9 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
                     },
                 )
             except Exception:
-                pass
+                logger.debug(
+                    "enforce_severity_by_evidence: suppressed best-effort error", exc_info=True
+                )
         if sev == "critical" and ec != "VALIDATED":
             try:
                 f.severity = "high"
@@ -1049,7 +1051,9 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
                     },
                 )
             except Exception:
-                pass
+                logger.debug(
+                    "enforce_severity_by_evidence: suppressed best-effort error", exc_info=True
+                )
     return findings
 
 
@@ -1168,7 +1172,9 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 )
                 downgraded += 1
             except Exception:
-                pass
+                logger.debug(
+                    "_apply_fuzz_hit_evidence_gate: suppressed best-effort error", exc_info=True
+                )
 
     if downgraded:
         logger.info(

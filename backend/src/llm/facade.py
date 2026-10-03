@@ -537,7 +537,7 @@ def _record_llm_cost(
                 completion_tokens=completion_tokens,
             )
     except Exception:
-        pass
+        logger.debug("_record_llm_cost: suppressed best-effort error", exc_info=True)
     try:
         from src.orchestration.cost_aware_reasoning import (
             TokenUsageRecord,
@@ -559,7 +559,7 @@ def _record_llm_cost(
             if _tracker is not None:
                 _tracker.record(_record)
     except Exception:
-        pass
+        logger.debug("_record_llm_cost: suppressed best-effort error", exc_info=True)
 
 
 def _get_wrb_adapter():

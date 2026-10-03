@@ -451,7 +451,7 @@ async def ai_vuln_analysis(
                 if data and isinstance(data.get("findings"), list):
                     return VulnAnalysisOutput(findings=data["findings"])
             except Exception:
-                pass
+                logger.debug("ai_vuln_analysis: suppressed best-effort error", exc_info=True)
         threat_blob = json.dumps(inp.threat_model, default=str)[:1500]
         asset_blob = " ".join(str(item) for item in inp.assets[:20])
         rag_query = (
@@ -499,7 +499,7 @@ async def ai_vuln_analysis(
                         },
                     )
         except Exception:
-            pass
+            logger.debug("ai_vuln_analysis: suppressed best-effort error", exc_info=True)
         return VulnAnalysisOutput(findings=_findings)
     except Exception:
         logger.exception("vuln_analysis_llm_failed")
@@ -583,7 +583,7 @@ async def ai_exploitation(
                         evidence=data.get("evidence", []),
                     )
             except Exception:
-                pass
+                logger.debug("ai_exploitation: suppressed best-effort error", exc_info=True)
         # Feed a compact evidence pack instead of raw findings when phase routing
         # is enabled (reduces prompt noise / hallucination pressure).
         _prompt_findings = inp.findings
@@ -670,7 +670,7 @@ async def _call_wrb_report_section(
             truncated = _json.loads(phase_data.rsplit('"', 1)[0] + '"}')
             phase_data = _json.dumps(truncated, ensure_ascii=False, default=str, indent=2)
         except Exception:
-            pass
+            logger.debug("_call_wrb_report_section: suppressed best-effort error", exc_info=True)
         if len(phase_data) > max_data:
             phase_data = phase_data[:max_data]
 

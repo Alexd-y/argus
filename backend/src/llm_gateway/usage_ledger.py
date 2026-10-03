@@ -87,7 +87,7 @@ def _record_prometheus(
 
         record_llm_tokens(provider, model, prompt_tokens, completion_tokens)
     except Exception:
-        pass
+        logger.debug("_record_prometheus: suppressed best-effort error", exc_info=True)
 
 
 async def _persist_to_db(

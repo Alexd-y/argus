@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from src.data_sources.securitytrails_client import SecurityTrailsClient
 from src.recon.adapters.intel.base import IntelAdapter, _finding
 from src.recon.schemas.base import FindingType
+
+logger = logging.getLogger(__name__)
 
 
 def _st_error(data: dict[str, Any]) -> str | None:
@@ -116,7 +119,7 @@ class SecurityTrailsIntelAdapter(IntelAdapter):
                                     )
                                 )
         except Exception:
-            pass
+            logger.debug("fetch: suppressed best-effort error", exc_info=True)
 
         return {
             "source": self.name,

@@ -245,7 +245,7 @@ def _whatweb_host(parsed: dict[str, Any] | None, fallback: str) -> str:
             if h:
                 return h
         except Exception:
-            pass
+            logger.debug("_whatweb_host: suppressed best-effort error", exc_info=True)
     return fallback
 
 

@@ -99,7 +99,7 @@ class GitHubConnector(BaseRepoConnector):
                 if isinstance(detail, dict):
                     files = detail.get("files", [])
             except Exception:
-                pass
+                logger.debug("list_commits: suppressed best-effort error", exc_info=True)
             commits.append(
                 CommitInfo(
                     sha=c.get("sha", ""),

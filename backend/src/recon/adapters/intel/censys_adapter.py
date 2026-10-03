@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from src.data_sources.censys_client import CensysClient
 from src.recon.adapters.intel.base import IntelAdapter, _finding
 from src.recon.schemas.base import FindingType
+
+logger = logging.getLogger(__name__)
 
 
 class CensysIntelAdapter(IntelAdapter):
@@ -150,7 +153,7 @@ class CensysIntelAdapter(IntelAdapter):
                             )
                         )
         except Exception:
-            pass
+            logger.debug("fetch: suppressed best-effort error", exc_info=True)
 
         return {
             "source": self.name,

@@ -105,7 +105,7 @@ class ScanEventBus:
                 self._redis_client.publish(f"argus:scan:{event.scan_id}", payload)
                 return
             except Exception:
-                pass
+                logger.warning("publish: failed to record state", exc_info=True)
         for sub in self.subscribers:
             with contextlib.suppress(Exception):
                 sub(event)
@@ -193,7 +193,7 @@ class ScanEventBus:
                 self._redis_pubsub.punsubscribe()
                 self._redis_pubsub.close()
             except Exception:
-                pass
+                logger.debug("stop_redis_subscriber: suppressed best-effort error", exc_info=True)
         if self._redis_listener_thread is not None:
             self._redis_listener_thread.join(timeout=5)
         logger.info("Redis event subscriber stopped")

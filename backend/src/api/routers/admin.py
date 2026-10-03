@@ -1638,7 +1638,7 @@ async def health_dashboard(
             await conn.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
-        pass
+        logger.debug("health_dashboard: suppressed best-effort error", exc_info=True)
 
     redis_ok = redis_ping()
     storage_ok = ensure_bucket() and ensure_bucket(settings.minio_reports_bucket)

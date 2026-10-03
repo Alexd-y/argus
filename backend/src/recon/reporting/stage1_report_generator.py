@@ -261,7 +261,7 @@ def generate_stage1_report(
 
                 stage1_live_hosts = extract_live_hosts_from_http_probe(http_probe_path)
             except Exception:
-                pass
+                logger.debug("generate_stage1_report: suppressed best-effort error", exc_info=True)
 
         try:
             from src.recon.reporting.headers_builder import build_headers_artifacts

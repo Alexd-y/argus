@@ -226,7 +226,7 @@ class PromptLoader:
             try:
                 return self._env.list_templates()
             except Exception:
-                pass
+                logger.debug("list_templates: suppressed best-effort error", exc_info=True)
         if self._prompts_dir.exists():
             return [str(p.relative_to(self._prompts_dir)) for p in self._prompts_dir.rglob("*.j2")]
         return []
@@ -238,7 +238,7 @@ class PromptLoader:
                 tpl = self._env.get_template("system_base.j2")
                 return tpl.render(prompt_version=prompt_version)
             except Exception:
-                pass
+                logger.debug("_get_system_base: suppressed best-effort error", exc_info=True)
 
         from src.orchestration.prompt_registry import (
             ORCHESTRATION_PROMPT_VERSION,

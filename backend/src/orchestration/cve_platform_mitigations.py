@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -10,6 +11,8 @@ from src.reports.finding_metadata import (
     extract_cve_ids_from_finding,
     normalize_confidence,
 )
+
+logger = logging.getLogger(__name__)
 
 # CVE IDs known to be addressed or materially mitigated on specific managed platforms
 # (conservative allowlist; extend via product security advisories).
@@ -37,7 +40,7 @@ def _hostname_hints(text: str) -> set[str]:
                 if host:
                     out.add(host)
             except Exception:
-                pass
+                logger.debug("_hostname_hints: suppressed best-effort error", exc_info=True)
         elif "." in token and " " not in token:
             out.add(token.lower())
     return out

@@ -112,9 +112,9 @@ def build_critic_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug("build_critic_prompt: suppressed best-effort error", exc_info=True)
     except Exception:
-        pass
+        logger.debug("build_critic_prompt: suppressed best-effort error", exc_info=True)
     user = CRITIC_USER_TEMPLATE.format(findings_json=findings_json[:50000])
     return CRITIC_SYSTEM_PROMPT, user
 

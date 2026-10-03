@@ -526,7 +526,7 @@ class SourceAnalyzer:
                         )
                     )
                 except Exception:
-                    pass
+                    logger.debug("_llm_deep_review: suppressed best-effort error", exc_info=True)
 
             for ag in data.get("auth_gaps", [])[:10]:
                 with contextlib.suppress(Exception):

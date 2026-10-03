@@ -98,7 +98,7 @@ class GatewayClient:
                 detail = resp.json()
                 detail = detail.get("detail", detail)
             except Exception:
-                pass
+                logger.debug("chat_completion: suppressed best-effort error", exc_info=True)
             raise GatewayClientError(
                 detail.get("code") if isinstance(detail, dict) else "llm_policy_denied",
                 (

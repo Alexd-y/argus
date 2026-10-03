@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 # OWASP Top 10:2021 label aligned with internal 2025 A02 (Security Misconfiguration) in Valhalla.
 VALHALLA_OWASP_2021_MISCONFIG = "A05:2021"
@@ -26,7 +29,7 @@ def _origin_from_url(url: str) -> str:
         if p.netloc:
             return f"{p.scheme or 'https'}://{p.netloc}"
     except Exception:
-        pass
+        logger.debug("_origin_from_url: suppressed best-effort error", exc_info=True)
     return "https://example.com"
 
 

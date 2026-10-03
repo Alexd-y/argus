@@ -99,9 +99,9 @@ def build_binary_prompt(binary_path: str, architecture: str, functions: str) -> 
                 if system.strip() and user.strip():
                     return system, user
             except Exception:
-                pass
+                logger.debug("build_binary_prompt: suppressed best-effort error", exc_info=True)
     except Exception:
-        pass
+        logger.debug("build_binary_prompt: suppressed best-effort error", exc_info=True)
     return BINARY_SYSTEM_PROMPT, BINARY_USER_TEMPLATE.format(
         binary_path=binary_path,
         architecture=architecture,

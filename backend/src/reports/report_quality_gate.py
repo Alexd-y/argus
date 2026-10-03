@@ -8,6 +8,7 @@ evidence, or conflicting scoring data must produce "not assessed" /
 from __future__ import annotations
 
 import contextlib
+import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -15,6 +16,8 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from src.reports.finding_severity_normalizer import severity_from_cvss
+
+logger = logging.getLogger(__name__)
 
 EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
 EvidenceClassification = Literal["validated", "observed", "candidate", "inconclusive"]
@@ -735,7 +738,7 @@ def _normalize_endpoint(raw: str) -> str:
                 f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path.rstrip('/') or '/'}"
             )
     except Exception:
-        pass
+        logger.debug("_normalize_endpoint: suppressed best-effort error", exc_info=True)
     return value.lower().rstrip("/") or "login"
 
 
