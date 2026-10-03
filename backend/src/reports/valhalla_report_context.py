@@ -6828,58 +6828,441 @@ def _tools_for_wstg_from_parsed_sections(
     return tools
 
 
-def build_valhalla_report_context(
-    *,
-    tenant_id: str,
-    scan_id: str,
-    recon_results: dict[str, Any] | None,
-    tech_profile: list[dict[str, Any]] | None,
-    anomalies_structured: dict[str, Any] | None,
-    raw_artifact_keys: list[tuple[str, str]],
-    phase_outputs: list[tuple[str, dict[str, Any] | None]],
-    phase_inputs: list[tuple[str, dict[str, Any] | None]],
-    findings: list[dict[str, Any]],
-    report_technologies: list[str] | None,
-    fetch_raw_bodies: bool,
-    tool_runs: list[tuple[str, dict[str, Any] | None]] | None = None,
-    raw_artifact_types: list[str] | None = None,
-    trivy_enabled: bool = False,
-    harvester_enabled: bool = False,
-    tool_run_summaries: list[tuple[str, str]] | None = None,
-    extra_feature_flags: dict[str, bool] | None = None,
-    scan_options: dict[str, Any] | None = None,
-    quick_fuzz_output: dict[str, Any] | None = None,
-    persisted_logical_findings: dict[str, Any] | None = None,
-    persisted_occurrences: dict[str, Any] | None = None,
-) -> ValhallaReportContext:
-    """Assemble ValhallaReportContext from already-collected scan report inputs."""
-    tid = (tenant_id or "").strip()
-    sid = (scan_id or "").strip()
+def _vh_build_flags_ports(
+    extra_feature_flags,
+    fetch_raw_bodies,
+    findings,
+    harvester_enabled,
+    merged_http_headers,
+    nmap_blob,
+    ports,
+    raw_artifact_keys,
+    recon_results,
+    sec_hdr,
+    ssl_out,
+    structured,
+    trivy_enabled,
+):
+    ff = None
+    port_data = None
+    raw_hints = None
+    target_guess = None
+    ff: dict[str, bool] = {
+        "HARVESTER_ENABLED": bool(harvester_enabled),
+        "TRIVY_ENABLED": bool(trivy_enabled),
+        "INCLUDE_MINIO": bool(fetch_raw_bodies),
+    }
+    if extra_feature_flags:
+        ff.update({str(k): bool(v) for k, v in extra_feature_flags.items()})
 
-    recon_pipeline_summary: dict[str, Any] = {}
+    target_guess = ""
     if isinstance(recon_results, dict):
-        cand = recon_results.get("recon_pipeline_summary")
-        if isinstance(cand, dict):
-            recon_pipeline_summary = cand
+        target_guess = str(
+            recon_results.get("target_url")
+            or recon_results.get("target_domain")
+            or recon_results.get("target")
+            or ""
+        )
+    if not target_guess and findings:
+        t0 = findings[0] if isinstance(findings[0], dict) else {}
+        target_guess = str(t0.get("affected_url") or t0.get("url") or t0.get("target") or "")
 
-    robots, sitemap = _collect_robots_sitemap_from_keys(
-        raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+    port_data = _build_port_exposure_summary(
+        nmap_blob=nmap_blob,
+        ports=ports,
+        structured=structured,
+        raw_artifact_keys=raw_artifact_keys,
+        fetch_bodies=fetch_raw_bodies,
+        target_hint=target_guess,
+        tls_observed=not _ssl_surface_empty(ssl_out),
+        http_observed=bool(merged_http_headers or sec_hdr.rows),
     )
-    robots_sitemap_merged = _build_robots_sitemap_merged(
+
+    raw_hints = _raw_keys_hint_flags(raw_artifact_keys)
+    return (
+        ff,
+        port_data,
+        raw_hints,
+        target_guess,
+    )
+
+
+def _vh_build_fallback_messages(
+    deps,
+    final_emails,
+    merged_http_headers,
+    outdated,
+    robots_sitemap_merged,
+    sec_hdr,
+    ssl_out,
+    structured,
+    tech_table,
+    trivy_enabled,
+):
+    leaked_emails_fallback_message = None
+    outdated_components_fallback_message = None
+    robots_sitemap_fallback_message = None
+    security_headers_fallback_message = None
+    ssl_tls_fallback_message = None
+    tech_stack_fallback_message = None
+    tech_stack_fallback_message: str | None = None
+    if _structured_stack_effectively_empty(structured) and not tech_table:
+        tech_stack_fallback_message = (
+            "Technology stack table was not populated because no parseable WhatWeb, HTTP header, HTML/JS, "
+            "robots/sitemap, or recon fingerprint signals were available."
+        )
+
+    ssl_tls_fallback_message: str | None = None
+    if _ssl_surface_empty(ssl_out):
+        ssl_tls_fallback_message = (
+            "CRITICAL GAP: SSL/TLS assessment was not performed. No testssl.sh, sslscan, nmap ssl-enum-ciphers, "
+            "openssl, or certificate metadata was available. TLS misconfigurations (expired certs, weak ciphers, "
+            "missing HSTS) are a common entry vector. Remediation: run `testssl.sh --full <target>` and re-scan."
+        )
+
+    security_headers_fallback_message: str | None = None
+    if not sec_hdr.rows and not merged_http_headers:
+        security_headers_fallback_message = (
+            "HTTP security header table was not populated because no parseable response header map or raw "
+            "HTTP response artifact was available."
+        )
+
+    outdated_components_fallback_message: str | None = None
+    if not outdated:
+        has_trivy_rows = any("trivy" in (d.source or "").lower() for d in deps)
+        if trivy_enabled and not has_trivy_rows:
+            outdated_components_fallback_message = (
+                "SCA via Trivy was not applicable because no filesystem target, container image, SBOM, or "
+                "dependency manifest bodies were available in this scan. For external URL-only tests, "
+                "ARGUS may use JS/bundle heuristics instead of full Trivy filesystem scanning."
+            )
+        else:
+            outdated_components_fallback_message = (
+                "No explicit component advisory signals (CVE, Trivy, searchsploit, or versioned WhatWeb/nmap "
+                "fingerprints) were parsed from scan data."
+            )
+
+    robots_sitemap_fallback_message: str | None = None
+    if not robots_sitemap_merged.robots_found and not robots_sitemap_merged.sitemap_found:
+        robots_sitemap_fallback_message = (
+            "robots.txt and sitemap.xml were not present in the parsed report context; related surface "
+            "analysis is limited."
+        )
+
+    leaked_emails_fallback_message: str | None = None
+    if not final_emails:
+        leaked_emails_fallback_message = (
+            "No masked email indicators detected. With HARVESTER_ENABLED=true theHarvester "
+            "adds signals from stdout artifacts; otherwise only indirect matches in recon are possible."
+        )
+    return (
+        leaked_emails_fallback_message,
+        outdated_components_fallback_message,
+        robots_sitemap_fallback_message,
+        security_headers_fallback_message,
+        ssl_tls_fallback_message,
+        tech_stack_fallback_message,
+    )
+
+
+def _vh_build_emails(
+    anomalies_structured,
+    fetch_raw_bodies,
+    phase_inputs,
+    phase_outputs,
+    raw_artifact_keys,
+    recon_results,
+):
+    final_emails = None
+    emails = _collect_leaked_emails(phase_outputs, recon_results)
+    emails.extend(
+        _masked_emails_from_theharvester_raw(
+            raw_artifact_keys,
+            fetch_bodies=fetch_raw_bodies,
+        )
+    )
+    if isinstance(anomalies_structured, dict):
+        with contextlib.suppress(TypeError, ValueError):
+            emails.extend(
+                _extract_emails_from_text(json.dumps(anomalies_structured, ensure_ascii=False))
+            )
+    for _ph, inp in phase_inputs:
+        if isinstance(inp, dict):
+            with contextlib.suppress(TypeError, ValueError):
+                emails.extend(
+                    _extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000])
+                )
+
+    if not emails:
+        harvester_phase_emails = _emails_from_harvester_phase_outputs(phase_outputs)
+        if harvester_phase_emails:
+            emails.extend(harvester_phase_emails)
+            logger.info(
+                "emails_harvester_phase_fallback_used",
+                extra={
+                    "event": "emails_harvester_phase_fallback_used",
+                    "count": len(harvester_phase_emails),
+                },
+            )
+    if not emails and fetch_raw_bodies:
+        for key, _p in raw_artifact_keys:
+            lowk = key.lower()
+            if not any(tok in lowk for tok in ("harvester", "theharvester", "email")):
+                continue
+            blob = _safe_download_raw(key)
+            if not blob:
+                continue
+            text = _text_from_raw_bytes(blob)
+            if not text:
+                continue
+            parsed_emails = _parse_harvester_emails(text)
+            if parsed_emails:
+                emails.extend(parsed_emails)
+                logger.info(
+                    "emails_raw_artifact_fallback_used",
+                    extra={
+                        "event": "emails_raw_artifact_fallback_used",
+                        "key_suffix": key[-64:],
+                    },
+                )
+            if len(emails) >= 64:
+                break
+
+    seen_m: set[str] = set()
+    final_emails: list[str] = []
+    for e in emails:
+        if e not in seen_m:
+            seen_m.add(e)
+            final_emails.append(e)
+        if len(final_emails) >= 64:
+            break
+    return (final_emails,)
+
+
+def _vh_build_threat_exploit(findings, phase_outputs, sid, tid):
+    critical_vulns = None
+    exploit_post_excerpt = None
+    risk_matrix = None
+    threat_ref = None
+    risk_matrix = build_risk_matrix(findings)
+    critical_vulns = _critical_vulns_from_findings(findings)
+
+    threat_excerpt = ""
+    threat_phase = "threat_modeling"
+    for ph, od in phase_outputs:
+        if (ph or "").lower() == threat_phase and od:
+            tm = od.get("threat_model")
+            if isinstance(tm, dict) and tm:
+                threat_excerpt = _format_threat_model_for_report(tm, 4000)
+            else:
+                threat_excerpt = _phased_output_narrative(od, 1500)
+            break
+
+    api_hint = ""
+    if tid and sid:
+        api_hint = f"/api/v1/tenants/{tid}/scans/{sid}/phases/{threat_phase}"
+
+    threat_ref = ThreatModelRefModel(
+        phase=threat_phase,
+        scan_id=sid,
+        tenant_id=tid,
+        excerpt=threat_excerpt,
+        api_hint=api_hint,
+    )
+
+    exploit_chunks: list[str] = []
+    for ph, od in phase_outputs:
+        pl = (ph or "").lower()
+        if pl in ("exploitation", "post_exploitation") and od:
+            exploit_chunks.append(_phase_output_excerpt(od, 800))
+    exploit_post_excerpt = _truncate("\n\n".join(exploit_chunks), 2500)
+    return (
+        critical_vulns,
+        exploit_post_excerpt,
+        risk_matrix,
+        threat_ref,
+    )
+
+
+def _vh_build_deps_outdated(
+    fetch_raw_bodies,
+    findings,
+    nmap_blob,
+    phase_outputs,
+    raw_artifact_keys,
+    trivy_enabled,
+    ww_merged,
+):
+    deps = None
+    outdated = None
+    deps = _collect_dependency_rows(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+    outdated = _assemble_outdated_components(
+        findings=findings,
+        ww_merged=ww_merged,
+        nmap_blob=nmap_blob,
+        phase_outputs=phase_outputs,
+        dependency_rows=deps,
+        trivy_enabled=trivy_enabled,
+    )
+    return (
+        deps,
+        outdated,
+    )
+
+
+def _vh_build_headers(
+    fetch_raw_bodies,
+    findings,
+    legacy_rows,
+    phase_outputs,
+    raw_artifact_keys,
+    recon_results,
+    robots,
+    sitemap,
+    structured,
+    structured_rows,
+    tech_table,
+    ww_merged,
+):
+    merged_http_headers = None
+    sec_hdr = None
+    security_headers_from_findings = None
+    merged_http_headers = _http_headers_merged_from_recon_and_phases(recon_results, phase_outputs)
+    marker_rows = _tech_rows_from_http_and_urls(
+        merged_http_headers,
         robots,
         sitemap,
         raw_artifact_keys,
         fetch_bodies=fetch_raw_bodies,
     )
+    if marker_rows:
+        structured = _apply_tech_marker_rows_to_structured(structured, marker_rows)
+        structured_rows = _tech_rows_from_structured(structured)
+        tech_table = _merge_tech_stack_tables(
+            structured_rows + marker_rows,
+            legacy_rows,
+            structured=structured,
+        )
+    sec_hdr = _security_headers_from_host_map(merged_http_headers)
+    security_headers_from_findings = False
 
-    ports: list[int] | None = None
-    for ph, od in phase_outputs:
-        if (ph or "").lower() == "recon" and isinstance(od, dict):
-            pr = od.get("ports")
-            if isinstance(pr, list):
-                ports = [int(x) for x in pr if isinstance(x, (int, float))]
-            break
+    if not sec_hdr.rows:
+        fallback_header_sources: list[dict[str, dict[str, str]]] = [
+            _security_headers_from_security_headers_result(phase_outputs, recon_results),
+            _security_headers_from_nikto_stdout(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
+            _security_headers_from_whatweb_stdout(ww_merged),
+            _security_headers_from_raw_http_responses(
+                raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+            ),
+        ]
+        for fb_map in fallback_header_sources:
+            if fb_map:
+                for host, hdrs in fb_map.items():
+                    cur = merged_http_headers.get(host, {})
+                    merged_http_headers[host] = {**cur, **hdrs}
+                sec_hdr = _security_headers_from_host_map(merged_http_headers)
+                if sec_hdr.rows:
+                    break
+    if merged_http_headers:
+        header_marker_rows = _tech_rows_from_http_and_urls(
+            merged_http_headers,
+            robots,
+            sitemap,
+            raw_artifact_keys,
+            fetch_bodies=False,
+        )
+        if header_marker_rows:
+            structured = _apply_tech_marker_rows_to_structured(structured, header_marker_rows)
+            structured_rows = _tech_rows_from_structured(structured)
+            tech_table = _merge_tech_stack_tables(
+                structured_rows + marker_rows + header_marker_rows,
+                legacy_rows,
+                structured=structured,
+            )
+    if not sec_hdr.rows:
+        finding_headers = _security_headers_from_findings(findings)
+        if finding_headers.rows:
+            sec_hdr = finding_headers
+            security_headers_from_findings = True
+    return (
+        merged_http_headers,
+        sec_hdr,
+        security_headers_from_findings,
+        structured,
+        tech_table,
+    )
 
+
+def _vh_build_ssl(fetch_raw_bodies, raw_artifact_keys, recon_results):
+    ssl_out = None
+    tls_blob = _latest_tls_blob_from_raw(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+    ssl_part = _ssl_from_recon_certs(recon_results)
+    if tls_blob:
+        merged = _ssl_from_testssl_json(tls_blob)
+        ssl_out = SslTlsAnalysisModel(
+            issuer=merged.issuer or ssl_part.issuer,
+            validity=merged.validity or ssl_part.validity,
+            protocols=(merged.protocols or ssl_part.protocols),
+            weak_protocols=(merged.weak_protocols or ssl_part.weak_protocols),
+            weak_ciphers=merged.weak_ciphers or ssl_part.weak_ciphers,
+            hsts=merged.hsts or ssl_part.hsts,
+            tls_versions=merged.tls_versions or ssl_part.tls_versions,
+            cipher_detail=merged.cipher_detail or ssl_part.cipher_detail,
+            cert_subject=merged.cert_subject or ssl_part.cert_subject,
+            cert_issuer=merged.cert_issuer or ssl_part.cert_issuer,
+            cert_expiry=merged.cert_expiry or ssl_part.cert_expiry,
+            hsts_present=merged.hsts_present or ssl_part.hsts_present,
+            hsts_max_age=merged.hsts_max_age or ssl_part.hsts_max_age,
+            hsts_include_subdomains=merged.hsts_include_subdomains
+            or ssl_part.hsts_include_subdomains,
+            hsts_preload=merged.hsts_preload or ssl_part.hsts_preload,
+            recommendations=merged.recommendations or ssl_part.recommendations,
+        )
+    else:
+        ssl_out = ssl_part
+
+    if _ssl_surface_empty(ssl_out):
+        text_ssl = _ssl_from_testssl_text_artifacts(
+            raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+        )
+        if text_ssl and not _ssl_surface_empty(text_ssl):
+            ssl_out = SslTlsAnalysisModel(
+                issuer=text_ssl.issuer or ssl_out.issuer,
+                validity=text_ssl.validity or ssl_out.validity,
+                protocols=text_ssl.protocols or ssl_out.protocols,
+                weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,
+                weak_ciphers=text_ssl.weak_ciphers or ssl_out.weak_ciphers,
+                hsts=text_ssl.hsts or ssl_out.hsts,
+                tls_versions=text_ssl.tls_versions or ssl_out.tls_versions,
+                cipher_detail=text_ssl.cipher_detail or ssl_out.cipher_detail,
+                cert_subject=text_ssl.cert_subject or ssl_out.cert_subject,
+                cert_issuer=text_ssl.cert_issuer or ssl_out.cert_issuer,
+                cert_expiry=text_ssl.cert_expiry or ssl_out.cert_expiry,
+                hsts_present=text_ssl.hsts_present or ssl_out.hsts_present,
+                hsts_max_age=text_ssl.hsts_max_age or ssl_out.hsts_max_age,
+                hsts_include_subdomains=text_ssl.hsts_include_subdomains
+                or ssl_out.hsts_include_subdomains,
+                hsts_preload=text_ssl.hsts_preload or ssl_out.hsts_preload,
+                recommendations=text_ssl.recommendations or ssl_out.recommendations,
+            )
+    return (ssl_out,)
+
+
+def _vh_build_tech(
+    fetch_raw_bodies,
+    phase_outputs,
+    ports,
+    raw_artifact_keys,
+    recon_results,
+    report_technologies,
+    tech_profile,
+):
+    legacy_rows = None
+    nmap_blob = None
+    structured = None
+    structured_rows = None
+    tech_table = None
+    ww_merged = None
     nmap_blob = _nmap_text_from_phase_outputs(phase_outputs)
     what_candidates = _whatweb_roots_from_phase_outputs(
         phase_outputs
@@ -6945,220 +7328,135 @@ def build_valhalla_report_context(
     structured_rows = _tech_rows_from_structured(structured)
     legacy_rows = _tech_rows_from_recon(recon_results, tech_profile, report_technologies, ports)
     tech_table = _merge_tech_stack_tables(structured_rows, legacy_rows, structured=structured)
+    return (
+        legacy_rows,
+        nmap_blob,
+        structured,
+        structured_rows,
+        tech_table,
+        ww_merged,
+    )
 
-    tls_blob = _latest_tls_blob_from_raw(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
-    ssl_part = _ssl_from_recon_certs(recon_results)
-    if tls_blob:
-        merged = _ssl_from_testssl_json(tls_blob)
-        ssl_out = SslTlsAnalysisModel(
-            issuer=merged.issuer or ssl_part.issuer,
-            validity=merged.validity or ssl_part.validity,
-            protocols=(merged.protocols or ssl_part.protocols),
-            weak_protocols=(merged.weak_protocols or ssl_part.weak_protocols),
-            weak_ciphers=merged.weak_ciphers or ssl_part.weak_ciphers,
-            hsts=merged.hsts or ssl_part.hsts,
-            tls_versions=merged.tls_versions or ssl_part.tls_versions,
-            cipher_detail=merged.cipher_detail or ssl_part.cipher_detail,
-            cert_subject=merged.cert_subject or ssl_part.cert_subject,
-            cert_issuer=merged.cert_issuer or ssl_part.cert_issuer,
-            cert_expiry=merged.cert_expiry or ssl_part.cert_expiry,
-            hsts_present=merged.hsts_present or ssl_part.hsts_present,
-            hsts_max_age=merged.hsts_max_age or ssl_part.hsts_max_age,
-            hsts_include_subdomains=merged.hsts_include_subdomains
-            or ssl_part.hsts_include_subdomains,
-            hsts_preload=merged.hsts_preload or ssl_part.hsts_preload,
-            recommendations=merged.recommendations or ssl_part.recommendations,
-        )
-    else:
-        ssl_out = ssl_part
 
-    if _ssl_surface_empty(ssl_out):
-        text_ssl = _ssl_from_testssl_text_artifacts(
-            raw_artifact_keys, fetch_bodies=fetch_raw_bodies
-        )
-        if text_ssl and not _ssl_surface_empty(text_ssl):
-            ssl_out = SslTlsAnalysisModel(
-                issuer=text_ssl.issuer or ssl_out.issuer,
-                validity=text_ssl.validity or ssl_out.validity,
-                protocols=text_ssl.protocols or ssl_out.protocols,
-                weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,
-                weak_ciphers=text_ssl.weak_ciphers or ssl_out.weak_ciphers,
-                hsts=text_ssl.hsts or ssl_out.hsts,
-                tls_versions=text_ssl.tls_versions or ssl_out.tls_versions,
-                cipher_detail=text_ssl.cipher_detail or ssl_out.cipher_detail,
-                cert_subject=text_ssl.cert_subject or ssl_out.cert_subject,
-                cert_issuer=text_ssl.cert_issuer or ssl_out.cert_issuer,
-                cert_expiry=text_ssl.cert_expiry or ssl_out.cert_expiry,
-                hsts_present=text_ssl.hsts_present or ssl_out.hsts_present,
-                hsts_max_age=text_ssl.hsts_max_age or ssl_out.hsts_max_age,
-                hsts_include_subdomains=text_ssl.hsts_include_subdomains
-                or ssl_out.hsts_include_subdomains,
-                hsts_preload=text_ssl.hsts_preload or ssl_out.hsts_preload,
-                recommendations=text_ssl.recommendations or ssl_out.recommendations,
-            )
+def build_valhalla_report_context(
+    *,
+    tenant_id: str,
+    scan_id: str,
+    recon_results: dict[str, Any] | None,
+    tech_profile: list[dict[str, Any]] | None,
+    anomalies_structured: dict[str, Any] | None,
+    raw_artifact_keys: list[tuple[str, str]],
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    phase_inputs: list[tuple[str, dict[str, Any] | None]],
+    findings: list[dict[str, Any]],
+    report_technologies: list[str] | None,
+    fetch_raw_bodies: bool,
+    tool_runs: list[tuple[str, dict[str, Any] | None]] | None = None,
+    raw_artifact_types: list[str] | None = None,
+    trivy_enabled: bool = False,
+    harvester_enabled: bool = False,
+    tool_run_summaries: list[tuple[str, str]] | None = None,
+    extra_feature_flags: dict[str, bool] | None = None,
+    scan_options: dict[str, Any] | None = None,
+    quick_fuzz_output: dict[str, Any] | None = None,
+    persisted_logical_findings: dict[str, Any] | None = None,
+    persisted_occurrences: dict[str, Any] | None = None,
+) -> ValhallaReportContext:
+    """Assemble ValhallaReportContext from already-collected scan report inputs."""
+    tid = (tenant_id or "").strip()
+    sid = (scan_id or "").strip()
 
-    merged_http_headers = _http_headers_merged_from_recon_and_phases(recon_results, phase_outputs)
-    marker_rows = _tech_rows_from_http_and_urls(
-        merged_http_headers,
+    recon_pipeline_summary: dict[str, Any] = {}
+    if isinstance(recon_results, dict):
+        cand = recon_results.get("recon_pipeline_summary")
+        if isinstance(cand, dict):
+            recon_pipeline_summary = cand
+
+    robots, sitemap = _collect_robots_sitemap_from_keys(
+        raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+    )
+    robots_sitemap_merged = _build_robots_sitemap_merged(
         robots,
         sitemap,
         raw_artifact_keys,
         fetch_bodies=fetch_raw_bodies,
     )
-    if marker_rows:
-        structured = _apply_tech_marker_rows_to_structured(structured, marker_rows)
-        structured_rows = _tech_rows_from_structured(structured)
-        tech_table = _merge_tech_stack_tables(
-            structured_rows + marker_rows,
-            legacy_rows,
-            structured=structured,
-        )
-    sec_hdr = _security_headers_from_host_map(merged_http_headers)
-    security_headers_from_findings = False
 
-    if not sec_hdr.rows:
-        fallback_header_sources: list[dict[str, dict[str, str]]] = [
-            _security_headers_from_security_headers_result(phase_outputs, recon_results),
-            _security_headers_from_nikto_stdout(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
-            _security_headers_from_whatweb_stdout(ww_merged),
-            _security_headers_from_raw_http_responses(
-                raw_artifact_keys, fetch_bodies=fetch_raw_bodies
-            ),
-        ]
-        for fb_map in fallback_header_sources:
-            if fb_map:
-                for host, hdrs in fb_map.items():
-                    cur = merged_http_headers.get(host, {})
-                    merged_http_headers[host] = {**cur, **hdrs}
-                sec_hdr = _security_headers_from_host_map(merged_http_headers)
-                if sec_hdr.rows:
-                    break
-    if merged_http_headers:
-        header_marker_rows = _tech_rows_from_http_and_urls(
-            merged_http_headers,
-            robots,
-            sitemap,
-            raw_artifact_keys,
-            fetch_bodies=False,
-        )
-        if header_marker_rows:
-            structured = _apply_tech_marker_rows_to_structured(structured, header_marker_rows)
-            structured_rows = _tech_rows_from_structured(structured)
-            tech_table = _merge_tech_stack_tables(
-                structured_rows + marker_rows + header_marker_rows,
-                legacy_rows,
-                structured=structured,
-            )
-    if not sec_hdr.rows:
-        finding_headers = _security_headers_from_findings(findings)
-        if finding_headers.rows:
-            sec_hdr = finding_headers
-            security_headers_from_findings = True
-
-    deps = _collect_dependency_rows(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
-    outdated = _assemble_outdated_components(
-        findings=findings,
-        ww_merged=ww_merged,
-        nmap_blob=nmap_blob,
-        phase_outputs=phase_outputs,
-        dependency_rows=deps,
-        trivy_enabled=trivy_enabled,
-    )
-    risk_matrix = build_risk_matrix(findings)
-    critical_vulns = _critical_vulns_from_findings(findings)
-
-    threat_excerpt = ""
-    threat_phase = "threat_modeling"
+    ports: list[int] | None = None
     for ph, od in phase_outputs:
-        if (ph or "").lower() == threat_phase and od:
-            tm = od.get("threat_model")
-            if isinstance(tm, dict) and tm:
-                threat_excerpt = _format_threat_model_for_report(tm, 4000)
-            else:
-                threat_excerpt = _phased_output_narrative(od, 1500)
+        if (ph or "").lower() == "recon" and isinstance(od, dict):
+            pr = od.get("ports")
+            if isinstance(pr, list):
+                ports = [int(x) for x in pr if isinstance(x, (int, float))]
             break
 
-    api_hint = ""
-    if tid and sid:
-        api_hint = f"/api/v1/tenants/{tid}/scans/{sid}/phases/{threat_phase}"
-
-    threat_ref = ThreatModelRefModel(
-        phase=threat_phase,
-        scan_id=sid,
-        tenant_id=tid,
-        excerpt=threat_excerpt,
-        api_hint=api_hint,
+    (
+        legacy_rows,
+        nmap_blob,
+        structured,
+        structured_rows,
+        tech_table,
+        ww_merged,
+    ) = _vh_build_tech(
+        fetch_raw_bodies,
+        phase_outputs,
+        ports,
+        raw_artifact_keys,
+        recon_results,
+        report_technologies,
+        tech_profile,
     )
 
-    exploit_chunks: list[str] = []
-    for ph, od in phase_outputs:
-        pl = (ph or "").lower()
-        if pl in ("exploitation", "post_exploitation") and od:
-            exploit_chunks.append(_phase_output_excerpt(od, 800))
-    exploit_post_excerpt = _truncate("\n\n".join(exploit_chunks), 2500)
+    (ssl_out,) = _vh_build_ssl(fetch_raw_bodies, raw_artifact_keys, recon_results)
 
-    emails = _collect_leaked_emails(phase_outputs, recon_results)
-    emails.extend(
-        _masked_emails_from_theharvester_raw(
-            raw_artifact_keys,
-            fetch_bodies=fetch_raw_bodies,
-        )
+    (
+        merged_http_headers,
+        sec_hdr,
+        security_headers_from_findings,
+        structured,
+        tech_table,
+    ) = _vh_build_headers(
+        fetch_raw_bodies,
+        findings,
+        legacy_rows,
+        phase_outputs,
+        raw_artifact_keys,
+        recon_results,
+        robots,
+        sitemap,
+        structured,
+        structured_rows,
+        tech_table,
+        ww_merged,
     )
-    if isinstance(anomalies_structured, dict):
-        with contextlib.suppress(TypeError, ValueError):
-            emails.extend(
-                _extract_emails_from_text(json.dumps(anomalies_structured, ensure_ascii=False))
-            )
-    for _ph, inp in phase_inputs:
-        if isinstance(inp, dict):
-            with contextlib.suppress(TypeError, ValueError):
-                emails.extend(
-                    _extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000])
-                )
 
-    if not emails:
-        harvester_phase_emails = _emails_from_harvester_phase_outputs(phase_outputs)
-        if harvester_phase_emails:
-            emails.extend(harvester_phase_emails)
-            logger.info(
-                "emails_harvester_phase_fallback_used",
-                extra={
-                    "event": "emails_harvester_phase_fallback_used",
-                    "count": len(harvester_phase_emails),
-                },
-            )
-    if not emails and fetch_raw_bodies:
-        for key, _p in raw_artifact_keys:
-            lowk = key.lower()
-            if not any(tok in lowk for tok in ("harvester", "theharvester", "email")):
-                continue
-            blob = _safe_download_raw(key)
-            if not blob:
-                continue
-            text = _text_from_raw_bytes(blob)
-            if not text:
-                continue
-            parsed_emails = _parse_harvester_emails(text)
-            if parsed_emails:
-                emails.extend(parsed_emails)
-                logger.info(
-                    "emails_raw_artifact_fallback_used",
-                    extra={
-                        "event": "emails_raw_artifact_fallback_used",
-                        "key_suffix": key[-64:],
-                    },
-                )
-            if len(emails) >= 64:
-                break
+    (
+        deps,
+        outdated,
+    ) = _vh_build_deps_outdated(
+        fetch_raw_bodies,
+        findings,
+        nmap_blob,
+        phase_outputs,
+        raw_artifact_keys,
+        trivy_enabled,
+        ww_merged,
+    )
+    (
+        critical_vulns,
+        exploit_post_excerpt,
+        risk_matrix,
+        threat_ref,
+    ) = _vh_build_threat_exploit(findings, phase_outputs, sid, tid)
 
-    seen_m: set[str] = set()
-    final_emails: list[str] = []
-    for e in emails:
-        if e not in seen_m:
-            seen_m.add(e)
-            final_emails.append(e)
-        if len(final_emails) >= 64:
-            break
+    (final_emails,) = _vh_build_emails(
+        anomalies_structured,
+        fetch_raw_bodies,
+        phase_inputs,
+        phase_outputs,
+        raw_artifact_keys,
+        recon_results,
+    )
 
     appendix_tools = build_appendix_tools(
         tool_runs=tool_runs,
@@ -7166,89 +7464,46 @@ def build_valhalla_report_context(
         raw_artifact_types=raw_artifact_types,
     )
 
-    tech_stack_fallback_message: str | None = None
-    if _structured_stack_effectively_empty(structured) and not tech_table:
-        tech_stack_fallback_message = (
-            "Technology stack table was not populated because no parseable WhatWeb, HTTP header, HTML/JS, "
-            "robots/sitemap, or recon fingerprint signals were available."
-        )
-
-    ssl_tls_fallback_message: str | None = None
-    if _ssl_surface_empty(ssl_out):
-        ssl_tls_fallback_message = (
-            "CRITICAL GAP: SSL/TLS assessment was not performed. No testssl.sh, sslscan, nmap ssl-enum-ciphers, "
-            "openssl, or certificate metadata was available. TLS misconfigurations (expired certs, weak ciphers, "
-            "missing HSTS) are a common entry vector. Remediation: run `testssl.sh --full <target>` and re-scan."
-        )
-
-    security_headers_fallback_message: str | None = None
-    if not sec_hdr.rows and not merged_http_headers:
-        security_headers_fallback_message = (
-            "HTTP security header table was not populated because no parseable response header map or raw "
-            "HTTP response artifact was available."
-        )
-
-    outdated_components_fallback_message: str | None = None
-    if not outdated:
-        has_trivy_rows = any("trivy" in (d.source or "").lower() for d in deps)
-        if trivy_enabled and not has_trivy_rows:
-            outdated_components_fallback_message = (
-                "SCA via Trivy was not applicable because no filesystem target, container image, SBOM, or "
-                "dependency manifest bodies were available in this scan. For external URL-only tests, "
-                "ARGUS may use JS/bundle heuristics instead of full Trivy filesystem scanning."
-            )
-        else:
-            outdated_components_fallback_message = (
-                "No explicit component advisory signals (CVE, Trivy, searchsploit, or versioned WhatWeb/nmap "
-                "fingerprints) were parsed from scan data."
-            )
-
-    robots_sitemap_fallback_message: str | None = None
-    if not robots_sitemap_merged.robots_found and not robots_sitemap_merged.sitemap_found:
-        robots_sitemap_fallback_message = (
-            "robots.txt and sitemap.xml were not present in the parsed report context; related surface "
-            "analysis is limited."
-        )
-
-    leaked_emails_fallback_message: str | None = None
-    if not final_emails:
-        leaked_emails_fallback_message = (
-            "No masked email indicators detected. With HARVESTER_ENABLED=true theHarvester "
-            "adds signals from stdout artifacts; otherwise only indirect matches in recon are possible."
-        )
-
-    ff: dict[str, bool] = {
-        "HARVESTER_ENABLED": bool(harvester_enabled),
-        "TRIVY_ENABLED": bool(trivy_enabled),
-        "INCLUDE_MINIO": bool(fetch_raw_bodies),
-    }
-    if extra_feature_flags:
-        ff.update({str(k): bool(v) for k, v in extra_feature_flags.items()})
-
-    target_guess = ""
-    if isinstance(recon_results, dict):
-        target_guess = str(
-            recon_results.get("target_url")
-            or recon_results.get("target_domain")
-            or recon_results.get("target")
-            or ""
-        )
-    if not target_guess and findings:
-        t0 = findings[0] if isinstance(findings[0], dict) else {}
-        target_guess = str(t0.get("affected_url") or t0.get("url") or t0.get("target") or "")
-
-    port_data = _build_port_exposure_summary(
-        nmap_blob=nmap_blob,
-        ports=ports,
-        structured=structured,
-        raw_artifact_keys=raw_artifact_keys,
-        fetch_bodies=fetch_raw_bodies,
-        target_hint=target_guess,
-        tls_observed=not _ssl_surface_empty(ssl_out),
-        http_observed=bool(merged_http_headers or sec_hdr.rows),
+    (
+        leaked_emails_fallback_message,
+        outdated_components_fallback_message,
+        robots_sitemap_fallback_message,
+        security_headers_fallback_message,
+        ssl_tls_fallback_message,
+        tech_stack_fallback_message,
+    ) = _vh_build_fallback_messages(
+        deps,
+        final_emails,
+        merged_http_headers,
+        outdated,
+        robots_sitemap_merged,
+        sec_hdr,
+        ssl_out,
+        structured,
+        tech_table,
+        trivy_enabled,
     )
 
-    raw_hints = _raw_keys_hint_flags(raw_artifact_keys)
+    (
+        ff,
+        port_data,
+        raw_hints,
+        target_guess,
+    ) = _vh_build_flags_ports(
+        extra_feature_flags,
+        fetch_raw_bodies,
+        findings,
+        harvester_enabled,
+        merged_http_headers,
+        nmap_blob,
+        ports,
+        raw_artifact_keys,
+        recon_results,
+        sec_hdr,
+        ssl_out,
+        structured,
+        trivy_enabled,
+    )
     mandatory, coverage = _compute_mandatory_sections_and_coverage(
         structured=structured,
         tech_table=tech_table,
