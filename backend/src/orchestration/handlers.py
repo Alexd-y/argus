@@ -2113,6 +2113,337 @@ async def _maybe_adaptive_vuln_analysis(
         return None
 
 
+async def _va_binary_analysis(llm_output, scan_id, scan_options, source_analysis):
+    if scan_options.get("binary_analysis_enabled", True) and source_analysis is not None:
+        try:
+            from src.orchestration.binary_analysis import (
+                BinaryAnalysisRequest,
+                detect_binary_type,
+                run_binary_analysis,
+            )
+
+            _sa_dict_ba = (
+                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            )
+            _code_files_ba = _sa_dict_ba.get("code_files", []) or []
+            for _cf_ba in _code_files_ba[:3]:
+                _path_ba = (
+                    str(_cf_ba.get("path", _cf_ba)) if isinstance(_cf_ba, dict) else str(_cf_ba)
+                )
+                _btype_ba = detect_binary_type(_path_ba)
+                if _btype_ba != "unknown":
+                    try:
+                        _ba_req = BinaryAnalysisRequest(
+                            binary_path=_path_ba,
+                            analysis_type="full",
+                            architecture=_btype_ba,
+                            scan_id=scan_id or "",
+                        )
+                        _ba_result = await run_binary_analysis(
+                            _ba_req, use_sandbox=bool(settings.sandbox_enabled)
+                        )
+                        if _ba_result and _ba_result.vulnerabilities:
+                            for _bv in _ba_result.vulnerabilities:
+                                llm_output.findings.append(
+                                    {
+                                        "title": f"Binary: {_bv.vuln_type} in {_path_ba}",
+                                        "severity": _bv.severity,
+                                        "description": _bv.description,
+                                        "source": "binary_analysis",
+                                        "cwe": getattr(_bv, "cwe", ""),
+                                        "evidence_tier": 2,
+                                        "code_location": _path_ba,
+                                    }
+                                )
+                            logger.info(
+                                "binary_analysis_vulns_found",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "file": _path_ba,
+                                    "vulns": len(_ba_result.vulnerabilities),
+                                },
+                            )
+                    except Exception as _ba_exc:  # noqa: BLE001
+                        logger.debug(
+                            "binary_analysis_target_failed",
+                            extra={
+                                "scan_id": scan_id,
+                                "file": _path_ba,
+                                "error": str(_ba_exc),
+                            },
+                        )
+        except Exception as _ba_outer:  # noqa: BLE001
+            logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
+
+
+async def _va_fuzzing(llm_output, scan_id, scan_options, source_analysis):
+    if scan_options.get("fuzzing_enabled") and source_analysis is not None:
+        try:
+            from src.orchestration.fuzzing import (
+                FuzzingRequest,
+                run_fuzzing_campaign,
+                select_engine,
+            )
+
+            _fuzz_targets = []
+            _sa_dict = (
+                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            )
+            _code_files = _sa_dict.get("code_files", [])
+            for _cf in (_code_files or [])[:3]:
+                _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
+                _engine = select_engine(_lang)
+                _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
+            if _fuzz_targets:
+                logger.info(
+                    "fuzzing_campaign_starting",
+                    extra={"scan_id": scan_id, "targets": len(_fuzz_targets)},
+                )
+                for _ft in _fuzz_targets:
+                    try:
+                        _freq = FuzzingRequest(
+                            target_binary=_ft["file"],
+                            language=_ft["language"],
+                            engine=_ft["engine"],
+                            scan_id=scan_id or "",
+                            timeout_seconds=min(int(scan_options.get("fuzz_timeout", 300)), 600),
+                        )
+                        _fresult = await run_fuzzing_campaign(
+                            _freq, use_sandbox=bool(settings.sandbox_enabled)
+                        )
+                        if _fresult.crashes:
+                            for _fc in _fresult.crashes:
+                                llm_output.findings.append(
+                                    {
+                                        "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
+                                        "severity": (
+                                            "high" if _fc.crash_type == "crash" else "medium"
+                                        ),
+                                        "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
+                                        "source": "fuzzing",
+                                        "cwe": "CWE-20",
+                                        "evidence_tier": 3,
+                                    }
+                                )
+                            logger.info(
+                                "fuzzing_crashes_found",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "target": _ft["file"],
+                                    "crashes": len(_fresult.crashes),
+                                },
+                            )
+                        else:
+                            logger.info(
+                                "fuzzing_campaign_clean",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "target": _ft["file"],
+                                    "runs": _fresult.total_runs,
+                                },
+                            )
+                    except Exception as _fuzz_exc:  # noqa: BLE001
+                        logger.debug(
+                            "fuzzing_target_failed",
+                            extra={"target": _ft["file"], "error": str(_fuzz_exc)},
+                        )
+        except Exception as _fuzz_outer:  # noqa: BLE001
+            logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
+
+
+async def _va_adaptive_followup(llm_output, scan_id, scan_options, target):
+    try:
+        from src.orchestration.vuln_agents import (
+            VULN_AGENT_SPECS,
+            AgentDomain,
+            filter_findings_by_domain,
+        )
+
+        agent_findings_map: dict[str, list[dict[str, Any]]] = {}
+        for domain in AgentDomain:
+            spec = VULN_AGENT_SPECS[domain]
+            relevant = filter_findings_by_domain(llm_output.findings, domain)
+            if relevant:
+                agent_findings_map[domain.value] = relevant
+                logger.debug(
+                    "vuln_agent_mapping",
+                    extra={
+                        "domain": domain.value,
+                        "agent": spec.display_name,
+                        "relevant_findings": len(relevant),
+                        "tools": list(spec.tool_allowlist),
+                        "scan_id": scan_id,
+                    },
+                )
+
+                # Fan-out: run domain-specific LLM analysis for each domain with relevant findings
+                if scan_options.get("enable_vuln_agents", True):
+                    try:
+                        domain_context = "\n".join(
+                            f"- [{f.get('severity', '?').upper()}] {f.get('title', '?')} (CWE {f.get('cwe', '?')})"
+                            for f in relevant[:10]
+                        )
+                        domain_prompt = (
+                            f"You are the {spec.display_name} — a CWE-specialized vulnerability analyst.\n"
+                            f"Focus domains: {', '.join(str(c) for c in spec.cwe_focus)}\n"
+                            f"Available tools: {', '.join(spec.tool_allowlist)}\n\n"
+                            f"Target: {target}\n\n"
+                            f"Findings requiring deeper analysis:\n{domain_context}\n\n"
+                            f"For each finding, produce an ExploitHypothesis JSON:\n"
+                            f'{{"vuln_type": "...", "location": "...", "method": "...", '
+                            f'"parameter": "...", "evidence": "...", "suggested_payload": "...", '
+                            f'"confidence": 0.0-1.0}}\n\n'
+                            f"Return a JSON array of hypotheses."
+                        )
+                        domain_analysis = await llm_facade.call_llm_with_escalation(
+                            system_prompt=f"You are {spec.display_name}. {spec.description}",
+                            user_prompt=domain_prompt,
+                            task=LLMTask.VULN_ANALYSIS,
+                            scan_id=scan_id,
+                            phase=f"vuln_agent_{domain.value}",
+                            execution_mode=_llm_execution_mode(scan_options),
+                            scan_options=scan_options,
+                        )
+                        if domain_analysis:
+                            import json as _json
+
+                            try:
+                                hypotheses = _json.loads(domain_analysis)
+                                if isinstance(hypotheses, list):
+                                    for h in hypotheses[:20]:
+                                        h["source_domain"] = domain.value
+                                        h["source_agent"] = spec.display_name
+                                    llm_output.hypotheses.extend(hypotheses)
+                            except (_json.JSONDecodeError, TypeError):
+                                for line in domain_analysis.splitlines():
+                                    if line.strip().startswith("{"):
+                                        try:
+                                            h = _json.loads(line.strip())
+                                            h["source_domain"] = domain.value
+                                            h["source_agent"] = spec.display_name
+                                            llm_output.hypotheses.append(h)
+                                        except (_json.JSONDecodeError, TypeError):
+                                            pass
+                    except Exception as _agent_llm_exc:  # noqa: BLE001
+                        logger.debug(
+                            "vuln_agent_llm_failed",
+                            extra={
+                                "domain": domain.value,
+                                "error": str(_agent_llm_exc),
+                            },
+                        )
+
+        if agent_findings_map:
+            # Build typed ExploitationQueue objects (one per domain) so the field
+            # matches its declared ``dict[str, ExploitationQueue]`` type. Assigning
+            # raw ``list[dict]`` here triggered a Pydantic serialization warning
+            # (PydanticSerializationUnexpectedValue) on every VulnAnalysisOutput dump.
+            from src.orchestration.exploitation_queue import ExploitationQueue
+
+            typed_queues: dict[str, ExploitationQueue] = {}
+            for _domain_key, _domain_findings in agent_findings_map.items():
+                try:
+                    typed_queues[_domain_key] = ExploitationQueue.from_vuln_analysis_output(
+                        target=target or "unknown",
+                        findings=_domain_findings,
+                        scan_id=scan_id or "",
+                    )
+                except Exception as _queue_exc:  # noqa: BLE001
+                    logger.debug(
+                        "exploitation_queue_build_failed",
+                        extra={"domain": _domain_key, "error": str(_queue_exc)},
+                    )
+            if typed_queues:
+                llm_output.exploitation_queues = typed_queues
+    except Exception as va_exc:  # noqa: BLE001
+        logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
+
+
+def _va_aiml_scan(llm_output, scan_options, source_analysis, target):
+    if scan_options.get("aiml_scan") or (
+        source_analysis
+        and hasattr(source_analysis, "frameworks")
+        and any(
+            "llm" in str(f).lower() or "ai" in str(f).lower()
+            for f in (getattr(source_analysis, "frameworks", None) or [])
+        )
+    ):
+        try:
+            from src.orchestration.aiml_security import AIMLSecurityScanner
+
+            _aiml = AIMLSecurityScanner()
+            _pi_findings = _aiml.scan_prompt_inputs(
+                {"target_url": target, "scan_options": json.dumps(scan_options)}
+            )
+            for _pif in _pi_findings:
+                llm_output.findings.append(
+                    {
+                        "title": f"AI/ML: {_pif.finding_type}",
+                        "severity": _pif.severity,
+                        "description": _pif.description,
+                        "recommendation": _pif.recommendation,
+                        "cwe": "prompt-injection",
+                        "source": "aiml_scanner",
+                    }
+                )
+            _mcp_tool_list = scan_options.get("mcp_tools", [])
+            if _mcp_tool_list:
+                _mcp_risks = _aiml.scan_mcp_tools(_mcp_tool_list)
+                for _mr in _mcp_risks:
+                    llm_output.findings.append(
+                        {
+                            "title": f"AI/ML: {_mr.risk_type}",
+                            "severity": _mr.severity,
+                            "description": _mr.description,
+                            "recommendation": f"Review MCP tool '{_mr.tool_name}' for {_mr.risk_type}",
+                            "cwe": "supply-chain",
+                            "source": "aiml_scanner",
+                        }
+                    )
+            _td_findings = _aiml.scan_training_data_leaks(
+                [str(f) for f in (llm_output.findings or [])],
+            )
+            for _td in _td_findings:
+                llm_output.findings.append(
+                    {
+                        "title": "AI/ML: Training data leak risk",
+                        "severity": "medium",
+                        "description": _td,
+                        "recommendation": "Review LLM output for sensitive data exposure",
+                        "cwe": "information-disclosure",
+                        "source": "aiml_scanner",
+                    }
+                )
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+
+def _va_typed_intent_compiler(llm_output, scan_id, tenant_id):
+    if settings.typed_intent_compiler_enabled:
+        try:
+            from src.orchestration.typed_intent_runner import enforce_finding_evidence
+
+            kept, dropped = enforce_finding_evidence(
+                llm_output.findings,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                phase="vuln_analysis",
+            )
+            if dropped:
+                logger.info(
+                    "typed_intent_evidence_gate",
+                    extra={
+                        "event": "typed_intent_evidence_gate",
+                        "scan_id": scan_id,
+                        "kept": len(kept),
+                        "dropped": len(dropped),
+                    },
+                )
+            llm_output.findings = kept
+        except Exception as _tig_exc:  # noqa: BLE001 — gate must never break VA
+            logger.debug("typed_intent_gate_failed", extra={"error": str(_tig_exc)})
+
+
 async def run_vuln_analysis(
     threat_model: dict,
     assets: list[str],
@@ -2568,327 +2899,16 @@ async def run_vuln_analysis(
 
     # R8 defense-in-depth: drop fabricated LLM findings (confirmed/exploitable or
     # CVE claim without any evidence). Opt-in; never touches evidenced findings.
-    if settings.typed_intent_compiler_enabled:
-        try:
-            from src.orchestration.typed_intent_runner import enforce_finding_evidence
+    _va_typed_intent_compiler(llm_output, scan_id, tenant_id)
 
-            kept, dropped = enforce_finding_evidence(
-                llm_output.findings,
-                scan_id=scan_id,
-                tenant_id=tenant_id,
-                phase="vuln_analysis",
-            )
-            if dropped:
-                logger.info(
-                    "typed_intent_evidence_gate",
-                    extra={
-                        "event": "typed_intent_evidence_gate",
-                        "scan_id": scan_id,
-                        "kept": len(kept),
-                        "dropped": len(dropped),
-                    },
-                )
-            llm_output.findings = kept
-        except Exception as _tig_exc:  # noqa: BLE001 — gate must never break VA
-            logger.debug("typed_intent_gate_failed", extra={"error": str(_tig_exc)})
-
-    if scan_options.get("aiml_scan") or (
-        source_analysis
-        and hasattr(source_analysis, "frameworks")
-        and any(
-            "llm" in str(f).lower() or "ai" in str(f).lower()
-            for f in (getattr(source_analysis, "frameworks", None) or [])
-        )
-    ):
-        try:
-            from src.orchestration.aiml_security import AIMLSecurityScanner
-
-            _aiml = AIMLSecurityScanner()
-            _pi_findings = _aiml.scan_prompt_inputs(
-                {"target_url": target, "scan_options": json.dumps(scan_options)}
-            )
-            for _pif in _pi_findings:
-                llm_output.findings.append(
-                    {
-                        "title": f"AI/ML: {_pif.finding_type}",
-                        "severity": _pif.severity,
-                        "description": _pif.description,
-                        "recommendation": _pif.recommendation,
-                        "cwe": "prompt-injection",
-                        "source": "aiml_scanner",
-                    }
-                )
-            _mcp_tool_list = scan_options.get("mcp_tools", [])
-            if _mcp_tool_list:
-                _mcp_risks = _aiml.scan_mcp_tools(_mcp_tool_list)
-                for _mr in _mcp_risks:
-                    llm_output.findings.append(
-                        {
-                            "title": f"AI/ML: {_mr.risk_type}",
-                            "severity": _mr.severity,
-                            "description": _mr.description,
-                            "recommendation": f"Review MCP tool '{_mr.tool_name}' for {_mr.risk_type}",
-                            "cwe": "supply-chain",
-                            "source": "aiml_scanner",
-                        }
-                    )
-            _td_findings = _aiml.scan_training_data_leaks(
-                [str(f) for f in (llm_output.findings or [])],
-            )
-            for _td in _td_findings:
-                llm_output.findings.append(
-                    {
-                        "title": "AI/ML: Training data leak risk",
-                        "severity": "medium",
-                        "description": _td,
-                        "recommendation": "Review LLM output for sensitive data exposure",
-                        "cwe": "information-disclosure",
-                        "source": "aiml_scanner",
-                    }
-                )
-        except Exception:  # noqa: BLE001, S110
-            pass
+    _va_aiml_scan(llm_output, scan_options, source_analysis, target)
     llm_output.active_injection_coverage = active_injection_coverage
 
-    try:
-        from src.orchestration.vuln_agents import (
-            VULN_AGENT_SPECS,
-            AgentDomain,
-            filter_findings_by_domain,
-        )
+    await _va_adaptive_followup(llm_output, scan_id, scan_options, target)
 
-        agent_findings_map: dict[str, list[dict[str, Any]]] = {}
-        for domain in AgentDomain:
-            spec = VULN_AGENT_SPECS[domain]
-            relevant = filter_findings_by_domain(llm_output.findings, domain)
-            if relevant:
-                agent_findings_map[domain.value] = relevant
-                logger.debug(
-                    "vuln_agent_mapping",
-                    extra={
-                        "domain": domain.value,
-                        "agent": spec.display_name,
-                        "relevant_findings": len(relevant),
-                        "tools": list(spec.tool_allowlist),
-                        "scan_id": scan_id,
-                    },
-                )
+    await _va_fuzzing(llm_output, scan_id, scan_options, source_analysis)
 
-                # Fan-out: run domain-specific LLM analysis for each domain with relevant findings
-                if scan_options.get("enable_vuln_agents", True):
-                    try:
-                        domain_context = "\n".join(
-                            f"- [{f.get('severity', '?').upper()}] {f.get('title', '?')} (CWE {f.get('cwe', '?')})"
-                            for f in relevant[:10]
-                        )
-                        domain_prompt = (
-                            f"You are the {spec.display_name} — a CWE-specialized vulnerability analyst.\n"
-                            f"Focus domains: {', '.join(str(c) for c in spec.cwe_focus)}\n"
-                            f"Available tools: {', '.join(spec.tool_allowlist)}\n\n"
-                            f"Target: {target}\n\n"
-                            f"Findings requiring deeper analysis:\n{domain_context}\n\n"
-                            f"For each finding, produce an ExploitHypothesis JSON:\n"
-                            f'{{"vuln_type": "...", "location": "...", "method": "...", '
-                            f'"parameter": "...", "evidence": "...", "suggested_payload": "...", '
-                            f'"confidence": 0.0-1.0}}\n\n'
-                            f"Return a JSON array of hypotheses."
-                        )
-                        domain_analysis = await llm_facade.call_llm_with_escalation(
-                            system_prompt=f"You are {spec.display_name}. {spec.description}",
-                            user_prompt=domain_prompt,
-                            task=LLMTask.VULN_ANALYSIS,
-                            scan_id=scan_id,
-                            phase=f"vuln_agent_{domain.value}",
-                            execution_mode=_llm_execution_mode(scan_options),
-                            scan_options=scan_options,
-                        )
-                        if domain_analysis:
-                            import json as _json
-
-                            try:
-                                hypotheses = _json.loads(domain_analysis)
-                                if isinstance(hypotheses, list):
-                                    for h in hypotheses[:20]:
-                                        h["source_domain"] = domain.value
-                                        h["source_agent"] = spec.display_name
-                                    llm_output.hypotheses.extend(hypotheses)
-                            except (_json.JSONDecodeError, TypeError):
-                                for line in domain_analysis.splitlines():
-                                    if line.strip().startswith("{"):
-                                        try:
-                                            h = _json.loads(line.strip())
-                                            h["source_domain"] = domain.value
-                                            h["source_agent"] = spec.display_name
-                                            llm_output.hypotheses.append(h)
-                                        except (_json.JSONDecodeError, TypeError):
-                                            pass
-                    except Exception as _agent_llm_exc:  # noqa: BLE001
-                        logger.debug(
-                            "vuln_agent_llm_failed",
-                            extra={
-                                "domain": domain.value,
-                                "error": str(_agent_llm_exc),
-                            },
-                        )
-
-        if agent_findings_map:
-            # Build typed ExploitationQueue objects (one per domain) so the field
-            # matches its declared ``dict[str, ExploitationQueue]`` type. Assigning
-            # raw ``list[dict]`` here triggered a Pydantic serialization warning
-            # (PydanticSerializationUnexpectedValue) on every VulnAnalysisOutput dump.
-            from src.orchestration.exploitation_queue import ExploitationQueue
-
-            typed_queues: dict[str, ExploitationQueue] = {}
-            for _domain_key, _domain_findings in agent_findings_map.items():
-                try:
-                    typed_queues[_domain_key] = ExploitationQueue.from_vuln_analysis_output(
-                        target=target or "unknown",
-                        findings=_domain_findings,
-                        scan_id=scan_id or "",
-                    )
-                except Exception as _queue_exc:  # noqa: BLE001
-                    logger.debug(
-                        "exploitation_queue_build_failed",
-                        extra={"domain": _domain_key, "error": str(_queue_exc)},
-                    )
-            if typed_queues:
-                llm_output.exploitation_queues = typed_queues
-    except Exception as va_exc:  # noqa: BLE001
-        logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
-
-    if scan_options.get("fuzzing_enabled") and source_analysis is not None:
-        try:
-            from src.orchestration.fuzzing import (
-                FuzzingRequest,
-                run_fuzzing_campaign,
-                select_engine,
-            )
-
-            _fuzz_targets = []
-            _sa_dict = (
-                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
-            )
-            _code_files = _sa_dict.get("code_files", [])
-            for _cf in (_code_files or [])[:3]:
-                _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
-                _engine = select_engine(_lang)
-                _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
-            if _fuzz_targets:
-                logger.info(
-                    "fuzzing_campaign_starting",
-                    extra={"scan_id": scan_id, "targets": len(_fuzz_targets)},
-                )
-                for _ft in _fuzz_targets:
-                    try:
-                        _freq = FuzzingRequest(
-                            target_binary=_ft["file"],
-                            language=_ft["language"],
-                            engine=_ft["engine"],
-                            scan_id=scan_id or "",
-                            timeout_seconds=min(int(scan_options.get("fuzz_timeout", 300)), 600),
-                        )
-                        _fresult = await run_fuzzing_campaign(
-                            _freq, use_sandbox=bool(settings.sandbox_enabled)
-                        )
-                        if _fresult.crashes:
-                            for _fc in _fresult.crashes:
-                                llm_output.findings.append(
-                                    {
-                                        "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
-                                        "severity": (
-                                            "high" if _fc.crash_type == "crash" else "medium"
-                                        ),
-                                        "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
-                                        "source": "fuzzing",
-                                        "cwe": "CWE-20",
-                                        "evidence_tier": 3,
-                                    }
-                                )
-                            logger.info(
-                                "fuzzing_crashes_found",
-                                extra={
-                                    "scan_id": scan_id,
-                                    "target": _ft["file"],
-                                    "crashes": len(_fresult.crashes),
-                                },
-                            )
-                        else:
-                            logger.info(
-                                "fuzzing_campaign_clean",
-                                extra={
-                                    "scan_id": scan_id,
-                                    "target": _ft["file"],
-                                    "runs": _fresult.total_runs,
-                                },
-                            )
-                    except Exception as _fuzz_exc:  # noqa: BLE001
-                        logger.debug(
-                            "fuzzing_target_failed",
-                            extra={"target": _ft["file"], "error": str(_fuzz_exc)},
-                        )
-        except Exception as _fuzz_outer:  # noqa: BLE001
-            logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
-
-    if scan_options.get("binary_analysis_enabled", True) and source_analysis is not None:
-        try:
-            from src.orchestration.binary_analysis import (
-                BinaryAnalysisRequest,
-                detect_binary_type,
-                run_binary_analysis,
-            )
-
-            _sa_dict_ba = (
-                source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
-            )
-            _code_files_ba = _sa_dict_ba.get("code_files", []) or []
-            for _cf_ba in _code_files_ba[:3]:
-                _path_ba = (
-                    str(_cf_ba.get("path", _cf_ba)) if isinstance(_cf_ba, dict) else str(_cf_ba)
-                )
-                _btype_ba = detect_binary_type(_path_ba)
-                if _btype_ba != "unknown":
-                    try:
-                        _ba_req = BinaryAnalysisRequest(
-                            binary_path=_path_ba,
-                            analysis_type="full",
-                            architecture=_btype_ba,
-                            scan_id=scan_id or "",
-                        )
-                        _ba_result = await run_binary_analysis(
-                            _ba_req, use_sandbox=bool(settings.sandbox_enabled)
-                        )
-                        if _ba_result and _ba_result.vulnerabilities:
-                            for _bv in _ba_result.vulnerabilities:
-                                llm_output.findings.append(
-                                    {
-                                        "title": f"Binary: {_bv.vuln_type} in {_path_ba}",
-                                        "severity": _bv.severity,
-                                        "description": _bv.description,
-                                        "source": "binary_analysis",
-                                        "cwe": getattr(_bv, "cwe", ""),
-                                        "evidence_tier": 2,
-                                        "code_location": _path_ba,
-                                    }
-                                )
-                            logger.info(
-                                "binary_analysis_vulns_found",
-                                extra={
-                                    "scan_id": scan_id,
-                                    "file": _path_ba,
-                                    "vulns": len(_ba_result.vulnerabilities),
-                                },
-                            )
-                    except Exception as _ba_exc:  # noqa: BLE001
-                        logger.debug(
-                            "binary_analysis_target_failed",
-                            extra={
-                                "scan_id": scan_id,
-                                "file": _path_ba,
-                                "error": str(_ba_exc),
-                            },
-                        )
-        except Exception as _ba_outer:  # noqa: BLE001
-            logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
+    await _va_binary_analysis(llm_output, scan_id, scan_options, source_analysis)
 
     # Platform-hardening A (3.1/5): the two redundant per-domain re-analysis
     # passes that used to live here were removed. They each re-invoked the full
