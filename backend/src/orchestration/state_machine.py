@@ -1477,6 +1477,627 @@ async def _execute_phase(
     return output_data
 
 
+async def _dispatch_phase_source_analysis(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> dict:
+    """Handle the SOURCE_ANALYSIS phase (extracted from _dispatch_phase_handler)."""
+    try:
+        source_out = await run_source_analysis(
+            target=target,
+            options=options or {},
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+        )
+    except ImportError:
+        logger.warning("source_analysis handler unavailable, skipping")
+        source_out = SourceAnalysisOutput(
+            skipped=True, summary="Source analysis handler not available"
+        )
+    except Exception as sa_exc:
+        logger.warning("source_analysis failed: %s", sa_exc)
+        source_out = SourceAnalysisOutput(skipped=True, summary=f"Source analysis error: {sa_exc}")
+    ctx.source_out = source_out
+
+    if source_out and not source_out.skipped:
+        try:
+            _sa_dict = source_out.model_dump() if hasattr(source_out, "model_dump") else {}
+            _code_files = _sa_dict.get("code_files", []) or []
+            _binary_types = []
+            for _cf in _code_files:
+                _path = str(_cf.get("path", _cf)) if isinstance(_cf, dict) else str(_cf)
+                _btype = detect_binary_type(_path)
+                if _btype != "unknown":
+                    _binary_types.append({"file": _path, "type": _btype})
+            if _binary_types:
+                logger.info(
+                    "binary_analysis_detected",
+                    extra={"scan_id": scan_id, "binaries": len(_binary_types)},
+                )
+            if _binary_types and options.get("binary_analysis_enabled", True):
+                _ba_max = min(len(_binary_types), 3)
+                for _bi in _binary_types[:_ba_max]:
+                    try:
+                        _ba_req = BinaryAnalysisRequest(
+                            binary_path=_bi["file"],
+                            analysis_type="full",
+                            architecture=_bi["type"],
+                            scan_id=scan_id or "",
+                        )
+                        _ba_result = await run_binary_analysis(
+                            _ba_req, use_sandbox=bool(settings.sandbox_enabled)
+                        )
+                        if _ba_result and _ba_result.vulnerabilities:
+                            for _bv in _ba_result.vulnerabilities:
+                                _sa_dict.setdefault("binary_findings", []).append(
+                                    {
+                                        "title": f"Binary: {_bv.vuln_type} in {_bi['file']}",
+                                        "severity": _bv.severity,
+                                        "description": _bv.description,
+                                        "source": "binary_analysis",
+                                        "cwe": "",
+                                        "evidence_tier": 2,
+                                    }
+                                )
+                            logger.info(
+                                "binary_analysis_vulns_found",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "file": _bi["file"],
+                                    "vulns": len(_ba_result.vulnerabilities),
+                                },
+                            )
+                        elif _ba_result and _ba_result.strings:
+                            logger.info(
+                                "binary_analysis_strings_extracted",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "file": _bi["file"],
+                                    "strings": len(_ba_result.strings),
+                                },
+                            )
+                        else:
+                            logger.info(
+                                "binary_analysis_no_results",
+                                extra={"scan_id": scan_id, "file": _bi["file"]},
+                            )
+                    except Exception as _ba_run_exc:
+                        logger.warning(
+                            "binary_analysis_run_failed",
+                            extra={
+                                "scan_id": scan_id,
+                                "file": _bi["file"],
+                                "error": str(_ba_run_exc),
+                            },
+                        )
+        except Exception as _ba_exc:
+            logger.warning(
+                "binary_analysis_failed",
+                extra={"scan_id": scan_id, "error": str(_ba_exc)},
+            )
+    output_data = source_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_recon(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> dict:
+    """Handle the RECON phase (extracted from _dispatch_phase_handler)."""
+    record_tool_run("recon")
+    _recon_cfg = build_recon_runtime_config(options)
+    logger.debug(
+        "recon_step_registry_preview",
+        extra={
+            "event": "recon_step_registry_preview",
+            "scan_id": scan_id,
+            "mode": _recon_cfg.mode,
+            "steps": [s.value for s in plan_recon_steps(_recon_cfg)],
+        },
+    )
+    recon_out = await run_recon(
+        target,
+        options,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        source_analysis=ctx.source_out,
+    )
+    ctx.recon_out = recon_out
+    output_data = recon_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_quick_fuzz(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> dict:
+    """Handle the QUICK_FUZZ phase (extracted from _dispatch_phase_handler)."""
+    record_tool_run("quick_fuzz")
+    quick_fuzz_out = await run_quick_fuzz(
+        target,
+        recon_output=ctx.recon_out.model_dump() if ctx.recon_out else None,
+        options=options,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
+    ctx.quick_fuzz_out = quick_fuzz_out
+    output_data = quick_fuzz_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_threat_modeling(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> dict:
+    """Handle the THREAT_MODELING phase (extracted from _dispatch_phase_handler)."""
+    record_tool_run("threat_modeling")
+    assets = ctx.recon_out.assets if ctx.recon_out else []
+    threat_out = await run_threat_modeling(
+        assets,
+        subdomains=ctx.recon_out.subdomains if ctx.recon_out else None,
+        ports=ctx.recon_out.ports if ctx.recon_out else None,
+        target=target,
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        scan_options=options,
+        source_analysis=ctx.source_out,
+        quick_fuzz_findings=ctx.quick_fuzz_out.findings if ctx.quick_fuzz_out else None,
+    )
+    ctx.threat_out = threat_out
+    output_data = threat_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_vuln_analysis(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+) -> dict:
+    """Handle the VULN_ANALYSIS phase (extracted from _dispatch_phase_handler)."""
+    record_tool_run("vuln_analysis")
+    tm = ctx.threat_out.threat_model if ctx.threat_out else {}
+    assets = ctx.recon_out.assets if ctx.recon_out else []
+    vuln_out = await run_vuln_analysis(
+        tm,
+        assets,
+        target=target,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        scan_options=options,
+        recon_context=ctx.recon_out.tool_results if ctx.recon_out else None,
+        source_analysis=ctx.source_out,
+        quick_fuzz_candidates=ctx.quick_fuzz_out.candidates if ctx.quick_fuzz_out else None,
+        attack_surface=ctx.recon_out.attack_surface if ctx.recon_out else None,
+    )
+    ctx.vuln_out = vuln_out
+    output_data = vuln_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_exploitation(
+    ctx: ScanContext,
+    *,
+    phase: ScanPhase,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+    session: AsyncSession,
+    progress: int,
+    phase_str: str,
+) -> dict:
+    """Handle the EXPLOITATION phase (extracted from _dispatch_phase_handler)."""
+    if is_quick_execution(options):
+        payload = skipped_phase_payload(phase)
+        ctx.exploit_out = ExploitationOutput(exploits=[], evidence=[])
+        return payload
+    findings = ctx.vuln_out.findings if ctx.vuln_out else []
+
+    # Block 1.4: whether the queue holds at least one actionable (exploitable,
+    # non-informational) hypothesis. Informational hardening findings (TLS,
+    # security headers, rate-limiting) map to vuln_class=None and are NOT
+    # actionable — if that is all we have, exploitation is honestly skipped.
+    _has_actionable_hypotheses = False
+    _queue_built = False
+
+    try:
+        exploitation_queue = ExploitationQueue.from_vuln_analysis_output(
+            target=target or "",
+            findings=findings,
+            scan_id=scan_id or "",
+        )
+        for _hyp_dict in ctx.vuln_out.hypotheses or []:
+            try:
+                _hyp = ExploitHypothesis(
+                    finding_id=str(_hyp_dict.get("finding_id") or _hyp_dict.get("id") or ""),
+                    vuln_type=_hyp_dict.get("vuln_type", "unknown"),
+                    location=_hyp_dict.get("location", "unknown"),
+                    method=_hyp_dict.get("method", "GET"),
+                    parameter=_hyp_dict.get("parameter", ""),
+                    evidence=_hyp_dict.get("evidence", ""),
+                    suggested_payload=_hyp_dict.get("suggested_payload", ""),
+                    confidence=float(_hyp_dict.get("confidence", 0.5)),
+                    source_phase=f"vuln_agent_{_hyp_dict.get('source_domain', 'unknown')}",
+                )
+                exploitation_queue.hypotheses.append(_hyp)
+            except Exception as _hyp_exc:
+                logger.warning(
+                    "exploit_hypothesis_append_failed",
+                    extra={"scan_id": scan_id, "error": str(_hyp_exc)},
+                )
+        # G4: consume VA-produced structured exploitation_queues (not just
+        # findings + hypotheses dicts) so typed exploit intents reach the
+        # exploitation phase.
+        _vq = getattr(ctx.vuln_out, "exploitation_queues", None)
+        if isinstance(_vq, dict) and _vq:
+            try:
+                _merged = exploitation_queue.extend_from_queues(_vq.values())
+                if _merged:
+                    logger.info(
+                        "exploitation_queues_consumed",
+                        extra={"scan_id": scan_id, "merged_hypotheses": _merged},
+                    )
+            except Exception as _vq_exc:
+                logger.warning(
+                    "exploitation_queues_merge_failed",
+                    extra={"scan_id": scan_id, "error": str(_vq_exc)},
+                )
+        _has_actionable_hypotheses = any(
+            getattr(h, "vuln_class", None) is not None for h in exploitation_queue.hypotheses
+        )
+        _queue_built = True
+        structured_findings = exploitation_queue.to_exploitation_input()
+        logger.info(
+            "ExploitationQueue: %d hypotheses (%s actionable) for %s",
+            len(exploitation_queue.hypotheses),
+            "some" if _has_actionable_hypotheses else "none",
+            scan_id,
+        )
+    except Exception as eq_exc:
+        logger.warning(
+            "ExploitationQueue build failed, using raw findings: %s",
+            eq_exc,
+            extra={"scan_id": scan_id},
+        )
+        structured_findings = None
+
+    # Block 1.4 honest outcome: when the queue was built successfully but holds
+    # no actionable hypothesis, exploitation does not pretend to run — it
+    # records an explicit skipped status instead of emitting evidence=0.
+    if _queue_built and not _has_actionable_hypotheses:
+        logger.info(
+            "exploitation_skipped_no_actionable_hypotheses",
+            extra={"scan_id": scan_id},
+        )
+        ctx.exploit_out = ExploitationOutput(
+            exploits=[],
+            evidence=[],
+            status="skipped: no actionable hypotheses",
+        )
+        await _record_event(
+            session,
+            tenant_id,
+            scan_id,
+            "progress",
+            phase_str,
+            progress,
+            message="Exploitation skipped: no actionable hypotheses",
+            data={"status": "skipped_no_actionable_hypotheses"},
+        )
+        await session.commit()
+        return ctx.exploit_out.model_dump()
+
+    try:
+        auth_cfg = TargetConfig.from_scan_options(options) if options else None
+    except Exception as _auth_exc:
+        logger.warning(
+            "exploit_auth_config_load_failed",
+            extra={"scan_id": scan_id, "error": str(_auth_exc)},
+        )
+        auth_cfg = None
+
+    if not is_quick_execution(options):
+        maybe_run_aggressive_exploit_tools(
+            findings,
+            tenant_id,
+            scan_id,
+            target,
+            scan_approval_flags=_scan_approval_flags_from_options(options),
+            scan_options=options,
+        )
+    await _record_event(
+        session,
+        tenant_id,
+        scan_id,
+        "tool_run",
+        phase_str,
+        progress,
+        message=f"Running {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
+        data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
+    )
+    record_tool_run(ExploitationSubPhase.EXPLOIT_ATTEMPT.value)
+    await session.commit()
+
+    _ewp = None
+    if options and options.get("ephemeral_workers"):
+        try:
+            _ewp = EphemeralWorkerPool(max_containers=options.get("max_ephemeral_containers", 5))
+            logger.info(
+                "ephemeral_worker_pool_active",
+                extra={"scan_id": scan_id, "max": _ewp._max_containers},
+            )
+        except Exception as _ewp_exc:
+            logger.warning(
+                "ephemeral_worker_pool_init_failed: %s",
+                _ewp_exc,
+                extra={"scan_id": scan_id},
+            )
+
+    _auth_config_dict = None
+    try:
+        if auth_cfg and hasattr(auth_cfg, "model_dump"):
+            _auth_config_dict = auth_cfg.model_dump()
+        elif auth_cfg and isinstance(auth_cfg, dict):
+            _auth_config_dict = auth_cfg
+    except Exception as _ad_exc:
+        logger.warning(
+            "exploit_auth_config_dump_failed",
+            extra={"scan_id": scan_id, "error": str(_ad_exc)},
+        )
+
+    _exploitation_findings = findings
+    try:
+        if structured_findings and isinstance(structured_findings, dict):
+            _exploitation_findings = structured_findings.get("findings", findings)
+            logger.info(
+                "Using structured_findings from ExploitationQueue (%d hypotheses)",
+                len(_exploitation_findings),
+                extra={"scan_id": scan_id},
+            )
+    except Exception as _sf_exc:
+        logger.warning(
+            "structured_findings_extract_failed",
+            extra={"scan_id": scan_id, "error": str(_sf_exc)},
+        )
+
+    attempt_out = await run_exploit_attempt(
+        _exploitation_findings,
+        scan_id=scan_id,
+        target=target,
+        tenant_id=tenant_id,
+        auth_config=_auth_config_dict,
+        execution_mode=extract_execution_mode(options if isinstance(options, dict) else None).value,
+        scan_options=options if isinstance(options, dict) else None,
+    )
+    await _record_event(
+        session,
+        tenant_id,
+        scan_id,
+        "progress",
+        phase_str,
+        progress,
+        message=f"Completed {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
+        data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
+    )
+    await _record_event(
+        session,
+        tenant_id,
+        scan_id,
+        "tool_run",
+        phase_str,
+        progress,
+        message=f"Running {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
+        data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
+    )
+    record_tool_run(ExploitationSubPhase.EXPLOIT_VERIFY.value)
+    await session.commit()
+    exploit_out = await run_exploit_verify(attempt_out)
+
+    try:
+        _microvm = ExploitVerificationMicroVM()
+        for _cand in exploit_out.exploits or []:
+            if str(_cand.get("severity", "")).lower() in ("critical", "high"):
+                try:
+                    _vr = VerificationRequest(
+                        exploit_payload=str(
+                            _cand.get("poc_curl", _cand.get("exploit_payload", ""))
+                        ),
+                        exploit_type=str(_cand.get("vuln_type", "general")),
+                        finding_id=str(_cand.get("finding_id", "")),
+                        scan_id=scan_id,
+                    )
+                    _vresult = await _microvm.verify(_vr)
+                    if _vresult.verified:
+                        _cand["microvm_verified"] = True
+                        _cand["microvm_artifact"] = _vresult.artifact_content[:2000]
+                except Exception as _vm_cand_exc:
+                    logger.warning(
+                        "microvm_verify_cand_failed",
+                        extra={"scan_id": scan_id, "error": str(_vm_cand_exc)},
+                    )
+    except Exception as _vm_exc:
+        logger.warning(
+            "microvm_verification_failed",
+            extra={"scan_id": scan_id, "error": str(_vm_exc)},
+        )
+
+    if _ewp is not None:
+        try:
+            for _ecand in (exploit_out.exploits or [])[:3]:
+                if str(_ecand.get("severity", "")).lower() in ("critical", "high"):
+                    _container_id = await _ewp.acquire(
+                        f"exploit-{scan_id[:12]}-{_ecand.get('finding_id', 'unk')[:8]}",
+                    )
+                    if _container_id:
+                        logger.info(
+                            "ephemeral_worker_acquired",
+                            extra={
+                                "scan_id": scan_id,
+                                "container": _container_id,
+                                "finding": str(_ecand.get("finding_id", "")),
+                            },
+                        )
+                        try:
+                            _artifacts = await _ewp.collect_artifacts(
+                                _container_id,
+                                scan_id,
+                                "exploit_verify",
+                                str(_ecand.get("finding_id", "")),
+                            )
+                            if _artifacts:
+                                _ecand["ephemeral_artifacts"] = _artifacts
+                        except Exception as _ewp_coll_exc:
+                            logger.warning(
+                                "ephemeral_collect_artifacts_failed",
+                                extra={
+                                    "scan_id": scan_id,
+                                    "error": str(_ewp_coll_exc),
+                                },
+                            )
+                        finally:
+                            await _ewp.release(_container_id)
+        except Exception as _ewp_dispatch_exc:
+            logger.warning(
+                "ephemeral_worker_dispatch_failed: %s",
+                _ewp_dispatch_exc,
+                extra={"scan_id": scan_id},
+            )
+        try:
+            await _ewp.prune_stale()
+            logger.info(
+                "ephemeral_worker_pool_cleanup",
+                extra={"scan_id": scan_id, "active": _ewp.active_count},
+            )
+        except Exception as _ewp_clean_exc:
+            logger.warning(
+                "ephemeral_cleanup_failed: %s",
+                _ewp_clean_exc,
+                extra={"scan_id": scan_id},
+            )
+
+    try:
+        _wm_secret = (
+            options.get("watermark_secret", "argus-default-wm-key")
+            if options
+            else "argus-default-wm-key"
+        )
+        for _exploit in exploit_out.exploits or []:
+            _poc = _exploit.get("poc_curl", _exploit.get("poc", ""))
+            if _poc and not _poc.startswith("# ARGUS-WM"):
+                _exploit["poc_curl"] = stamp_payload(
+                    _poc,
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                    secret_key=_wm_secret,
+                )
+    except Exception as _wm_exc:
+        logger.warning(
+            "poc_watermarking_failed",
+            extra={"scan_id": scan_id, "error": str(_wm_exc)},
+        )
+
+    await _record_event(
+        session,
+        tenant_id,
+        scan_id,
+        "progress",
+        phase_str,
+        progress,
+        message=f"Completed {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
+        data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
+    )
+    ctx.exploit_out = exploit_out
+    output_data = exploit_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_post_exploitation(
+    ctx: ScanContext,
+    *,
+    phase: ScanPhase,
+    scan_id: str,
+    tenant_id: str,
+    options: dict,
+) -> dict:
+    """Handle the POST_EXPLOITATION phase (extracted from _dispatch_phase_handler)."""
+    if is_quick_execution(options):
+        payload = skipped_phase_payload(phase)
+        ctx.post_out = PostExploitationOutput()
+        return payload
+    exploits = ctx.exploit_out.exploits if ctx.exploit_out else []
+    exploit_evidence = ctx.exploit_out.evidence if ctx.exploit_out else []
+    # Evidence-tier map (finding_id -> tier) from exploitation evidence so
+    # post-exploitation stays grounded in proven exploits (chain link G3).
+    evidence_tiers: dict[str, int] = {}
+    for _ev in exploit_evidence or []:
+        if not isinstance(_ev, dict):
+            continue
+        _fid = str(_ev.get("finding_id", "") or "")
+        _tier = _ev.get("evidence_tier") or _ev.get("tier")
+        if _fid and isinstance(_tier, int):
+            evidence_tiers[_fid] = max(evidence_tiers.get(_fid, 0), _tier)
+    post_out = await run_post_exploitation(
+        exploits,
+        evidence=exploit_evidence,
+        evidence_tiers=evidence_tiers,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        scan_options=options,
+    )
+    ctx.post_out = post_out
+    output_data = post_out.model_dump()
+    return output_data
+
+
+async def _dispatch_phase_reporting(
+    ctx: ScanContext,
+    *,
+    scan_id: str,
+    tenant_id: str,
+    target: str,
+    options: dict,
+    scope_context: dict[str, Any] | None,
+) -> dict:
+    """Handle the REPORTING phase (extracted from _dispatch_phase_handler)."""
+    record_tool_run("reporting")
+    report_out = await run_reporting(
+        target,
+        ctx.recon_out,
+        ctx.threat_out,
+        ctx.vuln_out,
+        ctx.exploit_out,
+        ctx.post_out,
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        scan_options=options,
+        scope_config=scope_context,
+        source_analysis=ctx.source_out,
+        quick_fuzz=ctx.quick_fuzz_out,
+    )
+    ctx.report_out = report_out
+    output_data = report_out.model_dump()
+    return output_data
+
+
 async def _dispatch_phase_handler(
     phase: ScanPhase,
     ctx: ScanContext,
@@ -1493,554 +2114,53 @@ async def _dispatch_phase_handler(
     scope_context: dict[str, Any] | None,
 ) -> dict:
     """Dispatch to the appropriate phase handler. Returns output_data dict."""
-    output_data: dict
-
     if phase == ScanPhase.SOURCE_ANALYSIS:
-        try:
-            source_out = await run_source_analysis(
-                target=target,
-                options=options or {},
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-            )
-        except ImportError:
-            logger.warning("source_analysis handler unavailable, skipping")
-            source_out = SourceAnalysisOutput(
-                skipped=True, summary="Source analysis handler not available"
-            )
-        except Exception as sa_exc:
-            logger.warning("source_analysis failed: %s", sa_exc)
-            source_out = SourceAnalysisOutput(
-                skipped=True, summary=f"Source analysis error: {sa_exc}"
-            )
-        ctx.source_out = source_out
-
-        if source_out and not source_out.skipped:
-            try:
-                _sa_dict = source_out.model_dump() if hasattr(source_out, "model_dump") else {}
-                _code_files = _sa_dict.get("code_files", []) or []
-                _binary_types = []
-                for _cf in _code_files:
-                    _path = str(_cf.get("path", _cf)) if isinstance(_cf, dict) else str(_cf)
-                    _btype = detect_binary_type(_path)
-                    if _btype != "unknown":
-                        _binary_types.append({"file": _path, "type": _btype})
-                if _binary_types:
-                    logger.info(
-                        "binary_analysis_detected",
-                        extra={"scan_id": scan_id, "binaries": len(_binary_types)},
-                    )
-                if _binary_types and options.get("binary_analysis_enabled", True):
-                    _ba_max = min(len(_binary_types), 3)
-                    for _bi in _binary_types[:_ba_max]:
-                        try:
-                            _ba_req = BinaryAnalysisRequest(
-                                binary_path=_bi["file"],
-                                analysis_type="full",
-                                architecture=_bi["type"],
-                                scan_id=scan_id or "",
-                            )
-                            _ba_result = await run_binary_analysis(
-                                _ba_req, use_sandbox=bool(settings.sandbox_enabled)
-                            )
-                            if _ba_result and _ba_result.vulnerabilities:
-                                for _bv in _ba_result.vulnerabilities:
-                                    _sa_dict.setdefault("binary_findings", []).append(
-                                        {
-                                            "title": f"Binary: {_bv.vuln_type} in {_bi['file']}",
-                                            "severity": _bv.severity,
-                                            "description": _bv.description,
-                                            "source": "binary_analysis",
-                                            "cwe": "",
-                                            "evidence_tier": 2,
-                                        }
-                                    )
-                                logger.info(
-                                    "binary_analysis_vulns_found",
-                                    extra={
-                                        "scan_id": scan_id,
-                                        "file": _bi["file"],
-                                        "vulns": len(_ba_result.vulnerabilities),
-                                    },
-                                )
-                            elif _ba_result and _ba_result.strings:
-                                logger.info(
-                                    "binary_analysis_strings_extracted",
-                                    extra={
-                                        "scan_id": scan_id,
-                                        "file": _bi["file"],
-                                        "strings": len(_ba_result.strings),
-                                    },
-                                )
-                            else:
-                                logger.info(
-                                    "binary_analysis_no_results",
-                                    extra={"scan_id": scan_id, "file": _bi["file"]},
-                                )
-                        except Exception as _ba_run_exc:
-                            logger.warning(
-                                "binary_analysis_run_failed",
-                                extra={
-                                    "scan_id": scan_id,
-                                    "file": _bi["file"],
-                                    "error": str(_ba_run_exc),
-                                },
-                            )
-            except Exception as _ba_exc:
-                logger.warning(
-                    "binary_analysis_failed",
-                    extra={"scan_id": scan_id, "error": str(_ba_exc)},
-                )
-        output_data = source_out.model_dump()
-
+        return await _dispatch_phase_source_analysis(
+            ctx, scan_id=scan_id, tenant_id=tenant_id, target=target, options=options
+        )
     elif phase == ScanPhase.RECON:
-        record_tool_run("recon")
-        _recon_cfg = build_recon_runtime_config(options)
-        logger.debug(
-            "recon_step_registry_preview",
-            extra={
-                "event": "recon_step_registry_preview",
-                "scan_id": scan_id,
-                "mode": _recon_cfg.mode,
-                "steps": [s.value for s in plan_recon_steps(_recon_cfg)],
-            },
+        return await _dispatch_phase_recon(
+            ctx, scan_id=scan_id, tenant_id=tenant_id, target=target, options=options
         )
-        recon_out = await run_recon(
-            target,
-            options,
-            tenant_id=tenant_id,
-            scan_id=scan_id,
-            source_analysis=ctx.source_out,
-        )
-        ctx.recon_out = recon_out
-        output_data = recon_out.model_dump()
-
     elif phase == ScanPhase.QUICK_FUZZ:
-        record_tool_run("quick_fuzz")
-        quick_fuzz_out = await run_quick_fuzz(
-            target,
-            recon_output=ctx.recon_out.model_dump() if ctx.recon_out else None,
-            options=options,
-            tenant_id=tenant_id,
-            scan_id=scan_id,
+        return await _dispatch_phase_quick_fuzz(
+            ctx, scan_id=scan_id, tenant_id=tenant_id, target=target, options=options
         )
-        ctx.quick_fuzz_out = quick_fuzz_out
-        output_data = quick_fuzz_out.model_dump()
-
     elif phase == ScanPhase.THREAT_MODELING:
-        record_tool_run("threat_modeling")
-        assets = ctx.recon_out.assets if ctx.recon_out else []
-        threat_out = await run_threat_modeling(
-            assets,
-            subdomains=ctx.recon_out.subdomains if ctx.recon_out else None,
-            ports=ctx.recon_out.ports if ctx.recon_out else None,
-            target=target,
-            scan_id=scan_id,
-            tenant_id=tenant_id,
-            scan_options=options,
-            source_analysis=ctx.source_out,
-            quick_fuzz_findings=ctx.quick_fuzz_out.findings if ctx.quick_fuzz_out else None,
+        return await _dispatch_phase_threat_modeling(
+            ctx, scan_id=scan_id, tenant_id=tenant_id, target=target, options=options
         )
-        ctx.threat_out = threat_out
-        output_data = threat_out.model_dump()
-
     elif phase == ScanPhase.VULN_ANALYSIS:
-        record_tool_run("vuln_analysis")
-        tm = ctx.threat_out.threat_model if ctx.threat_out else {}
-        assets = ctx.recon_out.assets if ctx.recon_out else []
-        vuln_out = await run_vuln_analysis(
-            tm,
-            assets,
-            target=target,
-            tenant_id=tenant_id,
-            scan_id=scan_id,
-            scan_options=options,
-            recon_context=ctx.recon_out.tool_results if ctx.recon_out else None,
-            source_analysis=ctx.source_out,
-            quick_fuzz_candidates=ctx.quick_fuzz_out.candidates if ctx.quick_fuzz_out else None,
-            attack_surface=ctx.recon_out.attack_surface if ctx.recon_out else None,
+        return await _dispatch_phase_vuln_analysis(
+            ctx, scan_id=scan_id, tenant_id=tenant_id, target=target, options=options
         )
-        ctx.vuln_out = vuln_out
-        output_data = vuln_out.model_dump()
-
     elif phase == ScanPhase.EXPLOITATION:
-        if is_quick_execution(options):
-            payload = skipped_phase_payload(phase)
-            ctx.exploit_out = ExploitationOutput(exploits=[], evidence=[])
-            return payload
-        findings = ctx.vuln_out.findings if ctx.vuln_out else []
-
-        # Block 1.4: whether the queue holds at least one actionable (exploitable,
-        # non-informational) hypothesis. Informational hardening findings (TLS,
-        # security headers, rate-limiting) map to vuln_class=None and are NOT
-        # actionable — if that is all we have, exploitation is honestly skipped.
-        _has_actionable_hypotheses = False
-        _queue_built = False
-
-        try:
-            exploitation_queue = ExploitationQueue.from_vuln_analysis_output(
-                target=target or "",
-                findings=findings,
-                scan_id=scan_id or "",
-            )
-            for _hyp_dict in ctx.vuln_out.hypotheses or []:
-                try:
-                    _hyp = ExploitHypothesis(
-                        finding_id=str(_hyp_dict.get("finding_id") or _hyp_dict.get("id") or ""),
-                        vuln_type=_hyp_dict.get("vuln_type", "unknown"),
-                        location=_hyp_dict.get("location", "unknown"),
-                        method=_hyp_dict.get("method", "GET"),
-                        parameter=_hyp_dict.get("parameter", ""),
-                        evidence=_hyp_dict.get("evidence", ""),
-                        suggested_payload=_hyp_dict.get("suggested_payload", ""),
-                        confidence=float(_hyp_dict.get("confidence", 0.5)),
-                        source_phase=f"vuln_agent_{_hyp_dict.get('source_domain', 'unknown')}",
-                    )
-                    exploitation_queue.hypotheses.append(_hyp)
-                except Exception as _hyp_exc:
-                    logger.warning(
-                        "exploit_hypothesis_append_failed",
-                        extra={"scan_id": scan_id, "error": str(_hyp_exc)},
-                    )
-            # G4: consume VA-produced structured exploitation_queues (not just
-            # findings + hypotheses dicts) so typed exploit intents reach the
-            # exploitation phase.
-            _vq = getattr(ctx.vuln_out, "exploitation_queues", None)
-            if isinstance(_vq, dict) and _vq:
-                try:
-                    _merged = exploitation_queue.extend_from_queues(_vq.values())
-                    if _merged:
-                        logger.info(
-                            "exploitation_queues_consumed",
-                            extra={"scan_id": scan_id, "merged_hypotheses": _merged},
-                        )
-                except Exception as _vq_exc:
-                    logger.warning(
-                        "exploitation_queues_merge_failed",
-                        extra={"scan_id": scan_id, "error": str(_vq_exc)},
-                    )
-            _has_actionable_hypotheses = any(
-                getattr(h, "vuln_class", None) is not None for h in exploitation_queue.hypotheses
-            )
-            _queue_built = True
-            structured_findings = exploitation_queue.to_exploitation_input()
-            logger.info(
-                "ExploitationQueue: %d hypotheses (%s actionable) for %s",
-                len(exploitation_queue.hypotheses),
-                "some" if _has_actionable_hypotheses else "none",
-                scan_id,
-            )
-        except Exception as eq_exc:
-            logger.warning(
-                "ExploitationQueue build failed, using raw findings: %s",
-                eq_exc,
-                extra={"scan_id": scan_id},
-            )
-            structured_findings = None
-
-        # Block 1.4 honest outcome: when the queue was built successfully but holds
-        # no actionable hypothesis, exploitation does not pretend to run — it
-        # records an explicit skipped status instead of emitting evidence=0.
-        if _queue_built and not _has_actionable_hypotheses:
-            logger.info(
-                "exploitation_skipped_no_actionable_hypotheses",
-                extra={"scan_id": scan_id},
-            )
-            ctx.exploit_out = ExploitationOutput(
-                exploits=[],
-                evidence=[],
-                status="skipped: no actionable hypotheses",
-            )
-            await _record_event(
-                session,
-                tenant_id,
-                scan_id,
-                "progress",
-                phase_str,
-                progress,
-                message="Exploitation skipped: no actionable hypotheses",
-                data={"status": "skipped_no_actionable_hypotheses"},
-            )
-            await session.commit()
-            return ctx.exploit_out.model_dump()
-
-        try:
-            auth_cfg = TargetConfig.from_scan_options(options) if options else None
-        except Exception as _auth_exc:
-            logger.warning(
-                "exploit_auth_config_load_failed",
-                extra={"scan_id": scan_id, "error": str(_auth_exc)},
-            )
-            auth_cfg = None
-
-        if not is_quick_execution(options):
-            maybe_run_aggressive_exploit_tools(
-                findings,
-                tenant_id,
-                scan_id,
-                target,
-                scan_approval_flags=_scan_approval_flags_from_options(options),
-                scan_options=options,
-            )
-        await _record_event(
-            session,
-            tenant_id,
-            scan_id,
-            "tool_run",
-            phase_str,
-            progress,
-            message=f"Running {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
-            data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
-        )
-        record_tool_run(ExploitationSubPhase.EXPLOIT_ATTEMPT.value)
-        await session.commit()
-
-        _ewp = None
-        if options and options.get("ephemeral_workers"):
-            try:
-                _ewp = EphemeralWorkerPool(
-                    max_containers=options.get("max_ephemeral_containers", 5)
-                )
-                logger.info(
-                    "ephemeral_worker_pool_active",
-                    extra={"scan_id": scan_id, "max": _ewp._max_containers},
-                )
-            except Exception as _ewp_exc:
-                logger.warning(
-                    "ephemeral_worker_pool_init_failed: %s",
-                    _ewp_exc,
-                    extra={"scan_id": scan_id},
-                )
-
-        _auth_config_dict = None
-        try:
-            if auth_cfg and hasattr(auth_cfg, "model_dump"):
-                _auth_config_dict = auth_cfg.model_dump()
-            elif auth_cfg and isinstance(auth_cfg, dict):
-                _auth_config_dict = auth_cfg
-        except Exception as _ad_exc:
-            logger.warning(
-                "exploit_auth_config_dump_failed",
-                extra={"scan_id": scan_id, "error": str(_ad_exc)},
-            )
-
-        _exploitation_findings = findings
-        try:
-            if structured_findings and isinstance(structured_findings, dict):
-                _exploitation_findings = structured_findings.get("findings", findings)
-                logger.info(
-                    "Using structured_findings from ExploitationQueue (%d hypotheses)",
-                    len(_exploitation_findings),
-                    extra={"scan_id": scan_id},
-                )
-        except Exception as _sf_exc:
-            logger.warning(
-                "structured_findings_extract_failed",
-                extra={"scan_id": scan_id, "error": str(_sf_exc)},
-            )
-
-        attempt_out = await run_exploit_attempt(
-            _exploitation_findings,
+        return await _dispatch_phase_exploitation(
+            ctx,
+            phase=phase,
             scan_id=scan_id,
+            tenant_id=tenant_id,
             target=target,
-            tenant_id=tenant_id,
-            auth_config=_auth_config_dict,
-            execution_mode=extract_execution_mode(
-                options if isinstance(options, dict) else None
-            ).value,
-            scan_options=options if isinstance(options, dict) else None,
+            options=options,
+            session=session,
+            progress=progress,
+            phase_str=phase_str,
         )
-        await _record_event(
-            session,
-            tenant_id,
-            scan_id,
-            "progress",
-            phase_str,
-            progress,
-            message=f"Completed {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
-            data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
-        )
-        await _record_event(
-            session,
-            tenant_id,
-            scan_id,
-            "tool_run",
-            phase_str,
-            progress,
-            message=f"Running {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
-            data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
-        )
-        record_tool_run(ExploitationSubPhase.EXPLOIT_VERIFY.value)
-        await session.commit()
-        exploit_out = await run_exploit_verify(attempt_out)
-
-        try:
-            _microvm = ExploitVerificationMicroVM()
-            for _cand in exploit_out.exploits or []:
-                if str(_cand.get("severity", "")).lower() in ("critical", "high"):
-                    try:
-                        _vr = VerificationRequest(
-                            exploit_payload=str(
-                                _cand.get("poc_curl", _cand.get("exploit_payload", ""))
-                            ),
-                            exploit_type=str(_cand.get("vuln_type", "general")),
-                            finding_id=str(_cand.get("finding_id", "")),
-                            scan_id=scan_id,
-                        )
-                        _vresult = await _microvm.verify(_vr)
-                        if _vresult.verified:
-                            _cand["microvm_verified"] = True
-                            _cand["microvm_artifact"] = _vresult.artifact_content[:2000]
-                    except Exception as _vm_cand_exc:
-                        logger.warning(
-                            "microvm_verify_cand_failed",
-                            extra={"scan_id": scan_id, "error": str(_vm_cand_exc)},
-                        )
-        except Exception as _vm_exc:
-            logger.warning(
-                "microvm_verification_failed",
-                extra={"scan_id": scan_id, "error": str(_vm_exc)},
-            )
-
-        if _ewp is not None:
-            try:
-                for _ecand in (exploit_out.exploits or [])[:3]:
-                    if str(_ecand.get("severity", "")).lower() in ("critical", "high"):
-                        _container_id = await _ewp.acquire(
-                            f"exploit-{scan_id[:12]}-{_ecand.get('finding_id', 'unk')[:8]}",
-                        )
-                        if _container_id:
-                            logger.info(
-                                "ephemeral_worker_acquired",
-                                extra={
-                                    "scan_id": scan_id,
-                                    "container": _container_id,
-                                    "finding": str(_ecand.get("finding_id", "")),
-                                },
-                            )
-                            try:
-                                _artifacts = await _ewp.collect_artifacts(
-                                    _container_id,
-                                    scan_id,
-                                    "exploit_verify",
-                                    str(_ecand.get("finding_id", "")),
-                                )
-                                if _artifacts:
-                                    _ecand["ephemeral_artifacts"] = _artifacts
-                            except Exception as _ewp_coll_exc:
-                                logger.warning(
-                                    "ephemeral_collect_artifacts_failed",
-                                    extra={
-                                        "scan_id": scan_id,
-                                        "error": str(_ewp_coll_exc),
-                                    },
-                                )
-                            finally:
-                                await _ewp.release(_container_id)
-            except Exception as _ewp_dispatch_exc:
-                logger.warning(
-                    "ephemeral_worker_dispatch_failed: %s",
-                    _ewp_dispatch_exc,
-                    extra={"scan_id": scan_id},
-                )
-            try:
-                await _ewp.prune_stale()
-                logger.info(
-                    "ephemeral_worker_pool_cleanup",
-                    extra={"scan_id": scan_id, "active": _ewp.active_count},
-                )
-            except Exception as _ewp_clean_exc:
-                logger.warning(
-                    "ephemeral_cleanup_failed: %s",
-                    _ewp_clean_exc,
-                    extra={"scan_id": scan_id},
-                )
-
-        try:
-            _wm_secret = (
-                options.get("watermark_secret", "argus-default-wm-key")
-                if options
-                else "argus-default-wm-key"
-            )
-            for _exploit in exploit_out.exploits or []:
-                _poc = _exploit.get("poc_curl", _exploit.get("poc", ""))
-                if _poc and not _poc.startswith("# ARGUS-WM"):
-                    _exploit["poc_curl"] = stamp_payload(
-                        _poc,
-                        scan_id=scan_id,
-                        tenant_id=tenant_id,
-                        secret_key=_wm_secret,
-                    )
-        except Exception as _wm_exc:
-            logger.warning(
-                "poc_watermarking_failed",
-                extra={"scan_id": scan_id, "error": str(_wm_exc)},
-            )
-
-        await _record_event(
-            session,
-            tenant_id,
-            scan_id,
-            "progress",
-            phase_str,
-            progress,
-            message=f"Completed {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
-            data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
-        )
-        ctx.exploit_out = exploit_out
-        output_data = exploit_out.model_dump()
-
     elif phase == ScanPhase.POST_EXPLOITATION:
-        if is_quick_execution(options):
-            payload = skipped_phase_payload(phase)
-            ctx.post_out = PostExploitationOutput()
-            return payload
-        exploits = ctx.exploit_out.exploits if ctx.exploit_out else []
-        exploit_evidence = ctx.exploit_out.evidence if ctx.exploit_out else []
-        # Evidence-tier map (finding_id -> tier) from exploitation evidence so
-        # post-exploitation stays grounded in proven exploits (chain link G3).
-        evidence_tiers: dict[str, int] = {}
-        for _ev in exploit_evidence or []:
-            if not isinstance(_ev, dict):
-                continue
-            _fid = str(_ev.get("finding_id", "") or "")
-            _tier = _ev.get("evidence_tier") or _ev.get("tier")
-            if _fid and isinstance(_tier, int):
-                evidence_tiers[_fid] = max(evidence_tiers.get(_fid, 0), _tier)
-        post_out = await run_post_exploitation(
-            exploits,
-            evidence=exploit_evidence,
-            evidence_tiers=evidence_tiers,
-            tenant_id=tenant_id,
-            scan_id=scan_id,
-            scan_options=options,
+        return await _dispatch_phase_post_exploitation(
+            ctx, phase=phase, scan_id=scan_id, tenant_id=tenant_id, options=options
         )
-        ctx.post_out = post_out
-        output_data = post_out.model_dump()
-
     elif phase == ScanPhase.REPORTING:
-        record_tool_run("reporting")
-        report_out = await run_reporting(
-            target,
-            ctx.recon_out,
-            ctx.threat_out,
-            ctx.vuln_out,
-            ctx.exploit_out,
-            ctx.post_out,
+        return await _dispatch_phase_reporting(
+            ctx,
             scan_id=scan_id,
             tenant_id=tenant_id,
-            scan_options=options,
-            scope_config=scope_context,
-            source_analysis=ctx.source_out,
-            quick_fuzz=ctx.quick_fuzz_out,
+            target=target,
+            options=options,
+            scope_context=scope_context,
         )
-        ctx.report_out = report_out
-        output_data = report_out.model_dump()
-
     else:
-        output_data = {}
-
-    return output_data
+        return {}
 
 
 # ---------------------------------------------------------------------------
