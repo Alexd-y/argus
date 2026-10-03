@@ -527,417 +527,186 @@ def _build_tools_ai_section(tools_ai_metadata: dict | None, mcp_used: bool) -> s
     return "\n".join(parts)
 
 
-def build_html_report(
-    recon_dir: str | Path,
-    output_path: str | Path | None = None,
-    mcp_used_for_endpoints: bool = False,
-    tools_ai_metadata: dict | None = None,
-) -> Path:
-    """Build professional HTML report from recon directory artifacts.
-
-    Reads dns_summary.md, subdomain_classification.csv, live_hosts_detailed.csv,
-    tech_profile.csv, headers_summary.md, tls_summary.md, endpoint_inventory.csv,
-    js_findings.md, anomalies.md, stage2_inputs.md, stage2_structured.json,
-    intel_findings.json, resolved.txt, cname_map.csv, and 00_scope files.
-
-    Args:
-        recon_dir: Path to recon directory (e.g. .../recon/svalbard-stage1/).
-        output_path: Optional output path. Default: recon_dir/stage1_report.html.
-        mcp_used_for_endpoints: When True, methodology section states that MCP
-                                user-fetch was used for endpoint discovery.
-        tools_ai_metadata: Optional dict with ai_provider, ai_model, prompts_used,
-                          mcp_tools_used for Tools & AI section.
-
-    Returns:
-        Path to generated HTML file.
-    """
-    base = Path(recon_dir)
-    out_path = Path(output_path) if output_path else base / "stage1_report.html"
-
-    target_domain = _derive_target_domain(base)
-    report_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-
-    scope_dir = base / "00_scope"
-    dns_dir = base / "03_dns"
-
-    scope_text = _read_text(scope_dir / "scope.txt")
-    roe_text = _read_text(scope_dir / "roe.txt")
-    targets_text = _read_text(scope_dir / "targets.txt")
-
-    dns_summary = _read_text(base / "dns_summary.md")
-    subdomain_csv = _load_csv(base / "subdomain_classification.csv")
-    live_hosts_csv = _load_csv(base / "live_hosts_detailed.csv")
-    tech_csv = _load_csv(base / "tech_profile.csv")
-    headers_summary = _read_text(base / "headers_summary.md")
-    headers_detailed_csv = _load_csv(base / "headers_detailed.csv")
-    tls_summary = _read_text(base / "tls_summary.md")
-    endpoint_csv = _load_csv(base / "endpoint_inventory.csv")
-    js_routes_csv = _load_csv(base / "js_routes.csv")
-    js_api_refs_csv = _load_csv(base / "js_api_refs.csv")
-    js_integrations_csv = _load_csv(base / "js_integrations.csv")
-    js_config_hints_csv = _load_csv(base / "js_config_hints.csv")
-    input_surfaces_csv = _load_csv(base / "input_surfaces.csv")
-    route_params_map_csv = _load_csv(base / "route_params_map.csv")
-    graphql_candidates_csv = _load_csv(base / "graphql_candidates.csv")
-    json_endpoint_candidates_csv = _load_csv(base / "json_endpoint_candidates.csv")
-    frontend_backend_boundaries = _read_text(base / "frontend_backend_boundaries.md")
-    app_flow_hints = _read_text(base / "app_flow_hints.md")
-    route_classification_csv = _load_csv(base / "route_classification.csv")
-    host_security_posture_csv = _load_csv(base / "host_security_posture.csv")
-    control_inconsistencies = _read_text(base / "control_inconsistencies.md")
-    response_similarity_csv = _load_csv(base / "response_similarity.csv")
-    catch_all_evidence = _read_text(base / "catch_all_evidence.md")
-    content_clusters_csv = _load_csv(base / "content_clusters.csv")
-    redirect_clusters_csv = _load_csv(base / "redirect_clusters.csv")
-    js_findings = _read_text(base / "js_findings.md")
-    anomalies_text = _read_text(base / "anomalies.md")
-    anomaly_validation = _read_text(base / "anomaly_validation.md")
-    anomaly_validation_csv = _load_csv(base / "anomaly_validation.csv")
-    hostname_behavior_matrix_csv = _load_csv(base / "hostname_behavior_matrix.csv")
-    anomalies_structured = _load_anomalies_structured(base / "anomalies_structured.json")
-    stage2_inputs = _read_text(base / "stage2_inputs.md")
-    stage2_preparation = _read_text(base / "stage2_preparation.md")
-    stage2_structured = _load_stage2_structured(base / "stage2_structured.json")
-    intel_findings = _load_intel_findings(base / "intel_findings.json")
-    stage3_readiness_json = _load_stage3_readiness(base / "stage3_readiness.json")
-
-    resolved = parse_resolved(dns_dir / "resolved.txt")
-    cname_map = parse_cname(dns_dir / "cname_map.csv")
-
-    sections: list[str] = []
-
-    # 1. Executive summary
-    sub_count = len(subdomain_csv) if subdomain_csv else len(resolved)
-    live_count = (
-        len({r.get("host", "") for r in live_hosts_csv if r.get("host")}) if live_hosts_csv else 0
-    )
-    anom_count = 0
-    if anomalies_structured and "anomalies" in anomalies_structured:
-        anom_count = len(anomalies_structured["anomalies"])
-    if anom_count == 0:
-        anom_count = anomalies_text.count("### anom_") or anomalies_text.count("- **Host**:")
-    exec_summary = f"""
-    <div class="evidence"><span class="badge badge-evidence">Evidence</span>
-    <p>Stage 1 reconnaissance for <strong>{_escape(target_domain)}</strong> completed. Discovered <strong>{sub_count}</strong> subdomains,
-    <strong>{live_count}</strong> live hosts, and <strong>{anom_count}</strong> anomalies requiring validation.</p>
-    </div>
-    <div class="observation"><span class="badge badge-observation">Observation</span>
-    <p>DNS resolution matrix and CNAME mapping documented; technology fingerprinting identified; headers and TLS observations captured.</p>
-    </div>
-    <div class="inference"><span class="badge badge-inference">Inference</span>
-    <p>Anomalies include service subdomains (cpanel, mail, webmail) returning shared 404 responses — recommend manual validation.</p>
-    </div>
-    <div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>
-    <p>CNAME takeover assessment and anomaly validation should be prioritized for Stage 2.</p>
-    </div>
-    """
-    exec_source = _source_block(
-        [
-            "subdomain_classification.csv",
-            "live_hosts_detailed.csv",
-            "anomalies_structured.json",
-        ]
-    )
-    sections.append(
-        f'<section id="section-01-executive-summary" class="section"><h2>1. Executive Summary</h2>{exec_summary}{exec_source}</section>'
-    )
-
-    # 2. Scope / methodology
-    mcp_methodology = ""
-    if mcp_used_for_endpoints:
-        mcp_methodology = """
-    <h3>Endpoint Discovery (MCP)</h3>
-    <p>Endpoint discovery (robots.txt, sitemap.xml, security.txt, favicon.ico, manifest.json) was performed via <strong>MCP user-fetch</strong> for authorized assessment.</p>
-    """
-    methodology = f"""
-    <div class="evidence"><span class="badge badge-evidence">Evidence</span>
-    <span class="badge" style="background:#e0e0e0;color:#424242;">Source: 00_scope/scope.txt, roe.txt, targets.txt</span>
-    <h3>In-Scope Assets</h3>
-    <pre>{_escape(scope_text or "Not available.")}</pre>
-    <h3>Rules of Engagement / Scan Constraints</h3>
-    <pre>{_escape(roe_text or "Not available.")}</pre>
-    <h3>Targets</h3>
-    <pre>{_escape(targets_text or "Not available.")}</pre>
-    <h3>Methodology</h3>
-    <p><strong>Passive vs safe-active:</strong> Passive recon (DNS, OSINT, CT), safe HTTP probing (no port scan, no fuzzing).</p>
-    <p><strong>Stages completed:</strong> 0 (Scope Prep), 1 (Domain/DNS), 2 (Subdomain Enum), 3 (DNS Validation), 4 (Live Hosts).</p>
-    {mcp_methodology}
-    </div>
-    """
-    sections.append(
-        f'<section id="section-02-scope-methodology" class="section"><h2>2. Scope &amp; Methodology</h2>{methodology}</section>'
-    )
-
-    # 3. Domain and DNS findings (split: Evidence, Observation, Inference)
-    dns_split = _split_dns_summary_by_taxonomy(dns_summary) if dns_summary else {}
-    dns_blocks: list[str] = []
-    if dns_split.get("evidence"):
-        dns_blocks.append(
-            f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
-            f"{_md_to_html(dns_split['evidence'])}</div>"
-        )
-    if dns_split.get("observation"):
-        dns_blocks.append(
-            f'<div class="observation"><span class="badge badge-observation">Observation</span>'
-            f"{_md_to_html(dns_split['observation'])}</div>"
-        )
-    if dns_split.get("inference"):
-        dns_blocks.append(
-            f'<div class="inference"><span class="badge badge-inference">Inference</span>'
-            f"{_md_to_html(dns_split['inference'])}</div>"
-        )
-    if not dns_blocks:
-        dns_fallback = (
-            _md_to_html(dns_summary) if dns_summary else "<p><em>No DNS summary available.</em></p>"
-        )
-        dns_blocks.append(
-            f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_fallback}</div>'
-        )
-    dns_source = _source_block(["01_domains/*.txt", "03_dns/resolved.txt"])
-    sections.append(
-        f'<section id="section-03-domain-dns-findings" class="section"><h2>3. Domain and DNS Findings</h2>{"".join(dns_blocks)}{dns_source}</section>'
-    )
-
-    # 4. Subdomain classification (REC-010: Evidence, Observation, Inference, Hypothesis)
-    sub_cols = ["subdomain", "role", "confidence", "priority", "notes"]
-    sub_table = (
-        _csv_to_html_table(subdomain_csv, sub_cols)
-        if subdomain_csv
-        else "<p><em>No subdomain classification.</em></p>"
-    )
-    sub_count_val = len(subdomain_csv) if subdomain_csv else 0
-    sub_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span><p>Raw subdomain inventory: <strong>{sub_count_val}</strong> entries from subdomain enumeration.</p></div>'
-    sub_observation = f'<div class="observation"><span class="badge badge-observation">Observation</span>{sub_table}</div>'
-    sub_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Role classification (api, admin, auth, static, etc.) derived from hostname patterns and probe results.</p></div>'
-    sub_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Prioritize high-confidence admin/auth subdomains for Stage 2 validation; verify unresolved or low-confidence entries.</p></div>'
-    sub_source = _source_block(
-        ["02_subdomains/subdomains_clean.txt", "subdomain_classification.csv"]
-    )
-    sections.append(
-        f'<section id="section-04-subdomain-classification" class="section"><h2>4. Subdomain Classification</h2>'
-        f"{sub_evidence}{sub_observation}{sub_inference}{sub_hypothesis}{sub_source}</section>"
-    )
-
-    # 5. DNS validation (resolution matrix, CNAME mapping)
-    res_rows: list[dict] = []
-    for sub, ips in sorted(resolved.items()):
-        res_rows.append(
-            {
-                "subdomain": sub,
-                "ips": ", ".join(ips[:5]) + ("..." if len(ips) > 5 else ""),
-            }
-        )
-    res_table = (
-        _csv_to_html_table(res_rows, ["subdomain", "ips"])
-        if res_rows
-        else "<p><em>No resolved data.</em></p>"
-    )
-
-    cname_rows = [
-        {
-            "host": r.get("host", ""),
-            "target": r.get("value", ""),
-            "comment": r.get("comment", ""),
-        }
-        for r in cname_map
-    ]
-    cname_table = (
-        _csv_to_html_table(cname_rows, ["host", "target", "comment"])
-        if cname_rows
-        else "<p><em>No CNAME records.</em></p>"
-    )
-
-    dns_val_evidence = f"""
-    <h3>Resolution Matrix (from resolved.txt)</h3>
-    {res_table}
-    <h3>CNAME Mapping (from cname_map.csv)</h3>
-    {cname_table}
-    """
-    dns_val_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Resolved vs unresolved counts; CNAME chains indicate delegation and potential takeover candidates.</p></div>'
-    dns_val_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>CNAME targets pointing to unclaimed or third-party services may be vulnerable to subdomain takeover.</p></div>'
-    dns_val_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Validate dangling CNAMEs and MX records before Stage 2; prioritize hosts with external targets.</p></div>'
-    dns_val_source = _source_block(["03_dns/resolved.txt", "03_dns/cname_map.csv"])
-    sections.append(
-        f'<section id="section-05-dns-validation-results" class="section"><h2>5. DNS Validation Results</h2>'
-        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_val_evidence}</div>'
-        f"{dns_val_observation}{dns_val_inference}{dns_val_hypothesis}{dns_val_source}</section>"
-    )
-
-    # 6. Live host analysis (REC-010: Evidence, Observation, Inference, Hypothesis)
-    live_cols = [
-        "host",
-        "ip",
-        "cname",
-        "final_url",
-        "status",
-        "title",
-        "server",
-        "notes",
-    ]
-    live_table = (
-        _csv_to_html_table(live_hosts_csv, live_cols)
-        if live_hosts_csv
-        else "<p><em>No live hosts data.</em></p>"
-    )
-    live_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{live_table}</div>'
-    live_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>HTTP probe results: status codes, titles, server headers; hosts responding to safe HTTP requests.</p></div>'
-    live_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Server headers and redirect chains indicate technology stack and potential admin/auth endpoints.</p></div>'
-    live_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Prioritize hosts with 401/403, login-like titles, or admin paths for Stage 2 authentication testing.</p></div>'
-    live_source = _source_block(["04_live_hosts/http_probe.csv", "live_hosts_detailed.csv"])
-    sections.append(
-        f'<section id="section-06-live-host-analysis" class="section"><h2>6. Live Host Analysis</h2>'
-        f"{live_evidence}{live_observation}{live_inference}{live_hypothesis}{live_source}</section>"
-    )
-
-    # 7. Technology profile (REC-010: Evidence, Observation, Inference, Hypothesis)
-    tech_table = _csv_to_html_table(tech_csv) if tech_csv else "<p><em>No tech profile.</em></p>"
-    tech_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span><h3>Technology Fingerprint</h3>{tech_table}</div>'
-    tech_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Technologies inferred from Server, X-Powered-By, and similar headers; Wappalyzer-style fingerprinting.</p></div>'
-    tech_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Stack composition suggests attack surface: CMS, frameworks, and APIs may have known vulnerabilities.</p></div>'
-    tech_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Cross-reference tech stack with CVE databases; prioritize outdated or high-risk components for Stage 2.</p></div>'
-    tech_source = _source_block(["tech_profile.csv", "04_live_hosts/http_probe.csv"])
-    sections.append(
-        f'<section id="section-07-technology-profile" class="section"><h2>7. Technology Profile</h2>'
-        f"{tech_evidence}{tech_observation}{tech_inference}{tech_hypothesis}{tech_source}</section>"
-    )
-
-    # 8. JavaScript / Frontend Analysis
-    js_routes_table = (
+def _html_routes(route_classification_csv, sections):
+    route_classification_table = (
         _csv_to_html_table(
-            js_routes_csv,
-            ["route_hint", "evidence_ref"],
+            route_classification_csv,
+            ["route", "host", "classification", "discovery_source", "evidence_ref"],
         )
-        if js_routes_csv
-        else "<p><em>No js_routes.csv.</em></p>"
+        if route_classification_csv
+        else "<p><em>No route_classification.csv.</em></p>"
     )
-    js_api_refs_table = (
-        _csv_to_html_table(
-            js_api_refs_csv,
-            ["api_ref", "evidence_ref"],
-        )
-        if js_api_refs_csv
-        else "<p><em>No js_api_refs.csv.</em></p>"
+    route_evidence = (
+        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
+        f"<p>Route inventory with classification (login_flow, admin_flow, api, static, etc.) from discovery sources.</p>"
+        f"{route_classification_table}</div>"
     )
-    js_integrations_table = (
-        _csv_to_html_table(
-            js_integrations_csv,
-            ["integration_hint", "integration_type", "evidence_ref"],
-        )
-        if js_integrations_csv
-        else "<p><em>No js_integrations.csv.</em></p>"
+    route_observation = (
+        '<div class="observation"><span class="badge badge-observation">Observation</span>'
+        "<p>Classification derived from path patterns and endpoint behavior; used for Stage 3 readiness assessment.</p></div>"
     )
-    js_config_table = (
-        _csv_to_html_table(
-            js_config_hints_csv,
-            ["config_hint", "evidence_ref"],
-        )
-        if js_config_hints_csv
-        else "<p><em>No js_config_hints.csv.</em></p>"
+    route_inference = (
+        '<div class="inference"><span class="badge badge-inference">Inference</span>'
+        "<p>login_flow and admin_flow routes indicate auth boundaries; api routes define backend attack surface.</p></div>"
     )
-    js_summary_html = _md_to_html(js_findings) if js_findings else "<p><em>No JS findings.</em></p>"
-    sections.append(
-        f'<section id="section-08-javascript-frontend-analysis" class="section"><h2>8. JavaScript / Frontend Analysis</h2>'
-        f'<h3>JS Routes</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{js_routes_table}</div>'
-        f'<h3>JS API References</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{js_api_refs_table}</div>'
-        f'<h3>JS Integrations</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_integrations_table}</div>'
-        f'<h3>JS Config Hints</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_config_table}</div>'
-        f'<h3>Interpretation</h3><div class="inference"><span class="badge badge-inference">Inference</span>{js_summary_html}</div>'
-        f"{_source_block(['js_routes.csv', 'js_api_refs.csv', 'js_integrations.csv', 'js_config_hints.csv', 'js_findings.md'])}</section>"
-    )
-
-    # 9. Parameters and Input Surfaces (REC-010: Evidence, Observation, Hypothesis)
-    input_surfaces_table = (
-        _csv_to_html_table(
-            input_surfaces_csv,
-            [
-                "surface_type",
-                "surface_name",
-                "context_url",
-                "classification",
-                "evidence_ref",
-            ],
-        )
-        if input_surfaces_csv
-        else "<p><em>No input_surfaces.csv.</em></p>"
-    )
-    route_params_map_table = (
-        _csv_to_html_table(
-            route_params_map_csv,
-            ["context_url", "route_path", "param_names", "sources", "evidence_refs"],
-        )
-        if route_params_map_csv
-        else "<p><em>No route_params_map.csv.</em></p>"
-    )
-    params_hypothesis = (
+    route_hypothesis = (
         '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        "<p>Prioritize auth-related parameters and form actions for Stage 2 validation; validate IDOR candidates on parameterized routes.</p></div>"
+        "<p>Prioritize login_flow and admin_flow for auth testing; validate API routes for injection and access control.</p></div>"
     )
     sections.append(
-        f'<section id="section-09-parameters-input-surfaces" class="section"><h2>9. Parameters and Input Surfaces</h2>'
-        f'<h3>Input Surfaces</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{input_surfaces_table}</div>'
-        f'<h3>Route-Parameter Mapping</h3><div class="observation"><span class="badge badge-observation">Observation</span>{route_params_map_table}</div>'
-        f"{params_hypothesis}"
-        f"{_source_block(['params_inventory.csv', 'forms_inventory.csv', 'input_surfaces.csv', 'route_params_map.csv'])}</section>"
+        f'<section id="section-18-route-classification" class="section"><h2>18. Route Classification</h2>'
+        f"{route_evidence}{route_observation}{route_inference}{route_hypothesis}"
+        f"{_source_block(['route_classification.csv', 'route_inventory.csv', 'stage3_readiness.json'])}</section>"
     )
 
-    # 10. API Surface Mapping
-    api_table = (
+
+def _html_anomaly_stage(
+    anomalies_structured,
+    anomalies_text,
+    anomaly_validation,
+    anomaly_validation_csv,
+    base,
+    intel_findings,
+    mcp_used_for_endpoints,
+    sections,
+    stage2_inputs,
+    stage2_preparation,
+    stage2_structured,
+    stage3_readiness_json,
+    tools_ai_metadata,
+):
+    anomaly_validation_table = (
         _csv_to_html_table(
-            endpoint_csv,
-            ["url", "status", "content_type", "exists", "notes"],
+            anomaly_validation_csv,
+            ["host", "classification", "confidence", "recommendation", "evidence_refs"],
         )
-        if endpoint_csv
-        else "<p><em>No endpoint inventory.</em></p>"
+        if anomaly_validation_csv
+        else "<p><em>No anomaly_validation.csv.</em></p>"
     )
-    api_surface_table = _csv_to_html_table(
-        _load_csv(base / "api_surface.csv"),
-        [
-            "host",
-            "path",
-            "full_url",
-            "source",
-            "api_type",
-            "method_hint",
-            "auth_boundary_hint",
-            "evidence_ref",
-        ],
-    )
-    graphql_table = (
-        _csv_to_html_table(
-            graphql_candidates_csv,
-            ["host", "path", "full_url", "source", "evidence_ref"],
+    if anomaly_validation:
+        anomaly_validation_html = _md_to_html(anomaly_validation)
+    elif anomalies_structured:
+        anomaly_validation_html = _render_anomalies_from_structured(anomalies_structured)
+    else:
+        anomaly_validation_html = (
+            _md_to_html(anomalies_text)
+            if anomalies_text
+            else "<p><em>No anomalies detected.</em></p>"
         )
-        if graphql_candidates_csv
-        else "<p><em>No graphql_candidates.csv.</em></p>"
+    sections.append(
+        f'<section id="section-13-anomaly-validation" class="section"><h2>13. Anomaly Validation</h2>'
+        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{anomaly_validation_table}</div>'
+        f'<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>{anomaly_validation_html}</div>'
+        f"{_source_block(['anomaly_validation.md', 'anomaly_validation.csv', 'anomalies_structured.json', 'anomalies.md'])}</section>"
     )
-    json_candidates_table = (
-        _csv_to_html_table(
-            json_endpoint_candidates_csv,
-            ["host", "path", "full_url", "source", "evidence_ref"],
+
+    # 14. Stage 2 preparation (REC-010: Evidence, Observation, Inference, Hypothesis)
+    if stage2_structured:
+        rec_html = _render_stage2_from_structured(stage2_structured)
+    elif stage2_preparation:
+        rec_html = _md_to_html(stage2_preparation)
+    elif stage2_inputs:
+        rec_html = _md_to_html(stage2_inputs)
+    else:
+        rec_html = "<p><em>No stage2_inputs. Run stage2_builder.</em></p>"
+    stage2_evidence = '<div class="evidence"><span class="badge badge-evidence">Evidence</span><p>Structured inputs from anomaly validation, route inventory, and API surface feed Stage 2 scope.</p></div>'
+    stage2_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Trust boundaries, critical assets, and entry points identified from recon artifacts.</p></div>'
+    stage2_inference = f'<div class="inference"><span class="badge badge-inference">Inference</span>{rec_html}</div>'
+    stage2_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Priority hypotheses and candidate entry points should be validated manually before penetration testing.</p></div>'
+    sections.append(
+        f'<section id="section-14-stage-2-preparation" class="section"><h2>14. Stage 2 Preparation</h2>'
+        f"{stage2_evidence}{stage2_observation}{stage2_inference}{stage2_hypothesis}"
+        f"{_source_block(['stage2_preparation.md', 'stage2_inputs.md', 'stage2_structured.json', 'anomaly_validation.md'])}</section>"
+    )
+
+    # 15. Tools & AI Used (REC-010: Evidence badge for tools inventory)
+    tools_ai_section = _build_tools_ai_section(tools_ai_metadata, mcp_used_for_endpoints)
+    sections.append(
+        f'<section id="section-15-tools-and-ai-used" class="section"><h2>15. Tools &amp; AI Used</h2>'
+        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{tools_ai_section}</div></section>'
+    )
+
+    # 16. Intel/OSINT Enrichment (REC-010: badges via intel_builder or Observation fallback)
+    if intel_findings:
+        from src.recon.reporting.intel_builder import build_intel_section_html
+
+        intel_html = build_intel_section_html(intel_findings)
+    else:
+        intel_html = (
+            '<div class="observation"><span class="badge badge-observation">Observation</span>'
+            "<p><em>No intel data. Configure API keys (e.g. SHODAN_API_KEY) and run Stage 1 report.</em></p></div>"
         )
-        if json_endpoint_candidates_csv
-        else "<p><em>No json_endpoint_candidates.csv.</em></p>"
+    intel_source = _source_block("intel_findings.json")
+    sections.append(
+        f'<section id="section-16-intel-osint-enrichment" class="section"><h2>16. Intel/OSINT Enrichment</h2>'
+        f"{intel_html}{intel_source}</section>"
     )
-    boundaries_html = (
-        _md_to_html(frontend_backend_boundaries)
-        if frontend_backend_boundaries
-        else "<p><em>No frontend_backend_boundaries.md.</em></p>"
+
+    # 17. Stage 3 Readiness (REC-010: Evidence, Observation, Inference, Hypothesis; section 17 from REC-008)
+    stage3_readiness_text = _read_text(base / "stage3_readiness.md")
+    stage3_readiness_html = (
+        _md_to_html(stage3_readiness_text)
+        if stage3_readiness_text
+        else "<p><em>No stage3_readiness.md.</em></p>"
     )
-    app_flow_html = (
-        _md_to_html(app_flow_hints) if app_flow_hints else "<p><em>No app_flow_hints.md.</em></p>"
+    stage3_evidence_parts: list[str] = []
+    if stage3_readiness_json:
+        status = stage3_readiness_json.get("status", "unknown")
+        scores = stage3_readiness_json.get("coverage_scores") or {}
+        route = float(scores.get("route") or 0)
+        inp = float(scores.get("input_surface") or 0)
+        api = float(scores.get("api_surface") or 0)
+        content = float(scores.get("content_anomaly") or 0)
+        boundary = float(scores.get("boundary_mapping") or 0)
+        stage3_evidence_parts.append(
+            f"<p><strong>Status:</strong> {_escape(str(status))}. "
+            f"Coverage: route={route:.2f}, input_surface={inp:.2f}, api_surface={api:.2f}, "
+            f"content_anomaly={content:.2f}, boundary_mapping={boundary:.2f}.</p>"
+        )
+    stage3_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{"".join(stage3_evidence_parts) or "<p>No stage3_readiness.json.</p>"}</div>'
+    stage3_observation_parts: list[str] = []
+    if stage3_readiness_json:
+        missing = stage3_readiness_json.get("missing_evidence", [])[:10]
+        follow_up = stage3_readiness_json.get("recommended_follow_up", [])[:5]
+        if missing:
+            stage3_observation_parts.append(
+                "<p><strong>Missing evidence:</strong> " + _escape(", ".join(missing)) + "</p>"
+            )
+        if follow_up:
+            stage3_observation_parts.append(
+                "<p><strong>Recommended follow-up:</strong> "
+                + _escape("; ".join(follow_up))
+                + "</p>"
+            )
+    stage3_observation = (
+        f'<div class="observation"><span class="badge badge-observation">Observation</span>'
+        f"{''.join(stage3_observation_parts) or '<p>Coverage gaps and recommended actions from readiness assessment.</p>'}</div>"
+    )
+    stage3_inference = f'<div class="inference"><span class="badge badge-inference">Inference</span>{stage3_readiness_html}</div>'
+    stage3_hypothesis = (
+        '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
+        "<p>Prioritize route and API surface coverage before penetration testing; address missing evidence gaps for Stage 3.</p></div>"
     )
     sections.append(
-        f'<section id="section-10-api-surface-mapping" class="section"><h2>10. API Surface Mapping</h2>'
-        f'<h3>Endpoint Inventory</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{api_table}</div>'
-        f'<h3>API Surface</h3><div class="observation"><span class="badge badge-observation">Observation</span>{api_surface_table}</div>'
-        f'<h3>GraphQL Candidates</h3><div class="observation"><span class="badge badge-observation">Observation</span>{graphql_table}</div>'
-        f'<h3>JSON Endpoint Candidates</h3><div class="observation"><span class="badge badge-observation">Observation</span>{json_candidates_table}</div>'
-        f'<h3>Frontend/Backend Boundaries</h3><div class="inference"><span class="badge badge-inference">Inference</span>{boundaries_html}</div>'
-        f'<h3>App Flow Hints</h3><div class="inference"><span class="badge badge-inference">Inference</span>{app_flow_html}</div>'
-        f"{_source_block(['api_surface.csv', 'graphql_candidates.csv', 'json_endpoint_candidates.csv', 'frontend_backend_boundaries.md', 'app_flow_hints.md'])}</section>"
+        f'<section id="section-17-stage-3-readiness" class="section"><h2>17. Stage 3 Readiness</h2>'
+        f"{stage3_evidence}{stage3_observation}{stage3_inference}{stage3_hypothesis}"
+        f"{_source_block(['stage3_readiness.json', 'stage3_readiness.md', 'ai_stage3_preparation_summary_normalized.json'])}</section>"
     )
 
-    # 11. Headers / Cookies / TLS Analysis
+
+def _html_headers_content(
+    catch_all_evidence,
+    content_clusters_csv,
+    control_inconsistencies,
+    headers_detailed_csv,
+    headers_summary,
+    host_security_posture_csv,
+    hostname_behavior_matrix_csv,
+    redirect_clusters_csv,
+    response_similarity_csv,
+    sections,
+    tls_summary,
+):
     headers_html = (
         _md_to_html(headers_summary) if headers_summary else "<p><em>No headers summary.</em></p>"
     )
@@ -1091,156 +860,521 @@ def build_html_report(
         f"{content_source}</section>"
     )
 
-    # 13. Anomaly Validation
-    anomaly_validation_table = (
+
+def _html_js_api(
+    app_flow_hints,
+    base,
+    endpoint_csv,
+    frontend_backend_boundaries,
+    graphql_candidates_csv,
+    input_surfaces_csv,
+    js_api_refs_csv,
+    js_config_hints_csv,
+    js_findings,
+    js_integrations_csv,
+    js_routes_csv,
+    json_endpoint_candidates_csv,
+    route_params_map_csv,
+    sections,
+):
+    js_routes_table = (
         _csv_to_html_table(
-            anomaly_validation_csv,
-            ["host", "classification", "confidence", "recommendation", "evidence_refs"],
+            js_routes_csv,
+            ["route_hint", "evidence_ref"],
         )
-        if anomaly_validation_csv
-        else "<p><em>No anomaly_validation.csv.</em></p>"
+        if js_routes_csv
+        else "<p><em>No js_routes.csv.</em></p>"
     )
-    if anomaly_validation:
-        anomaly_validation_html = _md_to_html(anomaly_validation)
-    elif anomalies_structured:
-        anomaly_validation_html = _render_anomalies_from_structured(anomalies_structured)
-    else:
-        anomaly_validation_html = (
-            _md_to_html(anomalies_text)
-            if anomalies_text
-            else "<p><em>No anomalies detected.</em></p>"
+    js_api_refs_table = (
+        _csv_to_html_table(
+            js_api_refs_csv,
+            ["api_ref", "evidence_ref"],
         )
-    sections.append(
-        f'<section id="section-13-anomaly-validation" class="section"><h2>13. Anomaly Validation</h2>'
-        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{anomaly_validation_table}</div>'
-        f'<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>{anomaly_validation_html}</div>'
-        f"{_source_block(['anomaly_validation.md', 'anomaly_validation.csv', 'anomalies_structured.json', 'anomalies.md'])}</section>"
+        if js_api_refs_csv
+        else "<p><em>No js_api_refs.csv.</em></p>"
     )
-
-    # 14. Stage 2 preparation (REC-010: Evidence, Observation, Inference, Hypothesis)
-    if stage2_structured:
-        rec_html = _render_stage2_from_structured(stage2_structured)
-    elif stage2_preparation:
-        rec_html = _md_to_html(stage2_preparation)
-    elif stage2_inputs:
-        rec_html = _md_to_html(stage2_inputs)
-    else:
-        rec_html = "<p><em>No stage2_inputs. Run stage2_builder.</em></p>"
-    stage2_evidence = '<div class="evidence"><span class="badge badge-evidence">Evidence</span><p>Structured inputs from anomaly validation, route inventory, and API surface feed Stage 2 scope.</p></div>'
-    stage2_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Trust boundaries, critical assets, and entry points identified from recon artifacts.</p></div>'
-    stage2_inference = f'<div class="inference"><span class="badge badge-inference">Inference</span>{rec_html}</div>'
-    stage2_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Priority hypotheses and candidate entry points should be validated manually before penetration testing.</p></div>'
-    sections.append(
-        f'<section id="section-14-stage-2-preparation" class="section"><h2>14. Stage 2 Preparation</h2>'
-        f"{stage2_evidence}{stage2_observation}{stage2_inference}{stage2_hypothesis}"
-        f"{_source_block(['stage2_preparation.md', 'stage2_inputs.md', 'stage2_structured.json', 'anomaly_validation.md'])}</section>"
-    )
-
-    # 15. Tools & AI Used (REC-010: Evidence badge for tools inventory)
-    tools_ai_section = _build_tools_ai_section(tools_ai_metadata, mcp_used_for_endpoints)
-    sections.append(
-        f'<section id="section-15-tools-and-ai-used" class="section"><h2>15. Tools &amp; AI Used</h2>'
-        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{tools_ai_section}</div></section>'
-    )
-
-    # 16. Intel/OSINT Enrichment (REC-010: badges via intel_builder or Observation fallback)
-    if intel_findings:
-        from src.recon.reporting.intel_builder import build_intel_section_html
-
-        intel_html = build_intel_section_html(intel_findings)
-    else:
-        intel_html = (
-            '<div class="observation"><span class="badge badge-observation">Observation</span>'
-            "<p><em>No intel data. Configure API keys (e.g. SHODAN_API_KEY) and run Stage 1 report.</em></p></div>"
+    js_integrations_table = (
+        _csv_to_html_table(
+            js_integrations_csv,
+            ["integration_hint", "integration_type", "evidence_ref"],
         )
-    intel_source = _source_block("intel_findings.json")
+        if js_integrations_csv
+        else "<p><em>No js_integrations.csv.</em></p>"
+    )
+    js_config_table = (
+        _csv_to_html_table(
+            js_config_hints_csv,
+            ["config_hint", "evidence_ref"],
+        )
+        if js_config_hints_csv
+        else "<p><em>No js_config_hints.csv.</em></p>"
+    )
+    js_summary_html = _md_to_html(js_findings) if js_findings else "<p><em>No JS findings.</em></p>"
     sections.append(
-        f'<section id="section-16-intel-osint-enrichment" class="section"><h2>16. Intel/OSINT Enrichment</h2>'
-        f"{intel_html}{intel_source}</section>"
+        f'<section id="section-08-javascript-frontend-analysis" class="section"><h2>8. JavaScript / Frontend Analysis</h2>'
+        f'<h3>JS Routes</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{js_routes_table}</div>'
+        f'<h3>JS API References</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{js_api_refs_table}</div>'
+        f'<h3>JS Integrations</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_integrations_table}</div>'
+        f'<h3>JS Config Hints</h3><div class="observation"><span class="badge badge-observation">Observation</span>{js_config_table}</div>'
+        f'<h3>Interpretation</h3><div class="inference"><span class="badge badge-inference">Inference</span>{js_summary_html}</div>'
+        f"{_source_block(['js_routes.csv', 'js_api_refs.csv', 'js_integrations.csv', 'js_config_hints.csv', 'js_findings.md'])}</section>"
     )
 
-    # 17. Stage 3 Readiness (REC-010: Evidence, Observation, Inference, Hypothesis; section 17 from REC-008)
-    stage3_readiness_text = _read_text(base / "stage3_readiness.md")
-    stage3_readiness_html = (
-        _md_to_html(stage3_readiness_text)
-        if stage3_readiness_text
-        else "<p><em>No stage3_readiness.md.</em></p>"
-    )
-    stage3_evidence_parts: list[str] = []
-    if stage3_readiness_json:
-        status = stage3_readiness_json.get("status", "unknown")
-        scores = stage3_readiness_json.get("coverage_scores") or {}
-        route = float(scores.get("route") or 0)
-        inp = float(scores.get("input_surface") or 0)
-        api = float(scores.get("api_surface") or 0)
-        content = float(scores.get("content_anomaly") or 0)
-        boundary = float(scores.get("boundary_mapping") or 0)
-        stage3_evidence_parts.append(
-            f"<p><strong>Status:</strong> {_escape(str(status))}. "
-            f"Coverage: route={route:.2f}, input_surface={inp:.2f}, api_surface={api:.2f}, "
-            f"content_anomaly={content:.2f}, boundary_mapping={boundary:.2f}.</p>"
+    # 9. Parameters and Input Surfaces (REC-010: Evidence, Observation, Hypothesis)
+    input_surfaces_table = (
+        _csv_to_html_table(
+            input_surfaces_csv,
+            [
+                "surface_type",
+                "surface_name",
+                "context_url",
+                "classification",
+                "evidence_ref",
+            ],
         )
-    stage3_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{"".join(stage3_evidence_parts) or "<p>No stage3_readiness.json.</p>"}</div>'
-    stage3_observation_parts: list[str] = []
-    if stage3_readiness_json:
-        missing = stage3_readiness_json.get("missing_evidence", [])[:10]
-        follow_up = stage3_readiness_json.get("recommended_follow_up", [])[:5]
-        if missing:
-            stage3_observation_parts.append(
-                "<p><strong>Missing evidence:</strong> " + _escape(", ".join(missing)) + "</p>"
-            )
-        if follow_up:
-            stage3_observation_parts.append(
-                "<p><strong>Recommended follow-up:</strong> "
-                + _escape("; ".join(follow_up))
-                + "</p>"
-            )
-    stage3_observation = (
-        f'<div class="observation"><span class="badge badge-observation">Observation</span>'
-        f"{''.join(stage3_observation_parts) or '<p>Coverage gaps and recommended actions from readiness assessment.</p>'}</div>"
+        if input_surfaces_csv
+        else "<p><em>No input_surfaces.csv.</em></p>"
     )
-    stage3_inference = f'<div class="inference"><span class="badge badge-inference">Inference</span>{stage3_readiness_html}</div>'
-    stage3_hypothesis = (
+    route_params_map_table = (
+        _csv_to_html_table(
+            route_params_map_csv,
+            ["context_url", "route_path", "param_names", "sources", "evidence_refs"],
+        )
+        if route_params_map_csv
+        else "<p><em>No route_params_map.csv.</em></p>"
+    )
+    params_hypothesis = (
         '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        "<p>Prioritize route and API surface coverage before penetration testing; address missing evidence gaps for Stage 3.</p></div>"
+        "<p>Prioritize auth-related parameters and form actions for Stage 2 validation; validate IDOR candidates on parameterized routes.</p></div>"
     )
     sections.append(
-        f'<section id="section-17-stage-3-readiness" class="section"><h2>17. Stage 3 Readiness</h2>'
-        f"{stage3_evidence}{stage3_observation}{stage3_inference}{stage3_hypothesis}"
-        f"{_source_block(['stage3_readiness.json', 'stage3_readiness.md', 'ai_stage3_preparation_summary_normalized.json'])}</section>"
+        f'<section id="section-09-parameters-input-surfaces" class="section"><h2>9. Parameters and Input Surfaces</h2>'
+        f'<h3>Input Surfaces</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{input_surfaces_table}</div>'
+        f'<h3>Route-Parameter Mapping</h3><div class="observation"><span class="badge badge-observation">Observation</span>{route_params_map_table}</div>'
+        f"{params_hypothesis}"
+        f"{_source_block(['params_inventory.csv', 'forms_inventory.csv', 'input_surfaces.csv', 'route_params_map.csv'])}</section>"
+    )
+
+    # 10. API Surface Mapping
+    api_table = (
+        _csv_to_html_table(
+            endpoint_csv,
+            ["url", "status", "content_type", "exists", "notes"],
+        )
+        if endpoint_csv
+        else "<p><em>No endpoint inventory.</em></p>"
+    )
+    api_surface_table = _csv_to_html_table(
+        _load_csv(base / "api_surface.csv"),
+        [
+            "host",
+            "path",
+            "full_url",
+            "source",
+            "api_type",
+            "method_hint",
+            "auth_boundary_hint",
+            "evidence_ref",
+        ],
+    )
+    graphql_table = (
+        _csv_to_html_table(
+            graphql_candidates_csv,
+            ["host", "path", "full_url", "source", "evidence_ref"],
+        )
+        if graphql_candidates_csv
+        else "<p><em>No graphql_candidates.csv.</em></p>"
+    )
+    json_candidates_table = (
+        _csv_to_html_table(
+            json_endpoint_candidates_csv,
+            ["host", "path", "full_url", "source", "evidence_ref"],
+        )
+        if json_endpoint_candidates_csv
+        else "<p><em>No json_endpoint_candidates.csv.</em></p>"
+    )
+    boundaries_html = (
+        _md_to_html(frontend_backend_boundaries)
+        if frontend_backend_boundaries
+        else "<p><em>No frontend_backend_boundaries.md.</em></p>"
+    )
+    app_flow_html = (
+        _md_to_html(app_flow_hints) if app_flow_hints else "<p><em>No app_flow_hints.md.</em></p>"
+    )
+    sections.append(
+        f'<section id="section-10-api-surface-mapping" class="section"><h2>10. API Surface Mapping</h2>'
+        f'<h3>Endpoint Inventory</h3><div class="evidence"><span class="badge badge-evidence">Evidence</span>{api_table}</div>'
+        f'<h3>API Surface</h3><div class="observation"><span class="badge badge-observation">Observation</span>{api_surface_table}</div>'
+        f'<h3>GraphQL Candidates</h3><div class="observation"><span class="badge badge-observation">Observation</span>{graphql_table}</div>'
+        f'<h3>JSON Endpoint Candidates</h3><div class="observation"><span class="badge badge-observation">Observation</span>{json_candidates_table}</div>'
+        f'<h3>Frontend/Backend Boundaries</h3><div class="inference"><span class="badge badge-inference">Inference</span>{boundaries_html}</div>'
+        f'<h3>App Flow Hints</h3><div class="inference"><span class="badge badge-inference">Inference</span>{app_flow_html}</div>'
+        f"{_source_block(['api_surface.csv', 'graphql_candidates.csv', 'json_endpoint_candidates.csv', 'frontend_backend_boundaries.md', 'app_flow_hints.md'])}</section>"
+    )
+
+
+def _html_hosts_tech(live_hosts_csv, sections, tech_csv):
+    live_cols = [
+        "host",
+        "ip",
+        "cname",
+        "final_url",
+        "status",
+        "title",
+        "server",
+        "notes",
+    ]
+    live_table = (
+        _csv_to_html_table(live_hosts_csv, live_cols)
+        if live_hosts_csv
+        else "<p><em>No live hosts data.</em></p>"
+    )
+    live_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{live_table}</div>'
+    live_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>HTTP probe results: status codes, titles, server headers; hosts responding to safe HTTP requests.</p></div>'
+    live_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Server headers and redirect chains indicate technology stack and potential admin/auth endpoints.</p></div>'
+    live_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Prioritize hosts with 401/403, login-like titles, or admin paths for Stage 2 authentication testing.</p></div>'
+    live_source = _source_block(["04_live_hosts/http_probe.csv", "live_hosts_detailed.csv"])
+    sections.append(
+        f'<section id="section-06-live-host-analysis" class="section"><h2>6. Live Host Analysis</h2>'
+        f"{live_evidence}{live_observation}{live_inference}{live_hypothesis}{live_source}</section>"
+    )
+
+    # 7. Technology profile (REC-010: Evidence, Observation, Inference, Hypothesis)
+    tech_table = _csv_to_html_table(tech_csv) if tech_csv else "<p><em>No tech profile.</em></p>"
+    tech_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span><h3>Technology Fingerprint</h3>{tech_table}</div>'
+    tech_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Technologies inferred from Server, X-Powered-By, and similar headers; Wappalyzer-style fingerprinting.</p></div>'
+    tech_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Stack composition suggests attack surface: CMS, frameworks, and APIs may have known vulnerabilities.</p></div>'
+    tech_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Cross-reference tech stack with CVE databases; prioritize outdated or high-risk components for Stage 2.</p></div>'
+    tech_source = _source_block(["tech_profile.csv", "04_live_hosts/http_probe.csv"])
+    sections.append(
+        f'<section id="section-07-technology-profile" class="section"><h2>7. Technology Profile</h2>'
+        f"{tech_evidence}{tech_observation}{tech_inference}{tech_hypothesis}{tech_source}</section>"
+    )
+
+
+def _html_dns_subdomains(cname_map, dns_summary, resolved, sections, subdomain_csv):
+    dns_split = _split_dns_summary_by_taxonomy(dns_summary) if dns_summary else {}
+    dns_blocks: list[str] = []
+    if dns_split.get("evidence"):
+        dns_blocks.append(
+            f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
+            f"{_md_to_html(dns_split['evidence'])}</div>"
+        )
+    if dns_split.get("observation"):
+        dns_blocks.append(
+            f'<div class="observation"><span class="badge badge-observation">Observation</span>'
+            f"{_md_to_html(dns_split['observation'])}</div>"
+        )
+    if dns_split.get("inference"):
+        dns_blocks.append(
+            f'<div class="inference"><span class="badge badge-inference">Inference</span>'
+            f"{_md_to_html(dns_split['inference'])}</div>"
+        )
+    if not dns_blocks:
+        dns_fallback = (
+            _md_to_html(dns_summary) if dns_summary else "<p><em>No DNS summary available.</em></p>"
+        )
+        dns_blocks.append(
+            f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_fallback}</div>'
+        )
+    dns_source = _source_block(["01_domains/*.txt", "03_dns/resolved.txt"])
+    sections.append(
+        f'<section id="section-03-domain-dns-findings" class="section"><h2>3. Domain and DNS Findings</h2>{"".join(dns_blocks)}{dns_source}</section>'
+    )
+
+    # 4. Subdomain classification (REC-010: Evidence, Observation, Inference, Hypothesis)
+    sub_cols = ["subdomain", "role", "confidence", "priority", "notes"]
+    sub_table = (
+        _csv_to_html_table(subdomain_csv, sub_cols)
+        if subdomain_csv
+        else "<p><em>No subdomain classification.</em></p>"
+    )
+    sub_count_val = len(subdomain_csv) if subdomain_csv else 0
+    sub_evidence = f'<div class="evidence"><span class="badge badge-evidence">Evidence</span><p>Raw subdomain inventory: <strong>{sub_count_val}</strong> entries from subdomain enumeration.</p></div>'
+    sub_observation = f'<div class="observation"><span class="badge badge-observation">Observation</span>{sub_table}</div>'
+    sub_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>Role classification (api, admin, auth, static, etc.) derived from hostname patterns and probe results.</p></div>'
+    sub_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Prioritize high-confidence admin/auth subdomains for Stage 2 validation; verify unresolved or low-confidence entries.</p></div>'
+    sub_source = _source_block(
+        ["02_subdomains/subdomains_clean.txt", "subdomain_classification.csv"]
+    )
+    sections.append(
+        f'<section id="section-04-subdomain-classification" class="section"><h2>4. Subdomain Classification</h2>'
+        f"{sub_evidence}{sub_observation}{sub_inference}{sub_hypothesis}{sub_source}</section>"
+    )
+
+    # 5. DNS validation (resolution matrix, CNAME mapping)
+    res_rows: list[dict] = []
+    for sub, ips in sorted(resolved.items()):
+        res_rows.append(
+            {
+                "subdomain": sub,
+                "ips": ", ".join(ips[:5]) + ("..." if len(ips) > 5 else ""),
+            }
+        )
+    res_table = (
+        _csv_to_html_table(res_rows, ["subdomain", "ips"])
+        if res_rows
+        else "<p><em>No resolved data.</em></p>"
+    )
+
+    cname_rows = [
+        {
+            "host": r.get("host", ""),
+            "target": r.get("value", ""),
+            "comment": r.get("comment", ""),
+        }
+        for r in cname_map
+    ]
+    cname_table = (
+        _csv_to_html_table(cname_rows, ["host", "target", "comment"])
+        if cname_rows
+        else "<p><em>No CNAME records.</em></p>"
+    )
+
+    dns_val_evidence = f"""
+    <h3>Resolution Matrix (from resolved.txt)</h3>
+    {res_table}
+    <h3>CNAME Mapping (from cname_map.csv)</h3>
+    {cname_table}
+    """
+    dns_val_observation = '<div class="observation"><span class="badge badge-observation">Observation</span><p>Resolved vs unresolved counts; CNAME chains indicate delegation and potential takeover candidates.</p></div>'
+    dns_val_inference = '<div class="inference"><span class="badge badge-inference">Inference</span><p>CNAME targets pointing to unclaimed or third-party services may be vulnerable to subdomain takeover.</p></div>'
+    dns_val_hypothesis = '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span><p>Validate dangling CNAMEs and MX records before Stage 2; prioritize hosts with external targets.</p></div>'
+    dns_val_source = _source_block(["03_dns/resolved.txt", "03_dns/cname_map.csv"])
+    sections.append(
+        f'<section id="section-05-dns-validation-results" class="section"><h2>5. DNS Validation Results</h2>'
+        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>{dns_val_evidence}</div>'
+        f"{dns_val_observation}{dns_val_inference}{dns_val_hypothesis}{dns_val_source}</section>"
+    )
+
+
+def _html_exec_methodology(
+    anomalies_structured,
+    anomalies_text,
+    live_hosts_csv,
+    mcp_used_for_endpoints,
+    resolved,
+    roe_text,
+    scope_text,
+    sections,
+    subdomain_csv,
+    target_domain,
+    targets_text,
+):
+    sub_count = len(subdomain_csv) if subdomain_csv else len(resolved)
+    live_count = (
+        len({r.get("host", "") for r in live_hosts_csv if r.get("host")}) if live_hosts_csv else 0
+    )
+    anom_count = 0
+    if anomalies_structured and "anomalies" in anomalies_structured:
+        anom_count = len(anomalies_structured["anomalies"])
+    if anom_count == 0:
+        anom_count = anomalies_text.count("### anom_") or anomalies_text.count("- **Host**:")
+    exec_summary = f"""
+    <div class="evidence"><span class="badge badge-evidence">Evidence</span>
+    <p>Stage 1 reconnaissance for <strong>{_escape(target_domain)}</strong> completed. Discovered <strong>{sub_count}</strong> subdomains,
+    <strong>{live_count}</strong> live hosts, and <strong>{anom_count}</strong> anomalies requiring validation.</p>
+    </div>
+    <div class="observation"><span class="badge badge-observation">Observation</span>
+    <p>DNS resolution matrix and CNAME mapping documented; technology fingerprinting identified; headers and TLS observations captured.</p>
+    </div>
+    <div class="inference"><span class="badge badge-inference">Inference</span>
+    <p>Anomalies include service subdomains (cpanel, mail, webmail) returning shared 404 responses — recommend manual validation.</p>
+    </div>
+    <div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>
+    <p>CNAME takeover assessment and anomaly validation should be prioritized for Stage 2.</p>
+    </div>
+    """
+    exec_source = _source_block(
+        [
+            "subdomain_classification.csv",
+            "live_hosts_detailed.csv",
+            "anomalies_structured.json",
+        ]
+    )
+    sections.append(
+        f'<section id="section-01-executive-summary" class="section"><h2>1. Executive Summary</h2>{exec_summary}{exec_source}</section>'
+    )
+
+    # 2. Scope / methodology
+    mcp_methodology = ""
+    if mcp_used_for_endpoints:
+        mcp_methodology = """
+    <h3>Endpoint Discovery (MCP)</h3>
+    <p>Endpoint discovery (robots.txt, sitemap.xml, security.txt, favicon.ico, manifest.json) was performed via <strong>MCP user-fetch</strong> for authorized assessment.</p>
+    """
+    methodology = f"""
+    <div class="evidence"><span class="badge badge-evidence">Evidence</span>
+    <span class="badge" style="background:#e0e0e0;color:#424242;">Source: 00_scope/scope.txt, roe.txt, targets.txt</span>
+    <h3>In-Scope Assets</h3>
+    <pre>{_escape(scope_text or "Not available.")}</pre>
+    <h3>Rules of Engagement / Scan Constraints</h3>
+    <pre>{_escape(roe_text or "Not available.")}</pre>
+    <h3>Targets</h3>
+    <pre>{_escape(targets_text or "Not available.")}</pre>
+    <h3>Methodology</h3>
+    <p><strong>Passive vs safe-active:</strong> Passive recon (DNS, OSINT, CT), safe HTTP probing (no port scan, no fuzzing).</p>
+    <p><strong>Stages completed:</strong> 0 (Scope Prep), 1 (Domain/DNS), 2 (Subdomain Enum), 3 (DNS Validation), 4 (Live Hosts).</p>
+    {mcp_methodology}
+    </div>
+    """
+    sections.append(
+        f'<section id="section-02-scope-methodology" class="section"><h2>2. Scope &amp; Methodology</h2>{methodology}</section>'
+    )
+
+
+def build_html_report(
+    recon_dir: str | Path,
+    output_path: str | Path | None = None,
+    mcp_used_for_endpoints: bool = False,
+    tools_ai_metadata: dict | None = None,
+) -> Path:
+    """Build professional HTML report from recon directory artifacts.
+
+    Reads dns_summary.md, subdomain_classification.csv, live_hosts_detailed.csv,
+    tech_profile.csv, headers_summary.md, tls_summary.md, endpoint_inventory.csv,
+    js_findings.md, anomalies.md, stage2_inputs.md, stage2_structured.json,
+    intel_findings.json, resolved.txt, cname_map.csv, and 00_scope files.
+
+    Args:
+        recon_dir: Path to recon directory (e.g. .../recon/svalbard-stage1/).
+        output_path: Optional output path. Default: recon_dir/stage1_report.html.
+        mcp_used_for_endpoints: When True, methodology section states that MCP
+                                user-fetch was used for endpoint discovery.
+        tools_ai_metadata: Optional dict with ai_provider, ai_model, prompts_used,
+                          mcp_tools_used for Tools & AI section.
+
+    Returns:
+        Path to generated HTML file.
+    """
+    base = Path(recon_dir)
+    out_path = Path(output_path) if output_path else base / "stage1_report.html"
+
+    target_domain = _derive_target_domain(base)
+    report_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+    scope_dir = base / "00_scope"
+    dns_dir = base / "03_dns"
+
+    scope_text = _read_text(scope_dir / "scope.txt")
+    roe_text = _read_text(scope_dir / "roe.txt")
+    targets_text = _read_text(scope_dir / "targets.txt")
+
+    dns_summary = _read_text(base / "dns_summary.md")
+    subdomain_csv = _load_csv(base / "subdomain_classification.csv")
+    live_hosts_csv = _load_csv(base / "live_hosts_detailed.csv")
+    tech_csv = _load_csv(base / "tech_profile.csv")
+    headers_summary = _read_text(base / "headers_summary.md")
+    headers_detailed_csv = _load_csv(base / "headers_detailed.csv")
+    tls_summary = _read_text(base / "tls_summary.md")
+    endpoint_csv = _load_csv(base / "endpoint_inventory.csv")
+    js_routes_csv = _load_csv(base / "js_routes.csv")
+    js_api_refs_csv = _load_csv(base / "js_api_refs.csv")
+    js_integrations_csv = _load_csv(base / "js_integrations.csv")
+    js_config_hints_csv = _load_csv(base / "js_config_hints.csv")
+    input_surfaces_csv = _load_csv(base / "input_surfaces.csv")
+    route_params_map_csv = _load_csv(base / "route_params_map.csv")
+    graphql_candidates_csv = _load_csv(base / "graphql_candidates.csv")
+    json_endpoint_candidates_csv = _load_csv(base / "json_endpoint_candidates.csv")
+    frontend_backend_boundaries = _read_text(base / "frontend_backend_boundaries.md")
+    app_flow_hints = _read_text(base / "app_flow_hints.md")
+    route_classification_csv = _load_csv(base / "route_classification.csv")
+    host_security_posture_csv = _load_csv(base / "host_security_posture.csv")
+    control_inconsistencies = _read_text(base / "control_inconsistencies.md")
+    response_similarity_csv = _load_csv(base / "response_similarity.csv")
+    catch_all_evidence = _read_text(base / "catch_all_evidence.md")
+    content_clusters_csv = _load_csv(base / "content_clusters.csv")
+    redirect_clusters_csv = _load_csv(base / "redirect_clusters.csv")
+    js_findings = _read_text(base / "js_findings.md")
+    anomalies_text = _read_text(base / "anomalies.md")
+    anomaly_validation = _read_text(base / "anomaly_validation.md")
+    anomaly_validation_csv = _load_csv(base / "anomaly_validation.csv")
+    hostname_behavior_matrix_csv = _load_csv(base / "hostname_behavior_matrix.csv")
+    anomalies_structured = _load_anomalies_structured(base / "anomalies_structured.json")
+    stage2_inputs = _read_text(base / "stage2_inputs.md")
+    stage2_preparation = _read_text(base / "stage2_preparation.md")
+    stage2_structured = _load_stage2_structured(base / "stage2_structured.json")
+    intel_findings = _load_intel_findings(base / "intel_findings.json")
+    stage3_readiness_json = _load_stage3_readiness(base / "stage3_readiness.json")
+
+    resolved = parse_resolved(dns_dir / "resolved.txt")
+    cname_map = parse_cname(dns_dir / "cname_map.csv")
+
+    sections: list[str] = []
+
+    # 1. Executive summary
+    _html_exec_methodology(
+        anomalies_structured,
+        anomalies_text,
+        live_hosts_csv,
+        mcp_used_for_endpoints,
+        resolved,
+        roe_text,
+        scope_text,
+        sections,
+        subdomain_csv,
+        target_domain,
+        targets_text,
+    )
+
+    # 3. Domain and DNS findings (split: Evidence, Observation, Inference)
+    _html_dns_subdomains(cname_map, dns_summary, resolved, sections, subdomain_csv)
+
+    # 6. Live host analysis (REC-010: Evidence, Observation, Inference, Hypothesis)
+    _html_hosts_tech(live_hosts_csv, sections, tech_csv)
+
+    # 8. JavaScript / Frontend Analysis
+    _html_js_api(
+        app_flow_hints,
+        base,
+        endpoint_csv,
+        frontend_backend_boundaries,
+        graphql_candidates_csv,
+        input_surfaces_csv,
+        js_api_refs_csv,
+        js_config_hints_csv,
+        js_findings,
+        js_integrations_csv,
+        js_routes_csv,
+        json_endpoint_candidates_csv,
+        route_params_map_csv,
+        sections,
+    )
+
+    # 11. Headers / Cookies / TLS Analysis
+    _html_headers_content(
+        catch_all_evidence,
+        content_clusters_csv,
+        control_inconsistencies,
+        headers_detailed_csv,
+        headers_summary,
+        host_security_posture_csv,
+        hostname_behavior_matrix_csv,
+        redirect_clusters_csv,
+        response_similarity_csv,
+        sections,
+        tls_summary,
+    )
+
+    # 13. Anomaly Validation
+    _html_anomaly_stage(
+        anomalies_structured,
+        anomalies_text,
+        anomaly_validation,
+        anomaly_validation_csv,
+        base,
+        intel_findings,
+        mcp_used_for_endpoints,
+        sections,
+        stage2_inputs,
+        stage2_preparation,
+        stage2_structured,
+        stage3_readiness_json,
+        tools_ai_metadata,
     )
 
     # 18. Route Classification (REC-010: Evidence, Observation, Inference, Hypothesis)
-    route_classification_table = (
-        _csv_to_html_table(
-            route_classification_csv,
-            ["route", "host", "classification", "discovery_source", "evidence_ref"],
-        )
-        if route_classification_csv
-        else "<p><em>No route_classification.csv.</em></p>"
-    )
-    route_evidence = (
-        f'<div class="evidence"><span class="badge badge-evidence">Evidence</span>'
-        f"<p>Route inventory with classification (login_flow, admin_flow, api, static, etc.) from discovery sources.</p>"
-        f"{route_classification_table}</div>"
-    )
-    route_observation = (
-        '<div class="observation"><span class="badge badge-observation">Observation</span>'
-        "<p>Classification derived from path patterns and endpoint behavior; used for Stage 3 readiness assessment.</p></div>"
-    )
-    route_inference = (
-        '<div class="inference"><span class="badge badge-inference">Inference</span>'
-        "<p>login_flow and admin_flow routes indicate auth boundaries; api routes define backend attack surface.</p></div>"
-    )
-    route_hypothesis = (
-        '<div class="hypothesis"><span class="badge badge-hypothesis">Hypothesis</span>'
-        "<p>Prioritize login_flow and admin_flow for auth testing; validate API routes for injection and access control.</p></div>"
-    )
-    sections.append(
-        f'<section id="section-18-route-classification" class="section"><h2>18. Route Classification</h2>'
-        f"{route_evidence}{route_observation}{route_inference}{route_hypothesis}"
-        f"{_source_block(['route_classification.csv', 'route_inventory.csv', 'stage3_readiness.json'])}</section>"
-    )
+    _html_routes(route_classification_csv, sections)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
