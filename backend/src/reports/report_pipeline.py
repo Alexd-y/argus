@@ -340,6 +340,470 @@ async def _upsert_report_object(
         )
 
 
+async def _rgp_valhalla_llm_remediation(
+    artifact,
+    built,
+    canon_fmt,
+    canon_key,
+    generated,
+    report_data,
+    report_id,
+    scan_id,
+    session,
+    tenant_id,
+    tier_str,
+    upload,
+    valhalla_llm_status,
+    vfmt,
+):
+    if tier_str == "valhalla" and settings.valhalla_llm_remediation_enabled:
+        try:
+            from src.reports.llm_remediation.facade_binding import (
+                build_facade_llm_callable,
+                resolve_report_llm_identity,
+            )
+            from src.reports.llm_remediation.integration import (
+                generate_valhalla_llm_release,
+            )
+
+            vsnapshot = build_snapshot_from_report_data(
+                report_data,
+                scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+                scan_report_data=getattr(built, "scan_report_data", None),
+            )
+            vfindings = [
+                {
+                    "finding_id": f.finding_id,
+                    "title": f.title,
+                    "severity": f.severity,
+                    "verification_status": f.verification_status,
+                    "evidence_refs": list(f.evidence_ids),
+                    "description": f.description,
+                    "cwe": f.cwe,
+                }
+                for f in vsnapshot.findings
+            ]
+            vmeta = {
+                "report_id": report_id,
+                "report_version": vsnapshot.snapshot_hash or report_id,
+                "tenant_id": tenant_id,
+                "scan_id": scan_id,
+                "target": vsnapshot.target,
+            }
+            # Phase S — record the REAL provider/model (not the alias), fail
+            # fast with llm_not_invoked when no provider is usable, and probe
+            # once before the per-finding pass (prompt §28.3/§28.6).
+            llm_identity = resolve_report_llm_identity()
+            _vdoc, vrelease = generate_valhalla_llm_release(
+                vfindings,
+                report_meta=vmeta,
+                llm_callable=build_facade_llm_callable(
+                    scan_id=scan_id, tenant_id=tenant_id, fail_if_unconfigured=True
+                ),
+                formats=["json", "md", "xml", "html"],
+                canonical_snapshot_hash=vsnapshot.snapshot_hash,
+                provider=llm_identity.provider_id if llm_identity else "unresolved",
+                model=llm_identity.model if llm_identity else "unresolved",
+                health_probe=True,
+            )
+
+            # Phase E.4 — merge the accepted LLM remediation/closure INTO the
+            # canonical v2 snapshot so the mandatory conclusions print inside the
+            # finding cards of the primary PDF/MD/JSON/XML, then re-emit the
+            # canonical_* set from the enriched snapshot. Fail-soft: any error
+            # leaves the un-merged canonical artifacts (emitted above) in place.
+            try:
+                merged_doc = merge_llm_into_document(vsnapshot, _vdoc)
+                # Phase M — reference the independent verification kit from the
+                # report, then render so the passport carries the ref. The kit is
+                # built from and uploaded for this exact (final) snapshot below.
+                merged_doc = merged_doc.model_copy(
+                    update={"verification_kit_ref": "valhalla_verification_kit"}
+                ).finalized()
+                merged_completed_at = merged_doc.completed_at or ""
+                merged_artifacts = render_canonical_bundle(
+                    merged_doc,
+                    include_pdf=True,
+                    html_to_pdf=lambda html: _snapshot_pdf_bytes(html, merged_completed_at),
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                )
+                assert_canonical_parity(merged_artifacts)
+                for artifact in merged_artifacts:
+                    canon_fmt = f"canonical_{artifact.format}"
+                    canon_key = upload(
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        canon_fmt,
+                        artifact.content,
+                        content_type=_CANONICAL_CONTENT_TYPES.get(canon_fmt, artifact.mime_type),
+                    )
+                    if canon_key:
+                        await _upsert_report_object(
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt=canon_fmt,
+                            object_key=canon_key,
+                            size_bytes=artifact.size,
+                        )
+                        generated[canon_fmt] = canon_key
+
+                # Phase M — build + upload the independent verification kit from
+                # the same final snapshot (shares snapshot_hash with the report).
+                try:
+                    kit_bytes, _kit_manifest = build_verification_kit(merged_doc)
+                    kit_key = upload(
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        "valhalla_verification_kit",
+                        kit_bytes,
+                        content_type="application/zip",
+                    )
+                    if kit_key:
+                        await _upsert_report_object(
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt="valhalla_verification_kit",
+                            object_key=kit_key,
+                            size_bytes=len(kit_bytes),
+                        )
+                        generated["valhalla_verification_kit"] = kit_key
+                except Exception:  # noqa: BLE001 — kit is additive
+                    logger.warning(
+                        "valhalla_verification_kit_failed",
+                        extra={
+                            "event": "valhalla_verification_kit_failed",
+                            "report_id": report_id,
+                        },
+                    )
+
+                logger.info(
+                    "canonical_snapshot_llm_merged",
+                    extra={
+                        "event": "canonical_snapshot_llm_merged",
+                        "report_id": report_id,
+                        "snapshot_hash": merged_doc.snapshot_hash,
+                        "llm_analysis_status": merged_doc.llm_analysis_status,
+                        "assessment_completeness": merged_doc.assessment_completeness,
+                    },
+                )
+            except Exception:  # noqa: BLE001 — merge is additive; keep base canon
+                logger.warning(
+                    "canonical_snapshot_llm_merge_failed",
+                    extra={
+                        "event": "canonical_snapshot_llm_merge_failed",
+                        "report_id": report_id,
+                    },
+                )
+            for vfmt, artifact in vrelease.artifacts.items():
+                llm_fmt = f"valhalla_llm_{vfmt}"
+                llm_key = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    llm_fmt,
+                    artifact.content,
+                    content_type=artifact.mime_type,
+                )
+                if llm_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt=llm_fmt,
+                        object_key=llm_key,
+                        size_bytes=artifact.size_bytes,
+                    )
+                    generated[llm_fmt] = llm_key
+            manifest_bytes = vrelease.manifest.model_dump_json(indent=2).encode("utf-8")
+            manifest_key = upload(
+                tenant_id,
+                scan_id,
+                tier_str,
+                report_id,
+                "valhalla_llm_manifest",
+                manifest_bytes,
+                content_type="application/json",
+            )
+            if manifest_key:
+                await _upsert_report_object(
+                    session,
+                    tenant_id=tenant_id,
+                    scan_id=scan_id,
+                    report_id=report_id,
+                    fmt="valhalla_llm_manifest",
+                    object_key=manifest_key,
+                    size_bytes=len(manifest_bytes),
+                )
+                generated["valhalla_llm_manifest"] = manifest_key
+            valhalla_llm_status = str(vrelease.manifest.generation_status.value)
+            logger.info(
+                "valhalla_llm_release_emitted",
+                extra={
+                    "event": "valhalla_llm_release_emitted",
+                    "report_id": report_id,
+                    "generation_status": vrelease.manifest.generation_status.value,
+                    "assessment_completeness": (vrelease.manifest.assessment_completeness.value),
+                    "formats": sorted(vrelease.artifacts.keys()),
+                },
+            )
+        except Exception:  # noqa: BLE001 — VH-LLM deliverable is additive
+            valhalla_llm_status = "failed"
+            logger.warning(
+                "valhalla_llm_release_failed",
+                extra={
+                    "event": "valhalla_llm_release_failed",
+                    "report_id": report_id,
+                },
+            )
+    return (valhalla_llm_status,)
+
+
+async def _rgp_canonical_snapshot(
+    built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
+):
+    artifact = None
+    canon_fmt = None
+    canon_key = None
+    if settings.canonical_report_snapshot_enabled:
+        try:
+            snapshot = build_snapshot_from_report_data(
+                report_data,
+                scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+                scan_report_data=getattr(built, "scan_report_data", None),
+            )
+            completed_at = snapshot.completed_at or ""
+            artifacts = render_canonical_bundle(
+                snapshot,
+                include_pdf=True,
+                html_to_pdf=lambda html: _snapshot_pdf_bytes(html, completed_at),
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+            )
+            # Atomic parity (§20.9): require the full canonical set from ONE
+            # snapshot before uploading anything, so we never ship a partial /
+            # divergent format subset. PDF stays best-effort (not required).
+            assert_canonical_parity(artifacts)
+            for artifact in artifacts:
+                canon_fmt = f"canonical_{artifact.format}"
+                canon_key = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    canon_fmt,
+                    artifact.content,
+                    content_type=_CANONICAL_CONTENT_TYPES.get(canon_fmt, artifact.mime_type),
+                )
+                if canon_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt=canon_fmt,
+                        object_key=canon_key,
+                        size_bytes=artifact.size,
+                    )
+                    generated[canon_fmt] = canon_key
+            logger.info(
+                "canonical_snapshot_emitted",
+                extra={
+                    "event": "canonical_snapshot_emitted",
+                    "report_id": report_id,
+                    "snapshot_hash": snapshot.snapshot_hash,
+                    "formats": [a.format for a in artifacts],
+                },
+            )
+        except Exception:  # noqa: BLE001 — canonical snapshot is additive
+            logger.warning(
+                "canonical_snapshot_failed",
+                extra={
+                    "event": "canonical_snapshot_failed",
+                    "report_id": report_id,
+                },
+            )
+    return (
+        artifact,
+        canon_fmt,
+        canon_key,
+    )
+
+
+async def _rgp_generate_formats(
+    built,
+    fmt_list,
+    generated,
+    report_data,
+    report_id,
+    scan_id,
+    session,
+    tenant_id,
+    tenant_pdf_format,
+    tier_str,
+    upload,
+):
+    vfmt = None
+    for fmt in fmt_list:
+        if fmt == "html":
+            content = generate_html(
+                report_data,
+                jinja_context=built.template_context,
+                tier=tier_str,
+            )
+        elif fmt == "pdf":
+            # Phase 1 (C-01): the canonical snapshot bundle emits the single
+            # Valhalla PDF (``canonical_pdf``). Skip the legacy ``valhalla.html.j2``
+            # PDF so the bundle never ships two competing, divergent PDFs. The
+            # legacy layout stays available behind ``valhalla_legacy_pdf`` and is
+            # only skipped when a canonical PDF will actually be produced.
+            if (
+                tier_str == "valhalla"
+                and not settings.valhalla_legacy_pdf
+                and settings.canonical_report_snapshot_enabled
+            ):
+                continue
+            content = generate_pdf(
+                report_data,
+                jinja_context=built.template_context,
+                tier=tier_str,
+                pdf_archival_format=tenant_pdf_format,
+            )
+        elif fmt == "json":
+            content = generate_json(report_data, jinja_context=built.template_context)
+        elif fmt == "csv":
+            content = generate_csv(report_data, jinja_context=built.template_context)
+        elif fmt == "md":
+            content = generate_markdown(
+                report_data, jinja_context=built.template_context, tier=tier_str
+            )
+        elif fmt == "xml":
+            content = generate_xml(report_data, jinja_context=built.template_context)
+        else:
+            continue
+        key = upload(
+            tenant_id,
+            scan_id,
+            tier_str,
+            report_id,
+            fmt,
+            content,
+            content_type=CONTENT_TYPES.get(fmt, "application/octet-stream"),
+        )
+        if not key:
+            raise RuntimeError(f"Upload failed for format {fmt}")
+        await _upsert_report_object(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            report_id=report_id,
+            fmt=fmt,
+            object_key=key,
+            size_bytes=len(content),
+        )
+        generated[fmt] = key
+        if fmt == "csv" and tier_str == "valhalla":
+            vhl_csv = generate_valhalla_sections_csv(
+                report_data, jinja_context=built.template_context
+            )
+            vfmt = VALHALLA_SECTIONS_CSV_FORMAT
+            vkey = upload(
+                tenant_id,
+                scan_id,
+                tier_str,
+                report_id,
+                vfmt,
+                vhl_csv,
+                content_type=CONTENT_TYPES.get(vfmt, "text/csv; charset=utf-8"),
+            )
+            if not vkey:
+                raise RuntimeError(f"Upload failed for format {vfmt}")
+            await _upsert_report_object(
+                session,
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                report_id=report_id,
+                fmt=vfmt,
+                object_key=vkey,
+                size_bytes=len(vhl_csv),
+            )
+            generated[vfmt] = vkey
+            # Companion CSVs — technologies, outdated components, tool health
+            for comp_name, comp_gen, comp_content_type in [
+                (
+                    "technologies_csv",
+                    generate_technologies_csv,
+                    "text/csv; charset=utf-8",
+                ),
+                (
+                    "outdated_components_csv",
+                    generate_outdated_components_csv,
+                    "text/csv; charset=utf-8",
+                ),
+                (
+                    "tool_health_csv",
+                    generate_tool_health_csv,
+                    "text/csv; charset=utf-8",
+                ),
+            ]:
+                comp_bytes = comp_gen(report_data, jinja_context=built.template_context)
+                comp_key = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    comp_name,
+                    comp_bytes,
+                    content_type=comp_content_type,
+                )
+                if comp_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt=comp_name,
+                        object_key=comp_key,
+                        size_bytes=len(comp_bytes),
+                    )
+                    generated[comp_name] = comp_key
+            # Export validation report
+            val_report = generate_export_validation_report(
+                report_data, jinja_context=built.template_context
+            )
+            val_key = upload(
+                tenant_id,
+                scan_id,
+                tier_str,
+                report_id,
+                "export_validation_report",
+                val_report,
+                content_type="application/json; charset=utf-8",
+            )
+            if val_key:
+                await _upsert_report_object(
+                    session,
+                    tenant_id=tenant_id,
+                    scan_id=scan_id,
+                    report_id=report_id,
+                    fmt="export_validation_report",
+                    object_key=val_key,
+                    size_bytes=len(val_report),
+                )
+                generated["export_validation_report"] = val_key
+    return (vfmt,)
+
+
 async def run_generate_report_pipeline(
     session: AsyncSession,
     *,
@@ -483,434 +947,51 @@ async def run_generate_report_pipeline(
         # out of the per-format branch to keep a single async query at the
         # top of the loop.
         tenant_pdf_format = await resolve_tenant_pdf_archival_format(session, tenant_id)
-        for fmt in fmt_list:
-            if fmt == "html":
-                content = generate_html(
-                    report_data,
-                    jinja_context=built.template_context,
-                    tier=tier_str,
-                )
-            elif fmt == "pdf":
-                # Phase 1 (C-01): the canonical snapshot bundle emits the single
-                # Valhalla PDF (``canonical_pdf``). Skip the legacy ``valhalla.html.j2``
-                # PDF so the bundle never ships two competing, divergent PDFs. The
-                # legacy layout stays available behind ``valhalla_legacy_pdf`` and is
-                # only skipped when a canonical PDF will actually be produced.
-                if (
-                    tier_str == "valhalla"
-                    and not settings.valhalla_legacy_pdf
-                    and settings.canonical_report_snapshot_enabled
-                ):
-                    continue
-                content = generate_pdf(
-                    report_data,
-                    jinja_context=built.template_context,
-                    tier=tier_str,
-                    pdf_archival_format=tenant_pdf_format,
-                )
-            elif fmt == "json":
-                content = generate_json(report_data, jinja_context=built.template_context)
-            elif fmt == "csv":
-                content = generate_csv(report_data, jinja_context=built.template_context)
-            elif fmt == "md":
-                content = generate_markdown(
-                    report_data, jinja_context=built.template_context, tier=tier_str
-                )
-            elif fmt == "xml":
-                content = generate_xml(report_data, jinja_context=built.template_context)
-            else:
-                continue
-            key = upload(
-                tenant_id,
-                scan_id,
-                tier_str,
-                report_id,
-                fmt,
-                content,
-                content_type=CONTENT_TYPES.get(fmt, "application/octet-stream"),
-            )
-            if not key:
-                raise RuntimeError(f"Upload failed for format {fmt}")
-            await _upsert_report_object(
-                session,
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                report_id=report_id,
-                fmt=fmt,
-                object_key=key,
-                size_bytes=len(content),
-            )
-            generated[fmt] = key
-            if fmt == "csv" and tier_str == "valhalla":
-                vhl_csv = generate_valhalla_sections_csv(
-                    report_data, jinja_context=built.template_context
-                )
-                vfmt = VALHALLA_SECTIONS_CSV_FORMAT
-                vkey = upload(
-                    tenant_id,
-                    scan_id,
-                    tier_str,
-                    report_id,
-                    vfmt,
-                    vhl_csv,
-                    content_type=CONTENT_TYPES.get(vfmt, "text/csv; charset=utf-8"),
-                )
-                if not vkey:
-                    raise RuntimeError(f"Upload failed for format {vfmt}")
-                await _upsert_report_object(
-                    session,
-                    tenant_id=tenant_id,
-                    scan_id=scan_id,
-                    report_id=report_id,
-                    fmt=vfmt,
-                    object_key=vkey,
-                    size_bytes=len(vhl_csv),
-                )
-                generated[vfmt] = vkey
-                # Companion CSVs — technologies, outdated components, tool health
-                for comp_name, comp_gen, comp_content_type in [
-                    (
-                        "technologies_csv",
-                        generate_technologies_csv,
-                        "text/csv; charset=utf-8",
-                    ),
-                    (
-                        "outdated_components_csv",
-                        generate_outdated_components_csv,
-                        "text/csv; charset=utf-8",
-                    ),
-                    (
-                        "tool_health_csv",
-                        generate_tool_health_csv,
-                        "text/csv; charset=utf-8",
-                    ),
-                ]:
-                    comp_bytes = comp_gen(report_data, jinja_context=built.template_context)
-                    comp_key = upload(
-                        tenant_id,
-                        scan_id,
-                        tier_str,
-                        report_id,
-                        comp_name,
-                        comp_bytes,
-                        content_type=comp_content_type,
-                    )
-                    if comp_key:
-                        await _upsert_report_object(
-                            session,
-                            tenant_id=tenant_id,
-                            scan_id=scan_id,
-                            report_id=report_id,
-                            fmt=comp_name,
-                            object_key=comp_key,
-                            size_bytes=len(comp_bytes),
-                        )
-                        generated[comp_name] = comp_key
-                # Export validation report
-                val_report = generate_export_validation_report(
-                    report_data, jinja_context=built.template_context
-                )
-                val_key = upload(
-                    tenant_id,
-                    scan_id,
-                    tier_str,
-                    report_id,
-                    "export_validation_report",
-                    val_report,
-                    content_type="application/json; charset=utf-8",
-                )
-                if val_key:
-                    await _upsert_report_object(
-                        session,
-                        tenant_id=tenant_id,
-                        scan_id=scan_id,
-                        report_id=report_id,
-                        fmt="export_validation_report",
-                        object_key=val_key,
-                        size_bytes=len(val_report),
-                    )
-                    generated["export_validation_report"] = val_key
+        (vfmt,) = await _rgp_generate_formats(
+            built,
+            fmt_list,
+            generated,
+            report_data,
+            report_id,
+            scan_id,
+            session,
+            tenant_id,
+            tenant_pdf_format,
+            tier_str,
+            upload,
+        )
 
         # R7 — canonical immutable snapshot: emit JSON/MD/XML(/PDF) companion
         # artifacts rendered from ONE ReportDocumentV1. Additive + fail-soft:
         # never breaks the standard tier outputs above (opt-in via flag).
-        if settings.canonical_report_snapshot_enabled:
-            try:
-                snapshot = build_snapshot_from_report_data(
-                    report_data,
-                    scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
-                    scan_report_data=getattr(built, "scan_report_data", None),
-                )
-                completed_at = snapshot.completed_at or ""
-                artifacts = render_canonical_bundle(
-                    snapshot,
-                    include_pdf=True,
-                    html_to_pdf=lambda html: _snapshot_pdf_bytes(html, completed_at),
-                    scan_id=scan_id,
-                    tenant_id=tenant_id,
-                )
-                # Atomic parity (§20.9): require the full canonical set from ONE
-                # snapshot before uploading anything, so we never ship a partial /
-                # divergent format subset. PDF stays best-effort (not required).
-                assert_canonical_parity(artifacts)
-                for artifact in artifacts:
-                    canon_fmt = f"canonical_{artifact.format}"
-                    canon_key = upload(
-                        tenant_id,
-                        scan_id,
-                        tier_str,
-                        report_id,
-                        canon_fmt,
-                        artifact.content,
-                        content_type=_CANONICAL_CONTENT_TYPES.get(canon_fmt, artifact.mime_type),
-                    )
-                    if canon_key:
-                        await _upsert_report_object(
-                            session,
-                            tenant_id=tenant_id,
-                            scan_id=scan_id,
-                            report_id=report_id,
-                            fmt=canon_fmt,
-                            object_key=canon_key,
-                            size_bytes=artifact.size,
-                        )
-                        generated[canon_fmt] = canon_key
-                logger.info(
-                    "canonical_snapshot_emitted",
-                    extra={
-                        "event": "canonical_snapshot_emitted",
-                        "report_id": report_id,
-                        "snapshot_hash": snapshot.snapshot_hash,
-                        "formats": [a.format for a in artifacts],
-                    },
-                )
-            except Exception:  # noqa: BLE001 — canonical snapshot is additive
-                logger.warning(
-                    "canonical_snapshot_failed",
-                    extra={
-                        "event": "canonical_snapshot_failed",
-                        "report_id": report_id,
-                    },
-                )
+        (
+            artifact,
+            canon_fmt,
+            canon_key,
+        ) = await _rgp_canonical_snapshot(
+            built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
+        )
 
         # Valhalla mandatory LLM remediation/closure deliverable (VH-LLM):
         # per-finding remediation plan + closure conclusion projected into
         # MD/XML/HTML/JSON + a release manifest, all from one document tree.
         # Opt-in + fail-soft: never breaks the standard Valhalla outputs.
-        if tier_str == "valhalla" and settings.valhalla_llm_remediation_enabled:
-            try:
-                from src.reports.llm_remediation.facade_binding import (
-                    build_facade_llm_callable,
-                    resolve_report_llm_identity,
-                )
-                from src.reports.llm_remediation.integration import (
-                    generate_valhalla_llm_release,
-                )
-
-                vsnapshot = build_snapshot_from_report_data(
-                    report_data,
-                    scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
-                    scan_report_data=getattr(built, "scan_report_data", None),
-                )
-                vfindings = [
-                    {
-                        "finding_id": f.finding_id,
-                        "title": f.title,
-                        "severity": f.severity,
-                        "verification_status": f.verification_status,
-                        "evidence_refs": list(f.evidence_ids),
-                        "description": f.description,
-                        "cwe": f.cwe,
-                    }
-                    for f in vsnapshot.findings
-                ]
-                vmeta = {
-                    "report_id": report_id,
-                    "report_version": vsnapshot.snapshot_hash or report_id,
-                    "tenant_id": tenant_id,
-                    "scan_id": scan_id,
-                    "target": vsnapshot.target,
-                }
-                # Phase S — record the REAL provider/model (not the alias), fail
-                # fast with llm_not_invoked when no provider is usable, and probe
-                # once before the per-finding pass (prompt §28.3/§28.6).
-                llm_identity = resolve_report_llm_identity()
-                _vdoc, vrelease = generate_valhalla_llm_release(
-                    vfindings,
-                    report_meta=vmeta,
-                    llm_callable=build_facade_llm_callable(
-                        scan_id=scan_id, tenant_id=tenant_id, fail_if_unconfigured=True
-                    ),
-                    formats=["json", "md", "xml", "html"],
-                    canonical_snapshot_hash=vsnapshot.snapshot_hash,
-                    provider=llm_identity.provider_id if llm_identity else "unresolved",
-                    model=llm_identity.model if llm_identity else "unresolved",
-                    health_probe=True,
-                )
-
-                # Phase E.4 — merge the accepted LLM remediation/closure INTO the
-                # canonical v2 snapshot so the mandatory conclusions print inside the
-                # finding cards of the primary PDF/MD/JSON/XML, then re-emit the
-                # canonical_* set from the enriched snapshot. Fail-soft: any error
-                # leaves the un-merged canonical artifacts (emitted above) in place.
-                try:
-                    merged_doc = merge_llm_into_document(vsnapshot, _vdoc)
-                    # Phase M — reference the independent verification kit from the
-                    # report, then render so the passport carries the ref. The kit is
-                    # built from and uploaded for this exact (final) snapshot below.
-                    merged_doc = merged_doc.model_copy(
-                        update={"verification_kit_ref": "valhalla_verification_kit"}
-                    ).finalized()
-                    merged_completed_at = merged_doc.completed_at or ""
-                    merged_artifacts = render_canonical_bundle(
-                        merged_doc,
-                        include_pdf=True,
-                        html_to_pdf=lambda html: _snapshot_pdf_bytes(html, merged_completed_at),
-                        scan_id=scan_id,
-                        tenant_id=tenant_id,
-                    )
-                    assert_canonical_parity(merged_artifacts)
-                    for artifact in merged_artifacts:
-                        canon_fmt = f"canonical_{artifact.format}"
-                        canon_key = upload(
-                            tenant_id,
-                            scan_id,
-                            tier_str,
-                            report_id,
-                            canon_fmt,
-                            artifact.content,
-                            content_type=_CANONICAL_CONTENT_TYPES.get(
-                                canon_fmt, artifact.mime_type
-                            ),
-                        )
-                        if canon_key:
-                            await _upsert_report_object(
-                                session,
-                                tenant_id=tenant_id,
-                                scan_id=scan_id,
-                                report_id=report_id,
-                                fmt=canon_fmt,
-                                object_key=canon_key,
-                                size_bytes=artifact.size,
-                            )
-                            generated[canon_fmt] = canon_key
-
-                    # Phase M — build + upload the independent verification kit from
-                    # the same final snapshot (shares snapshot_hash with the report).
-                    try:
-                        kit_bytes, _kit_manifest = build_verification_kit(merged_doc)
-                        kit_key = upload(
-                            tenant_id,
-                            scan_id,
-                            tier_str,
-                            report_id,
-                            "valhalla_verification_kit",
-                            kit_bytes,
-                            content_type="application/zip",
-                        )
-                        if kit_key:
-                            await _upsert_report_object(
-                                session,
-                                tenant_id=tenant_id,
-                                scan_id=scan_id,
-                                report_id=report_id,
-                                fmt="valhalla_verification_kit",
-                                object_key=kit_key,
-                                size_bytes=len(kit_bytes),
-                            )
-                            generated["valhalla_verification_kit"] = kit_key
-                    except Exception:  # noqa: BLE001 — kit is additive
-                        logger.warning(
-                            "valhalla_verification_kit_failed",
-                            extra={
-                                "event": "valhalla_verification_kit_failed",
-                                "report_id": report_id,
-                            },
-                        )
-
-                    logger.info(
-                        "canonical_snapshot_llm_merged",
-                        extra={
-                            "event": "canonical_snapshot_llm_merged",
-                            "report_id": report_id,
-                            "snapshot_hash": merged_doc.snapshot_hash,
-                            "llm_analysis_status": merged_doc.llm_analysis_status,
-                            "assessment_completeness": merged_doc.assessment_completeness,
-                        },
-                    )
-                except Exception:  # noqa: BLE001 — merge is additive; keep base canon
-                    logger.warning(
-                        "canonical_snapshot_llm_merge_failed",
-                        extra={
-                            "event": "canonical_snapshot_llm_merge_failed",
-                            "report_id": report_id,
-                        },
-                    )
-                for vfmt, artifact in vrelease.artifacts.items():
-                    llm_fmt = f"valhalla_llm_{vfmt}"
-                    llm_key = upload(
-                        tenant_id,
-                        scan_id,
-                        tier_str,
-                        report_id,
-                        llm_fmt,
-                        artifact.content,
-                        content_type=artifact.mime_type,
-                    )
-                    if llm_key:
-                        await _upsert_report_object(
-                            session,
-                            tenant_id=tenant_id,
-                            scan_id=scan_id,
-                            report_id=report_id,
-                            fmt=llm_fmt,
-                            object_key=llm_key,
-                            size_bytes=artifact.size_bytes,
-                        )
-                        generated[llm_fmt] = llm_key
-                manifest_bytes = vrelease.manifest.model_dump_json(indent=2).encode("utf-8")
-                manifest_key = upload(
-                    tenant_id,
-                    scan_id,
-                    tier_str,
-                    report_id,
-                    "valhalla_llm_manifest",
-                    manifest_bytes,
-                    content_type="application/json",
-                )
-                if manifest_key:
-                    await _upsert_report_object(
-                        session,
-                        tenant_id=tenant_id,
-                        scan_id=scan_id,
-                        report_id=report_id,
-                        fmt="valhalla_llm_manifest",
-                        object_key=manifest_key,
-                        size_bytes=len(manifest_bytes),
-                    )
-                    generated["valhalla_llm_manifest"] = manifest_key
-                valhalla_llm_status = str(vrelease.manifest.generation_status.value)
-                logger.info(
-                    "valhalla_llm_release_emitted",
-                    extra={
-                        "event": "valhalla_llm_release_emitted",
-                        "report_id": report_id,
-                        "generation_status": vrelease.manifest.generation_status.value,
-                        "assessment_completeness": (
-                            vrelease.manifest.assessment_completeness.value
-                        ),
-                        "formats": sorted(vrelease.artifacts.keys()),
-                    },
-                )
-            except Exception:  # noqa: BLE001 — VH-LLM deliverable is additive
-                valhalla_llm_status = "failed"
-                logger.warning(
-                    "valhalla_llm_release_failed",
-                    extra={
-                        "event": "valhalla_llm_release_failed",
-                        "report_id": report_id,
-                    },
-                )
+        (valhalla_llm_status,) = await _rgp_valhalla_llm_remediation(
+            artifact,
+            built,
+            canon_fmt,
+            canon_key,
+            generated,
+            report_data,
+            report_id,
+            scan_id,
+            session,
+            tenant_id,
+            tier_str,
+            upload,
+            valhalla_llm_status,
+            vfmt,
+        )
 
         expected_keys = set(fmt_list)
         # Phase 1 (C-01): the legacy ``pdf`` is intentionally not generated for

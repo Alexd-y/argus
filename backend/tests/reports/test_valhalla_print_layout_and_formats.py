@@ -78,7 +78,8 @@ def test_report_pipeline_registers_xml() -> None:
 
 def test_report_pipeline_generates_xml_branch() -> None:
     """The generation loop must have an explicit ``xml`` branch calling ``generate_xml``."""
-    src = inspect.getsource(report_pipeline.run_generate_report_pipeline)
+    # The per-format generation loop lives in the extracted _rgp_generate_formats helper.
+    src = inspect.getsource(report_pipeline._rgp_generate_formats)
     assert 'elif fmt == "xml":' in src
     assert "generate_xml(report_data" in src
 
