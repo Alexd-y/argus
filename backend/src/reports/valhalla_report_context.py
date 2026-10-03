@@ -5802,6 +5802,491 @@ def _envelope(
     return ValhallaSectionEnvelopeModel(status=status, reason=(reason or "").strip()[:2000])
 
 
+def _vh_section_ports(
+    fetch_raw_bodies,
+    port_data,
+    port_raw_body,
+    port_scan_completed,
+    port_scan_failed,
+    raw_artifact_keys,
+    raw_hints,
+):
+    port_env = None
+    if port_scan_failed and port_data.has_open_ports:
+        port_env = _envelope(
+            "completed_with_fallback",
+            "nmap/naabu/masscan execution failed, but fallback port or service signals were reconstructed. "
+            "Full port exposure remains inconclusive.",
+        )
+    elif port_scan_failed:
+        if not (raw_hints.get("has_ports") or port_scan_completed):
+            port_env = _envelope("not_assessed", _no_conclusion_tool_reason("nmap/naabu/masscan"))
+        elif fetch_raw_bodies and not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scanners failed; nmap/naabu/masscan stdout or structured output was not stored or is empty.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scan output bodies were present, but no open-port rows were parsed (zero rows).",
+            )
+    elif port_data.has_open_ports:
+        if any("fallback" in s.lower() for s in port_data.data_sources or []):
+            port_env = _envelope(
+                "parsed_from_fallback",
+                "Port exposure was reconstructed from successful HTTP/HTTPS artifacts; no full closed-port conclusion is implied.",
+            )
+        else:
+            port_env = _envelope_completed()
+    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and fetch_raw_bodies:
+        if not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scan object keys or execution metadata exist, but nmap/naabu/masscan stdout/body is empty in storage.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scan raw bodies are present, but no open ports or services were parsed in this pipeline.",
+            )
+    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and not fetch_raw_bodies:
+        port_env = _envelope(
+            "partial",
+            "Port scan object keys are listed, but raw bodies were not fetched; cannot parse open ports for this view.",
+        )
+    elif port_scan_completed:
+        if fetch_raw_bodies and not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scan completed per tool metadata, but no port-scan stdout/structured body was stored to parse.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scanner output was stored, but no port exposure rows were produced (zero rows).",
+            )
+    else:
+        port_env = _envelope(
+            "no_data",
+            "No nmap/naabu/masscan open port signals in collected scan data.",
+        )
+    return (port_env,)
+
+
+def _vh_section_emails(
+    fallback_messages,
+    final_emails,
+    harvester_completed,
+    harvester_enabled,
+    harvester_failed,
+    phase_outputs,
+    raw_hints,
+):
+    em_env = None
+    email_sources_exist = bool(
+        raw_hints.get("has_harvester")
+        or raw_hints.get("has_email_fallback")
+        or phase_outputs
+        or harvester_completed
+    )
+    if final_emails:
+        em_env = (
+            _envelope(
+                "completed_with_fallback",
+                "Email indicators were parsed from fallback artifacts after theHarvester execution issues.",
+            )
+            if harvester_failed
+            else _envelope_completed()
+        )
+    elif harvester_enabled and harvester_failed:
+        em_env = (
+            _envelope(
+                "no_observed_items_after_parsing",
+                "theHarvester execution failed, but fallback ARGUS sources were parsed and no email-like values were observed.",
+            )
+            if email_sources_exist
+            else _envelope("not_assessed", _no_conclusion_tool_reason("theHarvester"))
+        )
+    elif email_sources_exist:
+        em_env = _envelope(
+            "no_observed_items_after_parsing",
+            "Email-capable OSINT or fallback sources were parsed; no email-like values were observed.",
+        )
+    elif harvester_enabled:
+        em_env = _envelope(
+            "not_executed",
+            (
+                fallback_messages.get("leaked_emails")
+                or "theHarvester enabled, but no masked emails found in data."
+            ),
+        )
+    else:
+        em_env = _envelope(
+            "not_executed",
+            "Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.",
+        )
+    return (em_env,)
+
+
+def _vh_section_robots_sitemap(
+    fallback_messages, fetch_raw_bodies, raw_hints, robots, robots_sitemap_merged, sitemap
+):
+    rs_env = None
+    rs_signal = (
+        robots_sitemap_merged.robots_found
+        or robots_sitemap_merged.sitemap_found
+        or robots.found
+        or sitemap.found
+        or (robots_sitemap_merged.notes or "").strip()
+    )
+    if robots.found or sitemap.found:
+        rs_env = _envelope_completed()
+    elif rs_signal and (robots_sitemap_merged.notes or "").strip():
+        rs_env = _envelope(
+            "partial",
+            "Merged robots/sitemap JSON available; raw robots/sitemap bodies may not have been parsed.",
+        )
+    elif rs_signal:
+        rs_env = _envelope_completed()
+    elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
+        rs_env = _envelope(
+            "partial",
+            "INCLUDE_MINIO=false: robots/sitemap keys exist, but bodies were not fetched.",
+        )
+    else:
+        rs_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("robots_sitemap")
+                or "robots.txt and sitemap were not retrieved."
+            ),
+        )
+    return (rs_env,)
+
+
+def _vh_section_headers(
+    fallback_messages,
+    fetch_raw_bodies,
+    header_raw_body,
+    header_tool_completed,
+    header_tool_failed,
+    merged_http_headers,
+    raw_hints,
+    sec_hdr,
+    security_headers_from_findings,
+):
+    sec_env = None
+    if sec_hdr.rows:
+        if security_headers_from_findings and not merged_http_headers:
+            sec_env = _envelope(
+                "parsed_from_fallback",
+                "Missing security headers were reconstructed from findings evidence; full response header map "
+                "was not collected.",
+            )
+        else:
+            sec_env = _envelope_completed()
+    elif merged_http_headers:
+        sec_env = _envelope(
+            "parser_error",
+            "Partial headers present in data, but canonical security headers table was not built.",
+        )
+    elif header_tool_failed:
+        if not (
+            raw_hints.get("has_headers") or raw_hints.get("has_whatweb") or header_tool_completed
+        ):
+            sec_env = _envelope(
+                "not_assessed",
+                _no_conclusion_tool_reason("Nikto/httpx/WhatWeb header-capable tool"),
+            )
+        elif fetch_raw_bodies and not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-related tools failed; nikto/httpx/response stdout or body artifacts were not stored or were empty.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Header tool output exists, but no security header table rows were produced from parsing.",
+            )
+    elif raw_hints.get("has_headers") and fetch_raw_bodies:
+        if not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-capable execution metadata or keys exist, but no non-empty raw HTTP/header stdout/body was stored.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "HTTP header bodies were stored, but the canonical security headers table was not populated (zero rows).",
+            )
+    elif header_tool_completed:
+        if fetch_raw_bodies and not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-capable tools completed per metadata, but no nikto/httpx/response body was stored to build the table.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Header tool output was present, but no security header table rows were produced.",
+            )
+    else:
+        sec_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("security_headers")
+                or "No http_headers map in recon and no embedded headers in phase outputs."
+            ),
+        )
+    return (sec_env,)
+
+
+def _vh_section_ssl(
+    fallback_messages, fetch_raw_bodies, raw_hints, ssl_out, tls_completed, tls_failed, tls_raw_body
+):
+    ssl_env = None
+    ssl_from_recon_only = bool(
+        (ssl_out.issuer or ssl_out.validity)
+        and not ssl_out.protocols
+        and not ssl_out.weak_protocols
+        and not ssl_out.weak_ciphers
+        and not ssl_out.hsts
+    )
+    if tls_failed and not _ssl_surface_empty(ssl_out):
+        ssl_env = _envelope(
+            "completed_with_fallback",
+            "testssl/sslscan execution failed, but fallback TLS or certificate signals were reconstructed. "
+            "Full TLS configuration remains inconclusive.",
+        )
+    elif tls_failed:
+        if not (raw_hints.get("has_tls") or tls_completed):
+            ssl_env = _envelope("not_assessed", _no_conclusion_tool_reason("testssl/sslscan"))
+            ssl_out.assessment_note = "testssl.sh was not available or failed to execute (exit code non-zero). TLS data not collected. Re-scan with testssl.sh installed."
+        elif fetch_raw_bodies and not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS scanner failure; testssl/sslscan stdout/body was not stored or was empty.",
+            )
+            ssl_out.assessment_note = (
+                "testssl.sh execution failed with no output. Install testssl.sh and re-scan."
+            )
+        else:
+            ssl_env = _envelope(
+                "not_executed",
+                "TLS tool produced output bodies, but no SSL/TLS table values were parsed from them. This is a critical gap — TLS misconfigurations are a common entry vector.",
+            )
+            ssl_out.assessment_note = "testssl.sh output was present but could not be parsed. Verify testssl.sh installation and re-scan."
+    elif not _ssl_surface_empty(ssl_out):
+        ssl_env = (
+            _envelope_completed()
+            if not ssl_from_recon_only
+            else _envelope(
+                "parsed_from_fallback",
+                "Certificate data available from recon; cipher inventory was not available in parsed TLS artifacts.",
+            )
+        )
+    elif raw_hints.get("has_tls") and fetch_raw_bodies:
+        if not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS-related object keys or execution metadata exist, but no non-empty testssl/sslscan/SSL stdout body is stored.",
+            )
+        else:
+            ssl_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TLS raw bodies were stored, but the pipeline did not reconstruct a parseable testssl/sslscan table.",
+            )
+    elif not fetch_raw_bodies and raw_hints.get("has_tls"):
+        ssl_env = _envelope(
+            "partial",
+            "INCLUDE_MINIO=false: TLS artifacts exist in index, but bodies were not fetched.",
+        )
+    elif tls_completed:
+        if fetch_raw_bodies and not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS tool completed per metadata, but no TLS stdout/body artifact is available in storage to parse.",
+            )
+        else:
+            ssl_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TLS stdout/body exists, but SSL/TLS table values were not produced (zero rows after parsing).",
+            )
+    else:
+        ssl_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("ssl_tls")
+                or "SSL/TLS: no testssl/sslscan output and no certificate data."
+            ),
+        )
+        ssl_out.assessment_note = "No TLS/SSL assessment data available. Install testssl.sh and re-scan for TLS configuration analysis."
+    return (ssl_env,)
+
+
+def _vh_section_outdated(
+    deps,
+    fallback_messages,
+    fetch_raw_bodies,
+    has_dep_artifacts,
+    outdated,
+    trivy_completed,
+    trivy_enabled,
+    trivy_failed,
+    trivy_raw_body,
+):
+    outd_env = None
+    outdated_has_advisory = any(
+        r.cves or "cve" in (r.recommendation or "").lower() for r in outdated
+    )
+    outdated_has_sca_source = any(
+        "trivy" in (r.source or r.support_status or "").lower() for r in outdated
+    )
+    if outdated:
+        if outdated_has_advisory or outdated_has_sca_source:
+            outd_env = _envelope_completed()
+        else:
+            outd_env = _envelope(
+                "partial",
+                "Component/version inventory was parsed, but no fixed-version advisory result was available in the artifacts.",
+            )
+    elif trivy_failed:
+        if not (has_dep_artifacts or trivy_completed):
+            outd_env = _envelope(
+                "not_assessed", _no_conclusion_tool_reason("Trivy/dependency scanner")
+            )
+        elif fetch_raw_bodies and not trivy_raw_body:
+            outd_env = _envelope(
+                "artifact_missing_body",
+                "Trivy/SCA tool reported failure; dependency stdout/body artifacts were empty or not stored.",
+            )
+        else:
+            outd_env = _envelope(
+                "parser_error",
+                "Trivy/SCA artifact bodies were present, but no component inventory rows were parsed.",
+            )
+    elif deps:
+        outd_env = _envelope(
+            "partial",
+            "Dependency artifacts were parsed into component inventory, but no vulnerability advisory rows were produced.",
+        )
+    elif trivy_enabled and not any("trivy" in (d.source or "").lower() for d in deps):
+        if has_dep_artifacts:
+            outd_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TRIVY_ENABLED=true and dependency/SCA artifacts exist, but no Trivy rows were parsed.",
+            )
+        else:
+            outd_env = _envelope(
+                "not_executed",
+                "TRIVY_ENABLED=true, but no Trivy/SCA artifact, SBOM, lockfile, or dependency manifest was present for this run.",
+            )
+    elif not fetch_raw_bodies and has_dep_artifacts:
+        outd_env = _envelope(
+            "partial",
+            "INCLUDE_MINIO=false: dependency artifacts are indexed, but raw bodies were not fetched.",
+        )
+    elif trivy_completed:
+        if fetch_raw_bodies and not trivy_raw_body:
+            outd_env = _envelope(
+                "artifact_missing_body",
+                "Trivy/SCA completed per tool metadata, but no non-empty Trivy/lockfile/SBOM body was stored for parsing.",
+            )
+        else:
+            outd_env = _envelope(
+                "no_observed_items_after_parsing",
+                "SCA artifacts were present, but no dependency or CVE rows were produced after parsing (zero rows).",
+            )
+    else:
+        outd_env = _envelope(
+            "not_executed",
+            (
+                fallback_messages.get("outdated")
+                or "No outdated component signals (CVE/Trivy/searchsploit/versions)."
+            ),
+        )
+    return (outd_env,)
+
+
+def _vh_section_tech(
+    fallback_messages,
+    fetch_raw_bodies,
+    phase_outputs,
+    raw_hints,
+    structured,
+    tech_table,
+    whatweb_completed,
+    whatweb_failed,
+    whatweb_raw_body,
+):
+    tech_env = None
+    tech_empty = _structured_stack_effectively_empty(structured) and not tech_table
+    if whatweb_failed and not tech_empty:
+        tech_env = _envelope(
+            "parsed_from_fallback",
+            "WhatWeb execution failed, but fallback technology signals were reconstructed from other collected evidence. "
+            "Treat the technology stack as incomplete.",
+        )
+    elif whatweb_failed:
+        if not (raw_hints.get("has_whatweb") or whatweb_completed):
+            tech_env = _envelope("not_assessed", _no_conclusion_tool_reason("WhatWeb"))
+        elif fetch_raw_bodies and not whatweb_raw_body:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb reports failure; stdout/body artifacts were empty or not stored for parsing.",
+            )
+        else:
+            tech_env = _envelope(
+                "parser_error",
+                "WhatWeb stdout/body was available, but no technology rows were produced by the parser.",
+            )
+    elif not tech_empty:
+        if raw_hints.get("has_whatweb") or whatweb_completed:
+            tech_env = _envelope_completed()
+        else:
+            tech_env = _envelope(
+                "parsed_from_fallback",
+                "Technology stack parsed from HTTP headers, HTML/JS markers, robots/sitemap, or recon fallback data.",
+            )
+    elif raw_hints.get("has_whatweb") or whatweb_completed:
+        if not fetch_raw_bodies:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb execution metadata or object keys exist, but stdout/body artifacts were not fetched (INCLUDE_MINIO/stage download disabled or missing).",
+            )
+        elif not whatweb_raw_body:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb execution metadata exists, but stdout/body artifact was not stored or is empty in object storage.",
+            )
+        else:
+            tech_env = _envelope(
+                "no_observed_items_after_parsing",
+                "WhatWeb artifact body was stored, but no technology rows were reconstructed (parser produced zero rows).",
+            )
+    elif not fetch_raw_bodies and (raw_hints.get("has_whatweb") or phase_outputs):
+        tech_env = _envelope(
+            "partial",
+            "INCLUDE_MINIO=false: WhatWeb raw artifact bodies were not fetched; "
+            "stack reconstruction from phase_outputs / recon_results only.",
+        )
+    elif not phase_outputs and not fetch_raw_bodies:
+        tech_env = _envelope(
+            "not_executed",
+            "No phase outputs and raw fetching disabled; tech stack was not collected.",
+        )
+    else:
+        tech_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("tech_stack")
+                or "Stack not identified: no WhatWeb output and insufficient recon signals."
+            ),
+        )
+    return (tech_env,)
+
+
 def _compute_mandatory_sections_and_coverage(
     *,
     structured: TechStackStructuredModel,
@@ -5890,413 +6375,76 @@ def _compute_mandatory_sections_and_coverage(
     )
 
     # --- tech_stack_structured
-    tech_empty = _structured_stack_effectively_empty(structured) and not tech_table
-    if whatweb_failed and not tech_empty:
-        tech_env = _envelope(
-            "parsed_from_fallback",
-            "WhatWeb execution failed, but fallback technology signals were reconstructed from other collected evidence. "
-            "Treat the technology stack as incomplete.",
-        )
-    elif whatweb_failed:
-        if not (raw_hints.get("has_whatweb") or whatweb_completed):
-            tech_env = _envelope("not_assessed", _no_conclusion_tool_reason("WhatWeb"))
-        elif fetch_raw_bodies and not whatweb_raw_body:
-            tech_env = _envelope(
-                "artifact_missing_body",
-                "WhatWeb reports failure; stdout/body artifacts were empty or not stored for parsing.",
-            )
-        else:
-            tech_env = _envelope(
-                "parser_error",
-                "WhatWeb stdout/body was available, but no technology rows were produced by the parser.",
-            )
-    elif not tech_empty:
-        if raw_hints.get("has_whatweb") or whatweb_completed:
-            tech_env = _envelope_completed()
-        else:
-            tech_env = _envelope(
-                "parsed_from_fallback",
-                "Technology stack parsed from HTTP headers, HTML/JS markers, robots/sitemap, or recon fallback data.",
-            )
-    elif raw_hints.get("has_whatweb") or whatweb_completed:
-        if not fetch_raw_bodies:
-            tech_env = _envelope(
-                "artifact_missing_body",
-                "WhatWeb execution metadata or object keys exist, but stdout/body artifacts were not fetched (INCLUDE_MINIO/stage download disabled or missing).",
-            )
-        elif not whatweb_raw_body:
-            tech_env = _envelope(
-                "artifact_missing_body",
-                "WhatWeb execution metadata exists, but stdout/body artifact was not stored or is empty in object storage.",
-            )
-        else:
-            tech_env = _envelope(
-                "no_observed_items_after_parsing",
-                "WhatWeb artifact body was stored, but no technology rows were reconstructed (parser produced zero rows).",
-            )
-    elif not fetch_raw_bodies and (raw_hints.get("has_whatweb") or phase_outputs):
-        tech_env = _envelope(
-            "partial",
-            "INCLUDE_MINIO=false: WhatWeb raw artifact bodies were not fetched; "
-            "stack reconstruction from phase_outputs / recon_results only.",
-        )
-    elif not phase_outputs and not fetch_raw_bodies:
-        tech_env = _envelope(
-            "not_executed",
-            "No phase outputs and raw fetching disabled; tech stack was not collected.",
-        )
-    else:
-        tech_env = _envelope(
-            "no_data",
-            (
-                fallback_messages.get("tech_stack")
-                or "Stack not identified: no WhatWeb output and insufficient recon signals."
-            ),
-        )
+    (tech_env,) = _vh_section_tech(
+        fallback_messages,
+        fetch_raw_bodies,
+        phase_outputs,
+        raw_hints,
+        structured,
+        tech_table,
+        whatweb_completed,
+        whatweb_failed,
+        whatweb_raw_body,
+    )
 
     # --- outdated_components
-    outdated_has_advisory = any(
-        r.cves or "cve" in (r.recommendation or "").lower() for r in outdated
+    (outd_env,) = _vh_section_outdated(
+        deps,
+        fallback_messages,
+        fetch_raw_bodies,
+        has_dep_artifacts,
+        outdated,
+        trivy_completed,
+        trivy_enabled,
+        trivy_failed,
+        trivy_raw_body,
     )
-    outdated_has_sca_source = any(
-        "trivy" in (r.source or r.support_status or "").lower() for r in outdated
+
+    (ssl_env,) = _vh_section_ssl(
+        fallback_messages,
+        fetch_raw_bodies,
+        raw_hints,
+        ssl_out,
+        tls_completed,
+        tls_failed,
+        tls_raw_body,
     )
-    if outdated:
-        if outdated_has_advisory or outdated_has_sca_source:
-            outd_env = _envelope_completed()
-        else:
-            outd_env = _envelope(
-                "partial",
-                "Component/version inventory was parsed, but no fixed-version advisory result was available in the artifacts.",
-            )
-    elif trivy_failed:
-        if not (has_dep_artifacts or trivy_completed):
-            outd_env = _envelope(
-                "not_assessed", _no_conclusion_tool_reason("Trivy/dependency scanner")
-            )
-        elif fetch_raw_bodies and not trivy_raw_body:
-            outd_env = _envelope(
-                "artifact_missing_body",
-                "Trivy/SCA tool reported failure; dependency stdout/body artifacts were empty or not stored.",
-            )
-        else:
-            outd_env = _envelope(
-                "parser_error",
-                "Trivy/SCA artifact bodies were present, but no component inventory rows were parsed.",
-            )
-    elif deps:
-        outd_env = _envelope(
-            "partial",
-            "Dependency artifacts were parsed into component inventory, but no vulnerability advisory rows were produced.",
-        )
-    elif trivy_enabled and not any("trivy" in (d.source or "").lower() for d in deps):
-        if has_dep_artifacts:
-            outd_env = _envelope(
-                "no_observed_items_after_parsing",
-                "TRIVY_ENABLED=true and dependency/SCA artifacts exist, but no Trivy rows were parsed.",
-            )
-        else:
-            outd_env = _envelope(
-                "not_executed",
-                "TRIVY_ENABLED=true, but no Trivy/SCA artifact, SBOM, lockfile, or dependency manifest was present for this run.",
-            )
-    elif not fetch_raw_bodies and has_dep_artifacts:
-        outd_env = _envelope(
-            "partial",
-            "INCLUDE_MINIO=false: dependency artifacts are indexed, but raw bodies were not fetched.",
-        )
-    elif trivy_completed:
-        if fetch_raw_bodies and not trivy_raw_body:
-            outd_env = _envelope(
-                "artifact_missing_body",
-                "Trivy/SCA completed per tool metadata, but no non-empty Trivy/lockfile/SBOM body was stored for parsing.",
-            )
-        else:
-            outd_env = _envelope(
-                "no_observed_items_after_parsing",
-                "SCA artifacts were present, but no dependency or CVE rows were produced after parsing (zero rows).",
-            )
-    else:
-        outd_env = _envelope(
-            "not_executed",
-            (
-                fallback_messages.get("outdated")
-                or "No outdated component signals (CVE/Trivy/searchsploit/versions)."
-            ),
-        )
 
-    ssl_from_recon_only = bool(
-        (ssl_out.issuer or ssl_out.validity)
-        and not ssl_out.protocols
-        and not ssl_out.weak_protocols
-        and not ssl_out.weak_ciphers
-        and not ssl_out.hsts
+    (sec_env,) = _vh_section_headers(
+        fallback_messages,
+        fetch_raw_bodies,
+        header_raw_body,
+        header_tool_completed,
+        header_tool_failed,
+        merged_http_headers,
+        raw_hints,
+        sec_hdr,
+        security_headers_from_findings,
     )
-    if tls_failed and not _ssl_surface_empty(ssl_out):
-        ssl_env = _envelope(
-            "completed_with_fallback",
-            "testssl/sslscan execution failed, but fallback TLS or certificate signals were reconstructed. "
-            "Full TLS configuration remains inconclusive.",
-        )
-    elif tls_failed:
-        if not (raw_hints.get("has_tls") or tls_completed):
-            ssl_env = _envelope("not_assessed", _no_conclusion_tool_reason("testssl/sslscan"))
-            ssl_out.assessment_note = "testssl.sh was not available or failed to execute (exit code non-zero). TLS data not collected. Re-scan with testssl.sh installed."
-        elif fetch_raw_bodies and not tls_raw_body:
-            ssl_env = _envelope(
-                "artifact_missing_body",
-                "TLS scanner failure; testssl/sslscan stdout/body was not stored or was empty.",
-            )
-            ssl_out.assessment_note = (
-                "testssl.sh execution failed with no output. Install testssl.sh and re-scan."
-            )
-        else:
-            ssl_env = _envelope(
-                "not_executed",
-                "TLS tool produced output bodies, but no SSL/TLS table values were parsed from them. This is a critical gap — TLS misconfigurations are a common entry vector.",
-            )
-            ssl_out.assessment_note = "testssl.sh output was present but could not be parsed. Verify testssl.sh installation and re-scan."
-    elif not _ssl_surface_empty(ssl_out):
-        ssl_env = (
-            _envelope_completed()
-            if not ssl_from_recon_only
-            else _envelope(
-                "parsed_from_fallback",
-                "Certificate data available from recon; cipher inventory was not available in parsed TLS artifacts.",
-            )
-        )
-    elif raw_hints.get("has_tls") and fetch_raw_bodies:
-        if not tls_raw_body:
-            ssl_env = _envelope(
-                "artifact_missing_body",
-                "TLS-related object keys or execution metadata exist, but no non-empty testssl/sslscan/SSL stdout body is stored.",
-            )
-        else:
-            ssl_env = _envelope(
-                "no_observed_items_after_parsing",
-                "TLS raw bodies were stored, but the pipeline did not reconstruct a parseable testssl/sslscan table.",
-            )
-    elif not fetch_raw_bodies and raw_hints.get("has_tls"):
-        ssl_env = _envelope(
-            "partial",
-            "INCLUDE_MINIO=false: TLS artifacts exist in index, but bodies were not fetched.",
-        )
-    elif tls_completed:
-        if fetch_raw_bodies and not tls_raw_body:
-            ssl_env = _envelope(
-                "artifact_missing_body",
-                "TLS tool completed per metadata, but no TLS stdout/body artifact is available in storage to parse.",
-            )
-        else:
-            ssl_env = _envelope(
-                "no_observed_items_after_parsing",
-                "TLS stdout/body exists, but SSL/TLS table values were not produced (zero rows after parsing).",
-            )
-    else:
-        ssl_env = _envelope(
-            "no_data",
-            (
-                fallback_messages.get("ssl_tls")
-                or "SSL/TLS: no testssl/sslscan output and no certificate data."
-            ),
-        )
-        ssl_out.assessment_note = "No TLS/SSL assessment data available. Install testssl.sh and re-scan for TLS configuration analysis."
 
-    if sec_hdr.rows:
-        if security_headers_from_findings and not merged_http_headers:
-            sec_env = _envelope(
-                "parsed_from_fallback",
-                "Missing security headers were reconstructed from findings evidence; full response header map "
-                "was not collected.",
-            )
-        else:
-            sec_env = _envelope_completed()
-    elif merged_http_headers:
-        sec_env = _envelope(
-            "parser_error",
-            "Partial headers present in data, but canonical security headers table was not built.",
-        )
-    elif header_tool_failed:
-        if not (
-            raw_hints.get("has_headers") or raw_hints.get("has_whatweb") or header_tool_completed
-        ):
-            sec_env = _envelope(
-                "not_assessed",
-                _no_conclusion_tool_reason("Nikto/httpx/WhatWeb header-capable tool"),
-            )
-        elif fetch_raw_bodies and not header_raw_body:
-            sec_env = _envelope(
-                "artifact_missing_body",
-                "Header-related tools failed; nikto/httpx/response stdout or body artifacts were not stored or were empty.",
-            )
-        else:
-            sec_env = _envelope(
-                "no_observed_items_after_parsing",
-                "Header tool output exists, but no security header table rows were produced from parsing.",
-            )
-    elif raw_hints.get("has_headers") and fetch_raw_bodies:
-        if not header_raw_body:
-            sec_env = _envelope(
-                "artifact_missing_body",
-                "Header-capable execution metadata or keys exist, but no non-empty raw HTTP/header stdout/body was stored.",
-            )
-        else:
-            sec_env = _envelope(
-                "no_observed_items_after_parsing",
-                "HTTP header bodies were stored, but the canonical security headers table was not populated (zero rows).",
-            )
-    elif header_tool_completed:
-        if fetch_raw_bodies and not header_raw_body:
-            sec_env = _envelope(
-                "artifact_missing_body",
-                "Header-capable tools completed per metadata, but no nikto/httpx/response body was stored to build the table.",
-            )
-        else:
-            sec_env = _envelope(
-                "no_observed_items_after_parsing",
-                "Header tool output was present, but no security header table rows were produced.",
-            )
-    else:
-        sec_env = _envelope(
-            "no_data",
-            (
-                fallback_messages.get("security_headers")
-                or "No http_headers map in recon and no embedded headers in phase outputs."
-            ),
-        )
-
-    rs_signal = (
-        robots_sitemap_merged.robots_found
-        or robots_sitemap_merged.sitemap_found
-        or robots.found
-        or sitemap.found
-        or (robots_sitemap_merged.notes or "").strip()
+    (rs_env,) = _vh_section_robots_sitemap(
+        fallback_messages, fetch_raw_bodies, raw_hints, robots, robots_sitemap_merged, sitemap
     )
-    if robots.found or sitemap.found:
-        rs_env = _envelope_completed()
-    elif rs_signal and (robots_sitemap_merged.notes or "").strip():
-        rs_env = _envelope(
-            "partial",
-            "Merged robots/sitemap JSON available; raw robots/sitemap bodies may not have been parsed.",
-        )
-    elif rs_signal:
-        rs_env = _envelope_completed()
-    elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
-        rs_env = _envelope(
-            "partial",
-            "INCLUDE_MINIO=false: robots/sitemap keys exist, but bodies were not fetched.",
-        )
-    else:
-        rs_env = _envelope(
-            "no_data",
-            (
-                fallback_messages.get("robots_sitemap")
-                or "robots.txt and sitemap were not retrieved."
-            ),
-        )
 
-    email_sources_exist = bool(
-        raw_hints.get("has_harvester")
-        or raw_hints.get("has_email_fallback")
-        or phase_outputs
-        or harvester_completed
+    (em_env,) = _vh_section_emails(
+        fallback_messages,
+        final_emails,
+        harvester_completed,
+        harvester_enabled,
+        harvester_failed,
+        phase_outputs,
+        raw_hints,
     )
-    if final_emails:
-        em_env = (
-            _envelope(
-                "completed_with_fallback",
-                "Email indicators were parsed from fallback artifacts after theHarvester execution issues.",
-            )
-            if harvester_failed
-            else _envelope_completed()
-        )
-    elif harvester_enabled and harvester_failed:
-        em_env = (
-            _envelope(
-                "no_observed_items_after_parsing",
-                "theHarvester execution failed, but fallback ARGUS sources were parsed and no email-like values were observed.",
-            )
-            if email_sources_exist
-            else _envelope("not_assessed", _no_conclusion_tool_reason("theHarvester"))
-        )
-    elif email_sources_exist:
-        em_env = _envelope(
-            "no_observed_items_after_parsing",
-            "Email-capable OSINT or fallback sources were parsed; no email-like values were observed.",
-        )
-    elif harvester_enabled:
-        em_env = _envelope(
-            "not_executed",
-            (
-                fallback_messages.get("leaked_emails")
-                or "theHarvester enabled, but no masked emails found in data."
-            ),
-        )
-    else:
-        em_env = _envelope(
-            "not_executed",
-            "Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.",
-        )
 
-    if port_scan_failed and port_data.has_open_ports:
-        port_env = _envelope(
-            "completed_with_fallback",
-            "nmap/naabu/masscan execution failed, but fallback port or service signals were reconstructed. "
-            "Full port exposure remains inconclusive.",
-        )
-    elif port_scan_failed:
-        if not (raw_hints.get("has_ports") or port_scan_completed):
-            port_env = _envelope("not_assessed", _no_conclusion_tool_reason("nmap/naabu/masscan"))
-        elif fetch_raw_bodies and not port_raw_body:
-            port_env = _envelope(
-                "artifact_missing_body",
-                "Port scanners failed; nmap/naabu/masscan stdout or structured output was not stored or is empty.",
-            )
-        else:
-            port_env = _envelope(
-                "no_observed_items_after_parsing",
-                "Port scan output bodies were present, but no open-port rows were parsed (zero rows).",
-            )
-    elif port_data.has_open_ports:
-        if any("fallback" in s.lower() for s in port_data.data_sources or []):
-            port_env = _envelope(
-                "parsed_from_fallback",
-                "Port exposure was reconstructed from successful HTTP/HTTPS artifacts; no full closed-port conclusion is implied.",
-            )
-        else:
-            port_env = _envelope_completed()
-    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and fetch_raw_bodies:
-        if not port_raw_body:
-            port_env = _envelope(
-                "artifact_missing_body",
-                "Port scan object keys or execution metadata exist, but nmap/naabu/masscan stdout/body is empty in storage.",
-            )
-        else:
-            port_env = _envelope(
-                "no_observed_items_after_parsing",
-                "Port scan raw bodies are present, but no open ports or services were parsed in this pipeline.",
-            )
-    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and not fetch_raw_bodies:
-        port_env = _envelope(
-            "partial",
-            "Port scan object keys are listed, but raw bodies were not fetched; cannot parse open ports for this view.",
-        )
-    elif port_scan_completed:
-        if fetch_raw_bodies and not port_raw_body:
-            port_env = _envelope(
-                "artifact_missing_body",
-                "Port scan completed per tool metadata, but no port-scan stdout/structured body was stored to parse.",
-            )
-        else:
-            port_env = _envelope(
-                "no_observed_items_after_parsing",
-                "Port scanner output was stored, but no port exposure rows were produced (zero rows).",
-            )
-    else:
-        port_env = _envelope(
-            "no_data",
-            "No nmap/naabu/masscan open port signals in collected scan data.",
-        )
+    (port_env,) = _vh_section_ports(
+        fetch_raw_bodies,
+        port_data,
+        port_raw_body,
+        port_scan_completed,
+        port_scan_failed,
+        raw_artifact_keys,
+        raw_hints,
+    )
 
     mandatory = ValhallaMandatorySectionsModel(
         tech_stack_structured=tech_env,
