@@ -21,8 +21,29 @@ AST-сканером (длина функций, вложенность, арн�
 | P1 #8 | `_dispatch_phase_handler` — диспетчер фаз | 563 строки | **62 строки**; 8 ветвей → `_dispatch_phase_<name>` (параметры по AST) | `state_machine.py` |
 | P1 #4 | `_build_va_fallback_output` — fallback-диспетч по task | 741 строка | **83 строки**; 26 веток → `_va_fallback_<task>` | `vulnerability_analysis/pipeline.py` |
 
-**Коммиты (6):** `refactor(logging)`, `refactor(reports): json_encoders`, `refactor(exploitation)`, `refactor(orchestration)`, `refactor(va)`.
-Каждый верифицирован: `ruff`/`black`/`bandit` зелёные, профильные тесты — **1122 passed, 1 skipped** по всем затронутым областям.
+**Последовательные god-функции (dataflow-извлечение стадий, AST-инструмент `tmp/bx.py`):**
+
+| # | Функция | Было → Стало | Верификация |
+|---|---------|-------------|-------------|
+| P1 | `_compute_mandatory_sections_and_coverage` | 518 → **181** (7 `_vh_section_*`) | reports 760 passed |
+| P1 | `build_valhalla_report_context` | 735 → **479** (8 `_vh_build_*`) | reports 760 passed |
+| P1 | `run_generate_report_pipeline` | 710 → **327** (3 `_rgp_*`) | reports 340 passed |
+| P1 | `build_html_report` | 741 → **179** (7 `_html_*`) | smoke + stage1-report 31 passed |
+| P1 | `run_vuln_analysis` | 857 → **546** (5 `_va_*`) | orchestration 467 passed |
+
+**Коммиты (11):** логирование, json_encoders, exploitation, state_machine, va_fallback,
+_compute_mandatory, build_valhalla, report_pipeline, build_html_report, run_vuln_analysis (+docs).
+Каждый верифицирован: `ruff`/`black`/`bandit` зелёные, профильные тесты зелёные.
+
+**🚫 Не доведены (2 из 7 последовательных) — требуют docker-стенда:**
+
+| Функция | Причина блокировки |
+|---------|--------------------|
+| `run_va_active_scan_phase` (1375) | 8 взаимно-ссылающихся вложенных **замыканий** (~900 строк), захватывают ~20 внешних переменных. Нужен подъём замыканий (closure→params) + переписывание всех вызовов, НЕ блочное извлечение. Тесты docker-gated → нет быстрой верификации байт-в-байт. |
+| `build_stage1_enrichment_artifacts` (2112) | Последовательная сборка с 4 замыканиями, мутирующими общие аккумуляторы (риск алиасинга). Тест docker-gated и имеет **предсуществующее** падение (маркер scan-mode) → чистый baseline недоступен; smoke на пустом входе не исполняет data-зависимые ветви. |
+
+> Оба требуют выделённой сессии с поднятым docker-стендом (`docker-compose.e2e.yml`) для
+> интеграционной верификации, т.к. их unit-тесты исключены из быстрого прогона (`requires_docker`).
 
 **Почему безопасно:** замена `pass` на `logger.debug(...)` не меняет control flow (логирование
 не бросает исключений при штатной конфигурации) — best-effort семантика сохранена, но скрытые
@@ -43,19 +64,19 @@ AST-сканером (длина функций, вложенность, арн�
 Эти правки НЕ применялись автоматически: они меняют структуру кода в ядре pentest-pipeline и
 требуют характеризующих тестов + ручной верификации, чтобы гарантировать неизменность поведения.
 
-### P1 — God-функции: 138 функций ≥120 строк (3 из топ-10 сделаны)
+### P1 — God-функции топ-10: **8 из 10 сделаны**, 2 заблокированы
 
-| Строк | Файл:функция | Статус / действие |
-|------:|--------------|-------------------|
-| 2112 | `recon/reporting/stage1_enrichment_builder.py` → `build_stage1_enrichment_artifacts` | ⏳ последовательная сборка — ручное выделение этапов |
-| 1375 | `.../active_scan/va_active_scan_phase.py` → `run_va_active_scan_phase` | ⏳ последовательная — per-tool/per-step хелперы |
-| 857 | `orchestration/handlers.py` → `run_vuln_analysis` | ⏳ последовательная + ветвление |
+| Строк | Файл:функция | Статус |
+|------:|--------------|--------|
+| 2112 | `recon/reporting/stage1_enrichment_builder.py` → `build_stage1_enrichment_artifacts` | 🚫 заблокировано (замыкания+accum, docker-тест с предсущ. падением) |
+| 1375 | `.../active_scan/va_active_scan_phase.py` → `run_va_active_scan_phase` | 🚫 заблокировано (8 замыканий, нужен closure-lifting, docker-тесты) |
+| 857 | `orchestration/handlers.py` → `run_vuln_analysis` | ✅ **сделано** 857→546 (5 `_va_*`) |
 | 741 | `recon/vulnerability_analysis/pipeline.py` → `_build_va_fallback_output` | ✅ **сделано** 741→83 (26 хелперов) |
-| 741 | `recon/reporting/html_report_builder.py` → `build_html_report` | ⏳ последовательная (130 Assign) — рендер секций |
-| 735 | `reports/valhalla_report_context.py` → `build_valhalla_report_context` | ⏳ последовательная — по секциям отчёта |
-| 710 | `reports/report_pipeline.py` → `run_generate_report_pipeline` | ⏳ последовательная — стадии пайплайна |
+| 741 | `recon/reporting/html_report_builder.py` → `build_html_report` | ✅ **сделано** 741→179 (7 `_html_*`) |
+| 735 | `reports/valhalla_report_context.py` → `build_valhalla_report_context` | ✅ **сделано** 735→479 (8 `_vh_build_*`) |
+| 710 | `reports/report_pipeline.py` → `run_generate_report_pipeline` | ✅ **сделано** 710→327 (3 `_rgp_*`) |
 | 563 | `orchestration/state_machine.py` → `_dispatch_phase_handler` | ✅ **сделано** 563→62 (8 хелперов) |
-| 518 | `reports/valhalla_report_context.py` → `_compute_mandatory_sections_and_coverage` | ⏳ последовательная (29 Assign) |
+| 518 | `reports/valhalla_report_context.py` → `_compute_mandatory_sections_and_coverage` | ✅ **сделано** 518→181 (7 `_vh_section_*`) |
 | 495 | `orchestration/exploitation_executor.py` → `_execute_tool_in_sandbox` | ✅ **сделано** 495→154, nest 27→3 |
 
 Распределение по модулям: **recon 50, reports 33, orchestration 21**, api 7, llm 5, прочее 1–3.
