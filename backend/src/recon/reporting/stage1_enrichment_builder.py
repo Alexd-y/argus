@@ -1286,6 +1286,560 @@ def _render_js_findings_md(
     return "\n".join(lines)
 
 
+def _s1ai_stage3(
+    _meta,
+    anomaly_candidates,
+    focus_hosts,
+    job_id,
+    output_files,
+    run_id,
+    stage3_readiness_result,
+    trace_token,
+):
+    stage3_input = {
+        "meta": _meta(ReconAiTask.STAGE3_PREPARATION_SUMMARY),
+        "focus_hosts": focus_hosts,
+        "risk_hypotheses": [
+            str(item.get("classification", "")) for item in anomaly_candidates[:20]
+        ],
+        "stage3_readiness": stage3_readiness_result.model_dump(mode="json"),
+    }
+    stage3_output = {
+        "summary": (
+            f"Stage 3 readiness: {stage3_readiness_result.status}. "
+            "Prioritize missing evidence and recommended follow-up before penetration testing."
+        ),
+        "next_steps": [
+            {
+                "statement_type": "hypothesis",
+                "step": "Address missing evidence gaps before Stage 3 testing.",
+                "priority": "high",
+                "confidence": 0.75,
+                "evidence_refs": ["stage3_readiness.json", "stage3_readiness.md"],
+            },
+            {
+                "statement_type": "hypothesis",
+                "step": "Validate route classification coverage for auth and admin flows.",
+                "priority": "medium",
+                "confidence": 0.7,
+                "evidence_refs": ["route_classification.csv", "stage3_readiness.json"],
+            },
+            {
+                "statement_type": "hypothesis",
+                "step": "Complete API surface mapping for penetration test scope.",
+                "priority": "medium",
+                "confidence": 0.68,
+                "evidence_refs": ["api_surface.csv", "stage3_readiness.json"],
+            },
+        ],
+    }
+    stage3_source_artifacts = [
+        "stage3_readiness.json",
+        "stage3_readiness.md",
+        "route_classification.csv",
+        "stage2_preparation.md",
+        "api_surface.csv",
+    ]
+    output_files.update(
+        _persist_ai_task(
+            task_name="stage3_preparation_summary",
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=stage3_input,
+            normalized_output=stage3_output,
+            source_artifacts=stage3_source_artifacts,
+            evidence_refs=[
+                ref
+                for step in stage3_output["next_steps"]
+                for ref in step.get("evidence_refs", [])
+                if ref
+            ],
+        )
+    )
+
+
+def _s1ai_stage2(
+    _meta, anomaly_candidates, base, focus_hosts, job_id, output_files, run_id, trace_token
+):
+    stage2_output = None
+    stage2_input = {
+        "meta": _meta(ReconAiTask.STAGE2_PREPARATION_SUMMARY),
+        "focus_hosts": focus_hosts,
+        "risk_hypotheses": [
+            str(item.get("classification", "")) for item in anomaly_candidates[:20]
+        ],
+    }
+    stage2_output = {
+        "summary": "Stage 2 preparation synthesized from validated anomalies and cluster behavior.",
+        "next_steps": [
+            {
+                "statement_type": "hypothesis",
+                "step": "Validate suspicious host ownership and wildcard routing behavior.",
+                "priority": "high",
+                "confidence": 0.78,
+                "evidence_refs": ["anomaly_validation.md", "content_clusters.csv"],
+            },
+            {
+                "statement_type": "hypothesis",
+                "step": "Review redirect clusters for shared platform aliasing and routing controls.",
+                "priority": "medium",
+                "confidence": 0.69,
+                "evidence_refs": [
+                    "redirect_clusters.csv",
+                    "04_live_hosts/http_probe.csv",
+                ],
+            },
+            {
+                "statement_type": "hypothesis",
+                "step": "Prioritize hypothesis-driven checks for hosts with weak header posture.",
+                "priority": "medium",
+                "confidence": 0.67,
+                "evidence_refs": [
+                    "headers_detailed.csv",
+                    "tls_summary.md",
+                    "anomaly_validation.md",
+                ],
+            },
+        ],
+    }
+    stage2_source_artifacts = [
+        "stage2_preparation.md",
+        "frontend_backend_boundaries.md",
+        "app_flow_hints.md",
+        "anomaly_validation.md",
+        "anomaly_validation.csv",
+    ]
+    if (base / "stage2_inputs.md").exists():
+        stage2_source_artifacts.insert(1, "stage2_inputs.md")
+
+    output_files.update(
+        _persist_ai_task(
+            task_name="stage2_preparation_summary",
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=stage2_input,
+            normalized_output=stage2_output,
+            source_artifacts=stage2_source_artifacts,
+            evidence_refs=[
+                ref
+                for step in stage2_output["next_steps"]
+                for ref in step.get("evidence_refs", [])
+                if ref
+            ],
+        )
+    )
+    return (stage2_output,)
+
+
+def _s1ai_anomaly(
+    _meta, anomaly_validation_rows, content_cluster_rows, job_id, output_files, run_id, trace_token
+):
+    anomaly_candidates = None
+    anomaly_candidates = [
+        {
+            "host": r["host"],
+            "classification": r["classification"],
+            "confidence": float(r["confidence"]),
+            "recommendation": r["recommendation"],
+            "evidence_refs": [x for x in r["evidence_refs"].split("|") if x],
+        }
+        for r in anomaly_validation_rows
+    ]
+
+    anomaly_input = {
+        "meta": _meta(ReconAiTask.ANOMALY_INTERPRETATION),
+        "anomalies": [
+            {
+                "host": str(row.get("host", "")),
+                "status": str(row.get("status", "") or "0"),
+                "suspicious_host": str(row.get("suspicious_host", "no")) == "yes",
+                "catch_all_hint": str(row.get("catch_all_hint", "no")) == "yes",
+                "shared_with_root": str(row.get("similar_to_root", "no")) == "yes",
+                "evidence_refs": [
+                    str(row.get("evidence_ref", "")),
+                    "content_clusters.csv",
+                ],
+            }
+            for row in content_cluster_rows[:300]
+            if row.get("host")
+        ],
+    }
+    anomaly_output = {
+        "anomalies": [
+            {
+                "statement_type": "hypothesis",
+                "host": item["host"],
+                "classification": item["classification"],
+                "confidence": item["confidence"],
+                "recommendation": item["recommendation"],
+                "evidence_refs": item["evidence_refs"],
+            }
+            for item in anomaly_candidates[:300]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name="anomaly_interpretation",
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=anomaly_input,
+            normalized_output=anomaly_output,
+            source_artifacts=[
+                "anomaly_validation.md",
+                "anomaly_validation.csv",
+                "catch_all_evidence.md",
+                "hostname_behavior_matrix.csv",
+            ],
+            evidence_refs=[
+                ref
+                for item in anomaly_candidates[:300]
+                for ref in item.get("evidence_refs", [])
+                if ref
+            ],
+        )
+    )
+    return (anomaly_candidates,)
+
+
+def _s1ai_content_similarity(
+    _meta, content_cluster_rows, job_id, output_files, redirect_cluster_rows, run_id, trace_token
+):
+    content_similarity_input = {
+        "meta": _meta(ReconAiTask.CONTENT_SIMILARITY_INTERPRETATION),
+        "content_clusters": [
+            {
+                "cluster_id": str(row.get("cluster_id", "")),
+                "host": str(row.get("host", "")),
+                "cluster_size": int(row.get("cluster_size", 0) or 0),
+                "template_hint": str(row.get("template_hint", "")),
+                "evidence_ref": str(row.get("evidence_ref", "")),
+            }
+            for row in content_cluster_rows[:300]
+            if row.get("cluster_id")
+        ],
+        "redirect_clusters": [
+            {
+                "redirect_cluster_id": str(row.get("redirect_cluster_id", "")),
+                "host": str(row.get("host", "")),
+                "redirect_target": str(row.get("redirect_target", "")),
+                "evidence_ref": str(row.get("evidence_ref", "")),
+            }
+            for row in redirect_cluster_rows[:300]
+            if row.get("redirect_cluster_id")
+        ],
+    }
+    content_similarity_output = {
+        "summary": "Shared templates and redirect behavior interpreted from clustering artifacts.",
+        "clusters": [
+            {
+                "statement_type": "inference",
+                "cluster_id": row.get("cluster_id", ""),
+                "interpretation": (
+                    "shared_404_or_platform_template"
+                    if row.get("template_hint")
+                    in {"shared_404_template", "shared_platform_template"}
+                    else "unique_or_small_cluster"
+                ),
+                "confidence": 0.73 if int(row.get("cluster_size", 0) or 0) > 1 else 0.58,
+                "evidence_refs": [
+                    str(row.get("evidence_ref", "")),
+                    "content_clusters.csv",
+                ],
+            }
+            for row in content_cluster_rows[:300]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name="content_similarity_interpretation",
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=content_similarity_input,
+            normalized_output=content_similarity_output,
+            source_artifacts=[
+                "content_clusters.csv",
+                "redirect_clusters.csv",
+                "response_similarity.csv",
+                "hostname_behavior_matrix.csv",
+            ],
+            evidence_refs=[
+                *[str(row.get("evidence_ref", "")) for row in content_cluster_rows[:300]],
+                *[str(row.get("evidence_ref", "")) for row in redirect_cluster_rows[:300]],
+            ],
+        )
+    )
+
+
+def _s1ai_headers_tls(_meta, headers_rows, job_id, output_files, run_id, trace_token):
+    headers_tls_input = {
+        "meta": _meta(ReconAiTask.HEADERS_TLS_SUMMARY),
+        "hosts": [
+            {
+                "host": row.get("host_url", ""),
+                "header_score": row.get("security_header_score", "0"),
+                "cookie_count": row.get("cookie_count", "0"),
+                "cookie_secure": row.get("cookies_secure", "0"),
+                "evidence_refs": [f"headers_detailed.csv:{row.get('host_url', '')}"],
+            }
+            for row in headers_rows[:200]
+            if row.get("host_url")
+        ],
+    }
+    headers_tls_output = {
+        "summary": "Headers/cookies/TLS posture summarized from Stage 1 artifacts.",
+        "controls": [
+            {
+                "statement_type": "observation",
+                "host": row.get("host_url", ""),
+                "posture": (
+                    "strong"
+                    if int(row.get("security_header_score", "0") or 0) >= 5
+                    else (
+                        "moderate"
+                        if int(row.get("security_header_score", "0") or 0) >= 3
+                        else "weak"
+                    )
+                ),
+                "confidence": 0.76,
+                "evidence_refs": [
+                    f"headers_detailed.csv:{row.get('host_url', '')}",
+                    f"tls_summary.md:{row.get('host_url', '')}",
+                ],
+            }
+            for row in headers_rows[:200]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name=ReconAiTask.HEADERS_TLS_SUMMARY.value,
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=headers_tls_input,
+            normalized_output=headers_tls_output,
+            source_artifacts=[
+                "headers_summary.md",
+                "headers_detailed.csv",
+                "tls_summary.md",
+                "host_security_posture.csv",
+                "control_inconsistencies.md",
+            ],
+            evidence_refs=[
+                ref
+                for row in headers_tls_output["controls"]
+                for ref in row.get("evidence_refs", [])
+                if ref
+            ],
+        )
+    )
+
+
+def _s1ai_api(_meta, api_rows, job_id, output_files, run_id, trace_token):
+    api_input = {
+        "meta": _meta(ReconAiTask.API_SURFACE_INFERENCE),
+        "api_candidates": [
+            {
+                "path": a["path"],
+                "source": a["source"],
+                "method_hint": a["method_hint"],
+                "evidence_refs": [a["evidence_ref"]],
+            }
+            for a in api_rows[:300]
+        ],
+    }
+    api_output = {
+        "api_surface": [
+            {
+                "statement_type": "inference",
+                "path": a["path"],
+                "api_type": a["api_type"],
+                "auth_boundary_hint": a["auth_boundary_hint"],
+                "confidence": 0.72,
+                "evidence_refs": [a["evidence_ref"]],
+            }
+            for a in api_rows[:300]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name=ReconAiTask.API_SURFACE_INFERENCE.value,
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=api_input,
+            normalized_output=api_output,
+            source_artifacts=[
+                "api_surface.csv",
+                "graphql_candidates.csv",
+                "json_endpoint_candidates.csv",
+                "frontend_backend_boundaries.md",
+                "mcp_invocation_audit_meta.json",
+                "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
+            ],
+            evidence_refs=[a["evidence_ref"] for a in api_rows[:300] if a.get("evidence_ref")],
+        )
+    )
+
+
+def _s1ai_params(_meta, job_id, output_files, params_rows, run_id, trace_token):
+    params_input = {
+        "meta": _meta(ReconAiTask.PARAMETER_INPUT_ANALYSIS),
+        "params": [
+            {
+                "name": p["param_name"],
+                "source": p["param_source"],
+                "context_url": p["context_url"],
+                "evidence_refs": [p["evidence_ref"]],
+            }
+            for p in params_rows[:300]
+        ],
+    }
+    params_output = {
+        "params": [
+            {
+                "statement_type": "observation",
+                "name": p["param_name"],
+                "category": p["param_category"],
+                "context_url": p["context_url"],
+                "confidence": 0.7,
+                "evidence_refs": [p["evidence_ref"]],
+            }
+            for p in params_rows[:300]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name=ReconAiTask.PARAMETER_INPUT_ANALYSIS.value,
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=params_input,
+            normalized_output=params_output,
+            source_artifacts=[
+                "params_inventory.csv",
+                "input_surfaces.csv",
+                "route_params_map.csv",
+                "forms_inventory.csv",
+                "mcp_invocation_audit_meta.json",
+                "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
+            ],
+            evidence_refs=[p["evidence_ref"] for p in params_rows[:300] if p.get("evidence_ref")],
+        )
+    )
+
+
+def _s1ai_js(
+    _meta,
+    job_id,
+    js_api_refs,
+    js_client_routes,
+    js_frontend_markers,
+    js_hidden_hints,
+    output_files,
+    run_id,
+    trace_token,
+):
+    js_input = {
+        "meta": _meta(ReconAiTask.JS_FINDINGS_ANALYSIS),
+        "script_findings": [
+            {
+                "category": "client_route",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_client_routes[:100]
+        ]
+        + [
+            {
+                "category": "api_ref",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_api_refs[:100]
+        ]
+        + [
+            {
+                "category": "frontend_marker",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_frontend_markers[:100]
+        ]
+        + [
+            {
+                "category": "hidden_hint",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_hidden_hints[:100]
+        ],
+    }
+    js_output = {
+        "summary": "Static JS hints extracted from discovered script assets.",
+        "findings": [
+            {
+                "statement_type": "observation",
+                "category": "client_route",
+                "value": x["value"],
+                "confidence": 0.71,
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_client_routes[:100]
+        ]
+        + [
+            {
+                "statement_type": "observation",
+                "category": "api_ref",
+                "value": x["value"],
+                "confidence": 0.74,
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_api_refs[:100]
+        ]
+        + [
+            {
+                "statement_type": "observation",
+                "category": "frontend_marker",
+                "value": x["value"],
+                "confidence": 0.66,
+                "evidence_refs": [x["evidence_ref"]],
+            }
+            for x in js_frontend_markers[:100]
+        ],
+    }
+    output_files.update(
+        _persist_ai_task(
+            task_name=ReconAiTask.JS_FINDINGS_ANALYSIS.value,
+            run_id=run_id,
+            job_id=job_id,
+            trace_id=trace_token,
+            input_payload=js_input,
+            normalized_output=js_output,
+            source_artifacts=[
+                "js_routes.csv",
+                "js_api_refs.csv",
+                "js_integrations.csv",
+                "js_config_hints.csv",
+                "js_findings.md",
+                "mcp_invocation_audit_meta.json",
+                "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
+            ],
+            evidence_refs=[
+                *[x["evidence_ref"] for x in js_client_routes[:100]],
+                *[x["evidence_ref"] for x in js_api_refs[:100]],
+                *[x["evidence_ref"] for x in js_frontend_markers[:100]],
+            ],
+        )
+    )
+
+
 def build_stage1_enrichment_artifacts(
     recon_dir: str | Path,
     live_hosts: list[str],
@@ -2818,516 +3372,60 @@ def build_stage1_enrichment_artifacts(
             trace_id=f"{trace_token}:{task.value}",
         ).model_dump(mode="json")
 
-    js_input = {
-        "meta": _meta(ReconAiTask.JS_FINDINGS_ANALYSIS),
-        "script_findings": [
-            {
-                "category": "client_route",
-                "value": x["value"],
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_client_routes[:100]
-        ]
-        + [
-            {
-                "category": "api_ref",
-                "value": x["value"],
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_api_refs[:100]
-        ]
-        + [
-            {
-                "category": "frontend_marker",
-                "value": x["value"],
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_frontend_markers[:100]
-        ]
-        + [
-            {
-                "category": "hidden_hint",
-                "value": x["value"],
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_hidden_hints[:100]
-        ],
-    }
-    js_output = {
-        "summary": "Static JS hints extracted from discovered script assets.",
-        "findings": [
-            {
-                "statement_type": "observation",
-                "category": "client_route",
-                "value": x["value"],
-                "confidence": 0.71,
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_client_routes[:100]
-        ]
-        + [
-            {
-                "statement_type": "observation",
-                "category": "api_ref",
-                "value": x["value"],
-                "confidence": 0.74,
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_api_refs[:100]
-        ]
-        + [
-            {
-                "statement_type": "observation",
-                "category": "frontend_marker",
-                "value": x["value"],
-                "confidence": 0.66,
-                "evidence_refs": [x["evidence_ref"]],
-            }
-            for x in js_frontend_markers[:100]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name=ReconAiTask.JS_FINDINGS_ANALYSIS.value,
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=js_input,
-            normalized_output=js_output,
-            source_artifacts=[
-                "js_routes.csv",
-                "js_api_refs.csv",
-                "js_integrations.csv",
-                "js_config_hints.csv",
-                "js_findings.md",
-                "mcp_invocation_audit_meta.json",
-                "mcp_invocation_audit.jsonl",
-                "mcp_trace.jsonl",
-            ],
-            evidence_refs=[
-                *[x["evidence_ref"] for x in js_client_routes[:100]],
-                *[x["evidence_ref"] for x in js_api_refs[:100]],
-                *[x["evidence_ref"] for x in js_frontend_markers[:100]],
-            ],
-        )
+    _s1ai_js(
+        _meta,
+        job_id,
+        js_api_refs,
+        js_client_routes,
+        js_frontend_markers,
+        js_hidden_hints,
+        output_files,
+        run_id,
+        trace_token,
     )
 
-    params_input = {
-        "meta": _meta(ReconAiTask.PARAMETER_INPUT_ANALYSIS),
-        "params": [
-            {
-                "name": p["param_name"],
-                "source": p["param_source"],
-                "context_url": p["context_url"],
-                "evidence_refs": [p["evidence_ref"]],
-            }
-            for p in params_rows[:300]
-        ],
-    }
-    params_output = {
-        "params": [
-            {
-                "statement_type": "observation",
-                "name": p["param_name"],
-                "category": p["param_category"],
-                "context_url": p["context_url"],
-                "confidence": 0.7,
-                "evidence_refs": [p["evidence_ref"]],
-            }
-            for p in params_rows[:300]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name=ReconAiTask.PARAMETER_INPUT_ANALYSIS.value,
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=params_input,
-            normalized_output=params_output,
-            source_artifacts=[
-                "params_inventory.csv",
-                "input_surfaces.csv",
-                "route_params_map.csv",
-                "forms_inventory.csv",
-                "mcp_invocation_audit_meta.json",
-                "mcp_invocation_audit.jsonl",
-                "mcp_trace.jsonl",
-            ],
-            evidence_refs=[p["evidence_ref"] for p in params_rows[:300] if p.get("evidence_ref")],
-        )
+    _s1ai_params(_meta, job_id, output_files, params_rows, run_id, trace_token)
+
+    _s1ai_api(_meta, api_rows, job_id, output_files, run_id, trace_token)
+
+    _s1ai_headers_tls(_meta, headers_rows, job_id, output_files, run_id, trace_token)
+
+    _s1ai_content_similarity(
+        _meta,
+        content_cluster_rows,
+        job_id,
+        output_files,
+        redirect_cluster_rows,
+        run_id,
+        trace_token,
     )
 
-    api_input = {
-        "meta": _meta(ReconAiTask.API_SURFACE_INFERENCE),
-        "api_candidates": [
-            {
-                "path": a["path"],
-                "source": a["source"],
-                "method_hint": a["method_hint"],
-                "evidence_refs": [a["evidence_ref"]],
-            }
-            for a in api_rows[:300]
-        ],
-    }
-    api_output = {
-        "api_surface": [
-            {
-                "statement_type": "inference",
-                "path": a["path"],
-                "api_type": a["api_type"],
-                "auth_boundary_hint": a["auth_boundary_hint"],
-                "confidence": 0.72,
-                "evidence_refs": [a["evidence_ref"]],
-            }
-            for a in api_rows[:300]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name=ReconAiTask.API_SURFACE_INFERENCE.value,
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=api_input,
-            normalized_output=api_output,
-            source_artifacts=[
-                "api_surface.csv",
-                "graphql_candidates.csv",
-                "json_endpoint_candidates.csv",
-                "frontend_backend_boundaries.md",
-                "mcp_invocation_audit_meta.json",
-                "mcp_invocation_audit.jsonl",
-                "mcp_trace.jsonl",
-            ],
-            evidence_refs=[a["evidence_ref"] for a in api_rows[:300] if a.get("evidence_ref")],
-        )
-    )
-
-    headers_tls_input = {
-        "meta": _meta(ReconAiTask.HEADERS_TLS_SUMMARY),
-        "hosts": [
-            {
-                "host": row.get("host_url", ""),
-                "header_score": row.get("security_header_score", "0"),
-                "cookie_count": row.get("cookie_count", "0"),
-                "cookie_secure": row.get("cookies_secure", "0"),
-                "evidence_refs": [f"headers_detailed.csv:{row.get('host_url', '')}"],
-            }
-            for row in headers_rows[:200]
-            if row.get("host_url")
-        ],
-    }
-    headers_tls_output = {
-        "summary": "Headers/cookies/TLS posture summarized from Stage 1 artifacts.",
-        "controls": [
-            {
-                "statement_type": "observation",
-                "host": row.get("host_url", ""),
-                "posture": (
-                    "strong"
-                    if int(row.get("security_header_score", "0") or 0) >= 5
-                    else (
-                        "moderate"
-                        if int(row.get("security_header_score", "0") or 0) >= 3
-                        else "weak"
-                    )
-                ),
-                "confidence": 0.76,
-                "evidence_refs": [
-                    f"headers_detailed.csv:{row.get('host_url', '')}",
-                    f"tls_summary.md:{row.get('host_url', '')}",
-                ],
-            }
-            for row in headers_rows[:200]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name=ReconAiTask.HEADERS_TLS_SUMMARY.value,
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=headers_tls_input,
-            normalized_output=headers_tls_output,
-            source_artifacts=[
-                "headers_summary.md",
-                "headers_detailed.csv",
-                "tls_summary.md",
-                "host_security_posture.csv",
-                "control_inconsistencies.md",
-            ],
-            evidence_refs=[
-                ref
-                for row in headers_tls_output["controls"]
-                for ref in row.get("evidence_refs", [])
-                if ref
-            ],
-        )
-    )
-
-    content_similarity_input = {
-        "meta": _meta(ReconAiTask.CONTENT_SIMILARITY_INTERPRETATION),
-        "content_clusters": [
-            {
-                "cluster_id": str(row.get("cluster_id", "")),
-                "host": str(row.get("host", "")),
-                "cluster_size": int(row.get("cluster_size", 0) or 0),
-                "template_hint": str(row.get("template_hint", "")),
-                "evidence_ref": str(row.get("evidence_ref", "")),
-            }
-            for row in content_cluster_rows[:300]
-            if row.get("cluster_id")
-        ],
-        "redirect_clusters": [
-            {
-                "redirect_cluster_id": str(row.get("redirect_cluster_id", "")),
-                "host": str(row.get("host", "")),
-                "redirect_target": str(row.get("redirect_target", "")),
-                "evidence_ref": str(row.get("evidence_ref", "")),
-            }
-            for row in redirect_cluster_rows[:300]
-            if row.get("redirect_cluster_id")
-        ],
-    }
-    content_similarity_output = {
-        "summary": "Shared templates and redirect behavior interpreted from clustering artifacts.",
-        "clusters": [
-            {
-                "statement_type": "inference",
-                "cluster_id": row.get("cluster_id", ""),
-                "interpretation": (
-                    "shared_404_or_platform_template"
-                    if row.get("template_hint")
-                    in {"shared_404_template", "shared_platform_template"}
-                    else "unique_or_small_cluster"
-                ),
-                "confidence": 0.73 if int(row.get("cluster_size", 0) or 0) > 1 else 0.58,
-                "evidence_refs": [
-                    str(row.get("evidence_ref", "")),
-                    "content_clusters.csv",
-                ],
-            }
-            for row in content_cluster_rows[:300]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name="content_similarity_interpretation",
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=content_similarity_input,
-            normalized_output=content_similarity_output,
-            source_artifacts=[
-                "content_clusters.csv",
-                "redirect_clusters.csv",
-                "response_similarity.csv",
-                "hostname_behavior_matrix.csv",
-            ],
-            evidence_refs=[
-                *[str(row.get("evidence_ref", "")) for row in content_cluster_rows[:300]],
-                *[str(row.get("evidence_ref", "")) for row in redirect_cluster_rows[:300]],
-            ],
-        )
-    )
-
-    anomaly_candidates = [
-        {
-            "host": r["host"],
-            "classification": r["classification"],
-            "confidence": float(r["confidence"]),
-            "recommendation": r["recommendation"],
-            "evidence_refs": [x for x in r["evidence_refs"].split("|") if x],
-        }
-        for r in anomaly_validation_rows
-    ]
-
-    anomaly_input = {
-        "meta": _meta(ReconAiTask.ANOMALY_INTERPRETATION),
-        "anomalies": [
-            {
-                "host": str(row.get("host", "")),
-                "status": str(row.get("status", "") or "0"),
-                "suspicious_host": str(row.get("suspicious_host", "no")) == "yes",
-                "catch_all_hint": str(row.get("catch_all_hint", "no")) == "yes",
-                "shared_with_root": str(row.get("similar_to_root", "no")) == "yes",
-                "evidence_refs": [
-                    str(row.get("evidence_ref", "")),
-                    "content_clusters.csv",
-                ],
-            }
-            for row in content_cluster_rows[:300]
-            if row.get("host")
-        ],
-    }
-    anomaly_output = {
-        "anomalies": [
-            {
-                "statement_type": "hypothesis",
-                "host": item["host"],
-                "classification": item["classification"],
-                "confidence": item["confidence"],
-                "recommendation": item["recommendation"],
-                "evidence_refs": item["evidence_refs"],
-            }
-            for item in anomaly_candidates[:300]
-        ],
-    }
-    output_files.update(
-        _persist_ai_task(
-            task_name="anomaly_interpretation",
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=anomaly_input,
-            normalized_output=anomaly_output,
-            source_artifacts=[
-                "anomaly_validation.md",
-                "anomaly_validation.csv",
-                "catch_all_evidence.md",
-                "hostname_behavior_matrix.csv",
-            ],
-            evidence_refs=[
-                ref
-                for item in anomaly_candidates[:300]
-                for ref in item.get("evidence_refs", [])
-                if ref
-            ],
-        )
+    (anomaly_candidates,) = _s1ai_anomaly(
+        _meta,
+        anomaly_validation_rows,
+        content_cluster_rows,
+        job_id,
+        output_files,
+        run_id,
+        trace_token,
     )
 
     focus_hosts = [
         str(item.get("host", "")) for item in anomaly_candidates[:20] if item.get("host")
     ]
-    stage2_input = {
-        "meta": _meta(ReconAiTask.STAGE2_PREPARATION_SUMMARY),
-        "focus_hosts": focus_hosts,
-        "risk_hypotheses": [
-            str(item.get("classification", "")) for item in anomaly_candidates[:20]
-        ],
-    }
-    stage2_output = {
-        "summary": "Stage 2 preparation synthesized from validated anomalies and cluster behavior.",
-        "next_steps": [
-            {
-                "statement_type": "hypothesis",
-                "step": "Validate suspicious host ownership and wildcard routing behavior.",
-                "priority": "high",
-                "confidence": 0.78,
-                "evidence_refs": ["anomaly_validation.md", "content_clusters.csv"],
-            },
-            {
-                "statement_type": "hypothesis",
-                "step": "Review redirect clusters for shared platform aliasing and routing controls.",
-                "priority": "medium",
-                "confidence": 0.69,
-                "evidence_refs": [
-                    "redirect_clusters.csv",
-                    "04_live_hosts/http_probe.csv",
-                ],
-            },
-            {
-                "statement_type": "hypothesis",
-                "step": "Prioritize hypothesis-driven checks for hosts with weak header posture.",
-                "priority": "medium",
-                "confidence": 0.67,
-                "evidence_refs": [
-                    "headers_detailed.csv",
-                    "tls_summary.md",
-                    "anomaly_validation.md",
-                ],
-            },
-        ],
-    }
-    stage2_source_artifacts = [
-        "stage2_preparation.md",
-        "frontend_backend_boundaries.md",
-        "app_flow_hints.md",
-        "anomaly_validation.md",
-        "anomaly_validation.csv",
-    ]
-    if (base / "stage2_inputs.md").exists():
-        stage2_source_artifacts.insert(1, "stage2_inputs.md")
-
-    output_files.update(
-        _persist_ai_task(
-            task_name="stage2_preparation_summary",
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=stage2_input,
-            normalized_output=stage2_output,
-            source_artifacts=stage2_source_artifacts,
-            evidence_refs=[
-                ref
-                for step in stage2_output["next_steps"]
-                for ref in step.get("evidence_refs", [])
-                if ref
-            ],
-        )
+    (stage2_output,) = _s1ai_stage2(
+        _meta, anomaly_candidates, base, focus_hosts, job_id, output_files, run_id, trace_token
     )
 
-    stage3_input = {
-        "meta": _meta(ReconAiTask.STAGE3_PREPARATION_SUMMARY),
-        "focus_hosts": focus_hosts,
-        "risk_hypotheses": [
-            str(item.get("classification", "")) for item in anomaly_candidates[:20]
-        ],
-        "stage3_readiness": stage3_readiness_result.model_dump(mode="json"),
-    }
-    stage3_output = {
-        "summary": (
-            f"Stage 3 readiness: {stage3_readiness_result.status}. "
-            "Prioritize missing evidence and recommended follow-up before penetration testing."
-        ),
-        "next_steps": [
-            {
-                "statement_type": "hypothesis",
-                "step": "Address missing evidence gaps before Stage 3 testing.",
-                "priority": "high",
-                "confidence": 0.75,
-                "evidence_refs": ["stage3_readiness.json", "stage3_readiness.md"],
-            },
-            {
-                "statement_type": "hypothesis",
-                "step": "Validate route classification coverage for auth and admin flows.",
-                "priority": "medium",
-                "confidence": 0.7,
-                "evidence_refs": ["route_classification.csv", "stage3_readiness.json"],
-            },
-            {
-                "statement_type": "hypothesis",
-                "step": "Complete API surface mapping for penetration test scope.",
-                "priority": "medium",
-                "confidence": 0.68,
-                "evidence_refs": ["api_surface.csv", "stage3_readiness.json"],
-            },
-        ],
-    }
-    stage3_source_artifacts = [
-        "stage3_readiness.json",
-        "stage3_readiness.md",
-        "route_classification.csv",
-        "stage2_preparation.md",
-        "api_surface.csv",
-    ]
-    output_files.update(
-        _persist_ai_task(
-            task_name="stage3_preparation_summary",
-            run_id=run_id,
-            job_id=job_id,
-            trace_id=trace_token,
-            input_payload=stage3_input,
-            normalized_output=stage3_output,
-            source_artifacts=stage3_source_artifacts,
-            evidence_refs=[
-                ref
-                for step in stage3_output["next_steps"]
-                for ref in step.get("evidence_refs", [])
-                if ref
-            ],
-        )
+    _s1ai_stage3(
+        _meta,
+        anomaly_candidates,
+        focus_hosts,
+        job_id,
+        output_files,
+        run_id,
+        stage3_readiness_result,
+        trace_token,
     )
 
     stage2_preparation_md_lines = [
