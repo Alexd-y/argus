@@ -1840,200 +1840,167 @@ def _s1ai_js(
     )
 
 
-def build_stage1_enrichment_artifacts(
-    recon_dir: str | Path,
-    live_hosts: list[str],
-    endpoint_inventory_path: str | Path | None = None,
-    fetch_func: Any | None = None,
-    use_mcp: bool = True,
-    timeout: float = 10.0,
-    trace_id: str | None = None,
-) -> dict[str, str]:
-    """Build Stage 1 enrichment artifacts and AI task raw/normalized outputs."""
-    base = Path(recon_dir)
-    run_id = base.name
-    job_id = f"{run_id}-stage1"
-    trace_token = trace_id or f"{run_id}-{job_id}-enrichment"
-    fetch_page = _build_fetcher(fetch_func=fetch_func, use_mcp=use_mcp, timeout=timeout)
+def _s1_crawl_scripts(
+    _append_route,
+    api_rows,
+    fetch_page,
+    job_id,
+    js_api_refs,
+    js_auth_hints,
+    js_bundle_index,
+    js_client_routes,
+    js_config_hints,
+    js_feature_flags,
+    js_frontend_markers,
+    js_hidden_hints,
+    js_third_party,
+    run_id,
+    script_targets,
+    seen_api,
+):
+    for page_url, script_url, page_fetch_backend in script_targets:
+        fetched_script = fetch_page(script_url)
+        body = fetched_script.body[:_MAX_JS_BYTES]
+        if not _is_js_like(script_url, fetched_script.content_type, body):
+            continue
 
-    http_probe_rows = parse_http_probe(base / "04_live_hosts" / "http_probe.csv")
-    endpoint_rows: list[dict[str, Any]] = []
-    if endpoint_inventory_path:
-        ep_path = Path(endpoint_inventory_path)
-        if ep_path.exists():
-            with ep_path.open(encoding="utf-8", errors="replace", newline="") as f:
-                endpoint_rows = list(csv.DictReader(f))
-    if not endpoint_rows:
-        ep_path = base / "endpoint_inventory.csv"
-        if ep_path.exists():
-            try:
-                with ep_path.open(encoding="utf-8", errors="replace", newline="") as f:
-                    endpoint_rows = list(csv.DictReader(f))
-            except (OSError, csv.Error):
-                endpoint_rows = []
-
-    crawl_targets: list[str] = []
-    seen_targets: set[str] = set()
-
-    def _add_target(url: str) -> None:
-        n = _normalize_url(url)
-        if n and n not in seen_targets:
-            seen_targets.add(n)
-            crawl_targets.append(n)
-
-    for row in http_probe_rows:
-        _add_target(row.get("url", ""))
-    for row in endpoint_rows:
-        if str(row.get("exists", "")).lower() == "yes":
-            _add_target(str(row.get("url", "")))
-    if not http_probe_rows and endpoint_rows:
-        for row in endpoint_rows:
-            _add_target(str(row.get("url", "") or ""))
-    for base_url in live_hosts:
-        for path in _ROUTE_CANDIDATE_PATHS:
-            _add_target(f"{base_url.rstrip('/')}{path}")
-
-    crawl_targets = crawl_targets[:_MAX_PAGES]
-    in_scope_hosts: set[str] = {_host_from_url(url) for url in live_hosts if _host_from_url(url)}
-    in_scope_hosts.update(
-        str(row.get("host", "") or "").lower() for row in http_probe_rows if row.get("host")
-    )
-    in_scope_hosts.update(
-        _host_from_url(str(row.get("url", "") or ""))
-        for row in http_probe_rows
-        if _host_from_url(str(row.get("url", "") or ""))
-    )
-    if not in_scope_hosts:
-        in_scope_hosts.update(_host_from_url(url) for url in crawl_targets if _host_from_url(url))
-
-    route_rows: list[dict[str, Any]] = []
-    public_page_rows: list[dict[str, Any]] = []
-    forms_rows: list[dict[str, Any]] = []
-    params_rows: list[dict[str, Any]] = []
-    js_bundle_rows: list[dict[str, Any]] = []
-    api_rows: list[dict[str, Any]] = []
-
-    js_client_routes: list[dict[str, Any]] = []
-    js_api_refs: list[dict[str, Any]] = []
-    js_hidden_hints: list[dict[str, Any]] = []
-    js_third_party: list[dict[str, Any]] = []
-    js_feature_flags: list[dict[str, Any]] = []
-    js_auth_hints: list[dict[str, Any]] = []
-    js_config_hints: list[dict[str, Any]] = []
-    js_frontend_markers: list[dict[str, Any]] = []
-
-    seen_forms: set[tuple[str, str, str, str]] = set()
-    seen_params: set[tuple[str, str, str]] = set()
-    seen_api: set[tuple[str, str]] = set()
-    seen_routes: set[tuple[str, str, str]] = set()
-    seen_js_bundle: set[tuple[str, str]] = set()
-    js_bundle_index: dict[tuple[str, str], dict[str, Any]] = {}
-    script_targets: list[tuple[str, str, str]] = []
-    seen_script_targets: set[tuple[str, str]] = set()
-
-    def _append_route(
-        *,
-        source: str,
-        url: str,
-        status: int,
-        content_type: str,
-        evidence_ref: str,
-        fetch_backend: str,
-        skipped_reason: str = "",
-    ) -> None:
-        safe_url = _sanitize_url_for_artifact(url)
-        parsed = urlparse(url)
-        route_path = parsed.path or "/"
-        key = (safe_url, source, evidence_ref)
-        if key in seen_routes:
-            return
-        seen_routes.add(key)
-        route_rows.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "host": parsed.netloc,
-                "url": safe_url,
-                "route_path": route_path,
-                "discovery_source": source,
-                "classification": _route_classification(url),
-                "status": status,
-                "content_type": content_type,
-                "fetch_backend": fetch_backend,
-                "evidence_ref": evidence_ref,
-                "skipped_reason": skipped_reason,
-            }
+        js_row = js_bundle_index.get(
+            (
+                _sanitize_url_for_artifact(page_url),
+                _sanitize_url_for_artifact(script_url),
+            )
         )
+        if js_row is not None:
+            js_row["fetch_status"] = fetched_script.status
+            js_row["fetch_backend"] = fetched_script.fetch_backend or page_fetch_backend
 
-        for param_name, value in parse_qsl(parsed.query, keep_blank_values=True):
-            pkey = (safe_url, param_name, "query")
-            if pkey in seen_params:
+        for match in _CLIENT_ROUTE_RE.finditer(body):
+            value = match.group("route")
+            if value.count("/") < 1 or len(value) > 120:
                 continue
-            seen_params.add(pkey)
-            params_rows.append(
-                {
-                    "run_id": run_id,
-                    "job_id": job_id,
-                    "param_name": param_name,
-                    "param_source": "query",
-                    "param_category": _param_category(param_name),
-                    "example_value": _sanitize_example_value(param_name, value),
-                    "context_url": safe_url,
-                    "pattern_hint": "",
-                    "evidence_ref": evidence_ref,
-                }
+            js_client_routes.append(
+                {"value": value, "evidence_ref": _build_evidence_ref("js", script_url)}
+            )
+            _append_route(
+                source="js_route_hint",
+                url=urljoin(page_url, value),
+                status=0,
+                content_type="",
+                evidence_ref=_build_evidence_ref("js", script_url),
+                fetch_backend=fetched_script.fetch_backend,
             )
 
-        if _ID_PATH_RE.search(route_path) or re.search(r"/\d{2,}", route_path):
-            pkey = (safe_url, "id_path_pattern", "id_state")
-            if pkey not in seen_params:
-                seen_params.add(pkey)
-                params_rows.append(
+        for match in _API_HINT_RE.finditer(body):
+            path = match.group("path")
+            full_url = urljoin(page_url, path)
+            safe_full_url = _sanitize_url_for_artifact(full_url)
+            js_api_refs.append(
+                {
+                    "value": safe_full_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
+            api_key = (urlparse(full_url).netloc, urlparse(full_url).path)
+            if api_key not in seen_api:
+                seen_api.add(api_key)
+                api_rows.append(
                     {
                         "run_id": run_id,
                         "job_id": job_id,
-                        "param_name": "id_path_pattern",
-                        "param_source": "path",
-                        "param_category": "id_state",
-                        "example_value": _sanitize_preview_value(route_path),
-                        "context_url": safe_url,
-                        "pattern_hint": "state_transition_or_identifier",
-                        "evidence_ref": evidence_ref,
+                        "host": urlparse(full_url).netloc,
+                        "path": urlparse(full_url).path or "/",
+                        "full_url": safe_full_url,
+                        "source": "js_api_ref",
+                        "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
+                        "method_hint": "unknown",
+                        "schema_hint": "unknown",
+                        "auth_boundary_hint": (
+                            "auth_related"
+                            if _AUTH_HINT_RE.search(full_url)
+                            else "frontend_to_backend"
+                        ),
+                        "fetch_backend": fetched_script.fetch_backend,
+                        "evidence_ref": _build_evidence_ref("js", script_url),
                     }
                 )
 
-    def _get_or_create_js_bundle_row(
-        *,
-        page_url: str,
-        script_url: str,
-        fetch_backend: str,
-        evidence_ref: str,
-        is_third_party: bool,
-    ) -> dict[str, Any]:
-        safe_page_url = _sanitize_url_for_artifact(page_url)
-        safe_script_url = _sanitize_url_for_artifact(script_url)
-        key = (safe_page_url, safe_script_url)
-        existing = js_bundle_index.get(key)
-        if existing is not None:
-            return existing
+        if "hidden" in body.lower() or "internal" in body.lower():
+            js_hidden_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
+        if _THIRD_PARTY_RE.search(script_url):
+            js_third_party.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
+        if _FEATURE_FLAG_RE.search(body):
+            js_feature_flags.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
+        if _AUTH_HINT_RE.search(body):
+            js_auth_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
+        if _CONFIG_HINT_RE.search(body):
+            js_config_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
 
-        row = {
-            "run_id": run_id,
-            "job_id": job_id,
-            "page_url": safe_page_url,
-            "script_url": safe_script_url,
-            "origin": "external" if is_third_party else "same_origin",
-            "type": "script_src",
-            "is_third_party": "yes" if is_third_party else "no",
-            "fetch_status": 0,
-            "fetch_backend": fetch_backend,
-            "evidence_ref": evidence_ref,
-            "skipped_reason": "",
-        }
-        js_bundle_rows.append(row)
-        js_bundle_index[key] = row
-        return row
+        markers = []
+        lowered = body.lower()
+        for marker in ("react", "next", "vue", "nuxt", "angular", "svelte"):
+            if marker in lowered:
+                markers.append(marker)
+        for marker in markers:
+            js_frontend_markers.append(
+                {
+                    "value": f"{marker} marker in {script_url}",
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
 
+
+def _s1_crawl_targets(
+    _append_route,
+    _get_or_create_js_bundle_row,
+    api_rows,
+    crawl_targets,
+    fetch_page,
+    forms_rows,
+    in_scope_hosts,
+    job_id,
+    js_api_refs,
+    js_auth_hints,
+    js_bundle_index,
+    js_client_routes,
+    js_config_hints,
+    js_feature_flags,
+    js_hidden_hints,
+    js_third_party,
+    params_rows,
+    public_page_rows,
+    run_id,
+    script_targets,
+    seen_api,
+    seen_forms,
+    seen_js_bundle,
+    seen_params,
+    seen_script_targets,
+):
     for target_url in crawl_targets:
         target_host = _host_from_url(target_url)
         if not target_host or target_host not in in_scope_hosts:
@@ -2286,120 +2253,247 @@ def build_stage1_enrichment_artifacts(
                     seen_script_targets.add(script_target_key)
                     script_targets.append((fetched.url, script_url, fetched.fetch_backend))
 
-    for page_url, script_url, page_fetch_backend in script_targets:
-        fetched_script = fetch_page(script_url)
-        body = fetched_script.body[:_MAX_JS_BYTES]
-        if not _is_js_like(script_url, fetched_script.content_type, body):
-            continue
 
-        js_row = js_bundle_index.get(
-            (
-                _sanitize_url_for_artifact(page_url),
-                _sanitize_url_for_artifact(script_url),
-            )
+def build_stage1_enrichment_artifacts(
+    recon_dir: str | Path,
+    live_hosts: list[str],
+    endpoint_inventory_path: str | Path | None = None,
+    fetch_func: Any | None = None,
+    use_mcp: bool = True,
+    timeout: float = 10.0,
+    trace_id: str | None = None,
+) -> dict[str, str]:
+    """Build Stage 1 enrichment artifacts and AI task raw/normalized outputs."""
+    base = Path(recon_dir)
+    run_id = base.name
+    job_id = f"{run_id}-stage1"
+    trace_token = trace_id or f"{run_id}-{job_id}-enrichment"
+    fetch_page = _build_fetcher(fetch_func=fetch_func, use_mcp=use_mcp, timeout=timeout)
+
+    http_probe_rows = parse_http_probe(base / "04_live_hosts" / "http_probe.csv")
+    endpoint_rows: list[dict[str, Any]] = []
+    if endpoint_inventory_path:
+        ep_path = Path(endpoint_inventory_path)
+        if ep_path.exists():
+            with ep_path.open(encoding="utf-8", errors="replace", newline="") as f:
+                endpoint_rows = list(csv.DictReader(f))
+    if not endpoint_rows:
+        ep_path = base / "endpoint_inventory.csv"
+        if ep_path.exists():
+            try:
+                with ep_path.open(encoding="utf-8", errors="replace", newline="") as f:
+                    endpoint_rows = list(csv.DictReader(f))
+            except (OSError, csv.Error):
+                endpoint_rows = []
+
+    crawl_targets: list[str] = []
+    seen_targets: set[str] = set()
+
+    def _add_target(url: str) -> None:
+        n = _normalize_url(url)
+        if n and n not in seen_targets:
+            seen_targets.add(n)
+            crawl_targets.append(n)
+
+    for row in http_probe_rows:
+        _add_target(row.get("url", ""))
+    for row in endpoint_rows:
+        if str(row.get("exists", "")).lower() == "yes":
+            _add_target(str(row.get("url", "")))
+    if not http_probe_rows and endpoint_rows:
+        for row in endpoint_rows:
+            _add_target(str(row.get("url", "") or ""))
+    for base_url in live_hosts:
+        for path in _ROUTE_CANDIDATE_PATHS:
+            _add_target(f"{base_url.rstrip('/')}{path}")
+
+    crawl_targets = crawl_targets[:_MAX_PAGES]
+    in_scope_hosts: set[str] = {_host_from_url(url) for url in live_hosts if _host_from_url(url)}
+    in_scope_hosts.update(
+        str(row.get("host", "") or "").lower() for row in http_probe_rows if row.get("host")
+    )
+    in_scope_hosts.update(
+        _host_from_url(str(row.get("url", "") or ""))
+        for row in http_probe_rows
+        if _host_from_url(str(row.get("url", "") or ""))
+    )
+    if not in_scope_hosts:
+        in_scope_hosts.update(_host_from_url(url) for url in crawl_targets if _host_from_url(url))
+
+    route_rows: list[dict[str, Any]] = []
+    public_page_rows: list[dict[str, Any]] = []
+    forms_rows: list[dict[str, Any]] = []
+    params_rows: list[dict[str, Any]] = []
+    js_bundle_rows: list[dict[str, Any]] = []
+    api_rows: list[dict[str, Any]] = []
+
+    js_client_routes: list[dict[str, Any]] = []
+    js_api_refs: list[dict[str, Any]] = []
+    js_hidden_hints: list[dict[str, Any]] = []
+    js_third_party: list[dict[str, Any]] = []
+    js_feature_flags: list[dict[str, Any]] = []
+    js_auth_hints: list[dict[str, Any]] = []
+    js_config_hints: list[dict[str, Any]] = []
+    js_frontend_markers: list[dict[str, Any]] = []
+
+    seen_forms: set[tuple[str, str, str, str]] = set()
+    seen_params: set[tuple[str, str, str]] = set()
+    seen_api: set[tuple[str, str]] = set()
+    seen_routes: set[tuple[str, str, str]] = set()
+    seen_js_bundle: set[tuple[str, str]] = set()
+    js_bundle_index: dict[tuple[str, str], dict[str, Any]] = {}
+    script_targets: list[tuple[str, str, str]] = []
+    seen_script_targets: set[tuple[str, str]] = set()
+
+    def _append_route(
+        *,
+        source: str,
+        url: str,
+        status: int,
+        content_type: str,
+        evidence_ref: str,
+        fetch_backend: str,
+        skipped_reason: str = "",
+    ) -> None:
+        safe_url = _sanitize_url_for_artifact(url)
+        parsed = urlparse(url)
+        route_path = parsed.path or "/"
+        key = (safe_url, source, evidence_ref)
+        if key in seen_routes:
+            return
+        seen_routes.add(key)
+        route_rows.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "host": parsed.netloc,
+                "url": safe_url,
+                "route_path": route_path,
+                "discovery_source": source,
+                "classification": _route_classification(url),
+                "status": status,
+                "content_type": content_type,
+                "fetch_backend": fetch_backend,
+                "evidence_ref": evidence_ref,
+                "skipped_reason": skipped_reason,
+            }
         )
-        if js_row is not None:
-            js_row["fetch_status"] = fetched_script.status
-            js_row["fetch_backend"] = fetched_script.fetch_backend or page_fetch_backend
 
-        for match in _CLIENT_ROUTE_RE.finditer(body):
-            value = match.group("route")
-            if value.count("/") < 1 or len(value) > 120:
+        for param_name, value in parse_qsl(parsed.query, keep_blank_values=True):
+            pkey = (safe_url, param_name, "query")
+            if pkey in seen_params:
                 continue
-            js_client_routes.append(
-                {"value": value, "evidence_ref": _build_evidence_ref("js", script_url)}
-            )
-            _append_route(
-                source="js_route_hint",
-                url=urljoin(page_url, value),
-                status=0,
-                content_type="",
-                evidence_ref=_build_evidence_ref("js", script_url),
-                fetch_backend=fetched_script.fetch_backend,
-            )
-
-        for match in _API_HINT_RE.finditer(body):
-            path = match.group("path")
-            full_url = urljoin(page_url, path)
-            safe_full_url = _sanitize_url_for_artifact(full_url)
-            js_api_refs.append(
+            seen_params.add(pkey)
+            params_rows.append(
                 {
-                    "value": safe_full_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
+                    "run_id": run_id,
+                    "job_id": job_id,
+                    "param_name": param_name,
+                    "param_source": "query",
+                    "param_category": _param_category(param_name),
+                    "example_value": _sanitize_example_value(param_name, value),
+                    "context_url": safe_url,
+                    "pattern_hint": "",
+                    "evidence_ref": evidence_ref,
                 }
             )
-            api_key = (urlparse(full_url).netloc, urlparse(full_url).path)
-            if api_key not in seen_api:
-                seen_api.add(api_key)
-                api_rows.append(
+
+        if _ID_PATH_RE.search(route_path) or re.search(r"/\d{2,}", route_path):
+            pkey = (safe_url, "id_path_pattern", "id_state")
+            if pkey not in seen_params:
+                seen_params.add(pkey)
+                params_rows.append(
                     {
                         "run_id": run_id,
                         "job_id": job_id,
-                        "host": urlparse(full_url).netloc,
-                        "path": urlparse(full_url).path or "/",
-                        "full_url": safe_full_url,
-                        "source": "js_api_ref",
-                        "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
-                        "method_hint": "unknown",
-                        "schema_hint": "unknown",
-                        "auth_boundary_hint": (
-                            "auth_related"
-                            if _AUTH_HINT_RE.search(full_url)
-                            else "frontend_to_backend"
-                        ),
-                        "fetch_backend": fetched_script.fetch_backend,
-                        "evidence_ref": _build_evidence_ref("js", script_url),
+                        "param_name": "id_path_pattern",
+                        "param_source": "path",
+                        "param_category": "id_state",
+                        "example_value": _sanitize_preview_value(route_path),
+                        "context_url": safe_url,
+                        "pattern_hint": "state_transition_or_identifier",
+                        "evidence_ref": evidence_ref,
                     }
                 )
 
-        if "hidden" in body.lower() or "internal" in body.lower():
-            js_hidden_hints.append(
-                {
-                    "value": script_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
-        if _THIRD_PARTY_RE.search(script_url):
-            js_third_party.append(
-                {
-                    "value": script_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
-        if _FEATURE_FLAG_RE.search(body):
-            js_feature_flags.append(
-                {
-                    "value": script_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
-        if _AUTH_HINT_RE.search(body):
-            js_auth_hints.append(
-                {
-                    "value": script_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
-        if _CONFIG_HINT_RE.search(body):
-            js_config_hints.append(
-                {
-                    "value": script_url,
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
+    def _get_or_create_js_bundle_row(
+        *,
+        page_url: str,
+        script_url: str,
+        fetch_backend: str,
+        evidence_ref: str,
+        is_third_party: bool,
+    ) -> dict[str, Any]:
+        safe_page_url = _sanitize_url_for_artifact(page_url)
+        safe_script_url = _sanitize_url_for_artifact(script_url)
+        key = (safe_page_url, safe_script_url)
+        existing = js_bundle_index.get(key)
+        if existing is not None:
+            return existing
 
-        markers = []
-        lowered = body.lower()
-        for marker in ("react", "next", "vue", "nuxt", "angular", "svelte"):
-            if marker in lowered:
-                markers.append(marker)
-        for marker in markers:
-            js_frontend_markers.append(
-                {
-                    "value": f"{marker} marker in {script_url}",
-                    "evidence_ref": _build_evidence_ref("js", script_url),
-                }
-            )
+        row = {
+            "run_id": run_id,
+            "job_id": job_id,
+            "page_url": safe_page_url,
+            "script_url": safe_script_url,
+            "origin": "external" if is_third_party else "same_origin",
+            "type": "script_src",
+            "is_third_party": "yes" if is_third_party else "no",
+            "fetch_status": 0,
+            "fetch_backend": fetch_backend,
+            "evidence_ref": evidence_ref,
+            "skipped_reason": "",
+        }
+        js_bundle_rows.append(row)
+        js_bundle_index[key] = row
+        return row
+
+    _s1_crawl_targets(
+        _append_route,
+        _get_or_create_js_bundle_row,
+        api_rows,
+        crawl_targets,
+        fetch_page,
+        forms_rows,
+        in_scope_hosts,
+        job_id,
+        js_api_refs,
+        js_auth_hints,
+        js_bundle_index,
+        js_client_routes,
+        js_config_hints,
+        js_feature_flags,
+        js_hidden_hints,
+        js_third_party,
+        params_rows,
+        public_page_rows,
+        run_id,
+        script_targets,
+        seen_api,
+        seen_forms,
+        seen_js_bundle,
+        seen_params,
+        seen_script_targets,
+    )
+
+    _s1_crawl_scripts(
+        _append_route,
+        api_rows,
+        fetch_page,
+        job_id,
+        js_api_refs,
+        js_auth_hints,
+        js_bundle_index,
+        js_client_routes,
+        js_config_hints,
+        js_feature_flags,
+        js_frontend_markers,
+        js_hidden_hints,
+        js_third_party,
+        run_id,
+        script_targets,
+        seen_api,
+    )
 
     for row_idx, ep_row in enumerate(endpoint_rows, start=1):
         if str(ep_row.get("exists", "")).lower() != "yes":
