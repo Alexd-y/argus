@@ -35,15 +35,24 @@ AST-сканером (длина функций, вложенность, арн�
 _compute_mandatory, build_valhalla, report_pipeline, build_html_report, run_vuln_analysis (+docs).
 Каждый верифицирован: `ruff`/`black`/`bandit` зелёные, профильные тесты зелёные.
 
-**🚫 Не доведены (2 из 7 последовательных) — требуют docker-стенда:**
+**`build_stage1_enrichment_artifacts` — СДЕЛАНО (2112 → 1169, −943):**
+Запущены контейнеры (postgres/redis/minio/sandbox); выяснилось, что unit-тест
+`test_stage1_enrichment_builder.py` на самом деле быстрый (auto-marked `requires_docker`
+из-за localhost-URL в фикстурах, но исполняется за ~7s через `pytest -m ""`). Это дало
+быструю страховку. Извлечено (dataflow-инструментом `tmp/bx.py`): 8 AI-блоков (`_s1ai_*`),
+2 crawl-цикла (`_s1_crawl_*`), 2 row-группы (`_s1_rows_*`). Верификация: **33 passed**
+(1 предсущ. fail — footer scan-mode, не связан). Остаток — литерал `output_files` (157)
+и взаимозависимые temp-циклы — оставлены inline.
 
-| Функция | Причина блокировки |
-|---------|--------------------|
-| `run_va_active_scan_phase` (1375) | 8 взаимно-ссылающихся вложенных **замыканий** (~900 строк), захватывают ~20 внешних переменных. Нужен подъём замыканий (closure→params) + переписывание всех вызовов, НЕ блочное извлечение. Тесты docker-gated → нет быстрой верификации байт-в-байт. |
-| `build_stage1_enrichment_artifacts` (2112) | Последовательная сборка с 4 замыканиями, мутирующими общие аккумуляторы (риск алиасинга). Тест docker-gated и имеет **предсуществующее** падение (маркер scan-mode) → чистый baseline недоступен; smoke на пустом входе не исполняет data-зависимые ветви. |
-
-> Оба требуют выделённой сессии с поднятым docker-стендом (`docker-compose.e2e.yml`) для
-> интеграционной верификации, т.к. их unit-тесты исключены из быстрого прогона (`requires_docker`).
+**🚫 `run_va_active_scan_phase` (1375) — заблокировано (1 из 10 топ-P1):**
+~900 строк функции — это **8 взаимно-ссылающихся вложенных замыканий** (`_sink_tool_run`,
+`_sink_ssl_probe_step`, `_sink_plan_step`, `_sink_va_tool_artifacts` + 4 мелких), каскадно
+захватывающих ~25 внешних переменных. Блочное/фабричное извлечение некорректно — нужен
+scope-анализ замыканий (нельзя тянуть внутренние локалы как входы). Корректный путь:
+**подъём замыканий через `symtable`** ИЛИ **редизайн в класс-контекст** (sink-методы +
+общее состояние в `__init__`) с переписыванием всех вызовов. Верификация только через
+медленные интеграционные тесты (реальное исполнение инструментов в sandbox, ~минуты).
+Требует выделённой сессии — это не механическое извлечение.
 
 **Почему безопасно:** замена `pass` на `logger.debug(...)` не меняет control flow (логирование
 не бросает исключений при штатной конфигурации) — best-effort семантика сохранена, но скрытые
@@ -64,12 +73,12 @@ _compute_mandatory, build_valhalla, report_pipeline, build_html_report, run_vuln
 Эти правки НЕ применялись автоматически: они меняют структуру кода в ядре pentest-pipeline и
 требуют характеризующих тестов + ручной верификации, чтобы гарантировать неизменность поведения.
 
-### P1 — God-функции топ-10: **8 из 10 сделаны**, 2 заблокированы
+### P1 — God-функции топ-10: **9 из 10 сделаны**, 1 заблокирована
 
 | Строк | Файл:функция | Статус |
 |------:|--------------|--------|
-| 2112 | `recon/reporting/stage1_enrichment_builder.py` → `build_stage1_enrichment_artifacts` | 🚫 заблокировано (замыкания+accum, docker-тест с предсущ. падением) |
-| 1375 | `.../active_scan/va_active_scan_phase.py` → `run_va_active_scan_phase` | 🚫 заблокировано (8 замыканий, нужен closure-lifting, docker-тесты) |
+| 2112 | `recon/reporting/stage1_enrichment_builder.py` → `build_stage1_enrichment_artifacts` | ✅ **сделано** 2112→1169 (8 `_s1ai_*` + 2 `_s1_crawl_*` + 2 `_s1_rows_*`) |
+| 1375 | `.../active_scan/va_active_scan_phase.py` → `run_va_active_scan_phase` | 🚫 заблокировано (8 замыканий, нужен symtable-lifting/класс, docker-тесты) |
 | 857 | `orchestration/handlers.py` → `run_vuln_analysis` | ✅ **сделано** 857→546 (5 `_va_*`) |
 | 741 | `recon/vulnerability_analysis/pipeline.py` → `_build_va_fallback_output` | ✅ **сделано** 741→83 (26 хелперов) |
 | 741 | `recon/reporting/html_report_builder.py` → `build_html_report` | ✅ **сделано** 741→179 (7 `_html_*`) |
