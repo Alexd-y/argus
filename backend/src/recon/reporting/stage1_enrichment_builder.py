@@ -2254,6 +2254,213 @@ def _s1_crawl_targets(
                     script_targets.append((fetched.url, script_url, fetched.fetch_backend))
 
 
+def _s1_rows_params_forms_context(
+    forms_rows, input_surfaces_rows, job_id, params_rows, run_id, seen_input_surfaces, trace_token
+):
+    route_param_map_rows = None
+    for row in params_rows:
+        surface_name = str(row.get("param_name", "") or "").strip()
+        if not surface_name:
+            continue
+        surface_type = str(row.get("param_source", "") or "").strip() or "query"
+        context_url = str(row.get("context_url", "") or "").strip()
+        key = (surface_type, surface_name, context_url)
+        if key in seen_input_surfaces:
+            continue
+        seen_input_surfaces.add(key)
+        input_surfaces_rows.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "trace_id": trace_token,
+                "surface_type": surface_type,
+                "surface_name": surface_name,
+                "context_url": context_url,
+                "classification": row.get("param_category", ""),
+                "evidence_ref": row.get("evidence_ref", ""),
+            }
+        )
+    for row in forms_rows:
+        surface_name = str(row.get("input_name", "") or "").strip()
+        if not surface_name:
+            continue
+        context_url = str(row.get("page_url", "") or "").strip()
+        key = ("form_input", surface_name, context_url)
+        if key in seen_input_surfaces:
+            continue
+        seen_input_surfaces.add(key)
+        input_surfaces_rows.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "trace_id": trace_token,
+                "surface_type": "form_input",
+                "surface_name": surface_name,
+                "context_url": context_url,
+                "classification": row.get("classification", ""),
+                "evidence_ref": row.get("evidence_ref", ""),
+            }
+        )
+
+    route_param_map_rows: list[dict[str, Any]] = []
+    by_context: dict[str, list[dict[str, Any]]] = {}
+    for row in params_rows:
+        ctx = str(row.get("context_url", "") or "").strip()
+        if not ctx:
+            continue
+        by_context.setdefault(ctx, []).append(row)
+    for context_url, grouped in by_context.items():
+        param_names = sorted(
+            {
+                str(item.get("param_name", "")).strip()
+                for item in grouped
+                if str(item.get("param_name", "")).strip()
+            }
+        )
+        if not param_names:
+            continue
+        route_param_map_rows.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "trace_id": trace_token,
+                "context_url": context_url,
+                "route_path": urlparse(context_url).path or "/",
+                "param_names": "|".join(param_names),
+                "sources": "|".join(
+                    sorted(
+                        {
+                            str(item.get("param_source", ""))
+                            for item in grouped
+                            if item.get("param_source")
+                        }
+                    )
+                ),
+                "evidence_refs": "|".join(
+                    sorted(
+                        {
+                            str(item.get("evidence_ref", ""))
+                            for item in grouped
+                            if item.get("evidence_ref")
+                        }
+                    )
+                ),
+            }
+        )
+    return (route_param_map_rows,)
+
+
+def _s1_rows_endpoints_routes_probe(
+    api_rows,
+    endpoint_rows,
+    http_probe_rows,
+    job_id,
+    params_rows,
+    route_rows,
+    run_id,
+    seen_api,
+    seen_params,
+):
+    for row_idx, ep_row in enumerate(endpoint_rows, start=1):
+        if str(ep_row.get("exists", "")).lower() != "yes":
+            continue
+        url = str(ep_row.get("url", "") or "").strip()
+        if not url:
+            continue
+        parsed = urlparse(url)
+        path = parsed.path or "/"
+        content_type = str(ep_row.get("content_type", "") or "").lower()
+        is_json_ct = "application/json" in content_type or "json" in content_type
+        is_api_path = (
+            _API_HINT_RE.search(path)
+            or "/api/" in path.lower()
+            or "graphql" in path.lower()
+            or is_json_ct
+        )
+        if not is_api_path:
+            continue
+        api_key = (parsed.netloc, path)
+        if api_key in seen_api:
+            continue
+        seen_api.add(api_key)
+        schema_hint = "json" if is_json_ct else "unknown"
+        api_rows.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "host": parsed.netloc,
+                "path": path,
+                "full_url": _sanitize_url_for_artifact(url),
+                "source": "endpoint_inventory",
+                "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
+                "method_hint": "GET",
+                "schema_hint": schema_hint,
+                "auth_boundary_hint": ("auth_related" if _AUTH_HINT_RE.search(url) else "unknown"),
+                "fetch_backend": "endpoint_inventory",
+                "evidence_ref": f"endpoint_inventory.csv:{row_idx}",
+            }
+        )
+
+    for route in route_rows:
+        url = str(route.get("url", ""))
+        if not url:
+            continue
+        parsed = urlparse(url)
+        path = parsed.path or "/"
+        if _API_HINT_RE.search(path):
+            api_key = (parsed.netloc, path)
+            if api_key not in seen_api:
+                seen_api.add(api_key)
+                api_rows.append(
+                    {
+                        "run_id": run_id,
+                        "job_id": job_id,
+                        "host": parsed.netloc,
+                        "path": path,
+                        "full_url": _sanitize_url_for_artifact(url),
+                        "source": "route_inventory",
+                        "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
+                        "method_hint": "GET",
+                        "schema_hint": "unknown",
+                        "auth_boundary_hint": (
+                            "auth_related" if _AUTH_HINT_RE.search(url) else "unknown"
+                        ),
+                        "fetch_backend": route.get("fetch_backend", ""),
+                        "evidence_ref": route.get("evidence_ref", ""),
+                    }
+                )
+
+    for row in http_probe_rows:
+        source_url = str(row.get("url", "") or "").strip()
+        if not source_url or "?" not in source_url:
+            continue
+        parsed = urlparse(source_url)
+        if not parsed.query:
+            continue
+        safe_url = _sanitize_url_for_artifact(source_url)
+        for param_name, value in parse_qsl(parsed.query, keep_blank_values=True):
+            param_name = (param_name or "").strip()
+            if not param_name:
+                continue
+            pkey = (safe_url, param_name, "query")
+            if pkey in seen_params:
+                continue
+            seen_params.add(pkey)
+            params_rows.append(
+                {
+                    "run_id": run_id,
+                    "job_id": job_id,
+                    "param_name": param_name,
+                    "param_source": "http_probe_url",
+                    "param_category": _param_category(param_name),
+                    "example_value": _sanitize_example_value(param_name, value),
+                    "context_url": safe_url,
+                    "pattern_hint": "",
+                    "evidence_ref": _build_evidence_ref("http_probe", source_url),
+                }
+            )
+
+
 def build_stage1_enrichment_artifacts(
     recon_dir: str | Path,
     live_hosts: list[str],
@@ -2495,104 +2702,17 @@ def build_stage1_enrichment_artifacts(
         seen_api,
     )
 
-    for row_idx, ep_row in enumerate(endpoint_rows, start=1):
-        if str(ep_row.get("exists", "")).lower() != "yes":
-            continue
-        url = str(ep_row.get("url", "") or "").strip()
-        if not url:
-            continue
-        parsed = urlparse(url)
-        path = parsed.path or "/"
-        content_type = str(ep_row.get("content_type", "") or "").lower()
-        is_json_ct = "application/json" in content_type or "json" in content_type
-        is_api_path = (
-            _API_HINT_RE.search(path)
-            or "/api/" in path.lower()
-            or "graphql" in path.lower()
-            or is_json_ct
-        )
-        if not is_api_path:
-            continue
-        api_key = (parsed.netloc, path)
-        if api_key in seen_api:
-            continue
-        seen_api.add(api_key)
-        schema_hint = "json" if is_json_ct else "unknown"
-        api_rows.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "host": parsed.netloc,
-                "path": path,
-                "full_url": _sanitize_url_for_artifact(url),
-                "source": "endpoint_inventory",
-                "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
-                "method_hint": "GET",
-                "schema_hint": schema_hint,
-                "auth_boundary_hint": ("auth_related" if _AUTH_HINT_RE.search(url) else "unknown"),
-                "fetch_backend": "endpoint_inventory",
-                "evidence_ref": f"endpoint_inventory.csv:{row_idx}",
-            }
-        )
-
-    for route in route_rows:
-        url = str(route.get("url", ""))
-        if not url:
-            continue
-        parsed = urlparse(url)
-        path = parsed.path or "/"
-        if _API_HINT_RE.search(path):
-            api_key = (parsed.netloc, path)
-            if api_key not in seen_api:
-                seen_api.add(api_key)
-                api_rows.append(
-                    {
-                        "run_id": run_id,
-                        "job_id": job_id,
-                        "host": parsed.netloc,
-                        "path": path,
-                        "full_url": _sanitize_url_for_artifact(url),
-                        "source": "route_inventory",
-                        "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
-                        "method_hint": "GET",
-                        "schema_hint": "unknown",
-                        "auth_boundary_hint": (
-                            "auth_related" if _AUTH_HINT_RE.search(url) else "unknown"
-                        ),
-                        "fetch_backend": route.get("fetch_backend", ""),
-                        "evidence_ref": route.get("evidence_ref", ""),
-                    }
-                )
-
-    for row in http_probe_rows:
-        source_url = str(row.get("url", "") or "").strip()
-        if not source_url or "?" not in source_url:
-            continue
-        parsed = urlparse(source_url)
-        if not parsed.query:
-            continue
-        safe_url = _sanitize_url_for_artifact(source_url)
-        for param_name, value in parse_qsl(parsed.query, keep_blank_values=True):
-            param_name = (param_name or "").strip()
-            if not param_name:
-                continue
-            pkey = (safe_url, param_name, "query")
-            if pkey in seen_params:
-                continue
-            seen_params.add(pkey)
-            params_rows.append(
-                {
-                    "run_id": run_id,
-                    "job_id": job_id,
-                    "param_name": param_name,
-                    "param_source": "http_probe_url",
-                    "param_category": _param_category(param_name),
-                    "example_value": _sanitize_example_value(param_name, value),
-                    "context_url": safe_url,
-                    "pattern_hint": "",
-                    "evidence_ref": _build_evidence_ref("http_probe", source_url),
-                }
-            )
+    _s1_rows_endpoints_routes_probe(
+        api_rows,
+        endpoint_rows,
+        http_probe_rows,
+        job_id,
+        params_rows,
+        route_rows,
+        run_id,
+        seen_api,
+        seen_params,
+    )
 
     route_columns = [
         "run_id",
@@ -2822,95 +2942,15 @@ def build_stage1_enrichment_artifacts(
     ]
     input_surfaces_rows: list[dict[str, Any]] = []
     seen_input_surfaces: set[tuple[str, str, str]] = set()
-    for row in params_rows:
-        surface_name = str(row.get("param_name", "") or "").strip()
-        if not surface_name:
-            continue
-        surface_type = str(row.get("param_source", "") or "").strip() or "query"
-        context_url = str(row.get("context_url", "") or "").strip()
-        key = (surface_type, surface_name, context_url)
-        if key in seen_input_surfaces:
-            continue
-        seen_input_surfaces.add(key)
-        input_surfaces_rows.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "trace_id": trace_token,
-                "surface_type": surface_type,
-                "surface_name": surface_name,
-                "context_url": context_url,
-                "classification": row.get("param_category", ""),
-                "evidence_ref": row.get("evidence_ref", ""),
-            }
-        )
-    for row in forms_rows:
-        surface_name = str(row.get("input_name", "") or "").strip()
-        if not surface_name:
-            continue
-        context_url = str(row.get("page_url", "") or "").strip()
-        key = ("form_input", surface_name, context_url)
-        if key in seen_input_surfaces:
-            continue
-        seen_input_surfaces.add(key)
-        input_surfaces_rows.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "trace_id": trace_token,
-                "surface_type": "form_input",
-                "surface_name": surface_name,
-                "context_url": context_url,
-                "classification": row.get("classification", ""),
-                "evidence_ref": row.get("evidence_ref", ""),
-            }
-        )
-
-    route_param_map_rows: list[dict[str, Any]] = []
-    by_context: dict[str, list[dict[str, Any]]] = {}
-    for row in params_rows:
-        ctx = str(row.get("context_url", "") or "").strip()
-        if not ctx:
-            continue
-        by_context.setdefault(ctx, []).append(row)
-    for context_url, grouped in by_context.items():
-        param_names = sorted(
-            {
-                str(item.get("param_name", "")).strip()
-                for item in grouped
-                if str(item.get("param_name", "")).strip()
-            }
-        )
-        if not param_names:
-            continue
-        route_param_map_rows.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "trace_id": trace_token,
-                "context_url": context_url,
-                "route_path": urlparse(context_url).path or "/",
-                "param_names": "|".join(param_names),
-                "sources": "|".join(
-                    sorted(
-                        {
-                            str(item.get("param_source", ""))
-                            for item in grouped
-                            if item.get("param_source")
-                        }
-                    )
-                ),
-                "evidence_refs": "|".join(
-                    sorted(
-                        {
-                            str(item.get("evidence_ref", ""))
-                            for item in grouped
-                            if item.get("evidence_ref")
-                        }
-                    )
-                ),
-            }
-        )
+    (route_param_map_rows,) = _s1_rows_params_forms_context(
+        forms_rows,
+        input_surfaces_rows,
+        job_id,
+        params_rows,
+        run_id,
+        seen_input_surfaces,
+        trace_token,
+    )
 
     _AUTH_ROUTE_COMMON_PARAMS: dict[str, list[str]] = {
         "/login": ["redirect", "next", "return_url", "callback", "continue"],
