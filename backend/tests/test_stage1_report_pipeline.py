@@ -354,7 +354,8 @@ class TestGenerateStage1ReportFull:
         )
 
         assert "tls handshake metadata" in tls_summary
-        assert "authorized safe recon only" in anomaly_validation
+        # Footer discloses operating mode; relabelled to "unrestricted pentest" in 0433ea0.
+        assert "unrestricted pentest" in anomaly_validation
 
 
 class TestGenerateStage1ReportMissingArtifacts:

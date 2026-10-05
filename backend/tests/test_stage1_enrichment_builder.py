@@ -874,7 +874,10 @@ def test_stage1_enrichment_safe_outputs_are_metadata_only(tmp_path: Path) -> Non
         use_mcp=False,
     )
 
-    assert "authorized safe recon only" in outputs["anomaly_validation.md"].lower()
+    # Footer discloses the operating mode; relabelled from "authorized safe recon only"
+    # to "unrestricted pentest" in 0433ea0 (restriction-removal feature) — see the
+    # module docstring of stage1_enrichment_builder. The doc stays metadata-only.
+    assert "unrestricted pentest" in outputs["anomaly_validation.md"].lower()
     assert "source artifacts" in outputs["anomaly_validation.md"].lower()
 
 
