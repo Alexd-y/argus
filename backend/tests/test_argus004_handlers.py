@@ -3,10 +3,14 @@
 Tests verify handler structure and integration with tools, NOT mock fallbacks.
 """
 
+import asyncio
+import time as _time
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from src.orchestration.handlers import (
+    _QUICK_TM_REPORT_RESERVE_SECONDS,
     run_exploitation,
     run_post_exploitation,
     run_recon,
@@ -103,6 +107,70 @@ class TestRunThreatModeling:
             assert isinstance(out, ThreatModelOutput)
             assert "threats" in out.threat_model
             mock_ai.assert_called_once()
+
+
+class TestRunThreatModelingQuickBudget:
+    """QUICK timeout root-cause fix: threat_modeling must bound NVD + LLM to the
+    remaining quick wall-clock budget so this single phase cannot blow the quick
+    deadline and get the whole scan hard-killed by the outer asyncio.wait_for."""
+
+    @staticmethod
+    def _quick_opts(seconds_until_deadline: float) -> dict:
+        deadline = datetime.now(UTC) + timedelta(seconds=seconds_until_deadline)
+        return {"execution_mode": "quick", "deadline_at": deadline.isoformat()}
+
+    @pytest.mark.asyncio
+    async def test_quick_skips_nvd_when_budget_exhausted(self) -> None:
+        """With no budget left, NVD enrichment is skipped entirely (never awaited)."""
+        from src.orchestration import handlers as H
+
+        with (
+            patch.object(H, "_query_nvd_for_technologies", new_callable=AsyncMock) as mock_nvd,
+            patch.object(H, "ai_threat_modeling", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_ai.return_value = ThreatModelOutput(threat_model={"threats": []})
+            out = await run_threat_modeling(["80/tcp nginx"], scan_options=self._quick_opts(0.0))
+            assert isinstance(out, ThreatModelOutput)
+            mock_nvd.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_quick_bounds_slow_nvd(self) -> None:
+        """A slow NVD query is bounded by the budget and degrades gracefully, fast."""
+        from src.orchestration import handlers as H
+
+        async def _slow_nvd(_assets: list[str]) -> str:
+            await asyncio.sleep(5.0)
+            return "SHOULD NOT APPEAR"
+
+        with (
+            patch.object(H, "_query_nvd_for_technologies", side_effect=_slow_nvd),
+            patch.object(H, "ai_threat_modeling", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_ai.return_value = ThreatModelOutput(threat_model={"threats": []})
+            # A tiny NVD window (reserve + 0.2s) → nvd_budget ≈ 0.2s.
+            opts = self._quick_opts(_QUICK_TM_REPORT_RESERVE_SECONDS + 0.2)
+            start = _time.monotonic()
+            out = await run_threat_modeling(["80/tcp nginx"], scan_options=opts)
+            elapsed = _time.monotonic() - start
+            assert isinstance(out, ThreatModelOutput)
+            assert elapsed < 2.0  # bounded, not the full 5s NVD sleep
+            if mock_ai.call_args is not None:
+                assert mock_ai.call_args.kwargs.get("nvd_data") != "SHOULD NOT APPEAR"
+
+    @pytest.mark.asyncio
+    async def test_production_mode_does_not_bound_nvd(self) -> None:
+        """Non-quick (production) scans keep the full, unbounded NVD enrichment."""
+        from src.orchestration import handlers as H
+
+        with (
+            patch.object(H, "_query_nvd_for_technologies", new_callable=AsyncMock) as mock_nvd,
+            patch.object(H, "ai_threat_modeling", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_nvd.return_value = "cve data"
+            mock_ai.return_value = ThreatModelOutput(threat_model={"threats": []})
+            out = await run_threat_modeling(["80/tcp nginx"], scan_options={})
+            assert isinstance(out, ThreatModelOutput)
+            mock_nvd.assert_awaited_once()
 
 
 class TestRunVulnAnalysis:

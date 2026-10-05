@@ -714,6 +714,11 @@ async def get_scan(
             target=scan.target_url,
             email=scan.email,
             created_at=format_created_at_iso_z(scan.created_at),
+            error=(
+                getattr(scan, "error_message", None)
+                if str(scan.status).lower() == "failed"
+                else None
+            ),
             scan_profile=(
                 scan_profile_raw
                 if isinstance(scan_profile_raw, str)

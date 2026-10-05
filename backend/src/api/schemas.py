@@ -295,6 +295,8 @@ class ScanDetailResponse(BaseModel):
     target: str
     email: str | None = None
     created_at: str
+    #: Human-readable reason the scan failed (null unless status="failed").
+    error: str | None = None
     scan_profile: ScanProfileLiteral | None = None
     resolved_scan_mode: str | None = None
     execution_mode: ExecutionModeLiteral | None = None

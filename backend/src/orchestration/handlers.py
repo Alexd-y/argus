@@ -73,7 +73,11 @@ from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.owasp_top10_2025 import parse_owasp_category
 from src.quick.cancellation import is_scan_cancelled
 from src.quick.circuit_breaker import default_circuit_breaker
-from src.quick.scheduler import QuickScheduler
+from src.quick.scheduler import (
+    QuickScheduler,
+    deadline_from_options,
+    seconds_until_deadline,
+)
 from src.quick.schemas import QuickTaskStage
 from src.quick.workflow import QuickWorkflow, is_quick_execution, resolve_quick_plan
 from src.recon.attack_surface import build_attack_surface
@@ -1617,6 +1621,36 @@ async def run_quick_fuzz(
     )
 
 
+# --- QUICK threat-modeling budget guards (quick-timeout root-cause fix) ---
+# In execution_mode=quick the whole scan is force-killed by the outer
+# ``asyncio.wait_for`` at ``deadline + grace`` (see src/tasks/__init__.py). Unlike
+# recon, threat_modeling had no quick constraint, so its two slow awaits — NVD
+# enrichment (up to 8 sequential public-NVD queries @30s each) and the STRIDE LLM
+# call — could alone consume the entire quick wall-clock budget and get the scan
+# marked failed/timeout. We bound both to the *remaining* budget and degrade
+# gracefully (empty CVE data / empty threat model) so the deadline-aware pipeline
+# can still stop discovery and run the protected reporting phase.
+_QUICK_TM_NVD_MAX_SECONDS = 20.0
+_QUICK_TM_LLM_MAX_SECONDS = 60.0
+# Budget held back from threat_modeling for the protected reporting phase + the
+# outer report grace, so threat_modeling returns before the hard deadline.
+_QUICK_TM_REPORT_RESERVE_SECONDS = 45.0
+
+
+def _quick_remaining_seconds(scan_options: dict[str, Any] | None) -> float | None:
+    """Remaining quick wall-clock budget in seconds.
+
+    Returns ``None`` when this is not a quick scan or no ``deadline_at`` is set
+    (production/lab path) — callers then keep the original unbounded behaviour.
+    """
+    if not is_quick_execution(scan_options):
+        return None
+    deadline = deadline_from_options(scan_options if isinstance(scan_options, dict) else {})
+    if deadline is None:
+        return None
+    return seconds_until_deadline(deadline)
+
+
 async def run_threat_modeling(
     assets: list[str],
     *,
@@ -1674,20 +1708,88 @@ async def run_threat_modeling(
         },
     )
 
-    nvd_data = await _query_nvd_for_technologies(assets)
+    remaining = _quick_remaining_seconds(scan_options)
+    if remaining is None:
+        nvd_data = await _query_nvd_for_technologies(assets)
+    else:
+        nvd_budget = min(_QUICK_TM_NVD_MAX_SECONDS, remaining - _QUICK_TM_REPORT_RESERVE_SECONDS)
+        if nvd_budget < 1.0:
+            logger.info(
+                "quick_threat_model_nvd_skipped",
+                extra={
+                    "event": "quick_threat_model_nvd_skipped",
+                    "scan_id": scan_id,
+                    "remaining_seconds": round(remaining, 1),
+                },
+            )
+            nvd_data = "No CVE data available"
+        else:
+            try:
+                nvd_data = await asyncio.wait_for(
+                    _query_nvd_for_technologies(assets), timeout=nvd_budget
+                )
+            except TimeoutError:
+                logger.warning(
+                    "quick_threat_model_nvd_timeout",
+                    extra={
+                        "event": "quick_threat_model_nvd_timeout",
+                        "scan_id": scan_id,
+                        "nvd_budget_seconds": round(nvd_budget, 1),
+                    },
+                )
+                nvd_data = "No CVE data available"
     logger.info(
         "NVD data collected (%d chars), sending to LLM for threat modeling",
         len(nvd_data),
     )
 
     inp = ThreatModelInput(assets=assets, source_analysis=source_analysis)
-    raw_output = await ai_threat_modeling(
-        inp,
-        nvd_data=nvd_data,
-        recon_context=recon_context_str,
-        scan_id=scan_id,
-        scan_options=scan_options,
-    )
+    if remaining is None:
+        raw_output = await ai_threat_modeling(
+            inp,
+            nvd_data=nvd_data,
+            recon_context=recon_context_str,
+            scan_id=scan_id,
+            scan_options=scan_options,
+        )
+    else:
+        # Recompute from the wall clock — the NVD step consumed part of the budget.
+        llm_remaining = _quick_remaining_seconds(scan_options) or 0.0
+        llm_budget = min(
+            _QUICK_TM_LLM_MAX_SECONDS, llm_remaining - _QUICK_TM_REPORT_RESERVE_SECONDS
+        )
+        if llm_budget < 2.0:
+            logger.warning(
+                "quick_threat_model_llm_skipped",
+                extra={
+                    "event": "quick_threat_model_llm_skipped",
+                    "scan_id": scan_id,
+                    "remaining_seconds": round(llm_remaining, 1),
+                },
+            )
+            raw_output = ThreatModelOutput(threat_model={})
+        else:
+            try:
+                raw_output = await asyncio.wait_for(
+                    ai_threat_modeling(
+                        inp,
+                        nvd_data=nvd_data,
+                        recon_context=recon_context_str,
+                        scan_id=scan_id,
+                        scan_options=scan_options,
+                    ),
+                    timeout=llm_budget,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "quick_threat_model_llm_timeout",
+                    extra={
+                        "event": "quick_threat_model_llm_timeout",
+                        "scan_id": scan_id,
+                        "llm_budget_seconds": round(llm_budget, 1),
+                    },
+                )
+                raw_output = ThreatModelOutput(threat_model={})
 
     parsed = parse_threat_model_result(raw_output.threat_model)
     if parsed.threats or parsed.attack_surface or parsed.cves:

@@ -216,6 +216,11 @@ class Scan(Base):
     status: Mapped[str] = mapped_column(String(50), default="pending")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     phase: Mapped[str] = mapped_column(String(50), default="init")
+    #: Human-readable reason a scan ended in ``status="failed"`` (timeout,
+    #: phase error, lease required). Null while the scan is healthy. Surfaced via
+    #: ``GET /scans/:id`` so the UI can show *why* a scan failed instead of a
+    #: generic fallback message.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     options: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     #: quick | standard | deep (Strix-style scan *depth*, not execution_mode).
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)

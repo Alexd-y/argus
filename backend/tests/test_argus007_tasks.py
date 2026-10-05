@@ -303,3 +303,41 @@ class TestVaActiveScanToolTask:
             assert result["exit_code"] == -1
             assert result["error_reason"] == "task_error"
             assert result["tool_id"] == ""
+
+
+class TestScanFailureSummary:
+    """_scan_failure_summary — the user-safe reason persisted to scans.error_message.
+
+    Security: scans.error_message is returned by the public GET /scans/:id, so the
+    raw exception text (which may carry paths, SQL, target internals or secrets)
+    must never leak into it.
+    """
+
+    def test_known_timeout_maps_to_safe_string(self) -> None:
+        from src.tasks import _scan_failure_summary
+
+        assert _scan_failure_summary(TimeoutError("inner detail")) == (
+            "Scan exceeded its time budget before finishing. Please retry."
+        )
+
+    def test_network_errors_map_to_safe_string(self) -> None:
+        from src.tasks import _scan_failure_summary
+
+        expected = "A network error interrupted the scan. Please retry."
+        assert _scan_failure_summary(ConnectionError("tcp 10.0.0.1:5432 refused")) == expected
+        assert _scan_failure_summary(OSError("/etc/secret not found")) == expected
+
+    def test_unknown_exception_uses_generic_reason(self) -> None:
+        from src.tasks import _GENERIC_FAILURE_REASON, _scan_failure_summary
+
+        assert _scan_failure_summary(ValueError("boom")) == _GENERIC_FAILURE_REASON
+        assert _scan_failure_summary(RuntimeError()) == _GENERIC_FAILURE_REASON
+
+    def test_never_leaks_raw_exception_text(self) -> None:
+        from src.tasks import _scan_failure_summary
+
+        secret = "postgres://user:SUPERSECRET@db:5432 at C:/app/src/secret.py"
+        summary = _scan_failure_summary(RuntimeError(secret))
+        assert "SUPERSECRET" not in summary
+        assert "secret.py" not in summary
+        assert "RuntimeError" not in summary  # not even the type name

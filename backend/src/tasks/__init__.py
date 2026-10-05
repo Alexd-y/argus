@@ -50,6 +50,34 @@ def _scan_wait_timeout_seconds(options: dict) -> float:
     return max(_REPORT_GRACE_SEC, remaining + _REPORT_GRACE_SEC)
 
 
+# User-safe failure reasons for ``scans.error_message``. The raw ``str(exc)`` is
+# NEVER surfaced — it can carry internal file paths, SQL, target internals or
+# secrets, and this column is returned by the public ``GET /scans/:id``. Known
+# exception types map to fixed strings; every other exception yields a generic
+# message. Operators still get the full traceback in the server log (keyed by
+# scan_id) — see the ``logger.error(..., exc_info=True)`` at the failure site.
+# Order matters: more specific types first (``TimeoutError`` is an ``OSError``).
+_SAFE_FAILURE_REASONS: tuple[tuple[type[BaseException], str], ...] = (
+    (TimeoutError, "Scan exceeded its time budget before finishing. Please retry."),
+    (ConnectionError, "A network error interrupted the scan. Please retry."),
+    (OSError, "A network error interrupted the scan. Please retry."),
+)
+_GENERIC_FAILURE_REASON = "Scan failed due to an internal error. Please retry or contact support."
+
+
+def _scan_failure_summary(exc: BaseException) -> str:
+    """User-safe reason a scan failed, for the public ``scans.error_message``.
+
+    Maps known exception types to fixed strings and falls back to a generic
+    message — raw exception text is never returned, so no internal detail leaks
+    to the API/UI. The full exception is logged server-side for operators.
+    """
+    for exc_type, reason in _SAFE_FAILURE_REASONS:
+        if isinstance(exc, exc_type):
+            return reason
+    return _GENERIC_FAILURE_REASON
+
+
 def _is_transient_error(exc: BaseException) -> bool:
     return isinstance(exc, _TRANSIENT_RETRY_TYPES)
 
@@ -115,7 +143,8 @@ def scan_phase_task(
                     await notify_scan_finished(tenant_id)
                     return {"status": "cancelled", "scan_id": scan_id}
                 except TimeoutError:
-                    if is_quick_execution(options):
+                    quick = is_quick_execution(options)
+                    if quick:
                         logger.warning(
                             "quick_scan_deadline_timeout",
                             extra={
@@ -123,12 +152,22 @@ def scan_phase_task(
                                 "scan_id": scan_id,
                             },
                         )
+                    timeout_reason = (
+                        "Scan exceeded its time budget before finishing. "
+                        "Try a deeper tier or retry."
+                        if quick
+                        else "Scan exceeded the maximum run time (24h) and was stopped."
+                    )
                     async with session_factory() as err_session:
                         await set_session_tenant(err_session, tenant_id)
                         await err_session.execute(
                             update(Scan)
                             .where(cast(Scan.id, String) == scan_id)
-                            .values(status="failed", phase="timeout")
+                            .values(
+                                status="failed",
+                                phase="timeout",
+                                error_message=timeout_reason,
+                            )
                         )
                         await err_session.commit()
                     logger.error(
@@ -190,12 +229,27 @@ def scan_phase_task(
                             },
                         )
                         raise _self.retry(exc=exc, countdown=10) from exc
+                    # Full detail stays server-side only (keyed by scan_id); the
+                    # DB/API gets a sanitized, user-safe reason.
+                    logger.error(
+                        "scan_failed_unexpected",
+                        extra={
+                            "event": "scan_failed_unexpected",
+                            "scan_id": scan_id,
+                            "exception_type": type(exc).__name__,
+                        },
+                        exc_info=True,
+                    )
                     async with session_factory() as err_session:
                         await set_session_tenant(err_session, tenant_id)
                         await err_session.execute(
                             update(Scan)
                             .where(cast(Scan.id, String) == scan_id)
-                            .values(status="failed", phase="failed")
+                            .values(
+                                status="failed",
+                                phase="failed",
+                                error_message=_scan_failure_summary(exc),
+                            )
                         )
                         await err_session.commit()
 
