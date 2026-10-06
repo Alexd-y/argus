@@ -10,6 +10,7 @@ import logging
 import re
 import shlex
 import socket
+from collections.abc import Awaitable, Callable
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
@@ -1343,12 +1344,22 @@ async def run_recon(
             await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
 
     inp = ReconInput(target=target, options=options, source_analysis=source_analysis)
-    recon_out = await ai_recon(
-        inp,
-        tool_results=tool_results_str,
-        raw_sink=raw_sink,
+    recon_out = await _quick_bounded_llm(
+        lambda: ai_recon(
+            inp,
+            tool_results=tool_results_str,
+            raw_sink=raw_sink,
+            scan_id=scan_id,
+        ),
+        scan_options=options,
         scan_id=scan_id,
+        phase="recon",
     )
+    if recon_out is None:
+        # Quick budget exhausted / LLM timed out: fall back to a minimal recon
+        # output and let the deterministic reconcilers below fill ports and
+        # technologies from the raw tool results that already ran.
+        recon_out = ReconOutput(assets=[target] if target else [])
     recon_out.tool_results = tool_results
     recon_out.crawl_params = crawl_params
     recon_out.crawl_forms = crawl_forms
@@ -1621,20 +1632,22 @@ async def run_quick_fuzz(
     )
 
 
-# --- QUICK threat-modeling budget guards (quick-timeout root-cause fix) ---
+# --- QUICK phase budget guards (quick-timeout root-cause fix) ---
 # In execution_mode=quick the whole scan is force-killed by the outer
-# ``asyncio.wait_for`` at ``deadline + grace`` (see src/tasks/__init__.py). Unlike
-# recon, threat_modeling had no quick constraint, so its two slow awaits — NVD
-# enrichment (up to 8 sequential public-NVD queries @30s each) and the STRIDE LLM
-# call — could alone consume the entire quick wall-clock budget and get the scan
-# marked failed/timeout. We bound both to the *remaining* budget and degrade
-# gracefully (empty CVE data / empty threat model) so the deadline-aware pipeline
-# can still stop discovery and run the protected reporting phase.
+# ``asyncio.wait_for`` at ``deadline + grace`` (see src/tasks/__init__.py), and the
+# quick deadline is only enforced *between* phases — a phase already running when
+# the deadline passes is never interrupted. Every analysis phase calls the local
+# LLM (WRB), whose read timeout defaults to 600s — far longer than the 300s quick
+# wall-clock budget — so one slow LLM response (in recon, threat_modeling or
+# vuln_analysis) alone blows the budget and the scan is marked failed/timeout.
+# We bound each quick LLM call (and threat_modeling's NVD enrichment) to the
+# *remaining* budget and degrade gracefully, so the deadline-aware pipeline can
+# still stop discovery and run the protected reporting phase.
 _QUICK_TM_NVD_MAX_SECONDS = 20.0
-_QUICK_TM_LLM_MAX_SECONDS = 60.0
-# Budget held back from threat_modeling for the protected reporting phase + the
-# outer report grace, so threat_modeling returns before the hard deadline.
-_QUICK_TM_REPORT_RESERVE_SECONDS = 45.0
+_QUICK_LLM_MAX_SECONDS = 60.0
+# Budget held back from a phase for the protected reporting phase + the outer
+# report grace, so the phase returns before the hard deadline.
+_QUICK_LLM_RESERVE_SECONDS = 45.0
 
 
 def _quick_remaining_seconds(scan_options: dict[str, Any] | None) -> float | None:
@@ -1649,6 +1662,51 @@ def _quick_remaining_seconds(scan_options: dict[str, Any] | None) -> float | Non
     if deadline is None:
         return None
     return seconds_until_deadline(deadline)
+
+
+async def _quick_bounded_llm(
+    make_coro: Callable[[], Awaitable[Any]],
+    *,
+    scan_options: dict[str, Any] | None,
+    scan_id: str | None,
+    phase: str,
+):
+    """Await an LLM coroutine, bounded to the remaining quick budget.
+
+    ``make_coro`` is a zero-arg factory so the coroutine is created only when it
+    will actually be awaited (no "coroutine never awaited" warning on skip).
+    Returns the LLM result, or ``None`` when the quick budget is exhausted or the
+    call times out — the caller then supplies a safe partial fallback. Production
+    (non-quick) scans are awaited directly, unbounded (unchanged behaviour).
+    """
+    remaining = _quick_remaining_seconds(scan_options)
+    if remaining is None:
+        return await make_coro()
+    budget = min(_QUICK_LLM_MAX_SECONDS, remaining - _QUICK_LLM_RESERVE_SECONDS)
+    if budget < 2.0:
+        logger.warning(
+            "quick_llm_skipped",
+            extra={
+                "event": "quick_llm_skipped",
+                "scan_id": scan_id,
+                "phase": phase,
+                "remaining_seconds": round(remaining, 1),
+            },
+        )
+        return None
+    try:
+        return await asyncio.wait_for(make_coro(), timeout=budget)
+    except TimeoutError:
+        logger.warning(
+            "quick_llm_timeout",
+            extra={
+                "event": "quick_llm_timeout",
+                "scan_id": scan_id,
+                "phase": phase,
+                "llm_budget_seconds": round(budget, 1),
+            },
+        )
+        return None
 
 
 async def run_threat_modeling(
@@ -1712,7 +1770,7 @@ async def run_threat_modeling(
     if remaining is None:
         nvd_data = await _query_nvd_for_technologies(assets)
     else:
-        nvd_budget = min(_QUICK_TM_NVD_MAX_SECONDS, remaining - _QUICK_TM_REPORT_RESERVE_SECONDS)
+        nvd_budget = min(_QUICK_TM_NVD_MAX_SECONDS, remaining - _QUICK_LLM_RESERVE_SECONDS)
         if nvd_budget < 1.0:
             logger.info(
                 "quick_threat_model_nvd_skipped",
@@ -1744,52 +1802,18 @@ async def run_threat_modeling(
     )
 
     inp = ThreatModelInput(assets=assets, source_analysis=source_analysis)
-    if remaining is None:
-        raw_output = await ai_threat_modeling(
+    raw_output = await _quick_bounded_llm(
+        lambda: ai_threat_modeling(
             inp,
             nvd_data=nvd_data,
             recon_context=recon_context_str,
             scan_id=scan_id,
             scan_options=scan_options,
-        )
-    else:
-        # Recompute from the wall clock — the NVD step consumed part of the budget.
-        llm_remaining = _quick_remaining_seconds(scan_options) or 0.0
-        llm_budget = min(
-            _QUICK_TM_LLM_MAX_SECONDS, llm_remaining - _QUICK_TM_REPORT_RESERVE_SECONDS
-        )
-        if llm_budget < 2.0:
-            logger.warning(
-                "quick_threat_model_llm_skipped",
-                extra={
-                    "event": "quick_threat_model_llm_skipped",
-                    "scan_id": scan_id,
-                    "remaining_seconds": round(llm_remaining, 1),
-                },
-            )
-            raw_output = ThreatModelOutput(threat_model={})
-        else:
-            try:
-                raw_output = await asyncio.wait_for(
-                    ai_threat_modeling(
-                        inp,
-                        nvd_data=nvd_data,
-                        recon_context=recon_context_str,
-                        scan_id=scan_id,
-                        scan_options=scan_options,
-                    ),
-                    timeout=llm_budget,
-                )
-            except TimeoutError:
-                logger.warning(
-                    "quick_threat_model_llm_timeout",
-                    extra={
-                        "event": "quick_threat_model_llm_timeout",
-                        "scan_id": scan_id,
-                        "llm_budget_seconds": round(llm_budget, 1),
-                    },
-                )
-                raw_output = ThreatModelOutput(threat_model={})
+        ),
+        scan_options=scan_options,
+        scan_id=scan_id,
+        phase="threat_modeling",
+    ) or ThreatModelOutput(threat_model={})
 
     parsed = parse_threat_model_result(raw_output.threat_model)
     if parsed.threats or parsed.attack_surface or parsed.cves:
@@ -2935,15 +2959,24 @@ async def run_vuln_analysis(
             else quick_fuzz_section
         )
 
-    llm_output = await ai_vuln_analysis(
-        inp,
-        active_scan_context=active_scan_combined,
-        scan_id=scan_id,
-        code_aware_section=code_aware_section,
-        memory_context=memory_context,
-        use_react=scan_options.get("use_react", False),
+    llm_output = await _quick_bounded_llm(
+        lambda: ai_vuln_analysis(
+            inp,
+            active_scan_context=active_scan_combined,
+            scan_id=scan_id,
+            code_aware_section=code_aware_section,
+            memory_context=memory_context,
+            use_react=scan_options.get("use_react", False),
+            scan_options=scan_options,
+        ),
         scan_options=scan_options,
+        scan_id=scan_id,
+        phase="vuln_analysis",
     )
+    if llm_output is None:
+        # Quick budget exhausted / LLM timed out: keep any active-scan findings
+        # gathered below (merged next) instead of failing the whole scan.
+        llm_output = VulnAnalysisOutput(findings=[])
 
     await emit_scan_subprogress(
         scan_id=scan_id,

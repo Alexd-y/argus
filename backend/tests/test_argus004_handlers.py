@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from src.orchestration.handlers import (
-    _QUICK_TM_REPORT_RESERVE_SECONDS,
+    _QUICK_LLM_RESERVE_SECONDS,
     run_exploitation,
     run_post_exploitation,
     run_recon,
@@ -148,7 +148,7 @@ class TestRunThreatModelingQuickBudget:
         ):
             mock_ai.return_value = ThreatModelOutput(threat_model={"threats": []})
             # A tiny NVD window (reserve + 0.2s) → nvd_budget ≈ 0.2s.
-            opts = self._quick_opts(_QUICK_TM_REPORT_RESERVE_SECONDS + 0.2)
+            opts = self._quick_opts(_QUICK_LLM_RESERVE_SECONDS + 0.2)
             start = _time.monotonic()
             out = await run_threat_modeling(["80/tcp nginx"], scan_options=opts)
             elapsed = _time.monotonic() - start
@@ -171,6 +171,117 @@ class TestRunThreatModelingQuickBudget:
             out = await run_threat_modeling(["80/tcp nginx"], scan_options={})
             assert isinstance(out, ThreatModelOutput)
             mock_nvd.assert_awaited_once()
+
+
+class TestQuickBoundedLlm:
+    """_quick_bounded_llm — shared quick LLM time-bound used by every analysis phase.
+
+    Root cause of the quick-scan timeout: the WRB read timeout (600s default) far
+    exceeds the quick wall-clock budget (300s), so one slow LLM call in any phase
+    blows the budget. This helper bounds every quick LLM call to the remaining
+    budget; production scans stay unbounded.
+    """
+
+    @staticmethod
+    def _quick_opts(seconds: float) -> dict:
+        deadline = datetime.now(UTC) + timedelta(seconds=seconds)
+        return {"execution_mode": "quick", "deadline_at": deadline.isoformat()}
+
+    @pytest.mark.asyncio
+    async def test_production_awaits_unbounded(self) -> None:
+        from src.orchestration.handlers import _quick_bounded_llm
+
+        async def _coro() -> str:
+            return "RESULT"
+
+        out = await _quick_bounded_llm(
+            lambda: _coro(), scan_options={}, scan_id="s", phase="recon"
+        )
+        assert out == "RESULT"
+
+    @pytest.mark.asyncio
+    async def test_quick_with_budget_awaits(self) -> None:
+        from src.orchestration.handlers import _QUICK_LLM_RESERVE_SECONDS, _quick_bounded_llm
+
+        async def _coro() -> str:
+            return "OK"
+
+        out = await _quick_bounded_llm(
+            lambda: _coro(),
+            scan_options=self._quick_opts(_QUICK_LLM_RESERVE_SECONDS + 30),
+            scan_id="s",
+            phase="recon",
+        )
+        assert out == "OK"
+
+    @pytest.mark.asyncio
+    async def test_quick_budget_exhausted_returns_none_without_invoking(self) -> None:
+        from src.orchestration.handlers import _quick_bounded_llm
+
+        created = {"n": 0}
+
+        async def _coro() -> str:
+            created["n"] += 1
+            return "X"
+
+        out = await _quick_bounded_llm(
+            lambda: _coro(), scan_options=self._quick_opts(0.0), scan_id="s", phase="recon"
+        )
+        assert out is None
+        assert created["n"] == 0  # factory never invoked → no orphaned coroutine
+
+    @pytest.mark.asyncio
+    async def test_quick_slow_call_times_out_fast(self) -> None:
+        from src.orchestration.handlers import _QUICK_LLM_RESERVE_SECONDS, _quick_bounded_llm
+
+        async def _slow() -> str:
+            await asyncio.sleep(5.0)
+            return "LATE"
+
+        start = _time.monotonic()
+        out = await _quick_bounded_llm(
+            lambda: _slow(),
+            scan_options=self._quick_opts(_QUICK_LLM_RESERVE_SECONDS + 0.2),
+            scan_id="s",
+            phase="recon",
+        )
+        elapsed = _time.monotonic() - start
+        assert out is None
+        assert elapsed < 2.0
+
+
+class TestRunReconQuickBudget:
+    """RECON must bound its LLM call to the quick budget too (the progress=15 timeout)."""
+
+    @staticmethod
+    def _quick_opts(seconds: float) -> dict:
+        deadline = datetime.now(UTC) + timedelta(seconds=seconds)
+        return {"execution_mode": "quick", "deadline_at": deadline.isoformat()}
+
+    @pytest.mark.asyncio
+    async def test_quick_bounds_slow_recon_llm(self) -> None:
+        from src.orchestration import handlers as H
+
+        async def _slow_ai_recon(*_a: object, **_k: object) -> ReconOutput:
+            await asyncio.sleep(5.0)
+            return ReconOutput(assets=["should-not-appear"])
+
+        with (
+            patch.object(
+                H,
+                "run_recon_planned_tool_gather",
+                new_callable=AsyncMock,
+                return_value=({}, [], []),
+            ),
+            patch.object(H, "ai_recon", side_effect=_slow_ai_recon),
+        ):
+            opts = self._quick_opts(_QUICK_LLM_RESERVE_SECONDS + 0.2)
+            start = _time.monotonic()
+            out = await run_recon("https://alleksy.com", opts)
+            elapsed = _time.monotonic() - start
+            assert isinstance(out, ReconOutput)
+            assert elapsed < 2.0  # bounded, not the full 5s LLM sleep
+            assert "should-not-appear" not in out.assets  # fell back, LLM output discarded
 
 
 class TestRunVulnAnalysis:
