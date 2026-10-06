@@ -127,8 +127,10 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
             if row.get("owasp_category") == "A02":
                 row["owasp_display_code"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
                 row["owasp_top10_2021"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
-        unconfirmed_dicts = [r for r in finding_dicts if not r.get("is_provable", True)]
-        finding_dicts = [r for r in finding_dicts if r.get("is_provable", True)]
+        # Single finding set across all tiers: Valhalla keeps EVERY finding in the
+        # main list (provability stays a per-finding ``is_provable`` tag, not an
+        # exclusion), so the three report tiers and the UI show the identical
+        # findings and headline counts. ``unconfirmed_findings`` stays empty.
         aligned_counts = executive_severity_totals_from_severity_strings(
             str(r.get("severity") or "") for r in finding_dicts
         )

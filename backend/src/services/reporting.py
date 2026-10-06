@@ -1637,23 +1637,17 @@ class ReportGenerator:
                 "active": name == tier_norm,
                 "slots": {k: texts.get(k, "") for k in keys},
             }
-        # VHL-PROVABLE-001: recompute the partition from raw evidence so the split is
-        # correct even if findings were not pre-tagged by the collector. Idempotent and
-        # keeps every egress (HTML/PDF/JSON/CSV/MD) on the single source of truth.
+        # VHL-PROVABLE-001: tag each finding's provability from raw evidence (an
+        # ``is_provable`` badge), idempotently. The tag no longer partitions the
+        # report: every tier — Valhalla included — renders the SAME finding set in
+        # its main list, so the three report tiers and the UI match. ``unconfirmed``
+        # is kept empty (per-finding badge instead of a separate excluded section).
         if tier_norm == "valhalla":
             partition_findings(data.findings)
         finding_rows = findings_rows_for_jinja(data, report_tier=tier_norm)
-        # In Valhalla the main report contains only findings provable from raw evidence;
-        # unconfirmed findings are rendered in a separate, clearly labelled section and
-        # excluded from the headline risk counts.
-        if tier_norm == "valhalla":
-            confirmed_rows = [r for r in finding_rows if r.get("is_provable", True)]
-            unconfirmed_rows = [r for r in finding_rows if not r.get("is_provable", True)]
-            confirmed_findingrows = headline_findings(data.findings, tier_norm)
-        else:
-            confirmed_rows = finding_rows
-            unconfirmed_rows = []
-            confirmed_findingrows = headline_findings(data.findings, tier_norm)
+        confirmed_rows = finding_rows
+        unconfirmed_rows = []
+        confirmed_findingrows = headline_findings(data.findings, tier_norm)
         severity_counts_ctx = executive_severity_totals_from_finding_rows(confirmed_findingrows)
         v2021_owasp = tier_norm == "valhalla"
         ctx: dict[str, Any] = {

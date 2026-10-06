@@ -156,7 +156,9 @@ def test_normalize_no_longer_drops_threat_model_inference() -> None:
     assert out[0].evidence_type == "threat_model_inference"
 
 
-def test_html_context_valhalla_splits_provable_and_unconfirmed() -> None:
+def test_html_context_valhalla_keeps_all_findings_in_main_list() -> None:
+    # Unified behaviour: Valhalla's main list now holds EVERY finding (provable or
+    # not), matching asgard/midgard and the UI; provability stays a per-row tag.
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     partition_findings(findings)  # collector tags findings before context build
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
@@ -164,15 +166,15 @@ def test_html_context_valhalla_splits_provable_and_unconfirmed() -> None:
     ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
 
     main_titles = {r["title"] for r in ctx["findings"]}
-    unconfirmed_titles = {r["title"] for r in ctx["unconfirmed_findings"]}
     assert "Reflected XSS in q parameter" in main_titles
-    assert any("privilege escalation" in t.lower() for t in unconfirmed_titles)
-    # A finding is never in both buckets.
-    assert not (main_titles & unconfirmed_titles)
-    assert ctx["unconfirmed_findings_count"] == len(ctx["unconfirmed_findings"]) >= 1
-    assert ctx["findings_count"] == len(ctx["findings"]) >= 1
-    # Every unconfirmed row carries a reason.
-    assert all(r.get("unconfirmed_reason") for r in ctx["unconfirmed_findings"])
+    assert any("privilege escalation" in t.lower() for t in main_titles)
+    assert ctx["unconfirmed_findings"] == []
+    assert ctx["unconfirmed_findings_count"] == 0
+    assert ctx["findings_count"] == len(ctx["findings"]) == 2
+    # Provability is still tagged per finding (badge), not an exclusion.
+    by_title = {r["title"]: r for r in ctx["findings"]}
+    assert by_title["Reflected XSS in q parameter"]["is_provable"] is True
+    assert any(not r["is_provable"] for r in ctx["findings"])
 
 
 def test_findings_rows_for_jinja_carry_partition_flags() -> None:
@@ -186,7 +188,7 @@ def test_findings_rows_for_jinja_carry_partition_flags() -> None:
     assert row["unconfirmed_reason"] is None
 
 
-def test_generate_json_valhalla_splits_provable_and_unconfirmed() -> None:
+def test_generate_json_valhalla_keeps_all_findings_in_main_list() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     partition_findings(findings)
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
@@ -197,15 +199,11 @@ def test_generate_json_valhalla_splits_provable_and_unconfirmed() -> None:
     )
 
     main_titles = {f["title"] for f in payload["findings"]}
-    unconfirmed_titles = {f["title"] for f in payload["unconfirmed_findings"]}
     assert any("xss" in t.lower() for t in main_titles)
-    assert any("privilege escalation" in t.lower() for t in unconfirmed_titles)
-    assert not (main_titles & unconfirmed_titles)
-    for f in payload["unconfirmed_findings"]:
-        assert f["unconfirmed_reason"], "each unconfirmed finding must explain why"
-        assert f["is_provable"] is False
-    for f in payload["findings"]:
-        assert f["is_provable"] is True
+    assert any("privilege escalation" in t.lower() for t in main_titles)
+    assert payload["unconfirmed_findings"] == []
+    # is_provable is still carried per finding as a tag.
+    assert {f["is_provable"] for f in payload["findings"]} == {True, False}
 
 
 def test_generate_json_non_valhalla_keeps_all_findings_in_main_list() -> None:
@@ -222,7 +220,7 @@ def test_generate_json_non_valhalla_keeps_all_findings_in_main_list() -> None:
     assert len(payload["findings"]) == 2
 
 
-def test_generate_markdown_valhalla_has_unconfirmed_section() -> None:
+def test_generate_markdown_valhalla_lists_all_findings() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     partition_findings(findings)
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
@@ -231,8 +229,10 @@ def test_generate_markdown_valhalla_has_unconfirmed_section() -> None:
     md = generate_markdown(report_data, tier="valhalla", jinja_context={"tier": "valhalla"}).decode(
         "utf-8"
     )
-    assert "## Unconfirmed Observations (require manual verification)" in md
+    # All findings in the body; no separate "Unconfirmed Observations" section.
+    assert "## Unconfirmed Observations (require manual verification)" not in md
     assert "privilege escalation" in md.lower()
+    assert "reflected xss" in md.lower()
 
 
 def test_generate_csv_exposes_provability_columns() -> None:
@@ -299,7 +299,7 @@ def test_tag_findings_provability_classifies_built_finding() -> None:
     assert inf.unconfirmed_reason
 
 
-def test_offline_minimal_context_valhalla_splits() -> None:
+def test_offline_minimal_context_valhalla_keeps_all_findings() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     partition_findings(findings)
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
@@ -308,26 +308,26 @@ def test_offline_minimal_context_valhalla_splits() -> None:
     ctx = offline_minimal_jinja_context_from_report_data(report_data, "valhalla")
 
     main_titles = {f["title"] for f in ctx["findings"]}
-    unconfirmed_titles = {f["title"] for f in ctx["unconfirmed_findings"]}
     assert any("xss" in t.lower() for t in main_titles)
-    assert any("privilege escalation" in t.lower() for t in unconfirmed_titles)
-    assert ctx["unconfirmed_findings_count"] == len(ctx["unconfirmed_findings"]) >= 1
-    assert ctx["findings_count"] == len(ctx["findings"])
-    assert not (main_titles & unconfirmed_titles)
+    assert any("privilege escalation" in t.lower() for t in main_titles)
+    assert ctx["unconfirmed_findings"] == []
+    assert ctx["unconfirmed_findings_count"] == 0
+    assert ctx["findings_count"] == len(ctx["findings"]) == 2
 
 
-def test_html_render_valhalla_includes_unconfirmed_section() -> None:
+def test_html_render_valhalla_lists_all_findings_in_main() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
     ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
 
     html = render_tier_report_html("valhalla", ctx)
-    assert "Unconfirmed Observations" in html
+    # Both findings render in the main body; none is split off as excluded.
     assert "Reflected XSS in q parameter" in html
     assert "Potential privilege escalation via role model" in html
+    assert ctx["unconfirmed_findings"] == []
 
 
-def test_branded_pdf_valhalla_renders_unconfirmed_section() -> None:
+def test_branded_pdf_valhalla_has_empty_unconfirmed_section() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
     ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
@@ -338,5 +338,7 @@ def test_branded_pdf_valhalla_renders_unconfirmed_section() -> None:
     pdf_ctx = _build_branded_pdf_context(report_data, ctx, tier="valhalla")
     html = _render_branded_pdf_html(template_path, pdf_ctx)
 
-    assert "Unconfirmed Observations" in html
-    assert "privilege escalation" in html.lower()
+    # Findings are no longer excluded into a separate section: the unconfirmed
+    # table is empty (empty-state), so the three tiers list the same findings.
+    assert pdf_ctx["unconfirmed_findings"] == []
+    assert "no unconfirmed observations" in html.lower()

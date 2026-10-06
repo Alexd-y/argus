@@ -109,15 +109,18 @@ class TestCsvFindingId:
 
 
 class TestHeadlineCounts:
-    def test_valhalla_counts_provable_only(self) -> None:
+    def test_valhalla_counts_all_findings(self) -> None:
+        # Unified behaviour: Valhalla now counts every in-scope finding in its
+        # headline (same as the other tiers and the UI); provability is a
+        # per-finding tag, not a headline-count exclusion.
         findings = [
             _finding(finding_id="a", severity="high", is_provable=True),
             _finding(finding_id="b", severity="critical", is_provable=False),
         ]
         totals = headline_severity_totals(findings, "valhalla")
         assert totals["high"] == 1
-        assert totals["critical"] == 0
-        assert len(headline_findings(findings, "valhalla")) == 1
+        assert totals["critical"] == 1
+        assert len(headline_findings(findings, "valhalla")) == 2
 
     def test_other_tiers_count_everything(self) -> None:
         findings = [

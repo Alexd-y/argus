@@ -42,7 +42,6 @@ from src.db.models import Report as ReportModel
 from src.db.models import Scan as ScanModel
 from src.db.models import ScanTimeline as ScanTimelineModel
 from src.db.models import ToolRun as ToolRunModel
-from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
 from src.findings.repository import get_findings_repository
 from src.findings.severity import aggregate_severity
 from src.owasp.owasp_loader import get_owasp_category_info
@@ -56,13 +55,9 @@ from src.recon.stage2_storage import STAGE2_ROOT_FILES, download_stage2_artifact
 from src.recon.stage3_storage import download_stage3_artifact, get_stage3_root_files
 from src.recon.stage4_storage import STAGE4_ROOT_FILES, download_stage4_artifact
 from src.recon.stage_object_download import StageObjectFetchError
-from src.reports.evidence_partition import partition_findings
-from src.reports.finding_dedup import deduplicate_findings
-from src.reports.finding_quality_filter import filter_valid_findings
-from src.reports.finding_severity_normalizer import reconcile_findings_cvss
+from src.reports.canonical_findings import apply_canonical_finding_pipeline
 from src.reports.report_quality_gate import (
     apply_security_header_table_gap_to_findings,
-    normalize_findings_for_report,
 )
 from src.reports.valhalla_report_context import (
     OutdatedComponentRow,
@@ -275,7 +270,11 @@ def confirmed_only_population(findings: list[Any]) -> list[Any]:
 
 #: Report tiers whose headline population is the confirmed-only set. Named so
 #: the policy is explicit and testable rather than an inline string check.
-_CONFIRMED_ONLY_HEADLINE_TIERS: frozenset[str] = frozenset({"valhalla"})
+#: Empty: every tier (Valhalla included) counts every in-scope finding in its
+#: headline, so the three report tiers and the UI report the same severity totals
+#: for the same finding set. Provability remains a per-finding tag, not a
+#: headline-count exclusion.
+_CONFIRMED_ONLY_HEADLINE_TIERS: frozenset[str] = frozenset()
 
 
 def headline_findings(findings: list[Any], tier: str | None) -> list[Any]:
@@ -355,6 +354,44 @@ class FindingRow(BaseModel):
     is_provable: bool = True
     unconfirmed_reason: str | None = None
     created_at: Any = None
+
+
+def finding_rows_from_models(rows: list[Any]) -> list[FindingRow]:
+    """Convert DB ``FindingModel`` rows to ``FindingRow`` (pre-pipeline shape).
+
+    Extracted so the public /findings API can build the exact same input the
+    report collector feeds to ``apply_canonical_finding_pipeline``.
+    """
+    return [
+        FindingRow(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            scan_id=row.scan_id,
+            report_id=row.report_id,
+            severity=row.severity,
+            title=row.title,
+            description=row.description,
+            cwe=row.cwe,
+            cvss=row.cvss,
+            owasp_category=getattr(row, "owasp_category", None),
+            proof_of_concept=(
+                row.proof_of_concept
+                if isinstance(getattr(row, "proof_of_concept", None), dict)
+                else None
+            ),
+            confidence=str(getattr(row, "confidence", None) or "likely")[:20],
+            evidence_type=getattr(row, "evidence_type", None),
+            evidence_refs=(
+                [str(x)[:500] for x in getattr(row, "evidence_refs", [])[:64] if x is not None]
+                if isinstance(getattr(row, "evidence_refs", None), list)
+                else []
+            ),
+            reproducible_steps=getattr(row, "reproducible_steps", None),
+            applicability_notes=getattr(row, "applicability_notes", None),
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 class RawArtifactItem(BaseModel):
@@ -822,49 +859,14 @@ class ReportDataCollector:
                 cast(FindingModel.tenant_id, String) == tid,
             )
         )
-        findings = [
-            FindingRow(
-                id=row.id,
-                tenant_id=row.tenant_id,
-                scan_id=row.scan_id,
-                report_id=row.report_id,
-                severity=row.severity,
-                title=row.title,
-                description=row.description,
-                cwe=row.cwe,
-                cvss=row.cvss,
-                owasp_category=getattr(row, "owasp_category", None),
-                proof_of_concept=(
-                    row.proof_of_concept
-                    if isinstance(getattr(row, "proof_of_concept", None), dict)
-                    else None
-                ),
-                confidence=str(getattr(row, "confidence", None) or "likely")[:20],
-                evidence_type=getattr(row, "evidence_type", None),
-                evidence_refs=(
-                    [str(x)[:500] for x in getattr(row, "evidence_refs", [])[:64] if x is not None]
-                    if isinstance(getattr(row, "evidence_refs", None), list)
-                    else []
-                ),
-                reproducible_steps=getattr(row, "reproducible_steps", None),
-                applicability_notes=getattr(row, "applicability_notes", None),
-                created_at=row.created_at,
-            )
-            for row in f_result.scalars().all()
-        ]
-
-        findings = deduplicate_findings(findings)
-        findings = filter_valid_findings(findings)
-        findings = retain_findings_despite_ai_classification(findings)
-        findings = normalize_findings_for_report(findings)
-        # Reconcile severity/cvss/cvss_score/cvss_vector into a single consistent
-        # value (drops contradicting auto-generated vectors) before the report
-        # snapshot is built — supersedes the score→severity-only pass.
-        findings = reconcile_findings_cvss(findings)
-        # VHL-PROVABLE-001: tag each finding as provable-from-raw or unconfirmed. Nothing
-        # is dropped — the report routes provable findings to the main body and the rest
-        # to the "Unconfirmed — requires manual verification" section.
-        partition_findings(findings)
+        # Single canonical finding set — shared verbatim with the public
+        # /findings API via ``apply_canonical_finding_pipeline`` so the UI and
+        # every report tier show the identical findings/severities. The pipeline
+        # tags ``is_provable`` in place (VHL-PROVABLE-001); nothing is dropped by
+        # evidence tier.
+        findings = apply_canonical_finding_pipeline(
+            finding_rows_from_models(list(f_result.scalars().all()))
+        )
 
         s1 = StageArtifactsBundle()
         s2 = StageArtifactsBundle()

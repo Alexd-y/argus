@@ -56,7 +56,6 @@ from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
 from src.orchestration.auth_config import CredentialTestConfig, TargetConfig
 from src.orchestration.credential_testing_policy import resolve_credential_testing
-from src.orchestration.finding_gate import gate_and_dedupe_findings
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import try_pick_queued_scan
 from src.profiles import (
@@ -81,6 +80,8 @@ from src.quick.create import (
 from src.quick.models import QuickScanConfigRow, QuickScanPlanRow
 from src.quick.resolver import UnknownQuickProfileError
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
+from src.reports.canonical_findings import apply_canonical_finding_pipeline
+from src.reports.data_collector import finding_rows_from_models
 from src.reports.evidence_partition import reconcile_finding_evidence_view
 from src.reports.finding_title_normalizer import humanize_finding_title
 from src.reports.generators import build_report_data_from_scan_findings
@@ -928,58 +929,6 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     )
 
 
-def _finding_row_to_gate_dict(
-    f: FindingModel, index: int, *, default_target: str = ""
-) -> dict[str, Any]:
-    """Project a DB finding row onto the dict shape the finding gate reads.
-
-    Kept intentionally close to the pipeline finding dict so the read-time gate
-    on the UI path (``get_scan_findings``) applies the *same* evidence-quality
-    and dedup rules as the canonical snapshot — a single source of truth for
-    which findings count (fixes the historical UI-vs-export divergence).
-
-    ``default_target`` (the scan target) is passed as a fallback ``target`` so
-    findings that carry no per-finding URL (e.g. LLM-normalized host-level
-    findings) still resolve to the scan host and collapse against the
-    tool-produced record for the same issue.
-    """
-    poc = f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None
-    return {
-        "_row_index": index,
-        "title": f.title or "",
-        "cwe": f.cwe or "",
-        "description": f.description or "",
-        "severity": f.severity or "info",
-        "cvss": f.cvss,
-        "source_tool": getattr(f, "source_tool", None) or getattr(f, "source", None) or "",
-        "proof_of_concept": poc,
-        "evidence_refs": list(f.evidence_refs) if isinstance(f.evidence_refs, list) else [],
-        # Fallback host for URL-less findings; the gate prefers poc.url when set.
-        "target": default_target or "",
-    }
-
-
-def _gate_finding_rows(rows: list[FindingModel], *, default_target: str = "") -> list[FindingModel]:
-    """Return the gated + deduped subset of DB finding rows (order preserved).
-
-    Uses the shared :func:`gate_and_dedupe_findings` so the UI list matches the
-    canonical report snapshot. Guarded by ``finding_evidence_gate_enabled``
-    (when disabled, all rows pass through unchanged).
-    """
-    if not rows:
-        return rows
-    dicts = [
-        _finding_row_to_gate_dict(f, i, default_target=default_target) for i, f in enumerate(rows)
-    ]
-    kept = gate_and_dedupe_findings(
-        dicts,
-        enabled=settings.finding_evidence_gate_enabled,
-        default_host=default_target,
-    )
-    surviving = [d["_row_index"] for d in kept if isinstance(d.get("_row_index"), int)]
-    return [rows[i] for i in surviving]
-
-
 @router.get("/{scan_id}/findings/top", response_model=list[Finding])
 async def get_scan_findings_top(
     scan_id: str,
@@ -1143,11 +1092,30 @@ async def get_scan_findings(
         if validated_only:
             fq = fq.where(FindingModel.confidence == "confirmed")
         result = await session.execute(fq)
-        findings = _gate_finding_rows(
-            list(result.scalars().all()),
-            default_target=getattr(scan_row, "target", "") or "",
-        )
-        return [_finding_to_schema(f) for f in findings]
+        rows = list(result.scalars().all())
+        # Single source of truth: select the finding set with the SAME canonical
+        # pipeline the report generator uses (dedup / quality / severity reconcile
+        # / provability partition), so the UI list matches every report tier
+        # exactly. Previously this endpoint used a different gate+dedup
+        # (orchestration/finding_gate) and raised severity via the UI floor, so
+        # the UI could show findings/severities the reports did not.
+        canonical = apply_canonical_finding_pipeline(finding_rows_from_models(rows))
+        by_id = {str(r.id): r for r in rows if r.id is not None}
+        out: list[Finding] = []
+        for cf in canonical:
+            model = by_id.get(str(cf.id))
+            if model is None:
+                continue
+            schema = _finding_to_schema(model)
+            # Use the canonical (reconciled, non-raised) severity/cvss +
+            # provability instead of the UI severity floor so the UI shows the
+            # identical severities as the report tiers.
+            schema.severity = cf.severity
+            schema.cvss = cf.cvss
+            schema.is_provable = cf.is_provable
+            schema.unconfirmed_reason = cf.unconfirmed_reason
+            out.append(schema)
+        return out
 
 
 async def _stream_scan_findings_export(

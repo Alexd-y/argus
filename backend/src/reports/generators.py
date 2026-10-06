@@ -1931,18 +1931,16 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
     brand = get_brand()
     now_utc = datetime.now(UTC).isoformat()
 
-    # scope filter is always applied; Valhalla additionally uses the single provability
-    # partition (VHL-PROVABLE-001) shared with HTML/PDF, which routes findings without raw
-    # proof to a separate "unconfirmed" list instead of silently downgrading them.
+    # Single finding set across ALL tiers: every tier (Valhalla included) renders
+    # the same findings in its body, so the UI and the three report tiers match.
+    # Provability stays a per-finding tag (``is_provable``, set by the canonical
+    # pipeline) for a badge/label — it no longer excludes findings from Valhalla's
+    # body (which previously left Valhalla empty whenever nothing was provable).
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
-    if _is_valhalla_context(jinja_context):
-        findings_ordered, unconfirmed_findings = partition_findings(findings_ordered)
-        findings_ordered = enforce_severity_by_evidence(findings_ordered)
-    else:
-        findings_ordered = _apply_evidence_gate(findings_ordered)
-        findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
-        findings_ordered = enforce_severity_by_evidence(findings_ordered)
-        unconfirmed_findings = []
+    findings_ordered = _apply_evidence_gate(findings_ordered)
+    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
+    findings_ordered = enforce_severity_by_evidence(findings_ordered)
+    unconfirmed_findings = []
 
     # build evidence inventory
     evidence_inventory: list[dict[str, Any]] = []
@@ -3379,20 +3377,14 @@ def generate_markdown(
     lines.append("## Findings")
     lines.append("")
 
-    # scope filter is always applied; Valhalla additionally uses the single provability
-    # partition (VHL-PROVABLE-001) shared with the HTML/PDF/JSON paths. Unconfirmed
-    # findings are listed in their own section below.
-    is_valhalla_md = _is_valhalla_context(jinja_context, tier)
+    # Single finding set across ALL tiers (see the HTML/PDF path above): every
+    # tier, Valhalla included, renders the same findings; provability stays a
+    # per-finding tag rather than excluding findings from Valhalla's body.
     findings_ordered = _findings_sorted(data.findings)
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
-    if is_valhalla_md:
-        findings_ordered, unconfirmed_findings = partition_findings(findings_ordered)
-        findings_ordered = enforce_severity_by_evidence(findings_ordered)
-    else:
-        findings_ordered = _apply_evidence_gate(findings_ordered)
-        findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
-        findings_ordered = enforce_severity_by_evidence(findings_ordered)
-        unconfirmed_findings = []
+    findings_ordered = _apply_evidence_gate(findings_ordered)
+    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
+    findings_ordered = enforce_severity_by_evidence(findings_ordered)
 
     severity_emoji: dict[str, str] = {
         "critical": "🔴 CRITICAL",
@@ -3499,33 +3491,6 @@ def generate_markdown(
             lines.append("")
 
         lines.append("---")
-        lines.append("")
-
-    if is_valhalla_md:
-        lines.append("## Unconfirmed Observations (require manual verification)")
-        lines.append("")
-        lines.append(
-            "_The items below could not be proven from the captured raw evidence and are "
-            "excluded from the validated findings and the headline risk counts. Reproduce "
-            "each one manually before treating it as a confirmed finding._"
-        )
-        lines.append("")
-        if unconfirmed_findings:
-            lines.append("| # | Severity (claimed) | Title | Classification | Why unconfirmed |")
-            lines.append("|---|--------------------|-------|----------------|-----------------|")
-            for idx, f in enumerate(unconfirmed_findings, 1):
-                sev = str(getattr(f, "severity", "info") or "info").lower()
-                title = _md_cell(getattr(f, "title", getattr(f, "name", "")))
-                classification = _md_cell(_effective_evidence_classification(f) or "inconclusive")
-                reason = _md_cell(
-                    getattr(f, "unconfirmed_reason", None) or unconfirmed_reason(f) or ""
-                )
-                lines.append(
-                    f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | "
-                    f"{classification} | {reason} |"
-                )
-        else:
-            lines.append("_All reported findings are provable from raw evidence._")
         lines.append("")
 
     lines.append("## Technologies Detected")
