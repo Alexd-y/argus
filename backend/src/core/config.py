@@ -1577,6 +1577,10 @@ class Settings(BaseSettings):
     exploitation_timeout_minutes: int = 10
     exploitation_max_concurrent: int = 3
     exploitation_approval_timeout_minutes: int = 60
+    # Per-execution finding cap. Production/quick stay at the hard-coded 10 (cost/time
+    # control). A VERIFIED lab_unrestricted lease raises it to this value for deep
+    # authorized runs. Env: EXPLOITATION_LAB_MAX_FINDINGS_PER_RUN.
+    exploitation_lab_max_findings_per_run: int = 200
 
     # WEB-006 — destructive tools requiring explicit per-scan approval
     destructive_tool_names: str = "sqlmap,commix"
