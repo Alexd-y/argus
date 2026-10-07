@@ -118,15 +118,6 @@ class Settings(BaseSettings):
         default="docker",
         validation_alias=AliasChoices("SANDBOX_LIFECYCLE_BACKEND", "sandbox_lifecycle_backend"),
     )
-    # Durable agent-task claim/lease (§6).
-    agent_task_lease_seconds: int = Field(
-        default=180,
-        validation_alias=AliasChoices("AGENT_TASK_LEASE_SECONDS", "agent_task_lease_seconds"),
-    )
-    agent_task_max_attempts: int = Field(
-        default=3,
-        validation_alias=AliasChoices("AGENT_TASK_MAX_ATTEMPTS", "agent_task_max_attempts"),
-    )
 
     # WhiteRabbitNeo — primary pentest AI (локально, $0)
     whiterabbitneo_url: str = Field(
@@ -463,22 +454,6 @@ class Settings(BaseSettings):
         default="amqp://guest:guest@localhost:5672/",
         validation_alias=AliasChoices("RABBITMQ_URL", "rabbitmq_url"),
     )
-    message_queue_scan_events_topic: str = Field(
-        default="scan.events",
-        validation_alias=AliasChoices(
-            "MESSAGE_QUEUE_SCAN_EVENTS_TOPIC", "message_queue_scan_events_topic"
-        ),
-    )
-    message_queue_finding_alerts_topic: str = Field(
-        default="finding.alerts",
-        validation_alias=AliasChoices(
-            "MESSAGE_QUEUE_FINDING_ALERTS_TOPIC", "message_queue_finding_alerts_topic"
-        ),
-    )
-    message_queue_report_topic: str = Field(
-        default="report.generated",
-        validation_alias=AliasChoices("MESSAGE_QUEUE_REPORT_TOPIC", "message_queue_report_topic"),
-    )
 
     # ARG-041 — Observability (OpenTelemetry + Prometheus + cardinality discipline)
     # Tenant hash salt MUST be set in production; default empty triggers warning.
@@ -743,81 +718,9 @@ class Settings(BaseSettings):
         default=900,
         validation_alias=AliasChoices("CAIRN_REASON_TIMEOUT_SEC", "cairn_reason_timeout_sec"),
     )
-    cairn_max_workers: int = Field(
-        default=8, validation_alias=AliasChoices("CAIRN_MAX_WORKERS", "cairn_max_workers")
-    )
-    cairn_max_running_projects: int = Field(
-        default=3,
-        validation_alias=AliasChoices("CAIRN_MAX_RUNNING_PROJECTS", "cairn_max_running_projects"),
-    )
-    cairn_max_project_workers: int = Field(
-        default=4,
-        validation_alias=AliasChoices("CAIRN_MAX_PROJECT_WORKERS", "cairn_max_project_workers"),
-    )
-    cairn_max_intents_per_reason: int = Field(
-        default=3,
-        validation_alias=AliasChoices(
-            "CAIRN_MAX_INTENTS_PER_REASON", "cairn_max_intents_per_reason"
-        ),
-    )
-    cairn_bootstrap_timeout_sec: int = Field(
-        default=1800,
-        validation_alias=AliasChoices("CAIRN_BOOTSTRAP_TIMEOUT_SEC", "cairn_bootstrap_timeout_sec"),
-    )
-    cairn_bootstrap_conclude_timeout_sec: int = Field(
-        default=300,
-        validation_alias=AliasChoices(
-            "CAIRN_BOOTSTRAP_CONCLUDE_TIMEOUT_SEC", "cairn_bootstrap_conclude_timeout_sec"
-        ),
-    )
-    cairn_reason_timeout_task_sec: int = Field(
-        default=600,
-        validation_alias=AliasChoices(
-            "CAIRN_REASON_TIMEOUT_TASK_SEC", "cairn_reason_timeout_task_sec"
-        ),
-    )
     cairn_explore_timeout_sec: int = Field(
         default=1800,
         validation_alias=AliasChoices("CAIRN_EXPLORE_TIMEOUT_SEC", "cairn_explore_timeout_sec"),
-    )
-    cairn_explore_conclude_timeout_sec: int = Field(
-        default=300,
-        validation_alias=AliasChoices(
-            "CAIRN_EXPLORE_CONCLUDE_TIMEOUT_SEC", "cairn_explore_conclude_timeout_sec"
-        ),
-    )
-    cairn_worker_healthcheck: str = Field(
-        default="startup_only",
-        validation_alias=AliasChoices("CAIRN_WORKER_HEALTHCHECK", "cairn_worker_healthcheck"),
-    )
-    cairn_healthcheck_timeout_sec: int = Field(
-        default=20,
-        validation_alias=AliasChoices(
-            "CAIRN_HEALTHCHECK_TIMEOUT_SEC", "cairn_healthcheck_timeout_sec"
-        ),
-    )
-    cairn_unhealthy_backoff_sec: int = Field(
-        default=5,
-        validation_alias=AliasChoices("CAIRN_UNHEALTHY_BACKOFF_SEC", "cairn_unhealthy_backoff_sec"),
-    )
-    cairn_rejected_backoff_sec: int = Field(
-        default=5,
-        validation_alias=AliasChoices("CAIRN_REJECTED_BACKOFF_SEC", "cairn_rejected_backoff_sec"),
-    )
-    cairn_container_completed_action: str = Field(
-        default="remove",
-        validation_alias=AliasChoices(
-            "CAIRN_CONTAINER_COMPLETED_ACTION", "cairn_container_completed_action"
-        ),
-    )
-    cairn_max_graph_facts: int = Field(
-        default=500, validation_alias=AliasChoices("CAIRN_MAX_GRAPH_FACTS", "cairn_max_graph_facts")
-    )
-    cairn_max_graph_depth: int = Field(
-        default=25, validation_alias=AliasChoices("CAIRN_MAX_GRAPH_DEPTH", "cairn_max_graph_depth")
-    )
-    cairn_prompt_group: str = Field(
-        default="default", validation_alias=AliasChoices("CAIRN_PROMPT_GROUP", "cairn_prompt_group")
     )
     # CLI parity drivers (claude/codex/pi) — only usable under lab_unrestricted AND
     # when this flag is on; default off keeps them fail-closed in production.
@@ -868,10 +771,6 @@ class Settings(BaseSettings):
     qwythos_max_context: int = Field(
         default=32768,
         validation_alias=AliasChoices("QWYTHOS_MAX_CONTEXT", "qwythos_max_context"),
-    )
-    qwythos_api_key: str = Field(
-        default="",
-        validation_alias=AliasChoices("QWYTHOS_API_KEY", "qwythos_api_key"),
     )
     qwythos_timeout_sec: int = Field(
         default=1800,
@@ -1826,17 +1725,6 @@ class Settings(BaseSettings):
             return s in {"true", "1", "yes", "on"}
         return bool(v)
 
-    @field_validator("skip_prompt_verification", mode="before")
-    @classmethod
-    def coerce_skip_prompt_verification(cls, v: object) -> bool:
-        if v is None or v == "":
-            return False
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            return v.strip().lower() in {"true", "1", "yes", "on"}
-        return bool(v)
-
     # KAL-002 — MCP password-audit tools (hydra/medusa): server-side gate in addition to request opt-in.
     # Env: KAL_ALLOW_PASSWORD_AUDIT=true
     kal_allow_password_audit: bool = False
@@ -1856,12 +1744,6 @@ class Settings(BaseSettings):
     # VDF-008 — optional gospider/parsero after robots/sitemap fetch. Env: VA_ROBOTS_EXTENDED_PIPELINE
     va_robots_extended_pipeline: bool = False
 
-    # F-M04 — skip Ed25519 prompt catalog verification at startup. Dev-only escape hatch;
-    # production MUST keep the default (verify). Env: SKIP_PROMPT_VERIFICATION
-    skip_prompt_verification: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("SKIP_PROMPT_VERIFICATION", "skip_prompt_verification"),
-    )
 
     # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
     # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN
