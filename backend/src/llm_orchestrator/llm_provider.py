@@ -283,21 +283,31 @@ def _safe_parse_json(content: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-class OpenAILLMProvider:
-    """OpenAI-compatible provider stub (real HTTP integration out-of-scope).
+#: OpenAI ``finish_reason`` → the closed :class:`LLMResponse` taxonomy.
+_OPENAI_FINISH_MAP: Final[dict[str, str]] = {
+    "stop": "stop",
+    "length": "length",
+    "tool_calls": "tool_calls",
+    "function_call": "tool_calls",
+    "content_filter": "content_filter",
+}
 
-    Two-state behaviour:
-    * ``api_key is None`` → :meth:`call` raises
-      :class:`LLMProviderUnavailableError` immediately. The orchestrator
-      treats this as a routing miss (degrades gracefully to the next
-      configured provider).
-    * ``api_key is not None`` → :meth:`call` raises
-      :class:`NotImplementedError` to make it explicit that the real
-      HTTP integration has not been implemented in this cycle. Wiring
-      a real OpenAI / OpenRouter / DeepSeek call requires the cost table
-      from §6 and budget caps from §14 — landing it here would entangle
-      this task with provider-specific concerns. Production deployments
-      should swap in their own ``LLMProvider`` implementation.
+
+class OpenAILLMProvider:
+    """OpenAI-compatible chat-completions provider (real async HTTP).
+
+    Works against any OpenAI-compatible ``/chat/completions`` endpoint (OpenAI,
+    OpenRouter, DeepSeek, a local vLLM gateway) via ``base_url``. Behaviour:
+    * ``api_key is None`` → :meth:`call` raises :class:`LLMProviderUnavailableError`
+      immediately (routing miss; orchestrator degrades to the next provider).
+    * any network / non-200 / malformed-response condition raises
+      :class:`LLMProviderUnavailableError` (NOT a hard error) so the retry loop can
+      route onward.
+
+    Cost is computed from the response ``usage`` and the per-million prices passed to
+    the constructor (0.0 when unknown — never guessed). Per the module security note,
+    request/response *content* is never logged; only correlation/model/token/cost/
+    latency/finish metadata is emitted.
     """
 
     name = "openai"
@@ -306,9 +316,16 @@ class OpenAILLMProvider:
         self,
         api_key: str | None = None,
         base_url: str | None = None,
+        *,
+        request_timeout_sec: float = 60.0,
+        price_input_per_million_usd: float = 0.0,
+        price_output_per_million_usd: float = 0.0,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url
+        self._timeout = request_timeout_sec
+        self._price_in = price_input_per_million_usd
+        self._price_out = price_output_per_million_usd
 
     @property
     def api_key_present(self) -> bool:
@@ -321,19 +338,93 @@ class OpenAILLMProvider:
     async def call(self, request: LLMRequest) -> LLMResponse:
         if self._api_key is None:
             raise LLMProviderUnavailableError(self.name, reason="OPENAI_API_KEY not configured")
-        _logger.warning(
-            "openai_provider.real_http_call_blocked",
+
+        import time as _time
+
+        try:
+            import httpx
+        except Exception as exc:  # pragma: no cover - httpx is a hard dep in practice
+            raise LLMProviderUnavailableError(self.name, reason="httpx not available") from exc
+
+        base = (self._base_url or "https://api.openai.com/v1").rstrip("/")
+        payload: dict[str, Any] = {
+            "model": request.model_id,
+            "messages": [
+                {"role": "system", "content": request.system_prompt},
+                {"role": "user", "content": request.user_prompt},
+            ],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        }
+        if request.response_format in (ResponseFormat.JSON_OBJECT, ResponseFormat.JSON_SCHEMA):
+            payload["response_format"] = {"type": "json_object"}
+
+        start = _time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    f"{base}/chat/completions",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+        except Exception as exc:  # network/timeout → routing miss, not a hard failure
+            raise LLMProviderUnavailableError(
+                self.name, reason=f"transport error: {type(exc).__name__}"
+            ) from exc
+
+        latency_ms = max(0, int((_time.monotonic() - start) * 1000))
+        if resp.status_code != 200:
+            raise LLMProviderUnavailableError(self.name, reason=f"http status {resp.status_code}")
+
+        try:
+            data = resp.json()
+            choice = data["choices"][0]
+            content = str(choice["message"]["content"] or "")
+            raw_finish = str(choice.get("finish_reason") or "stop")
+            usage = data.get("usage") or {}
+            prompt_tokens = max(0, int(usage.get("prompt_tokens", 0) or 0))
+            completion_tokens = max(0, int(usage.get("completion_tokens", 0) or 0))
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            raise LLMProviderUnavailableError(self.name, reason="malformed response") from exc
+
+        content = content[:_MAX_RESPONSE_LEN]
+        parsed: dict[str, Any] | None = None
+        if request.response_format in (ResponseFormat.JSON_OBJECT, ResponseFormat.JSON_SCHEMA):
+            parsed = _safe_parse_json(content)
+
+        usd_cost = round(
+            (prompt_tokens / 1_000_000.0) * self._price_in
+            + (completion_tokens / 1_000_000.0) * self._price_out,
+            6,
+        )
+        finish_reason = _OPENAI_FINISH_MAP.get(raw_finish, "stop")
+
+        _logger.info(
+            "openai_provider.call",
             extra={
                 "correlation_id": str(request.correlation_id),
                 "model_id": request.model_id,
                 "prompt_id": request.prompt_id,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "usd_cost": usd_cost,
+                "latency_ms": latency_ms,
+                "finish_reason": finish_reason,
             },
         )
-        raise NotImplementedError(
-            "OpenAILLMProvider real HTTP integration is intentionally out of "
-            "scope for this cycle. Provide a custom LLMProvider implementation "
-            "(see EchoLLMProvider for the reference shape) or wire the OpenAI "
-            "Responses API in a follow-up cycle."
+        return LLMResponse(
+            correlation_id=request.correlation_id,
+            content=content,
+            parsed_json=parsed,
+            model_id=request.model_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_cost=usd_cost,
+            latency_ms=latency_ms,
+            finish_reason=finish_reason,
         )
 
 

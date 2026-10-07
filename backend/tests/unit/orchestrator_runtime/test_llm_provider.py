@@ -203,12 +203,19 @@ class TestOpenAILLMProvider:
         assert "OPENAI_API_KEY" in exc_info.value.reason
 
     @pytest.mark.asyncio
-    async def test_with_api_key_real_call_is_not_implemented(self) -> None:
+    async def test_with_api_key_transport_error_degrades(self, monkeypatch) -> None:
+        # Real HTTP integration now exists; a transport failure must degrade to
+        # LLMProviderUnavailableError (routing miss), never a hard error.
+        import httpx
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("no network")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _boom, raising=True)
         provider = OpenAILLMProvider(api_key="sk-fake")
-        request = _make_request()
-        with pytest.raises(NotImplementedError) as exc_info:
-            await provider.call(request)
-        assert "out of" in str(exc_info.value).lower()
+        with pytest.raises(LLMProviderUnavailableError) as exc_info:
+            await provider.call(_make_request())
+        assert exc_info.value.provider == "openai"
 
     def test_api_key_present_property(self) -> None:
         assert OpenAILLMProvider(api_key=None).api_key_present is False
