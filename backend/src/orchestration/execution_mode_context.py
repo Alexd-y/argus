@@ -584,15 +584,23 @@ resolve_tool_policy_for_scan = resolve_tool_policy_from_options
 
 
 def _host_of(value: str) -> str:
-    """Extract host from a URL / host:port / bare host (best-effort)."""
+    """Extract and sanitise the host from a URL / host:port / bare host.
+
+    Parses via ``urlparse`` (prefixing ``//`` for bare values) so userinfo
+    (``user@``), path, query and fragment are stripped and cannot smuggle an
+    out-of-scope host past the allowlist. Returns "" for anything that is not a
+    plain hostname/IP (defence-in-depth against SSRF / scope-bypass).
+    """
     v = (value or "").strip()
     if not v:
         return ""
-    if "://" in v:
-        return urlparse(v).hostname or v
-    if ":" in v and not v.startswith("["):
-        return v.split(":")[0]
-    return v
+    parsed = urlparse(v if "://" in v else "//" + v)
+    host = (parsed.hostname or "").strip()
+    if not host:
+        return ""
+    if any(c in host for c in "/\\#?@, \t\r\n"):
+        return ""
+    return host.rstrip(".")
 
 
 def _target_in_lab_scope(target: str, allowed: list[str]) -> bool:
@@ -651,4 +659,8 @@ def lab_authorized_target(
     allowed = [t.strip() for t in raw.split(",") if t.strip()]
     if not allowed:
         return False
-    return _target_in_lab_scope(target, allowed)
+    # Split EXACTLY as validate_target_for_tool does and require EVERY part in scope:
+    # the guardrail bypass applies to the whole target string, so a mixed in/out-of-
+    # scope string must NOT authorize (fail-closed — prevents scope/SSRF bypass).
+    parts = [p.strip() for p in str(target or "").replace(",", " ").split() if p.strip()]
+    return bool(parts) and all(_target_in_lab_scope(p, allowed) for p in parts)

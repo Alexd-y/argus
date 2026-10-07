@@ -48,3 +48,22 @@ def test_scope_membership_cidr_and_domain() -> None:
 def test_fail_closed_on_empty_scope() -> None:
     s = SimpleNamespace(argus_lab_allowed_targets="")
     assert lab_authorized_target("10.10.0.5", _LAB, settings=s) is False
+
+
+def test_multi_target_requires_all_parts_in_scope() -> None:
+    # The bypass applies to the whole target string, so EVERY part must be in scope.
+    s = SimpleNamespace(argus_lab_allowed_targets="lab.example.com,10.10.0.0/24")
+    assert lab_authorized_target("lab.example.com 10.10.0.5", _LAB, settings=s) is True
+    assert lab_authorized_target("lab.example.com,10.10.0.9", _LAB, settings=s) is True
+    # one part out of scope → NOT authorized (no whole-string bypass)
+    assert lab_authorized_target("lab.example.com evil.com", _LAB, settings=s) is False
+    assert lab_authorized_target("10.10.0.5 8.8.8.8", _LAB, settings=s) is False
+
+
+def test_userinfo_and_path_smuggling_rejected() -> None:
+    s = SimpleNamespace(argus_lab_allowed_targets="lab.example.com")
+    # allowed host placed as userinfo; the REAL host is evil → out of scope
+    assert lab_authorized_target("lab.example.com@evil.com", _LAB, settings=s) is False
+    # trailing-dot FQDN still matches; path/port resolve to the real host
+    assert lab_authorized_target("lab.example.com.", _LAB, settings=s) is True
+    assert lab_authorized_target("https://lab.example.com:8443/scan", _LAB, settings=s) is True
