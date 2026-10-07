@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { cairnApi, type CairnWorker } from "@/lib/cairnApi";
 
-const WORKER_TYPES = ["wrb", "claudecode", "codex", "pi", "mock"];
+// "mock" is a test-only Cairn worker driver (not registered in prod), so it is
+// not offered here — selecting it would be rejected by the backend registry.
+const WORKER_TYPES = ["wrb", "claudecode", "codex", "pi"];
 const ALL_TASK_TYPES = ["bootstrap", "reason", "explore"];
 
 export default function CairnWorkersPage() {
