@@ -16,6 +16,21 @@ from typing import Any
 
 logger = logging.getLogger("src.integrations.message_queue")
 
+VALID_TOPICS = frozenset({"scan.events", "finding.alerts", "report.generated"})
+VALID_MESSAGE_QUEUE_BACKENDS = frozenset({"nats", "rabbitmq", "none"})
+
+
+def _require_valid_topic(topic: str) -> None:
+    """Reject publishing/subscribing to an unknown subject (closed topic set).
+
+    Guards against typos and arbitrary-subject injection: only the declared ARGUS
+    topics are allowed on the bus.
+    """
+    if topic not in VALID_TOPICS:
+        raise ValueError(
+            f"unknown message-queue topic {topic!r}; valid: {sorted(VALID_TOPICS)}"
+        )
+
 
 class MessageQueueBackend(ABC):
     """Async publish/subscribe abstraction for message queues."""
@@ -83,6 +98,7 @@ class NatsJetStreamBackend(MessageQueueBackend):
             logger.info("nats_disconnected")
 
     async def publish(self, topic: str, payload: dict[str, Any]) -> None:
+        _require_valid_topic(topic)
         if self._js is None:
             raise RuntimeError("Not connected — call connect() first")
         data = json.dumps(payload, default=str).encode()
@@ -90,6 +106,7 @@ class NatsJetStreamBackend(MessageQueueBackend):
         logger.debug("nats_published", extra={"topic": topic})
 
     async def subscribe(self, topic: str, handler: Any) -> None:
+        _require_valid_topic(topic)
         if self._js is None:
             raise RuntimeError("Not connected — call connect() first")
         sub = await self._js.subscribe(topic, cb=handler)
@@ -129,6 +146,7 @@ class RabbitMQBackend(MessageQueueBackend):
             logger.info("rabbitmq_disconnected")
 
     async def publish(self, topic: str, payload: dict[str, Any]) -> None:
+        _require_valid_topic(topic)
         if self._exchange is None:
             raise RuntimeError("Not connected — call connect() first")
         import aio_pika  # type: ignore[import-untyped]
@@ -143,6 +161,7 @@ class RabbitMQBackend(MessageQueueBackend):
         logger.debug("rabbitmq_published", extra={"topic": topic})
 
     async def subscribe(self, topic: str, handler: Any) -> None:
+        _require_valid_topic(topic)
         if self._channel is None:
             raise RuntimeError("Not connected — call connect() first")
         queue = await self._channel.declare_queue(name="", exclusive=True, auto_delete=True)
@@ -154,10 +173,6 @@ class RabbitMQBackend(MessageQueueBackend):
 
         await queue.consume(_wrap)
         logger.info("rabbitmq_subscribed", extra={"topic": topic})
-
-
-VALID_TOPICS = frozenset({"scan.events", "finding.alerts", "report.generated"})
-VALID_MESSAGE_QUEUE_BACKENDS = frozenset({"nats", "rabbitmq", "none"})
 
 
 def get_message_queue(settings: Any) -> MessageQueueBackend:
