@@ -19,13 +19,13 @@
      * ``creator``      — fixed by the renderer to the cycle ID for stability.
      * ``language``     — defaults to "en-US"; override via Jinja context.
    ============================================================================ #}
-\Title{ARGUS Security Posture Report --- {{ tier_label | default('Tier') }}}
-\Author{ARGUS}
+\Title{Svalbard Security Inc. — Security Posture Report --- {{ tier_label | default('Tier') }}}
+\Author{Svalbard Security Inc.}
 \Subject{Security assessment report (tier={{ tier | default('midgard') }})}
-\Keywords{security, pentest, vulnerability, ARGUS, tier:{{ tier | default('midgard') }}}
-\Creator{ {{- creator | default('ARGUS Cycle 6') -}} }
+\Keywords{security, pentest, vulnerability, Svalbard Security Inc., tier:{{ tier | default('midgard') }}}
+\Creator{ {{- creator | default('Svalbard Security Inc. Cycle 6') -}} }
 \Producer{LaTeX with pdfx (PDF/A-2u)}
 \Language{ {{- language | default('en-US') -}} }
-\Org{ARGUS}
+\Org{Svalbard Security Inc.}
 \Copyrighted{True}
-\CopyrightText{Confidential. ARGUS internal report.}
+\CopyrightText{Confidential. Svalbard Security Inc. internal report.}

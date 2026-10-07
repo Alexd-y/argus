@@ -40,7 +40,7 @@
   size: A4;
   margin: 2cm;
   @top-left {
-    content: "ARGUS · Asgard tier";
+    content: "Svalbard Security Inc. · Asgard tier";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
     color: #6b5436;
@@ -52,7 +52,7 @@
     color: #6b5436;
   }
   @bottom-center {
-    content: "ARGUS Confidential — page " counter(page) " of " counter(pages);
+    content: "Svalbard Security Inc. Confidential — page " counter(page) " of " counter(pages);
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
     color: #6b5436;

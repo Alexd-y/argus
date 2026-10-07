@@ -7,7 +7,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ARGUS Midgard Report — {{ target | e }}</title>
+  <title>Svalbard Security Inc. Midgard Report — {{ target | e }}</title>
   <link rel="stylesheet" href="pdf_styles.css" />
 </head>
 <body class="tier-midgard">
@@ -15,15 +15,15 @@
   {# ----------------------- COVER PAGE ----------------------- #}
   <section class="cover-page">
     <div class="cover-brand">
-      <div class="brand-mark" aria-label="ARGUS logo">
-        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ARGUS shield">
+      <div class="brand-mark" aria-label="Svalbard Security Inc. logo">
+        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Svalbard Security Inc. shield">
           <circle cx="32" cy="32" r="30" fill="#1a3a8c" stroke="#0f2247" stroke-width="2" />
           <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#fff" opacity="0.9" />
           <circle cx="32" cy="30" r="6" fill="#1a3a8c" />
         </svg>
       </div>
       <div class="brand-text">
-        <div class="brand-name">ARGUS</div>
+        <div class="brand-name">Svalbard Security Inc.</div>
         <div class="brand-sub">Security Pentest Platform</div>
       </div>
     </div>
@@ -45,7 +45,7 @@
     </div>
 
     <div class="cover-confidential">
-      ARGUS Confidential · Internal use only
+      Svalbard Security Inc. Confidential · Internal use only
     </div>
   </section>
 
@@ -66,7 +66,7 @@
       <div class="prose">{{ exec_text | md }}</div>
     {% else %}
       <p class="prose">
-        ARGUS analysed {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
+        Svalbard Security Inc. analysed {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
         across the in-scope assets for <strong>{{ target | e or 'the engagement' }}</strong>.
         This Midgard brief surfaces the highest-impact issues only — the full
         evidence chain is preserved in the Asgard / Valhalla tiers.
@@ -132,7 +132,7 @@
 
   {# ----------------------- FOOTER --------------------------- #}
   <footer class="report-footer">
-    <p>ARGUS Confidential · Midgard Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
+    <p>Svalbard Security Inc. Confidential · Midgard Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
   </footer>
 
 </body>

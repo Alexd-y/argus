@@ -40,7 +40,7 @@
   size: A4;
   margin: 2cm;
   @top-left {
-    content: "ARGUS · Valhalla tier";
+    content: "Svalbard Security Inc. · Valhalla tier";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
     color: #8a7838;
@@ -52,7 +52,7 @@
     color: #8a7838;
   }
   @bottom-center {
-    content: "ARGUS Confidential — page " counter(page) " of " counter(pages);
+    content: "Svalbard Security Inc. Confidential — page " counter(page) " of " counter(pages);
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
     color: #8a7838;

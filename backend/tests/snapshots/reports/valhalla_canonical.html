@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARGUS Security Report - https://acme.example.com</title>
+    <title>Svalbard Security Inc. Report - https://acme.example.com</title>
     <style>
         :root {
             --bg: #0a0c10;
@@ -465,31 +465,79 @@
         }
 
         @media print {
-            body {
+            /*
+             * D1 root-cause fix: WeasyPrint does NOT fragment flex/grid
+             * containers across pages. Any flex/grid container with
+             * min-height:100vh collapses the whole document onto one page and
+             * clips overflow. In the print context every layout container that
+             * holds long content must become a plain block with auto height.
+             */
+            @page {
+                size: A4;
+                margin: 16mm 14mm 18mm 14mm;
+                @top-center {
+                    content: "Svalbard Security Inc. — Valhalla";
+                    font-family: "Consolas", "Courier New", monospace;
+                    font-size: 8px;
+                    color: #666;
+                }
+                @bottom-right {
+                    content: "Page " counter(page) " / " counter(pages);
+                    font-family: "Consolas", "Courier New", monospace;
+                    font-size: 8px;
+                    color: #666;
+                }
+            }
+            html, body {
                 background: #fff;
                 color: #111;
+                min-height: 0;
+                height: auto;
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
             }
-            .app-header, #sidebar, .rpt-footer {
-                position: static;
+            #app {
+                /* critical: a flex container is not fragmented page-by-page */
+                display: block;
+                min-height: 0;
+                height: auto;
             }
-            .main-container { display: block; }
-            #sidebar { display: none; }
+            .main-container {
+                display: block;
+                flex: none;
+                min-height: 0;
+            }
             #form-area {
+                display: block;
+                flex: none;
                 max-width: none;
-                padding: 18mm;
+                min-width: 0;
+                padding: 0;
             }
+            .app-header { display: block; position: static; }
+            #sidebar { display: none; }
+            .rpt-footer { display: block; position: static; }
             .panel, .valhalla-exec {
                 background: #fff;
                 border-color: #ccc;
                 color: #111;
+                /*
+                 * Long finding cards must be allowed to span pages. Forcing
+                 * page-break-inside:avoid on long sections provokes the engine
+                 * to push content out of the layout box (see prompt B.2).
+                 */
+                page-break-inside: auto;
+                break-inside: auto;
             }
+            h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
             table, th, td { border-color: #bbb; }
             th { background: #f2f2f2; color: #111; }
             pre, code {
                 background: #f7f7f7;
                 color: #111;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                white-space: pre-wrap;
             }
         }
     </style>
@@ -497,7 +545,7 @@
 <body>
 <div id="app" class="valhalla-secreport">
     <header class="app-header">
-        <h1>ARGUS <span>Security Report</span></h1>
+        <h1>Svalbard Security Inc. <span>Security Report</span></h1>
         <div class="subtitle">Valhalla Automated Security Assessment</div>
         <div class="header-meta">
             <span class="tier-badge">valhalla</span>
@@ -522,11 +570,10 @@
             <a class="nav-item" href="#active-web-scan"><span class="nav-num">10</span>Active Scan</a>
             <a class="nav-item" href="#exploitation"><span class="nav-num">11</span>Exploit Chain</a>
             <a class="nav-item" href="#remediation-priority"><span class="nav-num">12</span>Roadmap</a>
-            <a class="nav-item" href="#zero-day-potential"><span class="nav-num">13</span>Zero-Day</a>
-            <a class="nav-item" href="#cost-summary"><span class="nav-num">14</span>Cost</a>
+            <a class="nav-item" href="#zero-day-potential"><span class="nav-num">13</span>Novelty</a>
             <div class="nav-section-label">Back matter</div>
-            <a class="nav-item" href="#valhalla-executive-report"><span class="nav-num">15</span>Business Lens</a>
-            <a class="nav-item" href="#evidence-inventory"><span class="nav-num">16</span>Evidence</a>
+            <a class="nav-item" href="#valhalla-executive-report"><span class="nav-num">14</span>Business Lens</a>
+            <a class="nav-item" href="#evidence-inventory"><span class="nav-num">15</span>Evidence</a>
         </nav>
 
         <main id="form-area" class="report-area rpt-body">
@@ -537,8 +584,8 @@
 <section class="valhalla-title-page panel" id="valhalla-title">
     <h2>Title Page</h2>
     <p><strong>Report title:</strong> Valhalla Automated Security Assessment — https://acme.example.com</p>
-    <p><strong>Date / start time:</strong> No data</p>
-    <p><strong>Performed by:</strong> Svalbard Security Inc.</p>
+    <p><strong>Date / start time:</strong> not specified</p>
+    <p><strong>Performed by:</strong> Ragnarok Security</p>
     <p><strong>Client:</strong> https://acme.example.com</p>
 </section>
 
@@ -589,8 +636,8 @@
 
     <h3>Compliance and OWASP mapping</h3>
 <section class="owasp-compliance" id="owasp-top10-compliance">
-    <h3 class="owasp-compliance-heading">OWASP Top 10 compliance mapping</h3>
-    <p class="meta"><small>Security Misconfiguration, including missing HTTP security headers, is labeled <strong>A05:2021</strong> per OWASP Top 10:2021 for this customer-facing report.</small></p>
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2021 compliance mapping</h3>
+    <p class="meta"><small>Unexecuted categories are marked Not assessed. HTTP security response header findings map to <strong>A05:2021 Security Misconfiguration</strong>.</small></p>
     <table class="owasp-compliance-table">
         <thead>
             <tr>
@@ -599,137 +646,137 @@
                 <th scope="col">Assessed</th>
                 <th scope="col">Result</th>
                 <th scope="col" class="owasp-compliance-count-col">Findings</th>
-            </tr>
+<th scope="col">Evidence IDs</th>            </tr>
         </thead>
         <tbody>
             <tr class="owasp-compliance-warn">
-                <td class="owasp-compliance-category" title="Принудительная авторизация на сервере для каждого запроса, политики по ролям и владельцу ресурса, запрет на опору только на «скрытые» URL и параметры.">
-                    <span class="owasp-compliance-code"><code>A01</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A01:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Broken Access Control</span>
-                    <span class="owasp-compliance-title-ru">Нарушение контроля доступа</span>
                 </td>
-                <td class="owasp-compliance-desc">Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.</td>
-                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-desc">Access control enforcement failures such as unauthorized access to data or functions.</td>
+                <td class="owasp-compliance-assessed">Yes</td>
                 <td class="owasp-compliance-result">Finding present</td>
                 <td class="owasp-compliance-presence">1</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-warn">
-                <td class="owasp-compliance-category" title="Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.">
+                <td class="owasp-compliance-category">
                     <span class="owasp-compliance-code"><code>A05:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Security Misconfiguration</span>
-                    <span class="owasp-compliance-title-ru">Небезопасная конфигурация</span>
                 </td>
-                <td class="owasp-compliance-desc">Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.</td>
-                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-desc">Missing, incomplete, or unsafe security configuration, including HTTP security response headers.</td>
+                <td class="owasp-compliance-assessed">Yes</td>
                 <td class="owasp-compliance-result">Finding present</td>
                 <td class="owasp-compliance-presence">1</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.">
-                    <span class="owasp-compliance-code"><code>A03</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A06:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title">Software Supply Chain Failures</span>
-                    <span class="owasp-compliance-title-ru">Сбои цепочки поставки ПО</span>
+                    <span class="owasp-compliance-title">Vulnerable and Outdated Components</span>
                 </td>
-                <td class="owasp-compliance-desc">Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Known-vulnerable, unsupported, or outdated software components.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.">
-                    <span class="owasp-compliance-code"><code>A04</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A02:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Cryptographic Failures</span>
-                    <span class="owasp-compliance-title-ru">Криптографические сбои</span>
                 </td>
-                <td class="owasp-compliance-desc">Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Weaknesses in cryptographic design, TLS configuration, or protection of sensitive data in transit or at rest.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-warn">
-                <td class="owasp-compliance-category" title="Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.">
-                    <span class="owasp-compliance-code"><code>A05</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A03:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Injection</span>
-                    <span class="owasp-compliance-title-ru">Инъекции</span>
                 </td>
-                <td class="owasp-compliance-desc">SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.</td>
-                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-desc">Untrusted input interpreted as commands, queries, templates, or other executable syntax.</td>
+                <td class="owasp-compliance-assessed">Yes</td>
                 <td class="owasp-compliance-result">Finding present</td>
                 <td class="owasp-compliance-presence">2</td>
+                <td>s3://argus-evidence/sqli-dump</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.">
-                    <span class="owasp-compliance-code"><code>A06</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A04:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Insecure Design</span>
-                    <span class="owasp-compliance-title-ru">Небезопасное проектирование</span>
                 </td>
-                <td class="owasp-compliance-desc">Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Design-level weaknesses that require changes to security architecture or control design.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-warn">
-                <td class="owasp-compliance-category" title="MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.">
-                    <span class="owasp-compliance-code"><code>A07</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A07:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title">Authentication Failures</span>
-                    <span class="owasp-compliance-title-ru">Сбои аутентификации</span>
+                    <span class="owasp-compliance-title">Identification and Authentication Failures</span>
                 </td>
-                <td class="owasp-compliance-desc">Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.</td>
-                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-desc">Authentication, session, credential, lockout, or rate-limiting control weaknesses.</td>
+                <td class="owasp-compliance-assessed">Yes</td>
                 <td class="owasp-compliance-result">Finding present</td>
                 <td class="owasp-compliance-presence">1</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.">
-                    <span class="owasp-compliance-code"><code>A08</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A08:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title">Software or Data Integrity Failures</span>
-                    <span class="owasp-compliance-title-ru">Сбои целостности ПО и данных</span>
+                    <span class="owasp-compliance-title">Software and Data Integrity Failures</span>
                 </td>
-                <td class="owasp-compliance-desc">Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Integrity weaknesses in software updates, CI/CD, deserialization, or trusted data flows.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.">
-                    <span class="owasp-compliance-code"><code>A09</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A09:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title">Security Logging &amp; Alerting Failures</span>
-                    <span class="owasp-compliance-title-ru">Сбои журналирования и оповещения</span>
+                    <span class="owasp-compliance-title">Security Logging and Monitoring Failures</span>
                 </td>
-                <td class="owasp-compliance-desc">Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Insufficient logging, monitoring, alerting, or incident visibility.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
             <tr class="owasp-compliance-not-assessed">
-                <td class="owasp-compliance-category" title="Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.">
-                    <span class="owasp-compliance-code"><code>A10</code></span>
+                <td class="owasp-compliance-category">
+                    <span class="owasp-compliance-code"><code>A10:2021</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title">Mishandling of Exceptional Conditions</span>
-                    <span class="owasp-compliance-title-ru">Неверная обработка исключительных ситуаций</span>
+                    <span class="owasp-compliance-title">Server-Side Request Forgery</span>
                 </td>
-                <td class="owasp-compliance-desc">Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.</td>
-                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-desc">Server-side requests to unintended destinations caused by insufficient validation.</td>
+                <td class="owasp-compliance-assessed">No</td>
                 <td class="owasp-compliance-result">Not assessed</td>
                 <td class="owasp-compliance-presence">Not assessed</td>
+                <td>—</td>
             </tr>
         </tbody>
     </table>
 </section>    <div class="ai-slot-body">
             <h4>Compliance narrative (AI)</h4>
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
 
-    <h3>Data Breach Exposure Check (HIBP Pwned Passwords)</h3>
+    <h3>Credential Exposure Check (HIBP Pwned Passwords)</h3>
     <p class="meta"><small>Aggregate-only k-anonymity checks against the HIBP Pwned Passwords corpus; no plaintext credentials are stored in the report.</small></p>
         <table>
             <tbody>
@@ -741,22 +788,22 @@
 
     <h3>Key Business Risks</h3>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
 
     <h3>Priority Tasks (Top Plan)</h3>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
 </section>
 <section class="valhalla-objectives panel" id="objectives">
     <h2>Subject, Goals and Objectives</h2>
     <p><strong>Subject:</strong> Public web resource https://acme.example.com and related components (if applicable).</p>
-    <p><strong>Goal:</strong> Assess the security level of the web resource https://acme.example.com against an external attacker (model based on scan parameters).</p>
+    <p><strong>Goal:</strong> Assess evidence-backed security signals for the web resource https://acme.example.com from an external perspective.</p>
     <p><strong>Objectives:</strong></p>
     <ul>
             <li>Identify vulnerabilities in the web application and adjacent infrastructure.</li>
-            <li>Assess the possibility of unauthorized access to data and user accounts.</li>
+            <li>Assess authentication, authorization, and exposure signals within the tested scope.</li>
             <li>Provide recommendations for improving the security posture.</li>
     </ul>
 </section>
@@ -803,15 +850,23 @@
         <li>Reconnaissance (OSINT, information gathering)</li>
         <li>Automated scanning</li>
         <li>Manual verification (PoC)</li>
-        <li>Password leak analysis (hashed), if policy enabled</li>
+        <li>Credential exposure analysis (hashed), if policy enabled</li>
         <li>Impact assessment and recommendations</li>
     </ul>
 
     <h3>Reconnaissance Tools Used (dynamic)</h3>
     <p>
-            No data
+            Tool execution metadata was not included in this export.
     </p>
 
+<div class="wstg-coverage">
+    <h3>OWASP WSTG v4.2 Test Coverage</h3>
+    <p class="empty">Not assessed — WSTG coverage was not computed for this run.</p>
+</div>
+<div class="nist-limitations">
+    <h3>Test Limitations (NIST SP 800-115)</h3>
+    <p class="empty">Not assessed — no test limitations were recorded for this run.</p>
+</div>
 </section>
 <section class="valhalla-results panel" id="results-overview">
     <h2>Results Overview and Risk Matrix</h2>
@@ -836,53 +891,57 @@
                 <tr>
                     <td><code>tech_stack_structured</code></td>
                     <td>partial</td>
-                    <td class="desc">Not scanned: INCLUDE_MINIO=false — WhatWeb raw artifact bodies were not fetched; stack reconstruction from phase_outputs / recon_results only.</td>
+                    <td class="desc">INCLUDE_MINIO=false: WhatWeb raw artifact bodies were not fetched; stack reconstruction from phase_outputs / recon_results only.</td>
                 </tr>
                 <tr>
                     <td><code>outdated_components</code></td>
-                    <td>no_data</td>
+                    <td>not executed</td>
                     <td class="desc">No outdated component signals (CVE/Trivy/searchsploit/versions).</td>
                 </tr>
                 <tr>
                     <td><code>ssl_tls_analysis</code></td>
-                    <td>no_data</td>
+                    <td>no data</td>
                     <td class="desc">SSL/TLS: no testssl/sslscan output and no certificate data.</td>
                 </tr>
                 <tr>
                     <td><code>security_headers_analysis</code></td>
-                    <td>no_data</td>
+                    <td>no data</td>
                     <td class="desc">No http_headers map in recon and no embedded headers in phase outputs.</td>
                 </tr>
                 <tr>
                     <td><code>robots_sitemap_analysis</code></td>
-                    <td>no_data</td>
+                    <td>no data</td>
                     <td class="desc">robots.txt and sitemap were not retrieved.</td>
                 </tr>
                 <tr>
                     <td><code>leaked_emails</code></td>
-                    <td>not_executed</td>
-                    <td class="desc">Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.</td>
+                    <td>no observed items after parsing</td>
+                    <td class="desc">Email-capable OSINT or fallback sources were parsed; no email-like values were observed.</td>
                 </tr>
                 <tr>
                     <td><code>port_exposure</code></td>
-                    <td>no_data</td>
+                    <td>no data</td>
                     <td class="desc">No nmap/naabu/masscan open port signals in collected scan data.</td>
                 </tr>
             </tbody>
         </table>
-        <p class="meta"><small>Tool health summary is unavailable for this export.</small></p>
+        <p class="meta"><small>Tool health summary was not generated for this export.</small></p>
+</section>
+<section class="valhalla-active-injection panel" id="active-injection-coverage">
+    <h3>Active Injection Coverage</h3>
+    <p class="empty">Not assessed — no active-injection families were scheduled or executed for this run.</p>
 </section>
 
     <h3>robots.txt and sitemap.xml Analysis</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (robots_sitemap_analysis):</strong> no_data — robots.txt and sitemap were not retrieved.</p>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (robots_sitemap_analysis):</strong> no data — robots.txt and sitemap were not retrieved.</p>
 
-    <p><strong>robots.txt:</strong> Not found</p>
-        <p class="empty">No data</p>
+    <p><strong>robots.txt:</strong> Not retrieved in parsed context</p>
+        <p class="empty">No robots.txt allow/disallow entries were parsed.</p>
         <p class="meta"><small>Summary (robots_sitemap_analysis.merged): robots=False, sitemap=False, security.txt=False, URLs in sitemap: 0</small></p>
 
-    <p><strong>sitemap.xml:</strong> Not found</p>
+    <p><strong>sitemap.xml:</strong> Not retrieved in parsed context</p>
     <p><strong>URL count:</strong> 0</p>
-        <p class="empty">No data</p>
+        <p class="empty">No sitemap URL examples were parsed.</p>
 
     <h3>Sample Vulnerability Summary (first finding, if available)</h3>
         <table>
@@ -893,73 +952,92 @@
                 <tr><th scope="row">CWE</th><td>CWE-89</td></tr>
                 <tr><th scope="row">OWASP</th><td>A05</td></tr>
                 <tr><th scope="row">CVSS</th><td>9.8</td></tr>
-                <tr><th scope="row">CVE</th><td>Not found</td></tr>
+                <tr><th scope="row">CVE</th><td>No CVE identifier provided</td></tr>
             </tbody>
         </table>
 
     <h3>Technology Stack and Components</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (tech_stack_structured):</strong> partial — Not scanned: INCLUDE_MINIO=false — WhatWeb raw artifact bodies were not fetched; stack reconstruction from phase_outputs / recon_results only.</p>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (tech_stack_structured):</strong> partial — INCLUDE_MINIO=false: WhatWeb raw artifact bodies were not fetched; stack reconstruction from phase_outputs / recon_results only.</p>
 
-        <p class="empty">Not found</p>
+        <p class="empty">No customer-facing technology rows were parsed for this run.</p>
 
     <h3>Outdated Components</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (outdated_components):</strong> no_data — No outdated component signals (CVE/Trivy/searchsploit/versions).</p>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (outdated_components):</strong> not executed — No outdated component signals (CVE/Trivy/searchsploit/versions).</p>
 
-        <p class="empty">Not found</p>
+        <p class="empty">No component/version rows were parsed for this section.</p>
 
     <h3>Discovered Email Addresses (masked)</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (leaked_emails):</strong> not_executed — Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.</p>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (leaked_emails):</strong> no observed items after parsing — Email-capable OSINT or fallback sources were parsed; no email-like values were observed.</p>
 
-        <p class="empty">Not found</p>
+        <p class="empty">Email-capable sources were parsed only when indicated by the section status; no email-like values are listed here.</p>
 
-    <h3>Data Breach Exposure Check — HIBP Pwned Passwords (aggregate)</h3>
+    <h3>Credential Exposure Check — HIBP Pwned Passwords (aggregate)</h3>
         <table>
             <tbody>
                 <tr><th scope="row">Sample values checked (k-anonymity API)</th><td>0</td></tr>
                 <tr><th scope="row">Matches in Pwned Passwords corpus</th><td>12</td></tr>
-                <tr><th scope="row">Password breach exposure signal</th><td>—</td></tr>
+            <tr><th scope="row">Password exposure signal</th><td>—</td></tr>
             </tbody>
         </table>
 
-    <h3>SSL/TLS Analysis Results</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (ssl_tls_analysis):</strong> no_data — SSL/TLS: no testssl/sslscan output and no certificate data.</p>
+    <h3>Port Exposure</h3>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (port_exposure):</strong> no data — No nmap/naabu/masscan open port signals in collected scan data.</p>
 
-    <table>
-        <tbody>
-            <tr><th scope="row">Certificate Issuer</th><td>Not found</td></tr>
-            <tr><th scope="row">Validity Period</th><td>Not found</td></tr>
-            <tr><th scope="row">Supported Protocols</th><td>No data</td></tr>
-            <tr><th scope="row">Weak / Deprecated Protocols</th><td>Not found / no data</td></tr>
-            <tr><th scope="row">Weak Ciphers</th><td>Not found / no data</td></tr>
-            <tr><th scope="row">HSTS</th><td>No data</td></tr>
-        </tbody>
-    </table>
+        <p class="empty">No customer-facing port rows were parsed for this run.</p>
+
+    <h3>SSL/TLS Analysis Results</h3>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (ssl_tls_analysis):</strong> no data — SSL/TLS: no testssl/sslscan output and no certificate data.</p>
+
+    <p class="empty">No customer-facing TLS rows were parsed for this run.</p>
 
     <h3>HTTP Security Headers Analysis</h3>
-    <p class="meta valhalla-mandatory-status"><strong>Data status (security_headers_analysis):</strong> no_data — No http_headers map in recon and no embedded headers in phase outputs.</p>
+    <p class="meta valhalla-mandatory-status"><strong>Data status (security_headers_analysis):</strong> no data — No http_headers map in recon and no embedded headers in phase outputs.</p>
 
-        <p class="empty">No data</p>
+        <p class="empty">No customer-facing security header rows were parsed for this run.</p>
 
     <h3>Component and Dependency Analysis</h3>
-        <p class="empty">Not found</p>
+        <p class="empty">No dependency inventory rows were parsed for this run.</p>
 
     <h3>Risk Matrix (Impact × Likelihood)</h3>
     <p class="meta"><small>Axes: Low / Medium / High (0–3 → groups); cells — finding count and IDs.</small></p>
-        <p class="empty">No data</p>
+        <p class="empty">No risk matrix rows were produced because there were no reportable findings.</p>
 
     <h3>Critical Vulnerabilities (immediate remediation required)</h3>
     <p class="meta"><small>Only findings with <strong>Critical</strong> severity or <strong>CVSS ≥ 9.0</strong>, <strong>validated</strong> status, <strong>strong</strong> evidence, and <strong>exploit demonstrated</strong> (passive header gaps are excluded). Exploit is shown as “yes” only with demonstrated exploit evidence.</small></p>
-        <p class="empty">Not found</p>
+        <p class="empty">No validated critical vulnerabilities met the evidence threshold for this section.</p>
+
+    <h3>Authenticated Testing Context</h3>
+        <table>
+            <tbody>
+                <tr><th scope="row">Auth Testing Enabled</th><td>No</td></tr>
+                <tr><th scope="row">Credentials Provided</th><td>No</td></tr>
+                <tr><th scope="row">Auth Method</th><td></td></tr>
+                <tr><th scope="row">Roles Tested</th><td></td></tr>
+                <tr><th scope="row">Auth Findings</th><td>0</td></tr>
+                <tr><th scope="row">Auth Bypass Attempts</th><td>0</td></tr>
+                <tr><th scope="row">Session Management Tested</th><td>No</td></tr>
+                <tr><th scope="row">Token Validation Tested</th><td>No</td></tr>
+                <tr><th scope="row">MFA Status</th><td>not_tested</td></tr>
+            </tbody>
+        </table>
+
+    <h3>Full Headers Analysis (All Endpoints)</h3>
+        <table>
+            <tbody>
+                <tr><th scope="row">Total Endpoints Scanned</th><td>0</td></tr>
+                <tr><th scope="row">Common Missing Headers</th><td></td></tr>
+            </tbody>
+        </table>
 </section><section class="valhalla-threat panel" id="threat-modeling">
     <h2>Threat Modeling and Attack Scenarios</h2>
-    <p>Based on identified vulnerabilities, probable attacker scenarios have been modeled.</p>
+    <p>Scenario text is limited to validated findings and documented coverage constraints.</p>
     <h3>Scenarios (AI)</h3>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
     <h3>Threat model excerpt (scan context, non-authoritative)</h3>
     <p class="meta"><small>Structured phase output summarized as labeled bullets — not a raw API/JSON dump. Hypothetical assets and model paths are <strong>not</strong> field-validated unless tied to a finding id in the table.</small></p>
-        <p class="empty">Not found</p>
+        <p class="empty">No threat-model excerpt was generated for this report context.</p>
 </section>
 
 <section class="findings valhalla-findings" id="findings">
@@ -995,12 +1073,12 @@
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">Injection</span>
                     </td>
-                    <td>Not found</td>
+                    <td>No CVE identifier provided</td>
                     <td>9.8</td>
                 </tr>
                     <tr class="poc-row">
                         <td colspan="11">
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                         </td>
                     </tr>
                 <tr>
@@ -1017,12 +1095,12 @@
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">Injection</span>
                     </td>
-                    <td>Not found</td>
+                    <td>No CVE identifier provided</td>
                     <td>8.6</td>
                 </tr>
                     <tr class="poc-row">
                         <td colspan="11">
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                         </td>
                     </tr>
                 <tr>
@@ -1039,12 +1117,12 @@
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">Broken Access Control</span>
                     </td>
-                    <td>Not found</td>
+                    <td>No CVE identifier provided</td>
                     <td>7.5</td>
                 </tr>
                     <tr class="poc-row">
                         <td colspan="11">
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                         </td>
                     </tr>
                 <tr>
@@ -1061,7 +1139,7 @@
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">Security Misconfiguration</span>
                     </td>
-                    <td>Not found</td>
+                    <td>No CVE identifier provided</td>
                     <td>4.3</td>
                 </tr>
                 <tr>
@@ -1078,12 +1156,12 @@
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">Authentication Failures</span>
                     </td>
-                    <td>Not found</td>
+                    <td>No CVE identifier provided</td>
                     <td>2.9</td>
                 </tr>
                     <tr class="poc-row">
                         <td colspan="11">
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                         </td>
                     </tr>
         </tbody>
@@ -1114,14 +1192,10 @@
     </table>
 </section><section class="panel active-web-scan" id="active-web-scan">
     <h2>Active Web Scanning</h2>
-    <p class="meta">Dynamic testing (phases <code>vuln_analysis</code>, <code>exploitation</code>): tool outputs in raw artifacts and condensed AI context for report sections.</p>
+    <p class="meta">Dynamic testing evidence is summarized in the Findings and Evidence Inventory sections. Raw storage paths and internal API endpoints are omitted from the customer report.</p>
 
         <p class="empty">No active scanning tools were identified from raw artifact names (or artifacts were not uploaded).</p>
 
-    <h3>Artifacts and API</h3>
-    <p>Raw logs are available in the <a href="#scan-artifacts">Phase Artifacts</a> section.
-        Additionally: <code>GET /api/v1/scans/scan-int-valhalla-1/artifacts?phase=vuln_analysis&amp;raw=true</code>,
-        <code>GET /api/v1/scans/scan-int-valhalla-1/artifacts?phase=exploitation&amp;raw=true</code>.</p>
 
         <h3>AI Context Summary (report sections)</h3>
             <h4>Vulnerability Description (AI)</h4>
@@ -1131,26 +1205,188 @@
 <p>Disable unrestricted upload.</p>
 <p>Rotate all PATs.</p></div>
 
-    <h3>Reflected Input Verification Example (curl)</h3>
-    <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
-    <pre class="ai-slot-body"><code>curl -sS -G &#39;https://TARGET.example/search&#39; --data-urlencode &#39;q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING&#39;</code></pre>
 </section>
 <section class="valhalla-exploit-chains panel" id="exploitation">
     <h2>Exploit Chain Analysis</h2>
-    <p>Description of how multiple vulnerabilities can be combined for critical impact.</p>
+    <p>Multi-step exploit chains with concrete payloads, commands, and exploitation steps are documented below.</p>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
 </section><section class="valhalla-remediation panel" id="remediation-priority">
     <h2>Recommendations and Prioritization</h2>
     <h3>Vulnerability Remediation Stages</h3>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
+
+    <h3>Remediation Matrix</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Finding ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>CVSS</th>
+                <th>Priority</th>
+                <th>Deadline</th>
+                <th>Effort</th>
+                <th>Est. Hours</th>
+                <th>Affected Layer</th>
+                <th>Owner Team</th>
+                <th>Component</th>
+                <th>Fix Action</th>
+                <th>Rollback Risk</th>
+                <th>Verification</th>
+                <th>Test Case</th>
+                <th>Acceptance Criteria</th>
+                <th>Dependencies</th>
+                <th>Business Impact</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code></code></td>
+                <td>SQLi at /api/v1/users</td>
+                <td>Critical</td>
+                <td>9.8</td>
+                <td>P0</td>
+                <td>48 hours</td>
+                <td>16h</td>
+                <td>16</td>
+                <td>app/unknown</td>
+                <td>Development team</td>
+                <td>Unknown component</td>
+                <td>Review finding details and apply appropriate fix</td>
+                <td>Assess before deployment</td>
+                <td>Re-test after fix applied</td>
+                <td>Verify finding is no longer reproducible</td>
+                <td>Finding no longer reproducible under same conditions</td>
+                <td>None</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><code></code></td>
+                <td>Reverse shell PoC in /upload</td>
+                <td>High</td>
+                <td>8.6</td>
+                <td>P0</td>
+                <td>48 hours</td>
+                <td>8h</td>
+                <td>8</td>
+                <td>app/unknown</td>
+                <td>Development team</td>
+                <td>Unknown component</td>
+                <td>Review finding details and apply appropriate fix</td>
+                <td>Assess before deployment</td>
+                <td>Re-test after fix applied</td>
+                <td>Verify finding is no longer reproducible</td>
+                <td>Finding no longer reproducible under same conditions</td>
+                <td>None</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><code></code></td>
+                <td>GitHub PAT leaked in JS bundle</td>
+                <td>High</td>
+                <td>7.5</td>
+                <td>P0</td>
+                <td>48 hours</td>
+                <td>8h</td>
+                <td>8</td>
+                <td>app/unknown</td>
+                <td>Development team</td>
+                <td>Unknown component</td>
+                <td>Review finding details and apply appropriate fix</td>
+                <td>Assess before deployment</td>
+                <td>Re-test after fix applied</td>
+                <td>Verify finding is no longer reproducible</td>
+                <td>Finding no longer reproducible under same conditions</td>
+                <td>None</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><code></code></td>
+                <td>Missing security headers</td>
+                <td>Medium</td>
+                <td>4.3</td>
+                <td>P1</td>
+                <td>2 weeks</td>
+                <td>4h</td>
+                <td>4</td>
+                <td>app/unknown</td>
+                <td>Development team</td>
+                <td>Unknown component</td>
+                <td>Review finding details and apply appropriate fix</td>
+                <td>Assess before deployment</td>
+                <td>Re-test after fix applied</td>
+                <td>Verify finding is no longer reproducible</td>
+                <td>Finding no longer reproducible under same conditions</td>
+                <td>None</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td><code></code></td>
+                <td>MySQL root password observed in CI script</td>
+                <td>Low</td>
+                <td>2.9</td>
+                <td>P2</td>
+                <td>1 month</td>
+                <td>2h</td>
+                <td>2</td>
+                <td>app/unknown</td>
+                <td>Development team</td>
+                <td>Unknown component</td>
+                <td>Review finding details and apply appropriate fix</td>
+                <td>Assess before deployment</td>
+                <td>Re-test after fix applied</td>
+                <td>Verify finding is no longer reproducible</td>
+                <td>Finding no longer reproducible under same conditions</td>
+                <td>None</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Tier 1 — Immediate (P0)</h3>
+    <p>No Tier 1 remediation items.</p>
+
+    <h3>Tier 2 — Short-Term (P1/P2)</h3>
+    <p>No Tier 2 remediation items.</p>
+
+    <h3>Tier 3 — Architectural (P3)</h3>
+    <p>No Tier 3 architectural items.</p>
+
     <h3>Priority Roadmap</h3>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
+    <h3>Infrastructure Recommendations</h3>
+    <h4>Technology-Specific Configuration</h4>
+    <pre class="code-block"># nginx.conf — security headers
+add_header Content-Security-Policy &#34;default-src &#39;self&#39;; script-src &#39;self&#39;; style-src &#39;self&#39; &#39;unsafe-inline&#39;; frame-ancestors &#39;none&#39;;&#34; always;
+add_header X-Content-Type-Options &#34;nosniff&#34; always;
+add_header X-Frame-Options &#34;SAMEORIGIN&#34; always;
+add_header Referrer-Policy &#34;strict-origin-when-cross-origin&#34; always;
+add_header Permissions-Policy &#34;geolocation=(), microphone=(), camera=()&#34; always;
+add_header Strict-Transport-Security &#34;max-age=31536000; includeSubDomains; preload&#34; always;
+</pre>
+    <h4>TLS / SSL Hardening</h4>
+    <pre class="code-block"># TLS Hardening Checklist
+# 1. Disable TLS 1.0 and 1.1 (nginx: ssl_protocols TLSv1.2 TLSv1.3;)
+# 2. Disable weak ciphers (RC4, DES, 3DES, EXPORT, NULL, aNULL, eNULL, MD5)
+# 3. Prioritize ECDHE ciphers for forward secrecy
+# 4. HSTS header: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+# 5. OCSP stapling enabled
+# 6. Certificate key size &gt;= 2048-bit RSA or ECDSA P-256+
+# 7. TLS certificate from trusted CA (not self-signed for production)
+
+# Verification commands:
+openssl s_client -connect target:443 -tls1_2 -servername target | openssl x509 -noout -text
+nmap --script ssl-enum-ciphers -p 443 target
+testssl.sh --severity HIGH target
+</pre>
+    <hr>
+
     <h3>Responsible Parties and Timelines</h3>
     <table>
         <thead>
@@ -1190,10 +1426,16 @@
     </table>
 </section>
 
+<section class="valhalla-ownership panel" id="ownership-evidence">
+    <h3>Endpoint Ownership Evidence</h3>
+    <p class="empty">No ownership evidence (WHOIS, TLS certificate, DNS, IP) was collected for this engagement. Ownership of the target could not be independently verified.</p>
+</section>
+
+
 <section class="valhalla-zero-day panel" id="zero-day-potential">
     <h2>Novel Vulnerability Indication</h2>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
 </section>
 
@@ -1206,7 +1448,7 @@
     <h3>Hardening Recommendations</h3>
     <p class="meta"><strong>HTTP security headers (stack-neutral):</strong> prefer a strict <strong>Content-Security-Policy</strong>, <strong>X-Content-Type-Options: nosniff</strong>, <strong>Referrer-Policy</strong>, a deliberate <strong>Permissions-Policy</strong>, framing control via <strong>CSP <code>frame-ancestors</code></strong> (or <code>X-Frame-Options</code> as a transitional measure), <strong>Strict-Transport-Security</strong> for HTTPS sites, and where appropriate <strong>Cross-Origin-Opener-Policy</strong> / <strong>Cross-Origin-Resource-Policy</strong>. Avoid legacy browser XSS filter headers (deprecated). Verify with <code>curl -sS -D- -o /dev/null &lt;url&gt;</code> (or equivalent) and review redirects.</p>
     <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
+            <p>AI generation skipped: could not generate content</p>
     </div>
     <h3>Remediation Steps and Production Readiness</h3>
     <div class="ai-slot-body">
@@ -1217,11 +1459,6 @@
     <h3>Additional Vulnerability Descriptions</h3>
     <div class="ai-slot-body">
             <p>LLM exec summary</p>
-    </div>
-</section><section class="valhalla-cost-summary panel" id="cost-summary">
-    <h2>LLM Cost Summary</h2>
-    <div class="ai-slot-body">
-            <p>AI generation skipped: no LLM provider available</p>
     </div>
 </section><style>
     .valhalla-exec {
@@ -1406,7 +1643,7 @@
 
     <h3>Executive Summary</h3>
     <div class="summary-card">
-        <p>During scan scan-int-valhalla-1 for tenant tenant-int-valhalla-1 as of 2026-04-19T10:00:00Z, ARGUS identified 5 finding(s) (1 CRITICAL, 2 HIGH, 1 MEDIUM, 1 LOW). Top business risk: payments.acme.example.com (composite score 49.00). Recommended priority: P0 (critical, SLA ≤ 7 days, 1 item(s)).</p>
+        <p>During scan scan-int-valhalla-1 for tenant tenant-int-valhalla-1 as of 2026-04-19T10:00:00Z, Svalbard Security Inc. identified 5 finding(s) (1 CRITICAL, 2 HIGH, 1 MEDIUM, 1 LOW). Top business risk: payments.acme.example.com (composite score 49.00). Recommended priority: P0 (critical, SLA ≤ 7 days, 1 item(s)).</p>
     </div>
     <div class="counts-row">
         <span class="counts-pill critical">CRITICAL: 1</span>
@@ -1843,21 +2080,19 @@
     </table>
 
     <p class="footer">
-        ARGUS Valhalla Executive Report — generated by ARGUS ReportService.
+        Svalbard Security Inc. Valhalla Executive Report — generated by Svalbard Security Inc. ReportService.
         This document is privileged and confidential. Distribute on a need-to-know basis only.
     </p>
 </section>
 <section class="valhalla-evidence-inventory panel" id="evidence-inventory">
-    <h3>Evidence Inventory</h3>
+    <h2>Evidence Inventory</h2>
     <p class="meta">This table lists evidence references used for findings and key technical sections. Storage paths, API keys, and raw JSON dumps are not included in the customer deliverable.</p>
         <p class="empty">No evidence inventory rows were generated for this export.</p>
-</section>
-
-        </main>
+</section>        </main>
     </div>
 
     <footer class="rpt-footer">
-        <span>ARGUS Valhalla</span>
+        <span>Svalbard Security Inc. Valhalla</span>
         <span>scan-int-valhalla-1</span>
     </footer>
 </div>

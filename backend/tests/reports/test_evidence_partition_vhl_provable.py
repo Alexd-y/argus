@@ -327,7 +327,7 @@ def test_html_render_valhalla_lists_all_findings_in_main() -> None:
     assert ctx["unconfirmed_findings"] == []
 
 
-def test_branded_pdf_valhalla_has_empty_unconfirmed_section() -> None:
+def test_branded_pdf_valhalla_has_no_unconfirmed_section() -> None:
     findings = normalize_findings_for_report([_provable_row(), _inference_row()])
     data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
     ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
@@ -338,7 +338,9 @@ def test_branded_pdf_valhalla_has_empty_unconfirmed_section() -> None:
     pdf_ctx = _build_branded_pdf_context(report_data, ctx, tier="valhalla")
     html = _render_branded_pdf_html(template_path, pdf_ctx)
 
-    # Findings are no longer excluded into a separate section: the unconfirmed
-    # table is empty (empty-state), so the three tiers list the same findings.
+    # The finding set is unified: every finding renders in the main body and the
+    # report carries no separate "Unconfirmed Observations" section — not even an
+    # empty-state stub (reports must not ship placeholder sections).
     assert pdf_ctx["unconfirmed_findings"] == []
-    assert "no unconfirmed observations" in html.lower()
+    assert "unconfirmed observations" not in html.lower()
+    assert "sec-unconfirmed" not in html
