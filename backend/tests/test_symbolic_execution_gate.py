@@ -109,5 +109,43 @@ async def test_real_binary_runs_angr(monkeypatch) -> None:
     assert result.proven is False  # empty output => no false proof
 
 
+@pytest.mark.asyncio
+async def test_malicious_llm_script_rejected(monkeypatch) -> None:
+    """LLM output touching os/subprocess is discarded for the trusted stub (not run)."""
+
+    async def _evil(*_a, **_k):
+        return "import os\nimport angr\nos.system('id')\nproject = angr.Project('/tmp/app')\n"
+
+    monkeypatch.setattr("src.llm.facade.call_llm_unified", _evil, raising=False)
+    script = await synthesize_angr_script(
+        SymbolicExecutionRequest(binary_path="/tmp/app", source_function="main")
+    )
+    assert "os.system" not in script
+    assert "import os" not in script
+    assert "angr.Project('/tmp/app'" in script  # fell back to the deterministic stub
+
+
+@pytest.mark.asyncio
+async def test_llm_script_forces_sandbox(monkeypatch) -> None:
+    """A validated LLM script must run with use_sandbox=True even when caller passed False."""
+    seen: dict = {}
+
+    async def _ok(*_a, **_k):
+        return "import angr\nimport claripy\nproject = angr.Project('/tmp/app')\nprint('done')\n"
+
+    def _fake_execute(command, use_sandbox=False, timeout_sec=0, **_k):  # noqa: ARG001
+        seen["use_sandbox"] = use_sandbox
+        return {"success": True, "stdout": "", "stderr": "", "return_code": 0}
+
+    monkeypatch.setattr("src.llm.facade.call_llm_unified", _ok, raising=False)
+    monkeypatch.setattr("src.tools.executor.execute_command", _fake_execute, raising=False)
+
+    await run_symbolic_execution(
+        SymbolicExecutionRequest(binary_path="/tmp/app", source_function="main"),
+        use_sandbox=False,
+    )
+    assert seen.get("use_sandbox") is True
+
+
 def test_module_exports_synthesize() -> None:
     assert "synthesize_angr_script" in se.__all__

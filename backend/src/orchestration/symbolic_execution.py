@@ -8,6 +8,7 @@ providing mathematical proof that user input can reach a dangerous sink.
 
 from __future__ import annotations
 
+import ast
 import logging
 import os
 import re
@@ -20,6 +21,86 @@ logger = logging.getLogger(__name__)
 
 _URL_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*://", re.IGNORECASE)
 _HOSTNAME_ONLY = re.compile(r"^[a-z0-9\-]+(\.[a-z0-9\-]+)+$", re.IGNORECASE)
+
+# Static allowlist for LLM-synthesized angr scripts. The script is written to disk
+# and executed with ``python3``; prompt inputs partly derive from scan/target data,
+# so unvalidated model output is a code-injection vector *into the scanner itself*.
+# Only an angr/claripy symbolic-execution script shape is permitted; anything that
+# could touch the OS, network, filesystem, or dynamic eval is rejected (→ trusted stub).
+_ALLOWED_SCRIPT_IMPORTS = frozenset(
+    {"angr", "claripy", "archinfo", "pyvex", "logging", "json", "sys"}
+)
+_FORBIDDEN_CALL_NAMES = frozenset(
+    {
+        "eval",
+        "exec",
+        "compile",
+        "__import__",
+        "open",
+        "input",
+        "breakpoint",
+        "globals",
+        "locals",
+        "vars",
+        "getattr",
+        "setattr",
+        "delattr",
+    }
+)
+_FORBIDDEN_NAMES = frozenset(
+    {
+        "os",
+        "subprocess",
+        "socket",
+        "shutil",
+        "pathlib",
+        "importlib",
+        "ctypes",
+        "builtins",
+        "__builtins__",
+        "pty",
+        "commands",
+        "requests",
+        "urllib",
+        "httpx",
+        "pickle",
+        "marshal",
+    }
+)
+
+
+def _validate_angr_script(code: str) -> bool:
+    """Static allowlist check on LLM-synthesized angr code before we execute it.
+
+    Returns True only when the code parses and contains nothing outside an
+    angr/claripy symbolic-execution shape: rejects non-allowlisted imports, dynamic
+    eval/exec/open, and any reference to os/subprocess/socket/etc. Rejected code is
+    discarded in favour of the trusted generated stub — model output is never run raw.
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(a.name.split(".")[0] not in _ALLOWED_SCRIPT_IMPORTS for a in node.names):
+                return False
+        elif isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".")[0] not in _ALLOWED_SCRIPT_IMPORTS:
+                return False
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in _FORBIDDEN_CALL_NAMES:
+                return False
+        elif isinstance(node, ast.Name):
+            if node.id in _FORBIDDEN_NAMES:
+                return False
+        elif isinstance(node, ast.Attribute):
+            root: ast.expr = node
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name) and root.id in _FORBIDDEN_NAMES:
+                return False
+    return True
 
 
 def _is_binary_target(binary_path: str) -> bool:
@@ -240,11 +321,12 @@ def _strip_code_fences(text: str) -> str:
     return s
 
 
-async def synthesize_angr_script(request: SymbolicExecutionRequest) -> str:
-    """Synthesize a target-specific angr script via the LLM (WRB, local).
+async def _build_angr_script(request: SymbolicExecutionRequest) -> tuple[str, bool]:
+    """Return ``(script, is_llm_synthesized)``.
 
-    Falls back to :func:`generate_angr_stub` (a valid generic explore script) when
-    the LLM is unavailable or returns nothing usable.
+    LLM output is accepted ONLY when it passes :func:`_validate_angr_script` (AST
+    allowlist) — otherwise it is discarded in favour of the deterministic, trusted
+    :func:`generate_angr_stub`. Model output is never executed raw.
     """
     system, user = build_symbolic_prompt(request)
     try:
@@ -258,17 +340,34 @@ async def synthesize_angr_script(request: SymbolicExecutionRequest) -> str:
             phase="symbolic_execution",
         )
         code = _strip_code_fences(out or "")
-        if code.strip() and "angr" in code:
-            return code
+        if code.strip() and "angr" in code and _validate_angr_script(code):
+            return code, True
+        if code.strip():
+            logger.warning(
+                "synthesize_angr_script: LLM script rejected by allowlist, using trusted stub"
+            )
     except Exception:
         logger.debug(
             "synthesize_angr_script: LLM unavailable, using generic stub", exc_info=True
         )
-    return generate_angr_stub(
-        request.binary_path,
-        source_function=request.source_function,
-        sink_function=request.sink_function,
+    return (
+        generate_angr_stub(
+            request.binary_path,
+            source_function=request.source_function,
+            sink_function=request.sink_function,
+        ),
+        False,
     )
+
+
+async def synthesize_angr_script(request: SymbolicExecutionRequest) -> str:
+    """Synthesize a target-specific angr script via the LLM (WRB, local).
+
+    Falls back to :func:`generate_angr_stub` when the LLM is unavailable or when its
+    output fails the AST allowlist. See :func:`_build_angr_script`.
+    """
+    code, _ = await _build_angr_script(request)
+    return code
 
 
 async def run_symbolic_execution(
@@ -298,7 +397,10 @@ async def run_symbolic_execution(
             duration_seconds=round(time.monotonic() - start, 2),
         )
 
-    angr_script = await synthesize_angr_script(request)
+    angr_script, _script_is_llm = await _build_angr_script(request)
+    # LLM-synthesized scripts ALWAYS run inside the sandbox, never on the host,
+    # regardless of the sandbox setting — defense in depth atop the AST allowlist.
+    effective_sandbox = True if _script_is_llm else use_sandbox
 
     from src.tools.executor import execute_command
 
@@ -310,13 +412,13 @@ async def run_symbolic_execution(
         with open(script_path, "w") as f:
             f.write(angr_script)
 
-        command = f"python3 {script_path}" if use_sandbox else f"python3 {script_path}"
+        command = f"python3 {script_path}"
 
         timeout = min(request.timeout_seconds, 300)
 
         result = execute_command(
             command,
-            use_sandbox=use_sandbox,
+            use_sandbox=effective_sandbox,
             timeout_sec=timeout,
         )
 
