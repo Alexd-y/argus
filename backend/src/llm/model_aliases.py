@@ -8,9 +8,13 @@ No vendor model names as product invariants.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
+from dataclasses import fields as _dc_fields
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -214,8 +218,39 @@ class AliasRegistry:
             )
 
     async def load_from_db(self, session) -> None:
-        """Merge aliases from DB — overrides env defaults per tenant."""
-        # Placeholder: read from llm_model_aliases table
+        """Merge per-tenant alias overrides from the ``llm_model_aliases`` table.
+
+        DB rows take precedence over the env/config defaults (same semantics as
+        :meth:`load_from_config`); tenant scoping is enforced by row-level security
+        on the session. Best-effort: a missing table or query error leaves the
+        env/config defaults intact (logged) rather than failing startup.
+        """
+        try:
+            from sqlalchemy import select
+
+            from src.db.models import LlmModelAlias
+
+            result = await session.execute(select(LlmModelAlias))
+            rows = list(result.scalars().all())
+        except Exception:
+            logger.debug(
+                "load_from_db: alias table unavailable; keeping env/config defaults",
+                exc_info=True,
+            )
+            return
+
+        valid = {f.name for f in _dc_fields(ProviderConfig)}
+        for row in rows:
+            providers = [
+                ProviderConfig(**{k: v for k, v in p.items() if k in valid})
+                for p in (row.providers or [])
+                if isinstance(p, dict)
+            ]
+            self._aliases[str(row.alias)] = ModelAlias(
+                alias=str(row.alias),
+                role=str(row.role or "planner"),
+                providers=providers,
+            )
 
     def resolve(self, alias: str) -> ModelAlias | None:
         return self._aliases.get(alias)

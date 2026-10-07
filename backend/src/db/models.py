@@ -1398,3 +1398,34 @@ class BountyProgram(Base):
     )
 
     __table_args__ = (Index("ix_bounty_programs_tenant_id", "tenant_id"),)
+
+
+class LlmModelAlias(Base):
+    """Per-tenant LLM alias override — merged over env/config defaults at startup.
+
+    One row per ``(tenant_id, alias)``. ``providers`` holds the list of provider
+    configs in the same shape ``AliasRegistry.load_from_config`` consumes
+    (``[{"key","base_url","model","cloud_allowed","price_input_per_million_usd",
+    "price_output_per_million_usd"}, ...]``). DB rows override env/config defaults so
+    an operator can remap any logical alias per tenant without a redeploy.
+    """
+
+    __tablename__ = "llm_model_aliases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String(128), nullable=False)
+    role: Mapped[str] = mapped_column(String(64), nullable=False, default="planner")
+    providers: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        Index("ix_llm_model_aliases_tenant_alias", "tenant_id", "alias", unique=True),
+    )
