@@ -1335,6 +1335,12 @@ class Settings(BaseSettings):
     # RPT / Valhalla — отображаемое имя исполнителя на титульном листе отчёта.
     # Env: REPORT_EXECUTOR_DISPLAY_NAME
     report_executor_display_name: str = "Ragnarok Security"
+    # Phase 14.3 — require every factual report paragraph to carry a [CL-…]/[E-…]
+    # evidence reference (enforced by prose_gate). Default False: references are
+    # minted (evidence_references) but not yet emitted into free LLM prose, so
+    # enforcing would block current reports. Operators who emit references can opt in.
+    # Env: REPORT_REQUIRE_PROSE_REFERENCES
+    report_require_prose_references: bool = False
     # VA-007 — after vuln findings, exploitation phase may enqueue Celery sqlmap (policy + approval)
     va_exploit_aggressive_enabled: bool = False
     # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)

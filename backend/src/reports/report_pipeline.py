@@ -211,10 +211,16 @@ def _compute_valhalla_release_blockers(
         llm_analysis_status=llm_analysis_status,
     )
 
-    # Phase N — prose discipline on the rendered text. Reference-requirement is off
-    # here (per-claim [CL-…]/[E-…] linking is Phase 14.3, not yet emitted); only the
-    # unconditional stop-list / absolute-safety BLOCK rules apply to current reports.
-    for pv in blocking_prose_violations(evaluate_prose(report_text, require_references=False)):
+    # Phase N — prose discipline on the rendered text. Reference-requirement defaults
+    # off (per-claim [CL-…]/[E-…] linking is Phase 14.3; references are minted by
+    # evidence_references but not yet emitted into free LLM prose, so enforcing would
+    # block current reports). Operators who emit references opt in via
+    # settings.report_require_prose_references; the unconditional stop-list /
+    # absolute-safety BLOCK rules always apply.
+    _require_refs = bool(settings.report_require_prose_references)
+    for pv in blocking_prose_violations(
+        evaluate_prose(report_text, require_references=_require_refs)
+    ):
         blockers.append(f"PROSE: {pv.rule}: {pv.detail}")
 
     # Phase O — severity / CVSS / review consistency on the snapshot findings.
