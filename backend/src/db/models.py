@@ -951,6 +951,11 @@ class AdminUser(Base):
     mfa_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"), default=False
     )
+    #: C7-T03 — UTC timestamp set when confirm_enrollment first flips mfa_enabled
+    #: to True (Alembic 071). NULL for never-enrolled rows; surfaced by GET /status.
+    mfa_enrolled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     #: C7-T01 — Fernet ciphertext of the base32 TOTP secret. Encryption key
     #: comes from ``Settings.admin_mfa_keyring`` (CSV of base64 keys, newest
     #: first). Plaintext NEVER hits disk and MUST NOT be logged. ``NULL``

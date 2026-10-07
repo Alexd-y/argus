@@ -374,6 +374,7 @@ class _AdminMfaSnapshot:
     enabled: bool
     secret_encrypted: bytes | None
     backup_codes_count: int
+    enrolled_at: datetime | None = None
 
 
 async def _load_admin_mfa_snapshot(db: AsyncSession, *, subject: str) -> _AdminMfaSnapshot | None:
@@ -382,15 +383,22 @@ async def _load_admin_mfa_snapshot(db: AsyncSession, *, subject: str) -> _AdminM
         AdminUser.mfa_enabled,
         AdminUser.mfa_secret_encrypted,
         AdminUser.mfa_backup_codes_hash,
+        AdminUser.mfa_enrolled_at,
     ).where(AdminUser.subject == subject)
     row = (await db.execute(stmt)).one_or_none()
     if row is None:
         return None
     backup_codes = row.mfa_backup_codes_hash or []
+    # SQLite (test/dev) drops tzinfo on read-back; re-attach UTC so the response
+    # schema's AwareUtcDatetime accepts it. Postgres timestamptz is already aware.
+    enrolled = row.mfa_enrolled_at
+    if isinstance(enrolled, datetime) and enrolled.tzinfo is None:
+        enrolled = enrolled.replace(tzinfo=UTC)
     return _AdminMfaSnapshot(
         enabled=bool(row.mfa_enabled),
         secret_encrypted=row.mfa_secret_encrypted,
         backup_codes_count=len(backup_codes),
+        enrolled_at=enrolled,
     )
 
 
@@ -495,6 +503,7 @@ def _build_qr_data_uri(otpauth_uri: str) -> str | None:
 )
 async def admin_mfa_enroll(
     body: MFAEnrollRequest,  # noqa: ARG001 - FastAPI route signature; param bound by the framework
+    request: Request,
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFAEnrollResponse:
@@ -570,6 +579,12 @@ async def admin_mfa_enroll(
         extra={
             "event": "argus.auth.admin_mfa.enroll",
             "subject": subject,
+            # Audit correlation (spec C7-T03). ``session_id`` is the NON-secret
+            # session-token hash (never the raw cookie) — the same value used as the
+            # admin_sessions key — so the event is traceable without leaking a token.
+            "session_id": hash_session_token(session.raw_session_id),
+            "request_id": request.headers.get("x-request-id", ""),
+            "client_ip": _client_ip(request),
             "backup_codes_count": len(backup_codes_plain),
         },
     )
@@ -1104,7 +1119,7 @@ async def admin_mfa_status(
 
     return MFAStatusResponse(
         enabled=snapshot.enabled,
-        enrolled_at=None,  # see schema docstring (follow-up Alembic 03N)
+        enrolled_at=snapshot.enrolled_at,  # Alembic 071 — null until first enrol
         remaining_backup_codes=remaining,
         mfa_passed_for_session=fresh,
     )

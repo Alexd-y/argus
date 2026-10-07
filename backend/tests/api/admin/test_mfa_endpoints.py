@@ -119,7 +119,7 @@ from src.db.session import get_db
 
 _BACKEND_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 _VERSIONS_DIR: Final[Path] = _BACKEND_ROOT / "alembic" / "versions"
-_MIGRATION_CHAIN: Final[tuple[str, ...]] = ("028", "030", "031", "032")
+_MIGRATION_CHAIN: Final[tuple[str, ...]] = ("028", "030", "031", "032", "071")
 
 _PASSWORD: Final[str] = "Tr0ub4dor&3-not-the-real-one"
 _SUBJECT_ADMIN: Final[str] = "c7-t03-admin@argus.example"
@@ -829,12 +829,8 @@ class TestMFAStatus:
     async def test_status_post_confirm_reports_enabled_and_fresh(
         self, mfa_client: AsyncClient, session_factory: Any
     ) -> None:
-        """E2 — post-confirm: ``enabled=True``, ``mfa_passed_for_session=True``.
-
-        ``enrolled_at`` is documented as ``None`` in the schema (the
-        032 migration does not add a dedicated timestamp; a follow-up
-        Alembic 03N will). So we DO NOT assert it is set; we DO assert the
-        column is present in the response and JSON-serialisable.
+        """E2 — post-confirm: ``enabled=True``, ``mfa_passed_for_session=True``,
+        and ``enrolled_at`` is now a real UTC timestamp (Alembic 071).
         """
         await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
@@ -847,7 +843,11 @@ class TestMFAStatus:
         assert body["enabled"] is True
         assert body["mfa_passed_for_session"] is True
         assert body["remaining_backup_codes"] == 10
-        assert "enrolled_at" in body  # current contract: None until 03N
+        # enrolled_at is now persisted (Alembic 071) and set on confirm.
+        assert body["enrolled_at"] is not None
+        from datetime import datetime
+
+        datetime.fromisoformat(body["enrolled_at"])  # JSON-serialisable ISO-8601
 
     async def test_status_post_confirm_with_expired_window_reports_stale(
         self,
@@ -1127,12 +1127,10 @@ class TestMFAAuditLogs:
         session_factory: Any,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """H1 — ``argus.auth.admin_mfa.enroll`` carries ``subject``; no secret leaks.
-
-        Spec asks for ``session_id``, ``request_id``, ``client_ip`` in the
-        payload; current impl emits ``subject`` + ``backup_codes_count`` only.
-        We assert the keys actually present so this test stays meaningful;
-        a follow-up ticket will widen the payload.
+        """H1 — enroll event carries ``subject`` + audit correlation
+        (``session_id`` hash, ``request_id``, ``client_ip``) per spec C7-T03; no
+        secret material leaks. ``session_id`` is the NON-secret session-token hash,
+        never the raw cookie.
         """
         caplog.set_level(logging.INFO, logger=_MFA_ENROLL_LOGGER)
         await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
@@ -1147,6 +1145,10 @@ class TestMFAAuditLogs:
         assert records, "expected one argus.auth.admin_mfa.enroll record"
         rec = records[-1]
         assert getattr(rec, "subject", None) == _SUBJECT_ADMIN
+        # Audit correlation fields present (C7-T03).
+        assert isinstance(getattr(rec, "session_id", None), str) and rec.session_id
+        assert isinstance(getattr(rec, "client_ip", None), str)
+        assert hasattr(rec, "request_id")
         forbidden = {secret, resp.json()["secret_uri"], *codes}
         _assert_no_secret_material(rec, forbidden)
 

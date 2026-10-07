@@ -386,12 +386,13 @@ async def confirm_enrollment(
         # admin would otherwise be enrolled without recovery codes.
         if not state.backup_codes_hash:
             raise AdminMfaError("backup_codes_required")
-        update_values: dict[str, object] = {"mfa_enabled": True}
+        update_values: dict[str, object] = {"mfa_enabled": True, "mfa_enrolled_at": _utcnow()}
         emitted_count = len(state.backup_codes_hash)
     else:
         backup_hashes = [_bcrypt_hash(_normalize_backup_code(c)) for c in generated_codes]
         update_values = {
             "mfa_enabled": True,
+            "mfa_enrolled_at": _utcnow(),
             "mfa_backup_codes_hash": backup_hashes,
         }
         emitted_count = len(backup_hashes)

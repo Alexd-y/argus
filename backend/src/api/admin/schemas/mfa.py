@@ -296,10 +296,9 @@ class MFAStatusResponse(BaseModel):
     enrolled_at: AwareUtcDatetime | None = Field(
         default=None,
         description=(
-            "Reserved for future use. The current schema (Alembic 032) "
-            "does not persist a dedicated enrolment timestamp; the field "
-            "is reported as ``None`` for now and a follow-up migration "
-            "will introduce ``admin_users.mfa_enrolled_at``."
+            "UTC timestamp when the admin first completed MFA enrolment "
+            "(``admin_users.mfa_enrolled_at``, Alembic 071). ``None`` for admins "
+            "who have never enrolled."
         ),
     )
     remaining_backup_codes: int | None = Field(
