@@ -108,5 +108,31 @@ async def test_real_harness_runs_fuzzer(monkeypatch) -> None:
     assert ran["execute"] >= 1  # fuzzer ran (python is not compiled → no compile gate)
 
 
+@pytest.mark.asyncio
+async def test_llm_harness_forces_sandbox(monkeypatch) -> None:
+    """An LLM-synthesized harness must compile/run with use_sandbox=True even when
+    the caller passed use_sandbox=False (defense in depth)."""
+    seen: list = []
+
+    async def _ok(*_a, **_k):
+        return (
+            "#include <stdint.h>\nint LLVMFuzzerTestOneInput(const uint8_t *d, size_t n){\n"
+            "    parse(d, n); return 0;\n}\n"
+        )
+
+    def _fake_execute(command, use_sandbox=False, timeout_sec=0, **_k):  # noqa: ARG001
+        seen.append(use_sandbox)
+        return {"success": True, "stdout": "", "stderr": "", "return_code": 0}
+
+    monkeypatch.setattr("src.llm.facade.call_llm_unified", _ok, raising=False)
+    monkeypatch.setattr("src.tools.executor.execute_command", _fake_execute, raising=False)
+
+    await run_fuzzing_campaign(
+        FuzzingRequest(target_binary="app", language="c", engine="libfuzzer"),
+        use_sandbox=False,
+    )
+    assert seen and all(s is True for s in seen)  # compile + run both sandboxed
+
+
 def test_module_exports_synthesize() -> None:
     assert "synthesize_harness" in fuzzing.__all__

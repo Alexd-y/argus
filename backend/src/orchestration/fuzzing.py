@@ -285,8 +285,16 @@ async def run_fuzzing_campaign(
 
     if request.harness_source and request.harness_source.strip():
         harness, is_stub = request.harness_source, _is_stub_harness(request.harness_source)
+        harness_is_llm = False
     else:
         harness, is_stub = await synthesize_harness(request)
+        harness_is_llm = not is_stub
+
+    # An LLM-synthesized harness is model-authored code we compile and execute, so it
+    # ALWAYS runs inside the sandbox regardless of the sandbox setting (defense in
+    # depth, symmetric with symbolic execution). A caller-provided harness keeps the
+    # caller's setting.
+    effective_sandbox = True if harness_is_llm else use_sandbox
 
     if is_stub:
         # Honesty gate (P0-1): a no-op harness cannot find real bugs, so running it and
@@ -332,7 +340,7 @@ async def run_fuzzing_campaign(
             compile_cmd = compile_tmpl.format(
                 harness=harness_path, sources=source_path, fuzz_bin=fuzz_bin
             )
-            comp = execute_command(compile_cmd, use_sandbox=use_sandbox, timeout_sec=120)
+            comp = execute_command(compile_cmd, use_sandbox=effective_sandbox, timeout_sec=120)
             if not comp.get("success", False):
                 return FuzzingResult(
                     engine=request.engine,
@@ -351,7 +359,7 @@ async def run_fuzzing_campaign(
         )
 
         timeout = min(request.timeout_seconds, 600)
-        result = execute_command(command, use_sandbox=use_sandbox, timeout_sec=timeout)
+        result = execute_command(command, use_sandbox=effective_sandbox, timeout_sec=timeout)
 
         crashes = _parse_crashes_from_output(
             result.get("stdout", ""),
