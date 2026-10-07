@@ -44,14 +44,14 @@ Security invariants
   ``mfa_not_enabled``, ...) that the SOC's SIEM rules can pivot on
   without parsing free-form text.
 
-QR encoding TODO
-----------------
-``backend/requirements.txt`` does not pin ``qrcode`` or ``segno`` as of
-C7-T03 (verified via ``rg`` against the file). Per the C7-T03 hard rule
-"DO NOT add new pip deps", :data:`MFAEnrollResponse.qr_data_uri` is
-returned as ``None``; the frontend renders the URI as text. A follow-up
-ticket will add ``segno`` (zero C-extension footprint) once SCA review
-approves.
+QR encoding
+-----------
+:data:`MFAEnrollResponse.qr_data_uri` is rendered via an OPTIONAL QR library
+(``segno`` preferred, ``qrcode`` fallback) in :func:`_build_qr_data_uri`. No hard
+pip dependency is added (SCA-gated): when neither library is installed the field
+stays ``None`` and the frontend renders the ``otpauth://`` URI as text, exactly as
+before. Installing ``segno`` (zero C-extension footprint) enables a scannable PNG
+QR with no code change.
 """
 
 from __future__ import annotations
@@ -451,6 +451,40 @@ def _build_otpauth_uri(*, subject: str, secret_b32: str) -> str:
     return str(pyotp.TOTP(secret_b32).provisioning_uri(name=subject, issuer_name=_TOTP_ISSUER))
 
 
+def _build_qr_data_uri(otpauth_uri: str) -> str | None:
+    """Render ``otpauth_uri`` as a base64 PNG ``data:`` URI, or ``None``.
+
+    Uses an OPTIONAL QR library (``segno`` preferred, ``qrcode`` fallback) so no
+    hard pip dependency is added (SCA-gated): when neither is installed the enroll
+    response keeps ``qr_data_uri=None`` and the frontend renders the URI as text,
+    exactly as before. Install ``segno`` (zero C-extension footprint) to enable a
+    scannable QR. Never raises — any failure degrades to ``None``.
+    """
+    import base64
+    import io
+
+    try:
+        import segno  # type: ignore[import-untyped]
+
+        buf = io.BytesIO()
+        segno.make(otpauth_uri, error="m").save(buf, kind="png", scale=4)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        logger.debug("mfa_qr: segno unavailable, trying qrcode", exc_info=True)
+
+    try:
+        import qrcode  # type: ignore[import-untyped]
+
+        buf = io.BytesIO()
+        qrcode.make(otpauth_uri).save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        logger.debug("mfa_qr: no QR library available; returning None", exc_info=True)
+        return None
+
+
 @router.post(
     "/enroll",
     response_model=MFAEnrollResponse,
@@ -542,7 +576,7 @@ async def admin_mfa_enroll(
 
     return MFAEnrollResponse(
         secret_uri=secret_uri,
-        qr_data_uri=None,  # see module docstring "QR encoding TODO"
+        qr_data_uri=_build_qr_data_uri(secret_uri),  # None unless an optional QR lib is installed
         backup_codes=backup_codes_plain,
     )
 
