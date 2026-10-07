@@ -63,13 +63,13 @@ Target: https://app.example.test
 
 Server header leaks nginx/1.18.0.</system-out>
     </testcase>
-    <testcase classname="argus.findings.info" name="0009. HTTP allowed alongside HTTPS" time="0">
+    <testcase classname="argus.findings.informational" name="0009. HTTP allowed alongside HTTPS" time="0">
       <system-out>[INFO] HTTP allowed alongside HTTPS
 Target: https://app.example.test
 
 Plain HTTP returns 200 OK.</system-out>
     </testcase>
-    <testcase classname="argus.findings.info" name="0010. Open directory listing" time="0">
+    <testcase classname="argus.findings.informational" name="0010. Open directory listing" time="0">
       <system-out>[INFO] Open directory listing
 Target: https://app.example.test
 

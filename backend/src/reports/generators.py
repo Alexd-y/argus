@@ -1019,42 +1019,51 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
     return findings
 
 
+def _copy_finding(f: Finding) -> Finding:
+    """Shallow, independent copy of a finding (pydantic model or plain object)."""
+    try:
+        return f.model_copy()  # pydantic v2
+    except AttributeError:
+        import copy as _copy
+
+        return _copy.copy(f)
+
+
 def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
-    """High severity requires VALIDATED status. XSS High requires browser proof."""
+    """High severity requires VALIDATED status. XSS High requires browser proof.
+
+    Pure: never mutates the caller's Finding objects. Reports must be idempotent —
+    rendering the same ``ReportData`` twice must be byte-identical (bundles are
+    SHA-256 hashed and snapshot-tested). In-place mutation made a critical finding
+    downgrade ``critical -> high`` on the first render and then ``high -> medium``
+    on the second, so repeated renders diverged. We downgrade on a copy and return
+    a new list instead.
+    """
+    out: list[Finding] = []
     for f in findings:
         sev = str(_safe_attr(f, "severity") or "").lower()
         ec = str(getattr(f, "evidence_classification", "") or "").upper()
+        new_sev: str | None = None
         if sev == "high" and ec != "VALIDATED":
+            new_sev = "medium"
+        elif sev == "critical" and ec != "VALIDATED":
+            new_sev = "high"
+        if new_sev is not None:
             try:
-                f.severity = "medium"
+                f = _copy_finding(f)
+                f.severity = new_sev
                 logger.warning(
-                    "severity_downgraded_no_validated",
-                    extra={
-                        "finding_id": getattr(f, "id", "?"),
-                        "from": "high",
-                        "to": "medium",
-                    },
+                    "severity_downgraded_no_validated"
+                    if sev == "high"
+                    else "severity_downgraded_critical_no_validated",
+                    extra={"finding_id": getattr(f, "id", "?"), "from": sev, "to": new_sev},
                 )
             except Exception:
                 logger.debug(
                     "enforce_severity_by_evidence: suppressed best-effort error", exc_info=True
                 )
-        if sev == "critical" and ec != "VALIDATED":
-            try:
-                f.severity = "high"
-                logger.warning(
-                    "severity_downgraded_critical_no_validated",
-                    extra={
-                        "finding_id": getattr(f, "id", "?"),
-                        "from": "critical",
-                        "to": "high",
-                    },
-                )
-            except Exception:
-                logger.debug(
-                    "enforce_severity_by_evidence: suppressed best-effort error", exc_info=True
-                )
-    return findings
+        out.append(f)
+    return out
 
 
 def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
@@ -1929,7 +1938,16 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
     from src.reports.valhalla_report_context import get_brand
 
     brand = get_brand()
-    now_utc = datetime.now(UTC).isoformat()
+    # Deterministic evidence timestamp: tie the fallback to the report's own
+    # ``created_at`` rather than wall-clock ``now`` so repeated renders of the
+    # same ReportData are byte-identical (report bundles are SHA-256 hashed and
+    # snapshot-tested). Wall-clock ``now`` made every render diverge.
+    if isinstance(data.created_at, datetime):
+        now_utc = data.created_at.isoformat()
+    elif data.created_at:
+        now_utc = str(data.created_at)
+    else:
+        now_utc = datetime.now(UTC).isoformat()
 
     # Single finding set across ALL tiers: every tier (Valhalla included) renders
     # the same findings in its body, so the UI and the three report tiers match.

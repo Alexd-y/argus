@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARGUS Report — https://acme.example.com</title>
+    <title>Svalbard Security Inc. Report — https://acme.example.com</title>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
         h1 { color: #1a1a2e; }
@@ -56,7 +56,7 @@
     </style>
 </head>
 <body>
-    <h1>ARGUS Security Report</h1>
+    <h1>Svalbard Security Inc. Report</h1>
     <p class="meta">
         <span class="tier-badge">asgard</span>
             — Asgard (technical)
@@ -68,23 +68,26 @@
             nginx, django
     </p>
     <p><strong>Severity counts:</strong>
-                critical: 1;                 high: 2;                 medium: 1;                 low: 1;                 info: 0    </p>
+                critical: 1;                 high: 2;                 medium: 1;                 low: 1;                 info: 0;                 unknown: 0    </p>
     <p><strong>Phase I/O:</strong> inputs 0, outputs 1; timeline entries 2; findings 5</p>
         <h3>Timeline (preview)</h3>
         <ul class="timeline">
-                <li><strong>recon</strong> (#0): {&#39;phase&#39;: &#39;started&#39;}</li>
-                <li><strong>exploit</strong> (#1): {&#39;phase&#39;: &#39;rce&#39;}</li>
+                <li><strong>recon</strong> (#0): completed</li>
+                <li><strong>exploit</strong> (#1): completed</li>
         </ul>
 </section><section class="findings" id="findings">
     <h2>Findings</h2>
 <section class="owasp-compliance" id="owasp-top10-compliance">
-    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 Compliance</h3>
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 compliance mapping</h3>
+    <p class="meta"><small>Security misconfiguration and HTTP header gaps map to <strong>A02:2025</strong> — Security Misconfiguration.</small></p>
     <table class="owasp-compliance-table">
         <thead>
             <tr>
                 <th scope="col">Category</th>
                 <th scope="col">Description</th>
-                <th scope="col" class="owasp-compliance-count-col">Findings Present</th>
+                <th scope="col">Assessed</th>
+                <th scope="col">Result</th>
+                <th scope="col" class="owasp-compliance-count-col">Findings</th>
             </tr>
         </thead>
         <tbody>
@@ -93,90 +96,120 @@
                     <span class="owasp-compliance-code"><code>A01</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Broken Access Control</span>
+                    <span class="owasp-compliance-title-ru">Нарушение контроля доступа</span>
                 </td>
                 <td class="owasp-compliance-desc">Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.</td>
-                <td class="owasp-compliance-presence">Yes</td>
+                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-result">Finding present</td>
+                <td class="owasp-compliance-presence">1</td>
             </tr>
             <tr class="owasp-compliance-warn">
                 <td class="owasp-compliance-category" title="Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.">
                     <span class="owasp-compliance-code"><code>A02</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Security Misconfiguration</span>
+                    <span class="owasp-compliance-title-ru">Небезопасная конфигурация</span>
                 </td>
                 <td class="owasp-compliance-desc">Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.</td>
-                <td class="owasp-compliance-presence">Yes</td>
+                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-result">Finding present</td>
+                <td class="owasp-compliance-presence">1</td>
             </tr>
-            <tr class="owasp-compliance-0">
+            <tr class="owasp-compliance-not-assessed">
                 <td class="owasp-compliance-category" title="Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.">
                     <span class="owasp-compliance-code"><code>A03</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Software Supply Chain Failures</span>
+                    <span class="owasp-compliance-title-ru">Сбои цепочки поставки ПО</span>
                 </td>
                 <td class="owasp-compliance-desc">Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.</td>
-                <td class="owasp-compliance-presence">No</td>
+                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-result">Not assessed</td>
+                <td class="owasp-compliance-presence">Not assessed</td>
             </tr>
             <tr class="owasp-compliance-warn">
                 <td class="owasp-compliance-category" title="TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.">
                     <span class="owasp-compliance-code"><code>A04</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Cryptographic Failures</span>
+                    <span class="owasp-compliance-title-ru">Криптографические сбои</span>
                 </td>
                 <td class="owasp-compliance-desc">Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.</td>
-                <td class="owasp-compliance-presence">Yes</td>
+                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-result">Finding present</td>
+                <td class="owasp-compliance-presence">1</td>
             </tr>
             <tr class="owasp-compliance-warn">
                 <td class="owasp-compliance-category" title="Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.">
                     <span class="owasp-compliance-code"><code>A05</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Injection</span>
+                    <span class="owasp-compliance-title-ru">Инъекции</span>
                 </td>
                 <td class="owasp-compliance-desc">SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.</td>
-                <td class="owasp-compliance-presence">Yes</td>
+                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-result">Finding present</td>
+                <td class="owasp-compliance-presence">1</td>
             </tr>
-            <tr class="owasp-compliance-0">
+            <tr class="owasp-compliance-not-assessed">
                 <td class="owasp-compliance-category" title="Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.">
                     <span class="owasp-compliance-code"><code>A06</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Insecure Design</span>
+                    <span class="owasp-compliance-title-ru">Небезопасное проектирование</span>
                 </td>
                 <td class="owasp-compliance-desc">Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.</td>
-                <td class="owasp-compliance-presence">No</td>
+                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-result">Not assessed</td>
+                <td class="owasp-compliance-presence">Not assessed</td>
             </tr>
             <tr class="owasp-compliance-warn">
                 <td class="owasp-compliance-category" title="MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.">
                     <span class="owasp-compliance-code"><code>A07</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Authentication Failures</span>
+                    <span class="owasp-compliance-title-ru">Сбои аутентификации</span>
                 </td>
                 <td class="owasp-compliance-desc">Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.</td>
-                <td class="owasp-compliance-presence">Yes</td>
+                <td class="owasp-compliance-assessed">Assessed</td>
+                <td class="owasp-compliance-result">Finding present</td>
+                <td class="owasp-compliance-presence">1</td>
             </tr>
-            <tr class="owasp-compliance-0">
+            <tr class="owasp-compliance-not-assessed">
                 <td class="owasp-compliance-category" title="Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.">
                     <span class="owasp-compliance-code"><code>A08</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Software or Data Integrity Failures</span>
+                    <span class="owasp-compliance-title-ru">Сбои целостности ПО и данных</span>
                 </td>
                 <td class="owasp-compliance-desc">Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.</td>
-                <td class="owasp-compliance-presence">No</td>
+                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-result">Not assessed</td>
+                <td class="owasp-compliance-presence">Not assessed</td>
             </tr>
-            <tr class="owasp-compliance-0">
+            <tr class="owasp-compliance-not-assessed">
                 <td class="owasp-compliance-category" title="Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.">
                     <span class="owasp-compliance-code"><code>A09</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Security Logging &amp; Alerting Failures</span>
+                    <span class="owasp-compliance-title-ru">Сбои журналирования и оповещения</span>
                 </td>
                 <td class="owasp-compliance-desc">Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.</td>
-                <td class="owasp-compliance-presence">No</td>
+                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-result">Not assessed</td>
+                <td class="owasp-compliance-presence">Not assessed</td>
             </tr>
-            <tr class="owasp-compliance-0">
+            <tr class="owasp-compliance-not-assessed">
                 <td class="owasp-compliance-category" title="Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.">
                     <span class="owasp-compliance-code"><code>A10</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">Mishandling of Exceptional Conditions</span>
+                    <span class="owasp-compliance-title-ru">Неверная обработка исключительных ситуаций</span>
                 </td>
                 <td class="owasp-compliance-desc">Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.</td>
-                <td class="owasp-compliance-presence">No</td>
+                <td class="owasp-compliance-assessed">Not assessed</td>
+                <td class="owasp-compliance-result">Not assessed</td>
+                <td class="owasp-compliance-presence">Not assessed</td>
             </tr>
         </tbody>
     </table>
@@ -189,6 +222,9 @@
                 <th>CWE</th>
                 <th>OWASP Category</th>
                 <th>CVSS</th>
+                <th>Evidence Quality</th>
+                <th>Validation Status</th>
+                <th>Confidence</th>
             </tr>
         </thead>
         <tbody>
@@ -203,9 +239,12 @@
                             <span class="owasp-finding-label">Injection</span>
                     </td>
                     <td>9.8</td>
+                    <td>none</td>
+                    <td>unverified</td>
+                    <td>confirmed</td>
                 </tr>
                         <tr class="poc-row">
-                            <td colspan="6">
+                            <td colspan="9">
                                 <p class="finding-poc-empty">No PoC available</p>
                             </td>
                         </tr>
@@ -220,9 +259,12 @@
                             <span class="owasp-finding-label">Broken Access Control</span>
                     </td>
                     <td>8.6</td>
+                    <td>none</td>
+                    <td>unverified</td>
+                    <td>confirmed</td>
                 </tr>
                         <tr class="poc-row">
-                            <td colspan="6">
+                            <td colspan="9">
                                 <p class="finding-poc-empty">No PoC available</p>
                             </td>
                         </tr>
@@ -237,9 +279,12 @@
                             <span class="owasp-finding-label">Cryptographic Failures</span>
                     </td>
                     <td>7.5</td>
+                    <td>none</td>
+                    <td>unverified</td>
+                    <td>confirmed</td>
                 </tr>
                         <tr class="poc-row">
-                            <td colspan="6">
+                            <td colspan="9">
                                 <p class="finding-poc-empty">No PoC available</p>
                             </td>
                         </tr>
@@ -254,6 +299,9 @@
                             <span class="owasp-finding-label">Security Misconfiguration</span>
                     </td>
                     <td>—</td>
+                    <td>none</td>
+                    <td>unverified</td>
+                    <td>likely</td>
                 </tr>
                 <tr>
                     <td><span class="sev-low">low</span></td>
@@ -266,9 +314,12 @@
                             <span class="owasp-finding-label">Authentication Failures</span>
                     </td>
                     <td>—</td>
+                    <td>none</td>
+                    <td>unverified</td>
+                    <td>possible</td>
                 </tr>
                         <tr class="poc-row">
-                            <td colspan="6">
+                            <td colspan="9">
                                 <p class="finding-poc-empty">No PoC available</p>
                             </td>
                         </tr>
@@ -280,10 +331,10 @@
 
         <p class="empty">No active scanning tools were identified from raw artifact names (or artifacts were not uploaded).</p>
 
-    <h3>Artifacts and API</h3>
-    <p>Raw logs are available in the <a href="#scan-artifacts">Phase Artifacts</a> section.
-        Additionally: <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=vuln_analysis&amp;raw=true</code>,
-        <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=exploitation&amp;raw=true</code>.</p>
+        <h3>Artifacts and API</h3>
+        <p>Raw logs are available in the <a href="#scan-artifacts">Phase Artifacts</a> section.
+            Additionally: <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=vuln_analysis&amp;raw=true</code>,
+            <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=exploitation&amp;raw=true</code>.</p>
 
         <h3>AI Context Summary (report sections)</h3>
             <h4>Vulnerability Description (AI)</h4>
@@ -293,9 +344,9 @@
 <p>Disable unrestricted upload.</p>
 <p>Rotate all PATs.</p></div>
 
-    <h3>Reflected Input Verification Example (curl)</h3>
-    <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
-    <pre class="ai-slot-body"><code>curl -sS -G &#39;https://TARGET.example/search&#39; --data-urlencode &#39;q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING&#39;</code></pre>
+        <h3>Reflected Input Verification Example (curl)</h3>
+        <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
+        <pre class="ai-slot-body"><code>curl -sS -G &#39;https://TARGET.example/search&#39; --data-urlencode &#39;q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING&#39;</code></pre>
 </section>
 <h2 id="scan-artifacts">Phase Artifacts</h2>
     <p class="empty">Raw artifact listing was not loaded for this report. Via API (with a valid scan id):

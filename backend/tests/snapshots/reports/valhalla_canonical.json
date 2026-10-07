@@ -1,7 +1,17 @@
 {
+  "format": "jsoc",
+  "format_version": "1.0",
+  "brand": {
+    "name": "Svalbard Security Inc.",
+    "logo_file": "logo.svg",
+    "logo_mime": "image/svg+xml",
+    "logo_sha256": "2b3463ca7ac573458737fc0bb8bcbfb9e6660fd77aac8f92514fa9349fda3095",
+    "logo_base64_svg": "PHN2ZyBpZD0iTGF5ZXJfMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgMjI1LjQ4IDk1LjEzIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2ZmZjt9PC9zdHlsZT48L2RlZnM+PGcgaWQ9IkxheWVyXzEtMiI+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNTUuMTIsNTguMjlsLTI2LjM5LTI2LjU0Yy0uMTktLjE5LS4zNy0uMzgtLjU0LS41OS0xLjIzLTEuNTUtMS44NS0zLjQzLTEuODUtNS4zMSwwLTIuMjQuODgtNC40OSwyLjYzLTYuMTcsMy4zOC0zLjI0LDguNzgtMy4wNiwxMi4wOS4yNWw5Ljk4LDEwLjAzLDIuMS0yLjFjMS42OC0xLjY4LDIuMDYtNC4yNi45NC02LjM2TDQyLjY5LDBjLTEuNjMsMS43NS0yLjg2LDYuMjQtLjkyLDkuMzgtNi41LTIuNjctMTQuMjMtMS40Ny0xOS41LDMuNzYtMi4xNSwyLjE0LTMuNjksNC43My00LjU0LDcuNTVMNS4wNCw3LjkzQzEuOTcsMTIuNzMuMTMsMTkuMDgsMCwyNS40NWMwLDkuODUsMy42MiwxOC4yNSwxMC42LDI1LjJsMjUuNzUsMjUuODhjMS44MywxLjgyLDQuOCwxLjgyLDYuNjItLjAyaDBjMS44Mi0xLjgzLDEuNzgtNC43OC0uMDItNi42MmwtMjUuNzUtMjUuODhjLTUuMTYtNS4xMy03LjY4LTEwLjkzLTcuNzUtMTguMjFsMzkuMDMsMzkuMDljNC43NSw0Ljc4LDQuNzMsMTIuNTQtLjAzLDE3LjMtNC43Niw0Ljc2LTEyLjUyLDQuNzgtMTcuMy4wM2wtOS45OS0xMC4xMy00LjY4LTQuNzljLTIuOTQtMy4wMS04LjA1LS45My04LjA1LDMuMjgsMCw3LjMxLS4wMSwxNC42OC0uMDEsMTQuNjgsMy45OS0uMDUsNi43Ni0yLjgxLDcuMTQtNS41NWw5LDkuMTVjNC4yMSw0LjE4LDkuNzIsNi4yNiwxNS4yMyw2LjI2LDUuNTQsMCwxMS4wOC0yLjExLDE1LjI5LTYuMzIsOC40LTguNCw4LjQyLTIyLjA5LjA1LTMwLjUyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTkwLjc1LDIxLjg3bC00LjEsMy42MmMtMS40NC0yLTIuOS0zLTQuMzktMy0uNzMsMC0xLjMyLjItMS43OC41OC0uNDYuMzktLjY5LjgzLS42OSwxLjMxcy4xNi45NS40OSwxLjM4Yy40NS41OCwxLjgsMS44Miw0LjA2LDMuNzMsMi4xMSwxLjc3LDMuMzksMi44OCwzLjg0LDMuMzQsMS4xMiwxLjEzLDEuOTIsMi4yMiwyLjM4LDMuMjUuNDcsMS4wMy43LDIuMTYuNywzLjM5LDAsMi4zOC0uODIsNC4zNS0yLjQ3LDUuOTEtMS42NSwxLjU1LTMuOCwyLjMzLTYuNDUsMi4zMy0yLjA3LDAtMy44Ny0uNTEtNS40MS0xLjUyLTEuNTQtMS4wMS0yLjg1LTIuNjEtMy45NS00Ljc4bDQuNjUtMi44MWMxLjQsMi41NywzLjAxLDMuODUsNC44MywzLjg1Ljk1LDAsMS43NS0uMjgsMi4zOS0uODNzLjk3LTEuMTkuOTctMS45MmMwLS42Ni0uMjQtMS4zMi0uNzMtMS45OC0uNDktLjY2LTEuNTYtMS42Ny0zLjIzLTMuMDItMy4xNy0yLjU4LTUuMjEtNC41Ny02LjE0LTUuOThzLTEuMzktMi44LTEuMzktNC4yYzAtMi4wMS43Ny0zLjc0LDIuMy01LjE5LDEuNTQtMS40NCwzLjQzLTIuMTYsNS42OS0yLjE2LDEuNDUsMCwyLjgzLjM0LDQuMTQsMS4wMSwxLjMxLjY3LDIuNzMsMS45LDQuMjYsMy42N1oiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xMDUuMDksNDYuOThoLTUuNzVsLTcuNjUtMjEuMjRoNi4xNWwzLjEyLDkuODNjLjI3LjgxLjUzLDEuNjYuNzcsMi41NS4yNC44OS40MywxLjU5LjU3LDIuMS4xMy0uNTQuMzItMS4yNC41Ny0yLjEuMjQtLjg2LjUtMS43MS43Ny0yLjU1bDMuMTItOS44M2g1Ljk5bC03LjY1LDIxLjI0WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTEyNi4zMyw0Ni45OHYtMS40MmMtLjUxLjU0LTEuMTkuOTgtMi4wMiwxLjM0LS44NC4zNS0xLjc1LjUzLTIuNzUuNTNzLTEuOTctLjE2LTIuOTEtLjQ3Yy0uOTQtLjMxLTEuNzktLjc3LTIuNTMtMS40LS43NC0uNjItMS4zNC0xLjQtMS44LTIuMzUtLjQ2LS45NC0uNjktMi4wNi0uNjktMy4zNiwwLTEuMTYuMjItMi4xOC42Ny0zLjA4LjQ0LS44OSwxLjA2LTEuNjIsMS44NC0yLjIxLjc4LS41OCwxLjY5LTEuMDIsMi43My0xLjMyLDEuMDQtLjMsMi4xNi0uNDQsMy4zOC0uNDQuOTcsMCwxLjc4LjA5LDIuNDMuMjZzMS4yLjM3LDEuNjYuNTl2LTEuMDVjMC0uNzUtLjI1LTEuNC0uNzUtMS45Mi0uNS0uNTMtMS4yNi0uNzktMi4yOS0uNzktLjY1LDAtMS4yMi4wMy0xLjcyLjA4LS41LjA1LS45Ny4xNC0xLjQyLjI0LS40NC4xMS0uODguMjUtMS4zMS40My0uNDMuMTgtLjg5LjQtMS4zOC42N2wtMi4xNC0zLjg4Yy42Mi0uMzUsMS4yMi0uNjYsMS44LS45My41OC0uMjcsMS4xOS0uNDksMS44Mi0uNjcuNjMtLjE4LDEuMy0uMzEsMi0uNC43LS4wOSwxLjQ4LS4xNCwyLjM1LS4xNCwxLjI5LDAsMi40Ny4xNiwzLjUyLjQ5czEuOTYuOCwyLjcxLDEuNDRjLjc1LjYzLDEuMzQsMS40MiwxLjc2LDIuMzUuNDIuOTMuNjMsMS45OS42MywzLjE4djE0LjI0aC01LjU4Wk0xMjYuMzMsMzguMDhjLS40OS0uMy0xLjAxLS41Mi0xLjU2LS42Ny0uNTUtLjE1LTEuMzMtLjIyLTIuMzMtLjIyLTEuMDUsMC0xLjg2LjIzLTIuNDEuNjktLjU1LjQ2LS44MywxLjEyLS44MywxLjk4LDAsLjc2LjI0LDEuNDIuNzMsMS45OHMxLjMyLjg1LDIuNTEuODVjLjkyLDAsMS43Mi0uMiwyLjQxLS41OS42OS0uMzksMS4xOC0uODQsMS40OC0xLjM2di0yLjY3WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTEzNi41Myw0Ni45OHYtMjkuNXM1LjU4LDAsNS41OCwwdjI5LjVoLTUuNThaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTY1LjI2LDM2LjYyYzAsMS41OS0uMTgsMy4wNS0uNTUsNC4zNy0uMzYsMS4zMi0uOSwyLjQ2LTEuNiwzLjQyLS43Ljk2LTEuNTYsMS43LTIuNTksMi4yM3MtMi4yLjc5LTMuNTIuNzljLS45NCwwLTEuOC0uMTYtMi41Ny0uNDktLjc3LS4zMi0xLjQxLS43MS0xLjkyLTEuMTd2MS4yMWgtNS41OHYtMjkuNXM1LjU4LDAsNS41OCwwdjkuNTljLjU0LS40NiwxLjE3LS44NywxLjg4LTEuMjMuNzEtLjM2LDEuNTgtLjU1LDIuNjEtLjU1LDEuMTMsMCwyLjIuMjIsMy4yLjY1LDEsLjQzLDEuODcsMS4xMSwyLjYzLDIuMDRzMS4zNSwyLjExLDEuNzgsMy41NGMuNDMsMS40My42NSwzLjEzLjY1LDUuMVpNMTU5LjYsMzYuNzVjMC0yLjE5LS4zMy0zLjc2LS45OS00LjczLS42Ni0uOTctMS41NC0xLjQ2LTIuNjUtMS40Ni0uODYsMC0xLjU1LjE2LTIuMDYuNDktLjUxLjMyLS45Ny43Ni0xLjM4LDEuMjl2OC4wMWMuODksMS4yMSwyLjE0LDEuODIsMy43NiwxLjgyLDIuMjEsMCwzLjMyLTEuODEsMy4zMi01LjQyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTE4MS4wNCw0Ni45OHYtMS40MmMtLjUxLjU0LTEuMTkuOTgtMi4wMiwxLjM0LS44NC4zNS0xLjc1LjUzLTIuNzUuNTNzLTEuOTctLjE2LTIuOTEtLjQ3Yy0uOTQtLjMxLTEuNzktLjc3LTIuNTMtMS40LS43NC0uNjItMS4zNC0xLjQtMS44LTIuMzUtLjQ2LS45NC0uNjktMi4wNi0uNjktMy4zNiwwLTEuMTYuMjItMi4xOC42Ny0zLjA4LjQ0LS44OSwxLjA2LTEuNjIsMS44NC0yLjIxLjc4LS41OCwxLjY5LTEuMDIsMi43My0xLjMyLDEuMDQtLjMsMi4xNi0uNDQsMy4zOC0uNDQuOTcsMCwxLjc4LjA5LDIuNDMuMjZzMS4yLjM3LDEuNjYuNTl2LTEuMDVjMC0uNzUtLjI1LTEuNC0uNzUtMS45Mi0uNS0uNTMtMS4yNi0uNzktMi4yOS0uNzktLjY1LDAtMS4yMi4wMy0xLjcyLjA4LS41LjA1LS45Ny4xNC0xLjQyLjI0LS40NC4xMS0uODguMjUtMS4zMS40My0uNDMuMTgtLjg5LjQtMS4zOC42N2wtMi4xNC0zLjg4Yy42Mi0uMzUsMS4yMi0uNjYsMS44LS45My41OC0uMjcsMS4xOS0uNDksMS44Mi0uNjdzMS4zLS4zMSwyLS40Yy43LS4wOSwxLjQ4LS4xNCwyLjM1LS4xNCwxLjI5LDAsMi40Ny4xNiwzLjUyLjQ5LDEuMDUuMzIsMS45Ni44LDIuNzEsMS40NC43Ni42MywxLjM0LDEuNDIsMS43NiwyLjM1LjQyLjkzLjYzLDEuOTkuNjMsMy4xOHYxNC4yNGgtNS41OFpNMTgxLjA0LDM4LjA4Yy0uNDktLjMtMS4wMS0uNTItMS41Ni0uNjctLjU1LS4xNS0xLjMzLS4yMi0yLjMzLS4yMi0xLjA1LDAtMS44Ni4yMy0yLjQxLjY5cy0uODMsMS4xMi0uODMsMS45OGMwLC43Ni4yNCwxLjQyLjczLDEuOTguNDkuNTcsMS4zMi44NSwyLjUxLjg1LjkyLDAsMS43Mi0uMiwyLjQxLS41OS42OS0uMzksMS4xOC0uODQsMS40OC0xLjM2di0yLjY3WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTIwMy40NiwzMi4yNmMtLjQ2LS40LS45Ni0uNzMtMS41LS45OS0uNTQtLjI2LTEuMTItLjM4LTEuNzQtLjM4LS41NCwwLTEuMDMuMDctMS40OC4yLS40NC4xNC0uODIuMzgtMS4xMy43My0uMzEuMzUtLjU1LjgyLS43MywxLjQyLS4xOC41OS0uMjYsMS4zNS0uMjYsMi4yN3YxMS40OWgtNS41OHYtMjEuMjRoNS41OHYxLjQyYy40OS0uNTEsMS4wOS0uOTUsMS44LTEuMzEuNzEtLjM2LDEuNTctLjU1LDIuNTctLjU1LjkyLDAsMS43MS4xNiwyLjM3LjQ3LjY2LjMxLDEuMTguNjUsMS41NiwxLjAzbC0xLjQ2LDUuNDZaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjE5LjQsNDYuOTh2LTEuMzRjLS41NC40Ni0xLjE3Ljg3LTEuODgsMS4yMy0uNzIuMzYtMS41OC41NS0yLjYxLjU1LTEuMTMsMC0yLjItLjIyLTMuMi0uNjUtMS0uNDMtMS44OC0xLjExLTIuNjMtMi4wNC0uNzYtLjkzLTEuMzUtMi4xLTEuNzgtMy41Mi0uNDMtMS40Mi0uNjUtMy4xMi0uNjUtNS4xMiwwLTEuNTkuMTgtMy4wNS41NS00LjM3LjM2LTEuMzIuOS0yLjQ2LDEuNi0zLjQyLjctLjk2LDEuNTYtMS43LDIuNTktMi4yM3MyLjItLjc5LDMuNTItLjc5Yy45NCwwLDEuOC4xNiwyLjU3LjQ5Ljc3LjMyLDEuNDEuNzIsMS45MiwxLjE3di05LjQ3aDUuNTh2MjkuNWgtNS41OFpNMjE5LjQsMzIuMzhjLS44OS0xLjIxLTIuMTQtMS44Mi0zLjc2LTEuODItMi4yMSwwLTMuMzIsMS44MS0zLjMyLDUuNDIsMCwyLjE4LjMzLDMuNzYuOTksNC43M3MxLjU0LDEuNDYsMi42NSwxLjQ2Yy44NiwwLDEuNTUtLjE2LDIuMDYtLjQ5LjUxLS4zMi45Ny0uNzYsMS4zOC0xLjI5di04LjAxWiIvPjwvZz48L3N2Zz4K",
+    "alt_text": "Svalbard Security Inc. logo"
+  },
   "report_id": "r-int-valhalla-1",
-  "target": "https://acme.example.com",
   "scan_id": "scan-int-valhalla-1",
+  "target": "https://acme.example.com",
   "created_at": "2026-04-19T10:00:00Z",
   "metadata": {
     "report_id": "r-int-valhalla-1",
@@ -13,34 +23,73 @@
       "nginx"
     ]
   },
-  "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
-  "summary": {
-    "critical": 1,
-    "high": 2,
-    "medium": 1,
-    "low": 1,
-    "info": 0,
-    "technologies": [
-      "django",
-      "nginx"
-    ],
-    "sslIssues": 1,
-    "headerIssues": 2,
-    "leaksFound": false
+  "executive_summary": {
+    "text": "Critical SQLi and RCE; rotate exposed credentials immediately."
   },
+  "scope": {
+    "target": "https://acme.example.com",
+    "assessment_mode": "automated",
+    "authenticated_status": "NOT_ASSESSED",
+    "scan_id": "scan-int-valhalla-1"
+  },
+  "methodology": {
+    "description": "Automated security assessment via ARGUS pipeline"
+  },
+  "wstg_coverage": null,
+  "tool_health": [],
+  "ssl_tls_analysis": {},
+  "ssl_tls_table_rows": [],
+  "port_exposure": [],
+  "port_exposure_summary": {},
+  "robots_sitemap": {},
+  "credential_exposure": {},
+  "auth_testing": {},
+  "leaked_emails": [],
+  "technologies": [
+    "django",
+    "nginx"
+  ],
   "findings": [
     {
-      "severity": "critical",
+      "finding_id": "",
       "title": "SQLi at /api/v1/users",
-      "description": "UNION-based SQLi via id parameter on the payments API.",
-      "cwe": "CWE-89",
-      "cvss": 9.8,
+      "status": "CANDIDATE",
+      "severity": "high",
       "confidence": "confirmed",
-      "validation_status": "partially_validated",
-      "evidence_quality": "moderate",
-      "evidence_refs": [
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 9.8,
+      "cvss": 9.8,
+      "cwe": "CWE-89",
+      "owasp": "A05",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [
         "s3://argus-evidence/sqli-dump"
       ],
+      "description": "UNION-based SQLi via id parameter on the payments API.",
+      "evidence_classification": "candidate",
+      "is_provable": false,
+      "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
       "owasp_category": "A05",
       "proof_of_concept": {
         "url": "https://payments.acme.example.com/api/v1/users",
@@ -53,15 +102,43 @@
       }
     },
     {
-      "severity": "high",
+      "finding_id": "",
       "title": "GitHub PAT leaked in JS bundle",
-      "description": "ghp_* token observed in /static/app.js.",
-      "cwe": "CWE-200",
-      "cvss": 7.5,
+      "status": "CANDIDATE",
+      "severity": "medium",
       "confidence": "confirmed",
-      "validation_status": "unverified",
-      "evidence_quality": "none",
-      "evidence_refs": [],
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 7.5,
+      "cvss": 7.5,
+      "cwe": "CWE-200",
+      "owasp": "A01",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "ghp_* token observed in /static/app.js.",
+      "evidence_classification": "candidate",
+      "is_provable": false,
+      "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
       "owasp_category": "A01",
       "proof_of_concept": {
         "url": "https://www.acme.example.com/static/app.js",
@@ -69,15 +146,43 @@
       }
     },
     {
-      "severity": "high",
+      "finding_id": "",
       "title": "Reverse shell PoC in /upload",
-      "description": "File upload allows RCE; PoC included.",
-      "cwe": "CWE-78",
-      "cvss": 8.6,
+      "status": "CANDIDATE",
+      "severity": "medium",
       "confidence": "confirmed",
-      "validation_status": "unverified",
-      "evidence_quality": "none",
-      "evidence_refs": [],
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 8.6,
+      "cvss": 8.6,
+      "cwe": "CWE-78",
+      "owasp": "A05",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "File upload allows RCE; PoC included.",
+      "evidence_classification": "candidate",
+      "is_provable": false,
+      "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
       "owasp_category": "A05",
       "proof_of_concept": {
         "url": "https://app.acme.example.com/upload",
@@ -89,27 +194,83 @@
       }
     },
     {
-      "severity": "medium",
+      "finding_id": "",
       "title": "Missing security headers",
-      "description": "No CSP / HSTS / X-Frame-Options.",
-      "cwe": "CWE-693",
-      "cvss": 4.3,
+      "status": "CANDIDATE",
+      "severity": "medium",
       "confidence": "likely",
-      "validation_status": "unverified",
-      "evidence_quality": "none",
-      "evidence_refs": [],
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 4.3,
+      "cvss": 4.3,
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "No CSP / HSTS / X-Frame-Options.",
+      "evidence_classification": "candidate",
+      "is_provable": false,
+      "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
       "owasp_category": "A02"
     },
     {
-      "severity": "low",
+      "finding_id": "",
       "title": "MySQL root password observed in CI script",
-      "description": "Hardcoded password in deploy script.",
-      "cwe": "CWE-798",
-      "cvss": 2.9,
+      "status": "CANDIDATE",
+      "severity": "low",
       "confidence": "possible",
-      "validation_status": "unverified",
-      "evidence_quality": "none",
-      "evidence_refs": [],
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 2.9,
+      "cvss": 2.9,
+      "cwe": "CWE-798",
+      "owasp": "A07",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "Hardcoded password in deploy script.",
+      "evidence_classification": "candidate",
+      "is_provable": false,
+      "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
       "owasp_category": "A07",
       "proof_of_concept": {
         "url": "https://ci.acme.example.com/deploy",
@@ -126,10 +287,145 @@
       }
     }
   ],
-  "technologies": [
-    "django",
-    "nginx"
+  "unconfirmed_findings": [],
+  "evidence": [
+    {
+      "finding_id": "",
+      "evidence_id": "s3://argus-evidence/sqli-dump",
+      "evidence_type": "tool_output",
+      "source_tool": "",
+      "artifact_ref": "s3://argus-evidence/sqli-dump",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "parsed"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    }
   ],
+  "remediation_matrix": [
+    {
+      "report_id": "r-int-valhalla-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-valhalla-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-valhalla-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-valhalla-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-valhalla-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    }
+  ],
+  "retest_checklist": [],
+  "limitations": [],
+  "unresolved_gaps": [],
+  "verification_commands": [],
+  "infra_recommendations": {
+    "config_snippets": [
+      [
+        "generic",
+        "# nginx.conf — security headers\nadd_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';\" always;\nadd_header X-Content-Type-Options \"nosniff\" always;\nadd_header X-Frame-Options \"SAMEORIGIN\" always;\nadd_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\nadd_header Permissions-Policy \"geolocation=(), microphone=(), camera=()\" always;\nadd_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;\n"
+      ]
+    ],
+    "header_recommendations": [],
+    "owasp_gap_roadmap": [],
+    "tls_hardening": "# TLS Hardening Checklist\n# 1. Disable TLS 1.0 and 1.1 (nginx: ssl_protocols TLSv1.2 TLSv1.3;)\n# 2. Disable weak ciphers (RC4, DES, 3DES, EXPORT, NULL, aNULL, eNULL, MD5)\n# 3. Prioritize ECDHE ciphers for forward secrecy\n# 4. HSTS header: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n# 5. OCSP stapling enabled\n# 6. Certificate key size >= 2048-bit RSA or ECDSA P-256+\n# 7. TLS certificate from trusted CA (not self-signed for production)\n\n# Verification commands:\nopenssl s_client -connect target:443 -tls1_2 -servername target | openssl x509 -noout -text\nnmap --script ssl-enum-ciphers -p 443 target\ntestssl.sh --severity HIGH target\n"
+  },
+  "truthfulness_metrics": {
+    "truthfulness_score": 0.0,
+    "truthfulness_rating": "Insufficient",
+    "infra_applicability_score": 0.0,
+    "infra_applicability_rating": "Insufficient",
+    "validated_count": 0,
+    "advisory_count": 5,
+    "has_concrete_commands": 0,
+    "has_poc_evidence": 0,
+    "ai_sections_with_leakage": 0,
+    "total_ai_sections": 12,
+    "wstg_coverage_pct": 0.0,
+    "notes": "0/5 validated (0%), 0 with commands, 0 with PoC, 0 sections with prompt leakage. WSTG: 0%."
+  },
   "timeline": [
     {
       "phase": "recon",
@@ -150,22 +446,7 @@
   ],
   "phase_outputs": [
     {
-      "phase": "recon",
-      "output_data": {
-        "k": "v"
-      }
-    }
-  ],
-  "evidence": [
-    {
-      "finding_id": "f1",
-      "object_key": "evidence/sqli/dump.txt",
-      "description": "HTTP req/resp dump"
-    },
-    {
-      "finding_id": "f2",
-      "object_key": "evidence/upload/payload.bin",
-      "description": "Reverse-shell artefact"
+      "phase": "recon"
     }
   ],
   "screenshots": [
@@ -174,57 +455,19 @@
       "url_or_email": "login"
     }
   ],
-  "ai_conclusions": [
-    "LLM exec summary"
-  ],
-  "remediation": [
-    "Patch ORM.",
-    "Disable unrestricted upload.",
-    "Rotate all PATs."
-  ],
   "ai_sections": {
-    "attack_scenarios": "AI generation skipped: no LLM provider available",
-    "business_risk": "AI generation skipped: no LLM provider available",
-    "compliance_check": "AI generation skipped: no LLM provider available",
-    "cost_summary": "AI generation skipped: no LLM provider available",
+    "attack_scenarios": "AI generation skipped: could not generate content",
+    "business_risk": "AI generation skipped: could not generate content",
+    "compliance_check": "AI generation skipped: could not generate content",
     "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
     "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
-    "exploit_chains": "AI generation skipped: no LLM provider available",
-    "hardening_recommendations": "AI generation skipped: no LLM provider available",
-    "prioritization_roadmap": "AI generation skipped: no LLM provider available",
-    "remediation_stages": "AI generation skipped: no LLM provider available",
+    "exploit_chains": "AI generation skipped: could not generate content",
+    "hardening_recommendations": "AI generation skipped: could not generate content",
+    "prioritization_roadmap": "AI generation skipped: could not generate content",
+    "remediation_stages": "AI generation skipped: could not generate content",
     "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
     "vulnerability_description": "LLM exec summary",
-    "zero_day_potential": "AI generation skipped: no LLM provider available"
-  },
-  "scan_artifacts": {
-    "phase_blocks": [
-      {
-        "other_rows": [],
-        "phase_key": "unknown",
-        "phase_label": "Other",
-        "phase_query": "",
-        "rows": [
-          {
-            "download_url": null,
-            "file_name": "",
-            "key": "",
-            "last_modified": "",
-            "size": 0
-          }
-        ],
-        "tool_output_rows": [
-          {
-            "download_url": null,
-            "file_name": "",
-            "key": "",
-            "last_modified": "",
-            "size": 0
-          }
-        ]
-      }
-    ],
-    "status": "ok"
+    "zero_day_potential": "AI generation skipped: could not generate content"
   },
   "active_web_scan": {
     "ai_summary_rows": [
@@ -251,6 +494,15 @@
       "raw": "recon dump"
     }
   ],
+  "export_integrity": {
+    "html_sha256": "",
+    "pdf_sha256": "",
+    "md_sha256": "",
+    "csv_sha256": "",
+    "json_sha256": "18503afe237afc47d0cd608eeb02660bf0643918a3fe3e477e2e6437190d1c35",
+    "logo_sha256": "2b3463ca7ac573458737fc0bb8bcbfb9e6660fd77aac8f92514fa9349fda3095",
+    "generated_from_same_dataset": true
+  },
   "valhalla_report": {
     "title_meta": {
       "created_at": "2026-04-19T10:00:00Z",
@@ -265,151 +517,178 @@
       "high": 2,
       "info": 0,
       "low": 1,
-      "medium": 1
+      "medium": 1,
+      "unknown": 0
     },
     "owasp_compliance": [
       {
-        "assessed": "Assessed",
+        "assessed": "Yes",
         "assessment_result": "Finding present",
         "category_id": "A01",
         "count": 1,
-        "description": "Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.",
-        "description_hover": "Принудительная авторизация на сервере для каждого запроса, политики по ролям и владельцу ресурса, запрет на опору только на «скрытые» URL и параметры.",
+        "description": "Access control enforcement failures such as unauthorized access to data or functions.",
+        "description_hover": "",
+        "display_category_code": "A01:2021",
+        "evidence_ids": [],
         "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
         "title": "Broken Access Control",
-        "title_ru": "Нарушение контроля доступа"
+        "title_ru": ""
       },
       {
-        "assessed": "Assessed",
+        "assessed": "Yes",
         "assessment_result": "Finding present",
         "category_id": "A02",
         "count": 1,
-        "description": "Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.",
-        "description_hover": "Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.",
+        "description": "Missing, incomplete, or unsafe security configuration, including HTTP security response headers.",
+        "description_hover": "",
         "display_category_code": "A05:2021",
+        "evidence_ids": [],
         "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
         "title": "Security Misconfiguration",
-        "title_ru": "Небезопасная конфигурация"
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A03",
         "count": 0,
-        "description": "Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.",
-        "description_hover": "Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.",
+        "description": "Known-vulnerable, unsupported, or outdated software components.",
+        "description_hover": "",
+        "display_category_code": "A06:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
-        "title": "Software Supply Chain Failures",
-        "title_ru": "Сбои цепочки поставки ПО"
+        "title": "Vulnerable and Outdated Components",
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A04",
         "count": 0,
-        "description": "Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.",
-        "description_hover": "TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.",
+        "description": "Weaknesses in cryptographic design, TLS configuration, or protection of sensitive data in transit or at rest.",
+        "description_hover": "",
+        "display_category_code": "A02:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
         "title": "Cryptographic Failures",
-        "title_ru": "Криптографические сбои"
+        "title_ru": ""
       },
       {
-        "assessed": "Assessed",
+        "assessed": "Yes",
         "assessment_result": "Finding present",
         "category_id": "A05",
         "count": 2,
-        "description": "SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.",
-        "description_hover": "Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.",
+        "description": "Untrusted input interpreted as commands, queries, templates, or other executable syntax.",
+        "description_hover": "",
+        "display_category_code": "A03:2021",
+        "evidence_ids": [
+          "s3://argus-evidence/sqli-dump"
+        ],
         "findings_present": "2",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
         "title": "Injection",
-        "title_ru": "Инъекции"
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A06",
         "count": 0,
-        "description": "Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.",
-        "description_hover": "Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.",
+        "description": "Design-level weaknesses that require changes to security architecture or control design.",
+        "description_hover": "",
+        "display_category_code": "A04:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
         "title": "Insecure Design",
-        "title_ru": "Небезопасное проектирование"
+        "title_ru": ""
       },
       {
-        "assessed": "Assessed",
+        "assessed": "Yes",
         "assessment_result": "Finding present",
         "category_id": "A07",
         "count": 1,
-        "description": "Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.",
-        "description_hover": "MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.",
+        "description": "Authentication, session, credential, lockout, or rate-limiting control weaknesses.",
+        "description_hover": "",
+        "display_category_code": "A07:2021",
+        "evidence_ids": [],
         "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
-        "title": "Authentication Failures",
-        "title_ru": "Сбои аутентификации"
+        "title": "Identification and Authentication Failures",
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A08",
         "count": 0,
-        "description": "Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.",
-        "description_hover": "Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.",
+        "description": "Integrity weaknesses in software updates, CI/CD, deserialization, or trusted data flows.",
+        "description_hover": "",
+        "display_category_code": "A08:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
-        "title": "Software or Data Integrity Failures",
-        "title_ru": "Сбои целостности ПО и данных"
+        "title": "Software and Data Integrity Failures",
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A09",
         "count": 0,
-        "description": "Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.",
-        "description_hover": "Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.",
+        "description": "Insufficient logging, monitoring, alerting, or incident visibility.",
+        "description_hover": "",
+        "display_category_code": "A09:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
-        "title": "Security Logging & Alerting Failures",
-        "title_ru": "Сбои журналирования и оповещения"
+        "title": "Security Logging and Monitoring Failures",
+        "title_ru": ""
       },
       {
-        "assessed": "Not assessed",
+        "assessed": "No",
         "assessment_result": "Not assessed",
         "category_id": "A10",
         "count": 0,
-        "description": "Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.",
-        "description_hover": "Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.",
+        "description": "Server-side requests to unintended destinations caused by insufficient validation.",
+        "description_hover": "",
+        "display_category_code": "A10:2021",
+        "evidence_ids": [],
         "findings_present": "Not assessed",
         "has_findings": false,
         "row_class": "owasp-compliance-not-assessed",
-        "title": "Mishandling of Exceptional Conditions",
-        "title_ru": "Неверная обработка исключительных ситуаций"
+        "title": "Server-Side Request Forgery",
+        "title_ru": ""
       }
     ],
     "robots_sitemap": {
       "robots_txt_analysis": {
         "allow_paths_sample": [],
         "allow_rule_count": 0,
+        "content_type": "",
         "disallow_rule_count": 0,
         "disallowed_paths_sample": [],
+        "evidence_id": "",
         "found": false,
         "raw_excerpt": null,
+        "security_txt_excerpt": "",
+        "security_txt_found": false,
         "sensitive_path_hints": [],
-        "sitemap_hints": []
+        "sitemap_hints": [],
+        "status_code": 0
       },
       "sitemap_analysis": {
         "found": false,
@@ -421,19 +700,45 @@
     "tech_stack": [],
     "outdated_components": [],
     "emails": [],
+    "leaked_email_rows": [],
     "ssl_tls": {
+      "alpn": [],
+      "assessment_note": "",
+      "cert_expiry": "",
+      "cert_issuer": "",
+      "cert_subject": "",
+      "chain_length": 0,
+      "cipher_detail": [],
+      "cipher_suites": [],
+      "evidence_id": "",
+      "grade": "",
       "hsts": null,
+      "hsts_include_subdomains": false,
+      "hsts_max_age": 0,
+      "hsts_preload": false,
+      "hsts_present": false,
       "issuer": null,
+      "ocsp_stapling": false,
       "protocols": [],
+      "protocols_table": [],
+      "recommendations": [],
+      "san": [],
+      "subject": null,
+      "tls_versions": [],
+      "valid_from": null,
+      "valid_to": null,
       "validity": null,
       "weak_ciphers": [],
       "weak_protocols": []
     },
     "ssl_tls_table_rows": [],
     "headers": {
+      "endpoint_header_map": {},
       "missing_recommended": [],
+      "per_url_rows": {},
       "rows": [],
-      "summary": null
+      "summary": null,
+      "total_endpoints_scanned": 0
     },
     "security_headers_table_rows": [],
     "dependencies": [],
@@ -446,6 +751,43 @@
     "full_valhalla": false,
     "evidence_inventory": [],
     "tool_health_summary": [],
+    "port_exposure": [],
+    "credential_exposure": {
+      "breach_details": [],
+      "checks_run": 0,
+      "hash_samples_available": false,
+      "hibp_api_used": false,
+      "inconclusive": false,
+      "inconclusive_reason": "",
+      "missing_artifacts": [],
+      "password_samples_available": false,
+      "rows": []
+    },
+    "auth_testing": {
+      "auth_bypass_attempts": 0,
+      "auth_credentials_provided": false,
+      "auth_findings_count": 0,
+      "auth_flow_documented": false,
+      "auth_matrix": [],
+      "auth_method_used": "",
+      "auth_testing_enabled": false,
+      "business_logic_findings": 0,
+      "business_logic_tested": false,
+      "idor_tested": [],
+      "mfa_status": "not_tested",
+      "notes": "",
+      "password_policy": null,
+      "privilege_escalation_findings": 0,
+      "privilege_escalation_tested": false,
+      "rate_limiting": null,
+      "reset_password_flow": null,
+      "roles_tested": [],
+      "session_management_tested": false,
+      "tested_endpoints": [],
+      "token_validation_tested": false,
+      "username_enumeration": null
+    },
+    "wstg_coverage": null,
     "threat_modeling_ref": {
       "exploitation_post_excerpt": "",
       "threat_model": {
@@ -458,15 +800,34 @@
     },
     "findings": [
       {
+        "acceptance_criteria": "",
+        "affected_asset": "",
+        "affected_layer": "",
+        "authentication_state": "NOT_ASSESSED",
+        "browser_proof_ref": "",
+        "business_impact": "",
         "confidence": "confirmed",
         "cvss": 9.8,
+        "cvss_score": 9.8,
+        "cvss_vector": "",
         "cwe": "CWE-89",
         "description": "UNION-based SQLi via id parameter on the payments API.",
-        "evidence_quality": "moderate",
-        "evidence_refs": [
+        "endpoint": "",
+        "evidence_classification": "candidate",
+        "evidence_ids": [
           "s3://argus-evidence/sqli-dump"
         ],
+        "exact_remediation": "",
+        "finding_id": "",
+        "is_provable": false,
+        "manual_validation_result": "",
+        "method": "",
+        "observed_impact": "",
+        "owasp": "A05",
         "owasp_category": "A05",
+        "owner_team": "",
+        "parameter": "",
+        "payload": "",
         "proof_of_concept": {
           "replay_command": [
             "curl",
@@ -476,18 +837,46 @@
           ],
           "url": "https://payments.acme.example.com/api/v1/users"
         },
+        "raw_request_ref": "",
+        "raw_response_ref": "",
+        "retest_status": "NOT_ASSESSED",
         "severity": "critical",
+        "status": "CANDIDATE",
         "title": "SQLi at /api/v1/users",
-        "validation_status": "partially_validated"
+        "tool_command": "",
+        "tool_name": "",
+        "tool_output_ref": "",
+        "tool_version": "",
+        "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
+        "verification_command": ""
       },
       {
+        "acceptance_criteria": "",
+        "affected_asset": "",
+        "affected_layer": "",
+        "authentication_state": "NOT_ASSESSED",
+        "browser_proof_ref": "",
+        "business_impact": "",
         "confidence": "confirmed",
         "cvss": 8.6,
+        "cvss_score": 8.6,
+        "cvss_vector": "",
         "cwe": "CWE-78",
         "description": "File upload allows RCE; PoC included.",
-        "evidence_quality": "none",
-        "evidence_refs": [],
+        "endpoint": "",
+        "evidence_classification": "candidate",
+        "evidence_ids": [],
+        "exact_remediation": "",
+        "finding_id": "",
+        "is_provable": false,
+        "manual_validation_result": "",
+        "method": "",
+        "observed_impact": "",
+        "owasp": "A05",
         "owasp_category": "A05",
+        "owner_team": "",
+        "parameter": "",
+        "payload": "",
         "proof_of_concept": {
           "replay_command": [
             "sh",
@@ -496,48 +885,132 @@
           ],
           "url": "https://app.acme.example.com/upload"
         },
+        "raw_request_ref": "",
+        "raw_response_ref": "",
+        "retest_status": "NOT_ASSESSED",
         "severity": "high",
+        "status": "CANDIDATE",
         "title": "Reverse shell PoC in /upload",
-        "validation_status": "unverified"
+        "tool_command": "",
+        "tool_name": "",
+        "tool_output_ref": "",
+        "tool_version": "",
+        "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
+        "verification_command": ""
       },
       {
+        "acceptance_criteria": "",
+        "affected_asset": "",
+        "affected_layer": "",
+        "authentication_state": "NOT_ASSESSED",
+        "browser_proof_ref": "",
+        "business_impact": "",
         "confidence": "confirmed",
         "cvss": 7.5,
+        "cvss_score": 7.5,
+        "cvss_vector": "",
         "cwe": "CWE-200",
         "description": "ghp_* token observed in /static/app.js.",
-        "evidence_quality": "none",
-        "evidence_refs": [],
+        "endpoint": "",
+        "evidence_classification": "candidate",
+        "evidence_ids": [],
+        "exact_remediation": "",
+        "finding_id": "",
+        "is_provable": false,
+        "manual_validation_result": "",
+        "method": "",
+        "observed_impact": "",
+        "owasp": "A01",
         "owasp_category": "A01",
+        "owner_team": "",
+        "parameter": "",
+        "payload": "",
         "proof_of_concept": {
           "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user",
           "url": "https://www.acme.example.com/static/app.js"
         },
+        "raw_request_ref": "",
+        "raw_response_ref": "",
+        "retest_status": "NOT_ASSESSED",
         "severity": "high",
+        "status": "CANDIDATE",
         "title": "GitHub PAT leaked in JS bundle",
-        "validation_status": "unverified"
+        "tool_command": "",
+        "tool_name": "",
+        "tool_output_ref": "",
+        "tool_version": "",
+        "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
+        "verification_command": ""
       },
       {
+        "acceptance_criteria": "",
+        "affected_asset": "",
+        "affected_layer": "",
+        "authentication_state": "NOT_ASSESSED",
+        "browser_proof_ref": "",
+        "business_impact": "",
         "confidence": "likely",
         "cvss": 4.3,
+        "cvss_score": 4.3,
+        "cvss_vector": "",
         "cwe": "CWE-693",
         "description": "No CSP / HSTS / X-Frame-Options.",
-        "evidence_quality": "none",
-        "evidence_refs": [],
+        "endpoint": "",
+        "evidence_classification": "candidate",
+        "evidence_ids": [],
+        "exact_remediation": "",
+        "finding_id": "",
+        "is_provable": false,
+        "manual_validation_result": "",
+        "method": "",
+        "observed_impact": "",
+        "owasp": "A02",
         "owasp_category": "A02",
         "owasp_display_code": "A05:2021",
         "owasp_top10_2021": "A05:2021",
+        "owner_team": "",
+        "parameter": "",
+        "payload": "",
+        "raw_request_ref": "",
+        "raw_response_ref": "",
+        "retest_status": "NOT_ASSESSED",
         "severity": "medium",
+        "status": "CANDIDATE",
         "title": "Missing security headers",
-        "validation_status": "unverified"
+        "tool_command": "",
+        "tool_name": "",
+        "tool_output_ref": "",
+        "tool_version": "",
+        "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
+        "verification_command": ""
       },
       {
+        "acceptance_criteria": "",
+        "affected_asset": "",
+        "affected_layer": "",
+        "authentication_state": "NOT_ASSESSED",
+        "browser_proof_ref": "",
+        "business_impact": "",
         "confidence": "possible",
         "cvss": 2.9,
+        "cvss_score": 2.9,
+        "cvss_vector": "",
         "cwe": "CWE-798",
         "description": "Hardcoded password in deploy script.",
-        "evidence_quality": "none",
-        "evidence_refs": [],
+        "endpoint": "",
+        "evidence_classification": "candidate",
+        "evidence_ids": [],
+        "exact_remediation": "",
+        "finding_id": "",
+        "is_provable": false,
+        "manual_validation_result": "",
+        "method": "",
+        "observed_impact": "",
+        "owasp": "A07",
         "owasp_category": "A07",
+        "owner_team": "",
+        "parameter": "",
+        "payload": "",
         "proof_of_concept": {
           "replay_command": [
             "mysql",
@@ -551,24 +1024,32 @@
           ],
           "url": "https://ci.acme.example.com/deploy"
         },
+        "raw_request_ref": "",
+        "raw_response_ref": "",
+        "retest_status": "NOT_ASSESSED",
         "severity": "low",
+        "status": "CANDIDATE",
         "title": "MySQL root password observed in CI script",
-        "validation_status": "unverified"
+        "tool_command": "",
+        "tool_name": "",
+        "tool_output_ref": "",
+        "tool_version": "",
+        "unconfirmed_reason": "Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification.",
+        "verification_command": ""
       }
     ],
-    "exploit_chains_text": "AI generation skipped: no LLM provider available",
-    "remediation_stages_text": "AI generation skipped: no LLM provider available",
-    "zero_day_text": "AI generation skipped: no LLM provider available",
-    "conclusion_text": "AI generation skipped: no LLM provider available\n\nAI generation skipped: no LLM provider available",
+    "exploit_chains_text": "AI generation skipped: could not generate content",
+    "remediation_stages_text": "AI generation skipped: could not generate content",
+    "zero_day_text": "AI generation skipped: could not generate content",
+    "conclusion_text": "AI generation skipped: could not generate content\n\nAI generation skipped: could not generate content",
     "hibp_pwned_password_summary": {
       "pwned_count": 12
     },
     "appendices": {
       "ai_sections_supplemental": {
-        "attack_scenarios": "AI generation skipped: no LLM provider available",
-        "business_risk": "AI generation skipped: no LLM provider available",
-        "compliance_check": "AI generation skipped: no LLM provider available",
-        "cost_summary": "AI generation skipped: no LLM provider available",
+        "attack_scenarios": "AI generation skipped: could not generate content",
+        "business_risk": "AI generation skipped: could not generate content",
+        "compliance_check": "AI generation skipped: could not generate content",
         "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
         "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
         "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
@@ -596,7 +1077,8 @@
           "high": 2,
           "info": 0,
           "low": 1,
-          "medium": 1
+          "medium": 1,
+          "unknown": 0
         },
         "target_url": "https://acme.example.com",
         "technologies": [
@@ -608,12 +1090,12 @@
           {
             "order_index": 0,
             "phase": "recon",
-            "snippet": "{'phase': 'started'}"
+            "snippet": "completed"
           },
           {
             "order_index": 1,
             "phase": "exploit",
-            "snippet": "{'phase': 'rce'}"
+            "snippet": "completed"
           }
         ]
       },
@@ -646,6 +1128,369 @@
         ],
         "status": "ok"
       }
+    },
+    "valhalla_context": {
+      "robots_txt_analysis": {
+        "found": false,
+        "status_code": 0,
+        "content_type": "",
+        "raw_excerpt": null,
+        "disallowed_paths_sample": [],
+        "allow_paths_sample": [],
+        "sitemap_hints": [],
+        "sensitive_path_hints": [],
+        "security_txt_found": false,
+        "security_txt_excerpt": "",
+        "disallow_rule_count": 0,
+        "allow_rule_count": 0,
+        "evidence_id": ""
+      },
+      "sitemap_analysis": {
+        "found": false,
+        "index_found": false,
+        "url_count": 0,
+        "sample_urls": []
+      },
+      "robots_sitemap_merged": {
+        "robots_found": false,
+        "sitemap_found": false,
+        "security_txt_reachable": false,
+        "disallow_rule_count": 0,
+        "allow_rule_count": 0,
+        "sitemap_url_count": 0,
+        "sensitive_path_hints": [],
+        "notes": "",
+        "notes_ru": ""
+      },
+      "tech_stack_table": [],
+      "tech_stack_structured": {
+        "web_server": "",
+        "os": "",
+        "cms": "",
+        "frameworks": [],
+        "js_libraries": [],
+        "ports_summary": "",
+        "services_summary": "",
+        "entries": []
+      },
+      "tech_stack_fallback_message": null,
+      "ssl_tls_fallback_message": null,
+      "security_headers_fallback_message": null,
+      "outdated_components_fallback_message": null,
+      "robots_sitemap_fallback_message": null,
+      "leaked_emails_fallback_message": null,
+      "outdated_components": [],
+      "leaked_emails": [],
+      "leaked_email_rows": [],
+      "ssl_tls_analysis": {
+        "issuer": null,
+        "subject": null,
+        "san": [],
+        "valid_from": null,
+        "valid_to": null,
+        "validity": null,
+        "chain_length": 0,
+        "protocols": [],
+        "weak_protocols": [],
+        "cipher_suites": [],
+        "weak_ciphers": [],
+        "hsts": null,
+        "ocsp_stapling": false,
+        "alpn": [],
+        "grade": "",
+        "evidence_id": "",
+        "tls_versions": [],
+        "cipher_detail": [],
+        "cert_subject": "",
+        "cert_issuer": "",
+        "cert_expiry": "",
+        "hsts_present": false,
+        "hsts_max_age": 0,
+        "hsts_include_subdomains": false,
+        "hsts_preload": false,
+        "protocols_table": [],
+        "recommendations": [],
+        "assessment_note": ""
+      },
+      "ssl_tls_table_rows": [],
+      "security_headers_analysis": {
+        "rows": [],
+        "missing_recommended": [],
+        "summary": null,
+        "per_url_rows": {},
+        "endpoint_header_map": {},
+        "total_endpoints_scanned": 0
+      },
+      "security_headers_table_rows": [],
+      "dependency_analysis": [],
+      "threat_model": {
+        "phase": "threat_modeling",
+        "scan_id": "",
+        "tenant_id": "",
+        "excerpt": "",
+        "api_hint": ""
+      },
+      "threat_model_excerpt": "",
+      "threat_model_phase_link": "",
+      "exploitation_post_excerpt": "",
+      "risk_matrix": {
+        "variant": "matrix",
+        "cells": [],
+        "distribution": []
+      },
+      "critical_vulns": [],
+      "appendix_tools": [],
+      "mandatory_sections": {
+        "tech_stack_structured": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "outdated_components": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "ssl_tls_analysis": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "security_headers_analysis": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "robots_sitemap_analysis": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "leaked_emails": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        },
+        "port_exposure": {
+          "status": "no_data",
+          "reason": "",
+          "missing_artifacts": []
+        }
+      },
+      "robots_sitemap_analysis": {
+        "robots_txt": {
+          "found": false,
+          "status_code": 0,
+          "content_type": "",
+          "raw_excerpt": null,
+          "disallowed_paths_sample": [],
+          "allow_paths_sample": [],
+          "sitemap_hints": [],
+          "sensitive_path_hints": [],
+          "security_txt_found": false,
+          "security_txt_excerpt": "",
+          "disallow_rule_count": 0,
+          "allow_rule_count": 0,
+          "evidence_id": ""
+        },
+        "sitemap": {
+          "found": false,
+          "index_found": false,
+          "url_count": 0,
+          "sample_urls": []
+        },
+        "merged": {
+          "robots_found": false,
+          "sitemap_found": false,
+          "security_txt_reachable": false,
+          "disallow_rule_count": 0,
+          "allow_rule_count": 0,
+          "sitemap_url_count": 0,
+          "sensitive_path_hints": [],
+          "notes": "",
+          "notes_ru": ""
+        }
+      },
+      "coverage": {
+        "phases_executed": [],
+        "feature_flags": {},
+        "sections": {},
+        "tool_errors_summary": []
+      },
+      "recon_pipeline_summary": {},
+      "xss_structured": [
+        {
+          "finding_id": "finding-4",
+          "title": "MySQL root password observed in CI script",
+          "parameter": null,
+          "payload_entered": null,
+          "payload_reflected": null,
+          "payload_used": null,
+          "reflection_context": null,
+          "verification_method": null,
+          "verified_via_browser": null,
+          "browser_alert_text": null,
+          "artifact_keys": [],
+          "artifact_urls": []
+        }
+      ],
+      "scan_metadata": {
+        "scan_mode": "standard",
+        "agents_spawned": 0,
+        "categories_tested": [],
+        "categories_not_tested": [],
+        "skills_used": [],
+        "noise_reduction_pct": 0.0,
+        "owasp_coverage_pct": 0.0,
+        "findings_total": 0,
+        "findings_validated": 0,
+        "findings_rejected": 0,
+        "findings_deduplicated": 0
+      },
+      "wstg_coverage": null,
+      "test_limitations": null,
+      "valhalla_engagement_title": "Valhalla Automated Security Assessment",
+      "full_valhalla": false,
+      "port_exposure": {
+        "has_open_ports": false,
+        "open_port_hints": [],
+        "services_summary": "",
+        "summary_text": "",
+        "data_sources": [],
+        "has_naabu_hits": false,
+        "has_nmap_hits": false,
+        "has_recon_port_list": false
+      },
+      "port_exposure_table_rows": [],
+      "evidence_inventory": [],
+      "tool_health_summary": [],
+      "wstg_execution_degraded": false,
+      "wstg_coverage_zero_executed": false,
+      "sca_mode": "none",
+      "trivy_run_status": "not_applicable",
+      "sca_manifest_count": 0,
+      "sca_artifact_count": 0,
+      "active_injection_coverage": {},
+      "auth_testing": {
+        "auth_testing_enabled": false,
+        "auth_credentials_provided": false,
+        "auth_method_used": "",
+        "roles_tested": [],
+        "auth_matrix": [],
+        "idor_tested": [],
+        "auth_findings_count": 0,
+        "auth_bypass_attempts": 0,
+        "session_management_tested": false,
+        "token_validation_tested": false,
+        "mfa_status": "not_tested",
+        "password_policy": null,
+        "rate_limiting": null,
+        "username_enumeration": null,
+        "reset_password_flow": null,
+        "notes": "",
+        "privilege_escalation_tested": false,
+        "privilege_escalation_findings": 0,
+        "business_logic_tested": false,
+        "business_logic_findings": 0,
+        "auth_flow_documented": false,
+        "tested_endpoints": []
+      },
+      "full_headers": {
+        "endpoint_headers": [],
+        "common_missing_headers": [],
+        "inconsistent_headers": [],
+        "total_endpoints_scanned": 0,
+        "notes": ""
+      },
+      "credential_exposure": {
+        "checks_run": 0,
+        "password_samples_available": false,
+        "hash_samples_available": false,
+        "hibp_api_used": false,
+        "rows": [],
+        "breach_details": [],
+        "missing_artifacts": [],
+        "inconclusive": false,
+        "inconclusive_reason": ""
+      },
+      "remediation_matrix": [],
+      "ownership_evidence": {
+        "domain": "",
+        "whois_registrar": "",
+        "whois_org": "",
+        "whois_creation_date": "",
+        "whois_expiry_date": "",
+        "tls_subject": "",
+        "tls_issuer": "",
+        "tls_SANs": [],
+        "dns_soa_primary_ns": "",
+        "dns_ns_records": [],
+        "dns_mx_records": [],
+        "ip_whois_org": "",
+        "ip_whois_asn": "",
+        "ip_country": "",
+        "ownership_confidence": ""
+      },
+      "retest_plan": {
+        "retest_scope": [],
+        "retest_timeline": "14-30 days after remediation",
+        "retest_methodology": "Re-run all active scan tools + manual verification",
+        "retest_acceptance_criteria": "All P0 findings confirmed fixed; P1 findings confirmed fixed or risk accepted"
+      },
+      "unresolved_gaps": [],
+      "missing_artifacts": [],
+      "missing_artifacts_summary": [],
+      "next_scan_commands": [],
+      "quick_fuzz_summary": {},
+      "bounty_plan": {},
+      "burp_config_available": false,
+      "csrf_structured": [],
+      "cmdi_structured": [
+        {
+          "finding_id": "finding-1",
+          "title": "Reverse shell PoC in /upload",
+          "parameter": null,
+          "payload": null,
+          "harmless_marker": null,
+          "controlled_output": null,
+          "server_proof": null,
+          "output_source": "stdout",
+          "negative_control": null,
+          "verified": false
+        }
+      ],
+      "evidence_gate": {
+        "None": "candidate"
+      },
+      "evidence_quality": {
+        "total_findings": 5,
+        "gate_counts": {
+          "validated": 0,
+          "observed": 0,
+          "candidate": 1,
+          "inconclusive": 0
+        },
+        "critical_high": [
+          {
+            "finding_id": "None",
+            "severity": "critical",
+            "gate": "candidate"
+          },
+          {
+            "finding_id": "None",
+            "severity": "high",
+            "gate": "candidate"
+          },
+          {
+            "finding_id": "None",
+            "severity": "high",
+            "gate": "candidate"
+          }
+        ],
+        "all_critical_high_validated": false,
+        "score": 0
+      },
+      "coverage_occurrence": {}
     }
   },
   "valhalla_executive_report": {
@@ -663,7 +1508,7 @@
         "presigned_url": null
       }
     ],
-    "executive_summary": "During scan scan-int-valhalla-1 for tenant tenant-int-valhalla-1 as of 2026-04-19T10:00:00Z, ARGUS identified 5 finding(s) (1 CRITICAL, 2 HIGH, 1 MEDIUM, 1 LOW). Top business risk: payments.acme.example.com (composite score 49.00). Recommended priority: P0 (critical, SLA ≤ 7 days, 1 item(s)).",
+    "executive_summary": "During scan scan-int-valhalla-1 for tenant tenant-int-valhalla-1 as of 2026-04-19T10:00:00Z, Svalbard Security Inc. identified 5 finding(s) (1 CRITICAL, 2 HIGH, 1 MEDIUM, 1 LOW). Top business risk: payments.acme.example.com (composite score 49.00). Recommended priority: P0 (critical, SLA ≤ 7 days, 1 item(s)).",
     "executive_summary_counts": {
       "critical": 1,
       "high": 2,

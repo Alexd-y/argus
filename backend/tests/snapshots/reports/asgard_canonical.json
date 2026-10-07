@@ -1,7 +1,17 @@
 {
+  "format": "jsoc",
+  "format_version": "1.0",
+  "brand": {
+    "name": "Svalbard Security Inc.",
+    "logo_file": "logo.svg",
+    "logo_mime": "image/svg+xml",
+    "logo_sha256": "2b3463ca7ac573458737fc0bb8bcbfb9e6660fd77aac8f92514fa9349fda3095",
+    "logo_base64_svg": "PHN2ZyBpZD0iTGF5ZXJfMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgMjI1LjQ4IDk1LjEzIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2ZmZjt9PC9zdHlsZT48L2RlZnM+PGcgaWQ9IkxheWVyXzEtMiI+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNTUuMTIsNTguMjlsLTI2LjM5LTI2LjU0Yy0uMTktLjE5LS4zNy0uMzgtLjU0LS41OS0xLjIzLTEuNTUtMS44NS0zLjQzLTEuODUtNS4zMSwwLTIuMjQuODgtNC40OSwyLjYzLTYuMTcsMy4zOC0zLjI0LDguNzgtMy4wNiwxMi4wOS4yNWw5Ljk4LDEwLjAzLDIuMS0yLjFjMS42OC0xLjY4LDIuMDYtNC4yNi45NC02LjM2TDQyLjY5LDBjLTEuNjMsMS43NS0yLjg2LDYuMjQtLjkyLDkuMzgtNi41LTIuNjctMTQuMjMtMS40Ny0xOS41LDMuNzYtMi4xNSwyLjE0LTMuNjksNC43My00LjU0LDcuNTVMNS4wNCw3LjkzQzEuOTcsMTIuNzMuMTMsMTkuMDgsMCwyNS40NWMwLDkuODUsMy42MiwxOC4yNSwxMC42LDI1LjJsMjUuNzUsMjUuODhjMS44MywxLjgyLDQuOCwxLjgyLDYuNjItLjAyaDBjMS44Mi0xLjgzLDEuNzgtNC43OC0uMDItNi42MmwtMjUuNzUtMjUuODhjLTUuMTYtNS4xMy03LjY4LTEwLjkzLTcuNzUtMTguMjFsMzkuMDMsMzkuMDljNC43NSw0Ljc4LDQuNzMsMTIuNTQtLjAzLDE3LjMtNC43Niw0Ljc2LTEyLjUyLDQuNzgtMTcuMy4wM2wtOS45OS0xMC4xMy00LjY4LTQuNzljLTIuOTQtMy4wMS04LjA1LS45My04LjA1LDMuMjgsMCw3LjMxLS4wMSwxNC42OC0uMDEsMTQuNjgsMy45OS0uMDUsNi43Ni0yLjgxLDcuMTQtNS41NWw5LDkuMTVjNC4yMSw0LjE4LDkuNzIsNi4yNiwxNS4yMyw2LjI2LDUuNTQsMCwxMS4wOC0yLjExLDE1LjI5LTYuMzIsOC40LTguNCw4LjQyLTIyLjA5LjA1LTMwLjUyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTkwLjc1LDIxLjg3bC00LjEsMy42MmMtMS40NC0yLTIuOS0zLTQuMzktMy0uNzMsMC0xLjMyLjItMS43OC41OC0uNDYuMzktLjY5LjgzLS42OSwxLjMxcy4xNi45NS40OSwxLjM4Yy40NS41OCwxLjgsMS44Miw0LjA2LDMuNzMsMi4xMSwxLjc3LDMuMzksMi44OCwzLjg0LDMuMzQsMS4xMiwxLjEzLDEuOTIsMi4yMiwyLjM4LDMuMjUuNDcsMS4wMy43LDIuMTYuNywzLjM5LDAsMi4zOC0uODIsNC4zNS0yLjQ3LDUuOTEtMS42NSwxLjU1LTMuOCwyLjMzLTYuNDUsMi4zMy0yLjA3LDAtMy44Ny0uNTEtNS40MS0xLjUyLTEuNTQtMS4wMS0yLjg1LTIuNjEtMy45NS00Ljc4bDQuNjUtMi44MWMxLjQsMi41NywzLjAxLDMuODUsNC44MywzLjg1Ljk1LDAsMS43NS0uMjgsMi4zOS0uODNzLjk3LTEuMTkuOTctMS45MmMwLS42Ni0uMjQtMS4zMi0uNzMtMS45OC0uNDktLjY2LTEuNTYtMS42Ny0zLjIzLTMuMDItMy4xNy0yLjU4LTUuMjEtNC41Ny02LjE0LTUuOThzLTEuMzktMi44LTEuMzktNC4yYzAtMi4wMS43Ny0zLjc0LDIuMy01LjE5LDEuNTQtMS40NCwzLjQzLTIuMTYsNS42OS0yLjE2LDEuNDUsMCwyLjgzLjM0LDQuMTQsMS4wMSwxLjMxLjY3LDIuNzMsMS45LDQuMjYsMy42N1oiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xMDUuMDksNDYuOThoLTUuNzVsLTcuNjUtMjEuMjRoNi4xNWwzLjEyLDkuODNjLjI3LjgxLjUzLDEuNjYuNzcsMi41NS4yNC44OS40MywxLjU5LjU3LDIuMS4xMy0uNTQuMzItMS4yNC41Ny0yLjEuMjQtLjg2LjUtMS43MS43Ny0yLjU1bDMuMTItOS44M2g1Ljk5bC03LjY1LDIxLjI0WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTEyNi4zMyw0Ni45OHYtMS40MmMtLjUxLjU0LTEuMTkuOTgtMi4wMiwxLjM0LS44NC4zNS0xLjc1LjUzLTIuNzUuNTNzLTEuOTctLjE2LTIuOTEtLjQ3Yy0uOTQtLjMxLTEuNzktLjc3LTIuNTMtMS40LS43NC0uNjItMS4zNC0xLjQtMS44LTIuMzUtLjQ2LS45NC0uNjktMi4wNi0uNjktMy4zNiwwLTEuMTYuMjItMi4xOC42Ny0zLjA4LjQ0LS44OSwxLjA2LTEuNjIsMS44NC0yLjIxLjc4LS41OCwxLjY5LTEuMDIsMi43My0xLjMyLDEuMDQtLjMsMi4xNi0uNDQsMy4zOC0uNDQuOTcsMCwxLjc4LjA5LDIuNDMuMjZzMS4yLjM3LDEuNjYuNTl2LTEuMDVjMC0uNzUtLjI1LTEuNC0uNzUtMS45Mi0uNS0uNTMtMS4yNi0uNzktMi4yOS0uNzktLjY1LDAtMS4yMi4wMy0xLjcyLjA4LS41LjA1LS45Ny4xNC0xLjQyLjI0LS40NC4xMS0uODguMjUtMS4zMS40My0uNDMuMTgtLjg5LjQtMS4zOC42N2wtMi4xNC0zLjg4Yy42Mi0uMzUsMS4yMi0uNjYsMS44LS45My41OC0uMjcsMS4xOS0uNDksMS44Mi0uNjcuNjMtLjE4LDEuMy0uMzEsMi0uNC43LS4wOSwxLjQ4LS4xNCwyLjM1LS4xNCwxLjI5LDAsMi40Ny4xNiwzLjUyLjQ5czEuOTYuOCwyLjcxLDEuNDRjLjc1LjYzLDEuMzQsMS40MiwxLjc2LDIuMzUuNDIuOTMuNjMsMS45OS42MywzLjE4djE0LjI0aC01LjU4Wk0xMjYuMzMsMzguMDhjLS40OS0uMy0xLjAxLS41Mi0xLjU2LS42Ny0uNTUtLjE1LTEuMzMtLjIyLTIuMzMtLjIyLTEuMDUsMC0xLjg2LjIzLTIuNDEuNjktLjU1LjQ2LS44MywxLjEyLS44MywxLjk4LDAsLjc2LjI0LDEuNDIuNzMsMS45OHMxLjMyLjg1LDIuNTEuODVjLjkyLDAsMS43Mi0uMiwyLjQxLS41OS42OS0uMzksMS4xOC0uODQsMS40OC0xLjM2di0yLjY3WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTEzNi41Myw0Ni45OHYtMjkuNXM1LjU4LDAsNS41OCwwdjI5LjVoLTUuNThaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTY1LjI2LDM2LjYyYzAsMS41OS0uMTgsMy4wNS0uNTUsNC4zNy0uMzYsMS4zMi0uOSwyLjQ2LTEuNiwzLjQyLS43Ljk2LTEuNTYsMS43LTIuNTksMi4yM3MtMi4yLjc5LTMuNTIuNzljLS45NCwwLTEuOC0uMTYtMi41Ny0uNDktLjc3LS4zMi0xLjQxLS43MS0xLjkyLTEuMTd2MS4yMWgtNS41OHYtMjkuNXM1LjU4LDAsNS41OCwwdjkuNTljLjU0LS40NiwxLjE3LS44NywxLjg4LTEuMjMuNzEtLjM2LDEuNTgtLjU1LDIuNjEtLjU1LDEuMTMsMCwyLjIuMjIsMy4yLjY1LDEsLjQzLDEuODcsMS4xMSwyLjYzLDIuMDRzMS4zNSwyLjExLDEuNzgsMy41NGMuNDMsMS40My42NSwzLjEzLjY1LDUuMVpNMTU5LjYsMzYuNzVjMC0yLjE5LS4zMy0zLjc2LS45OS00LjczLS42Ni0uOTctMS41NC0xLjQ2LTIuNjUtMS40Ni0uODYsMC0xLjU1LjE2LTIuMDYuNDktLjUxLjMyLS45Ny43Ni0xLjM4LDEuMjl2OC4wMWMuODksMS4yMSwyLjE0LDEuODIsMy43NiwxLjgyLDIuMjEsMCwzLjMyLTEuODEsMy4zMi01LjQyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTE4MS4wNCw0Ni45OHYtMS40MmMtLjUxLjU0LTEuMTkuOTgtMi4wMiwxLjM0LS44NC4zNS0xLjc1LjUzLTIuNzUuNTNzLTEuOTctLjE2LTIuOTEtLjQ3Yy0uOTQtLjMxLTEuNzktLjc3LTIuNTMtMS40LS43NC0uNjItMS4zNC0xLjQtMS44LTIuMzUtLjQ2LS45NC0uNjktMi4wNi0uNjktMy4zNiwwLTEuMTYuMjItMi4xOC42Ny0zLjA4LjQ0LS44OSwxLjA2LTEuNjIsMS44NC0yLjIxLjc4LS41OCwxLjY5LTEuMDIsMi43My0xLjMyLDEuMDQtLjMsMi4xNi0uNDQsMy4zOC0uNDQuOTcsMCwxLjc4LjA5LDIuNDMuMjZzMS4yLjM3LDEuNjYuNTl2LTEuMDVjMC0uNzUtLjI1LTEuNC0uNzUtMS45Mi0uNS0uNTMtMS4yNi0uNzktMi4yOS0uNzktLjY1LDAtMS4yMi4wMy0xLjcyLjA4LS41LjA1LS45Ny4xNC0xLjQyLjI0LS40NC4xMS0uODguMjUtMS4zMS40My0uNDMuMTgtLjg5LjQtMS4zOC42N2wtMi4xNC0zLjg4Yy42Mi0uMzUsMS4yMi0uNjYsMS44LS45My41OC0uMjcsMS4xOS0uNDksMS44Mi0uNjdzMS4zLS4zMSwyLS40Yy43LS4wOSwxLjQ4LS4xNCwyLjM1LS4xNCwxLjI5LDAsMi40Ny4xNiwzLjUyLjQ5LDEuMDUuMzIsMS45Ni44LDIuNzEsMS40NC43Ni42MywxLjM0LDEuNDIsMS43NiwyLjM1LjQyLjkzLjYzLDEuOTkuNjMsMy4xOHYxNC4yNGgtNS41OFpNMTgxLjA0LDM4LjA4Yy0uNDktLjMtMS4wMS0uNTItMS41Ni0uNjctLjU1LS4xNS0xLjMzLS4yMi0yLjMzLS4yMi0xLjA1LDAtMS44Ni4yMy0yLjQxLjY5cy0uODMsMS4xMi0uODMsMS45OGMwLC43Ni4yNCwxLjQyLjczLDEuOTguNDkuNTcsMS4zMi44NSwyLjUxLjg1LjkyLDAsMS43Mi0uMiwyLjQxLS41OS42OS0uMzksMS4xOC0uODQsMS40OC0xLjM2di0yLjY3WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTIwMy40NiwzMi4yNmMtLjQ2LS40LS45Ni0uNzMtMS41LS45OS0uNTQtLjI2LTEuMTItLjM4LTEuNzQtLjM4LS41NCwwLTEuMDMuMDctMS40OC4yLS40NC4xNC0uODIuMzgtMS4xMy43My0uMzEuMzUtLjU1LjgyLS43MywxLjQyLS4xOC41OS0uMjYsMS4zNS0uMjYsMi4yN3YxMS40OWgtNS41OHYtMjEuMjRoNS41OHYxLjQyYy40OS0uNTEsMS4wOS0uOTUsMS44LTEuMzEuNzEtLjM2LDEuNTctLjU1LDIuNTctLjU1LjkyLDAsMS43MS4xNiwyLjM3LjQ3LjY2LjMxLDEuMTguNjUsMS41NiwxLjAzbC0xLjQ2LDUuNDZaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjE5LjQsNDYuOTh2LTEuMzRjLS41NC40Ni0xLjE3Ljg3LTEuODgsMS4yMy0uNzIuMzYtMS41OC41NS0yLjYxLjU1LTEuMTMsMC0yLjItLjIyLTMuMi0uNjUtMS0uNDMtMS44OC0xLjExLTIuNjMtMi4wNC0uNzYtLjkzLTEuMzUtMi4xLTEuNzgtMy41Mi0uNDMtMS40Mi0uNjUtMy4xMi0uNjUtNS4xMiwwLTEuNTkuMTgtMy4wNS41NS00LjM3LjM2LTEuMzIuOS0yLjQ2LDEuNi0zLjQyLjctLjk2LDEuNTYtMS43LDIuNTktMi4yM3MyLjItLjc5LDMuNTItLjc5Yy45NCwwLDEuOC4xNiwyLjU3LjQ5Ljc3LjMyLDEuNDEuNzIsMS45MiwxLjE3di05LjQ3aDUuNTh2MjkuNWgtNS41OFpNMjE5LjQsMzIuMzhjLS44OS0xLjIxLTIuMTQtMS44Mi0zLjc2LTEuODItMi4yMSwwLTMuMzIsMS44MS0zLjMyLDUuNDIsMCwyLjE4LjMzLDMuNzYuOTksNC43M3MxLjU0LDEuNDYsMi42NSwxLjQ2Yy44NiwwLDEuNTUtLjE2LDIuMDYtLjQ5LjUxLS4zMi45Ny0uNzYsMS4zOC0xLjI5di04LjAxWiIvPjwvZz48L3N2Zz4K",
+    "alt_text": "Svalbard Security Inc. logo"
+  },
   "report_id": "r-int-asgard-1",
-  "target": "https://acme.example.com",
   "scan_id": "scan-int-asgard-1",
+  "target": "https://acme.example.com",
   "created_at": "2026-04-19T10:00:00Z",
   "metadata": {
     "report_id": "r-int-asgard-1",
@@ -13,28 +23,73 @@
       "nginx"
     ]
   },
-  "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
-  "summary": {
-    "critical": 1,
-    "high": 2,
-    "medium": 1,
-    "low": 1,
-    "info": 0,
-    "technologies": [
-      "django",
-      "nginx"
-    ],
-    "sslIssues": 1,
-    "headerIssues": 2,
-    "leaksFound": false
+  "executive_summary": {
+    "text": "Critical SQLi and RCE; rotate exposed credentials immediately."
   },
+  "scope": {
+    "target": "https://acme.example.com",
+    "assessment_mode": "automated",
+    "authenticated_status": "NOT_ASSESSED",
+    "scan_id": "scan-int-asgard-1"
+  },
+  "methodology": {
+    "description": "Automated security assessment via ARGUS pipeline"
+  },
+  "wstg_coverage": {},
+  "tool_health": [],
+  "ssl_tls_analysis": {},
+  "ssl_tls_table_rows": [],
+  "port_exposure": [],
+  "port_exposure_summary": {},
+  "robots_sitemap": {},
+  "credential_exposure": {},
+  "auth_testing": {},
+  "leaked_emails": [],
+  "technologies": [
+    "django",
+    "nginx"
+  ],
   "findings": [
     {
-      "severity": "critical",
+      "finding_id": "",
       "title": "SQLi at /api/v1/users",
-      "description": "UNION-based SQLi via id parameter.",
-      "cwe": "CWE-89",
+      "status": "CANDIDATE",
+      "severity": "high",
+      "confidence": "confirmed",
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 9.8,
       "cvss": 9.8,
+      "cwe": "CWE-89",
+      "owasp": "A05",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [
+        "s3://argus-evidence/sqli-dump"
+      ],
+      "description": "UNION-based SQLi via id parameter.",
+      "evidence_classification": "candidate",
+      "is_provable": true,
+      "unconfirmed_reason": null,
       "owasp_category": "A05",
       "proof_of_concept": {
         "replay_command": [
@@ -46,22 +101,86 @@
       }
     },
     {
-      "severity": "high",
+      "finding_id": "",
       "title": "GitHub PAT leaked in JS bundle",
-      "description": "ghp_* token observed in /static/app.js.",
-      "cwe": "CWE-200",
+      "status": "CANDIDATE",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 7.5,
       "cvss": 7.5,
+      "cwe": "CWE-200",
+      "owasp": "A04",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "ghp_* token observed in /static/app.js.",
+      "evidence_classification": "candidate",
+      "is_provable": true,
+      "unconfirmed_reason": null,
       "owasp_category": "A04",
       "proof_of_concept": {
         "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user"
       }
     },
     {
-      "severity": "high",
+      "finding_id": "",
       "title": "Reverse shell PoC in /upload",
-      "description": "File upload allows RCE; PoC included.",
-      "cwe": "CWE-78",
+      "status": "CANDIDATE",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": 8.6,
       "cvss": 8.6,
+      "cwe": "CWE-78",
+      "owasp": "A01",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "File upload allows RCE; PoC included.",
+      "evidence_classification": "candidate",
+      "is_provable": true,
+      "unconfirmed_reason": null,
       "owasp_category": "A01",
       "proof_of_concept": {
         "replay_command": [
@@ -72,19 +191,83 @@
       }
     },
     {
-      "severity": "medium",
+      "finding_id": "",
       "title": "Missing security headers",
-      "description": "No CSP / HSTS / X-Frame-Options.",
-      "cwe": "CWE-693",
+      "status": "CANDIDATE",
+      "severity": "medium",
+      "confidence": "likely",
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": null,
       "cvss": null,
+      "cwe": "CWE-693",
+      "owasp": "A02",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "No CSP / HSTS / X-Frame-Options.",
+      "evidence_classification": "candidate",
+      "is_provable": true,
+      "unconfirmed_reason": null,
       "owasp_category": "A02"
     },
     {
-      "severity": "low",
+      "finding_id": "",
       "title": "MySQL root password observed in CI script",
-      "description": "Hardcoded password in deploy script.",
-      "cwe": "CWE-798",
+      "status": "CANDIDATE",
+      "severity": "low",
+      "confidence": "possible",
+      "affected_asset": "",
+      "endpoint": "",
+      "method": "",
+      "parameter": "",
+      "authentication_state": "NOT_ASSESSED",
+      "raw_request_ref": "",
+      "raw_response_ref": "",
+      "payload": "",
+      "tool_name": "",
+      "tool_version": "",
+      "tool_command": "",
+      "tool_output_ref": "",
+      "manual_validation_result": "",
+      "browser_proof_ref": "",
+      "observed_impact": "",
+      "cvss_vector": "",
+      "cvss_score": null,
       "cvss": null,
+      "cwe": "CWE-798",
+      "owasp": "A07",
+      "business_impact": "",
+      "affected_layer": "",
+      "owner_team": "",
+      "exact_remediation": "",
+      "verification_command": "",
+      "acceptance_criteria": "",
+      "retest_status": "NOT_ASSESSED",
+      "evidence_ids": [],
+      "description": "Hardcoded password in deploy script.",
+      "evidence_classification": "candidate",
+      "is_provable": true,
+      "unconfirmed_reason": null,
       "owasp_category": "A07",
       "proof_of_concept": {
         "replay_command": [
@@ -100,10 +283,145 @@
       }
     }
   ],
-  "technologies": [
-    "django",
-    "nginx"
+  "unconfirmed_findings": [],
+  "evidence": [
+    {
+      "finding_id": "",
+      "evidence_id": "s3://argus-evidence/sqli-dump",
+      "evidence_type": "tool_output",
+      "source_tool": "",
+      "artifact_ref": "s3://argus-evidence/sqli-dump",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "parsed"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    },
+    {
+      "finding_id": "",
+      "evidence_id": "NONE",
+      "evidence_type": "none",
+      "source_tool": "",
+      "artifact_ref": "",
+      "timestamp": "2026-04-19T10:00:00Z",
+      "parser_status": "missing"
+    }
   ],
+  "remediation_matrix": [
+    {
+      "report_id": "r-int-asgard-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-asgard-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-asgard-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-asgard-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    },
+    {
+      "report_id": "r-int-asgard-1",
+      "finding_id": "",
+      "status": "CANDIDATE",
+      "affected_layer": "NOT_ASSESSED",
+      "owner_team": "NOT_ASSESSED",
+      "config_or_component": "",
+      "exact_fix": "NOT_ASSESSED",
+      "verification_step": "NOT_ASSESSED",
+      "acceptance_criteria": "NOT_ASSESSED",
+      "retest_status": "NOT_ASSESSED"
+    }
+  ],
+  "retest_checklist": [],
+  "limitations": [],
+  "unresolved_gaps": [],
+  "verification_commands": [],
+  "infra_recommendations": {
+    "config_snippets": [
+      [
+        "generic",
+        "# nginx.conf — security headers\nadd_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';\" always;\nadd_header X-Content-Type-Options \"nosniff\" always;\nadd_header X-Frame-Options \"SAMEORIGIN\" always;\nadd_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\nadd_header Permissions-Policy \"geolocation=(), microphone=(), camera=()\" always;\nadd_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;\n"
+      ]
+    ],
+    "header_recommendations": [],
+    "owasp_gap_roadmap": [],
+    "tls_hardening": "# TLS Hardening Checklist\n# 1. Disable TLS 1.0 and 1.1 (nginx: ssl_protocols TLSv1.2 TLSv1.3;)\n# 2. Disable weak ciphers (RC4, DES, 3DES, EXPORT, NULL, aNULL, eNULL, MD5)\n# 3. Prioritize ECDHE ciphers for forward secrecy\n# 4. HSTS header: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n# 5. OCSP stapling enabled\n# 6. Certificate key size >= 2048-bit RSA or ECDSA P-256+\n# 7. TLS certificate from trusted CA (not self-signed for production)\n\n# Verification commands:\nopenssl s_client -connect target:443 -tls1_2 -servername target | openssl x509 -noout -text\nnmap --script ssl-enum-ciphers -p 443 target\ntestssl.sh --severity HIGH target\n"
+  },
+  "truthfulness_metrics": {
+    "truthfulness_score": 0.0,
+    "truthfulness_rating": "Insufficient",
+    "infra_applicability_score": 0.0,
+    "infra_applicability_rating": "Insufficient",
+    "validated_count": 0,
+    "advisory_count": 5,
+    "has_concrete_commands": 0,
+    "has_poc_evidence": 0,
+    "ai_sections_with_leakage": 0,
+    "total_ai_sections": 5,
+    "wstg_coverage_pct": 0.0,
+    "notes": "0/5 validated (0%), 0 with commands, 0 with PoC, 0 sections with prompt leakage. WSTG: 0%."
+  },
   "timeline": [
     {
       "phase": "recon",
@@ -124,22 +442,7 @@
   ],
   "phase_outputs": [
     {
-      "phase": "recon",
-      "output_data": {
-        "k": "v"
-      }
-    }
-  ],
-  "evidence": [
-    {
-      "finding_id": "f1",
-      "object_key": "evidence/sqli/dump.txt",
-      "description": "HTTP req/resp dump"
-    },
-    {
-      "finding_id": "f2",
-      "object_key": "evidence/upload/payload.bin",
-      "description": "Reverse-shell artefact"
+      "phase": "recon"
     }
   ],
   "screenshots": [
@@ -148,24 +451,12 @@
       "url_or_email": "login"
     }
   ],
-  "ai_conclusions": [
-    "LLM exec summary"
-  ],
-  "remediation": [
-    "Patch ORM.",
-    "Disable unrestricted upload.",
-    "Rotate all PATs."
-  ],
   "ai_sections": {
     "business_risk": "AI generation skipped: could not generate content",
     "compliance_check": "AI generation skipped: could not generate content",
     "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
     "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
     "vulnerability_description": "LLM exec summary"
-  },
-  "scan_artifacts": {
-    "phase_blocks": [],
-    "status": "skipped"
   },
   "active_web_scan": {
     "ai_summary_rows": [
@@ -188,6 +479,15 @@
     "visible": true
   },
   "raw_artifacts": [],
+  "export_integrity": {
+    "html_sha256": "",
+    "pdf_sha256": "",
+    "md_sha256": "",
+    "csv_sha256": "",
+    "json_sha256": "e8dd290640734b82b5426b3c35ba7f545da269567e9ef4096ab1e5454fea28fa",
+    "logo_sha256": "2b3463ca7ac573458737fc0bb8bcbfb9e6660fd77aac8f92514fa9349fda3095",
+    "generated_from_same_dataset": true
+  },
   "asgard_report": {
     "evidence": [
       {

@@ -1,17 +1,70 @@
-Severity,Title,Description,CWE,CVSS
-critical,Remote Code Execution in /upload,Unrestricted file upload + LFI chain.,CWE-78,9.5
-critical,SQL Injection in /api/users,UNION-based SQLi via id parameter.,CWE-89,9.8
-high,Reflected XSS in search,`q` echoed unescaped.,CWE-79,7.5
-high,Server-Side Request Forgery,Internal metadata endpoint reachable.,CWE-918,8.1
-medium,Missing security headers,No CSP / HSTS / X-Frame-Options.,CWE-693,
-medium,Outdated jQuery,jQuery 1.x with known prototype-pollution.,CWE-1104,6.1
-low,Cookie missing Secure flag,Session cookie served over HTTP.,CWE-614,
-low,Server banner exposed,Server header leaks nginx/1.18.0.,CWE-200,
-info,HTTP allowed alongside HTTPS,Plain HTTP returns 200 OK.,,
-info,Open directory listing,/static/ shows directory index.,,
+# report_id,r-int-midgard-1
+# scan_id,scan-int-midgard-1
+# target,https://app.example.test
+# brand,Svalbard Security Inc.
 
-"# ai_sections (section_key, text)"
-section_key,section_text
+report_id,scan_id,target,finding_id,status,severity,confidence,title,affected_asset,endpoint,method,parameter,authentication_state,cwe,owasp,cvss_vector,cvss_score,evidence_ids,raw_request_ref,raw_response_ref,tool_name,tool_version,tool_command,manual_validation_result,observed_impact,affected_layer,owner_team,exact_remediation,verification_command,acceptance_criteria,retest_status,is_provable,unconfirmed_reason
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,high,likely,Remote Code Execution in /upload,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-78,NOT_ASSESSED,NOT_ASSESSED,9.5,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,high,likely,SQL Injection in /api/users,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-89,A03,NOT_ASSESSED,9.8,"[""s3://argus-evidence/sqli-dump""]",NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,medium,likely,Reflected XSS in search,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-79,A03,NOT_ASSESSED,7.5,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,medium,likely,Server-Side Request Forgery,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-918,NOT_ASSESSED,NOT_ASSESSED,8.1,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,medium,likely,Missing security headers,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-693,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,medium,likely,Outdated jQuery,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-1104,NOT_ASSESSED,NOT_ASSESSED,6.1,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,low,likely,Cookie missing Secure flag,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-614,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,low,likely,Server banner exposed,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-200,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,info,likely,HTTP allowed alongside HTTPS,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-midgard-1,scan-int-midgard-1,https://app.example.test,NOT_ASSESSED,CANDIDATE,info,likely,Open directory listing,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
 
-# scan_artifacts (single JSON cell)
-"{""phase_blocks"": [], ""status"": ""skipped""}"
+# evidence.csv
+report_id,finding_id,evidence_id,evidence_type,source_tool,artifact_ref,timestamp,parser_status,status,summary
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,s3://argus-evidence/sqli-dump,raw,,s3://argus-evidence/sqli-dump,,parsed,CANDIDATE,SQL Injection in /api/users
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-midgard-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+
+# sections.csv
+report_id,section,status,content_markdown_or_json,evidence_ids,parser_status,updated_at
+r-int-midgard-1,title_meta,PRESENT,"{""target"": ""https://app.example.test"", ""report_id"": ""r-int-midgard-1""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,executive_summary_counts,PRESENT,"{""status"": ""PRESENT"", ""severity_counts"": {}}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,owasp_compliance,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,robots_sitemap,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,tech_stack,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,outdated_components,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,emails,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,ssl_tls,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,ssl_tls_table_rows,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,headers,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,security_headers_table_rows,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,dependencies,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,risk_matrix,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,critical_vulns,PRESENT,"{""status"": ""PRESENT"", ""critical_high_count"": 2}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,full_valhalla,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,evidence_inventory,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,tool_health_summary,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,threat_modeling_ref,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,findings,PRESENT,"{""status"": ""PRESENT"", ""finding_count"": 10}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,exploit_chains_text,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,remediation_stages_text,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,zero_day_text,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,conclusion_text,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,hibp_pwned_password_summary,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-midgard-1,appendices,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+
+# remediation.csv
+report_id,finding_id,status,affected_layer,owner_team,config_or_component,exact_fix,priority,rollback_risk,verification_step,acceptance_criteria,retest_status
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,HIGH,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,HIGH,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,LOW,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,LOW,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,LOW,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-midgard-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,LOW,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED

@@ -1,29 +1,71 @@
-Severity,Title,Description,CWE,CVSS
-critical,SQLi at /api/v1/users,UNION-based SQLi via id parameter on the payments API.,CWE-89,9.8
-high,GitHub PAT leaked in JS bundle,ghp_* token observed in /static/app.js.,CWE-200,7.5
-high,Reverse shell PoC in /upload,File upload allows RCE; PoC included.,CWE-78,8.6
-medium,Missing security headers,No CSP / HSTS / X-Frame-Options.,CWE-693,4.3
-low,MySQL root password observed in CI script,Hardcoded password in deploy script.,CWE-798,2.9
+# report_id,r-int-valhalla-1
+# scan_id,scan-int-valhalla-1
+# target,https://acme.example.com
+# brand,Svalbard Security Inc.
 
-"# ai_sections (section_key, text)"
-section_key,section_text
-attack_scenarios,AI generation skipped: no LLM provider available
-business_risk,AI generation skipped: no LLM provider available
-compliance_check,AI generation skipped: no LLM provider available
-cost_summary,AI generation skipped: no LLM provider available
-executive_summary,Critical SQLi and RCE; rotate exposed credentials immediately.
-executive_summary_valhalla,Critical SQLi and RCE; rotate exposed credentials immediately.
-exploit_chains,AI generation skipped: no LLM provider available
-hardening_recommendations,AI generation skipped: no LLM provider available
-prioritization_roadmap,AI generation skipped: no LLM provider available
-remediation_stages,AI generation skipped: no LLM provider available
-remediation_step,"Patch ORM.
+report_id,scan_id,target,finding_id,status,severity,confidence,title,affected_asset,endpoint,method,parameter,authentication_state,cwe,owasp,cvss_vector,cvss_score,evidence_ids,raw_request_ref,raw_response_ref,tool_name,tool_version,tool_command,manual_validation_result,observed_impact,affected_layer,owner_team,exact_remediation,verification_command,acceptance_criteria,retest_status,is_provable,unconfirmed_reason
+r-int-valhalla-1,scan-int-valhalla-1,https://acme.example.com,NOT_ASSESSED,CANDIDATE,high,confirmed,SQLi at /api/v1/users,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-89,A05,NOT_ASSESSED,9.8,"[""s3://argus-evidence/sqli-dump""]",NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-valhalla-1,scan-int-valhalla-1,https://acme.example.com,NOT_ASSESSED,CANDIDATE,medium,confirmed,GitHub PAT leaked in JS bundle,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-200,A01,NOT_ASSESSED,7.5,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-valhalla-1,scan-int-valhalla-1,https://acme.example.com,NOT_ASSESSED,CANDIDATE,medium,confirmed,Reverse shell PoC in /upload,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-78,A05,NOT_ASSESSED,8.6,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-valhalla-1,scan-int-valhalla-1,https://acme.example.com,NOT_ASSESSED,CANDIDATE,medium,likely,Missing security headers,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-693,A02,NOT_ASSESSED,4.3,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+r-int-valhalla-1,scan-int-valhalla-1,https://acme.example.com,NOT_ASSESSED,CANDIDATE,low,possible,MySQL root password observed in CI script,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,CWE-798,A07,NOT_ASSESSED,2.9,[],NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,false,"Scanner/heuristic candidate — impact not demonstrated and no raw request/response, tool output, OAST callback or screenshot was captured. Requires manual verification."
+
+# evidence.csv
+report_id,finding_id,evidence_id,evidence_type,source_tool,artifact_ref,timestamp,parser_status,status,summary
+r-int-valhalla-1,,s3://argus-evidence/sqli-dump,tool_output,,s3://argus-evidence/sqli-dump,,parsed,CANDIDATE,SQLi at /api/v1/users
+r-int-valhalla-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-valhalla-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-valhalla-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+r-int-valhalla-1,,NONE,none,,,,missing,INCONCLUSIVE,INCONCLUSIVE: missing artifact
+
+# sections.csv
+report_id,section,status,content_markdown_or_json,evidence_ids,parser_status,updated_at
+r-int-valhalla-1,title_meta,PRESENT,"{""target"": ""https://acme.example.com"", ""report_id"": ""r-int-valhalla-1""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,executive_summary_counts,PRESENT,"{""status"": ""PRESENT"", ""severity_counts"": {""critical"": 1, ""high"": 2, ""medium"": 1, ""low"": 1, ""info"": 0, ""unknown"": 0}}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,owasp_compliance,PRESENT,"{""status"": ""PRESENT"", ""row_count"": 10}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,robots_sitemap,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,tech_stack,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,outdated_components,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,emails,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,ssl_tls,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,ssl_tls_table_rows,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,headers,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,security_headers_table_rows,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,dependencies,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,risk_matrix,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,critical_vulns,PRESENT,"{""status"": ""PRESENT"", ""critical_high_count"": 1}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,full_valhalla,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,evidence_inventory,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,tool_health_summary,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,threat_modeling_ref,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,findings,PRESENT,"{""status"": ""PRESENT"", ""finding_count"": 5}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,exploit_chains_text,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,remediation_stages_text,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,zero_day_text,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,conclusion_text,PRESENT,Critical SQLi and RCE; rotate exposed credentials immediately.,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,hibp_pwned_password_summary,PRESENT,"{""pwned_count"": 12}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,appendices,NOT_ASSESSED,"{""status"": ""NOT_ASSESSED"", ""reason"": ""no data captured""}",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,attack_scenarios,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,business_risk,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,compliance_check,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,executive_summary,PRESENT,Critical SQLi and RCE; rotate exposed credentials immediately.,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,executive_summary_valhalla,PRESENT,Critical SQLi and RCE; rotate exposed credentials immediately.,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,exploit_chains,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,hardening_recommendations,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,prioritization_roadmap,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,remediation_stages,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,remediation_step,PRESENT,"Patch ORM.
 
 Disable unrestricted upload.
 
-Rotate all PATs."
-vulnerability_description,LLM exec summary
-zero_day_potential,AI generation skipped: no LLM provider available
+Rotate all PATs.",[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,vulnerability_description,PRESENT,LLM exec summary,[],generated,2026-04-19T10:00:00Z
+r-int-valhalla-1,zero_day_potential,PRESENT,AI generation skipped: could not generate content,[],generated,2026-04-19T10:00:00Z
 
-# scan_artifacts (single JSON cell)
-"{""phase_blocks"": [{""other_rows"": [], ""phase_key"": ""unknown"", ""phase_label"": ""Other"", ""phase_query"": """", ""rows"": [{""download_url"": null, ""file_name"": """", ""key"": """", ""last_modified"": """", ""size"": 0}], ""tool_output_rows"": [{""download_url"": null, ""file_name"": """", ""key"": """", ""last_modified"": """", ""size"": 0}]}], ""status"": ""ok""}"
+# remediation.csv
+report_id,finding_id,status,affected_layer,owner_team,config_or_component,exact_fix,priority,rollback_risk,verification_step,acceptance_criteria,retest_status
+r-int-valhalla-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,HIGH,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-valhalla-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-valhalla-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-valhalla-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,MEDIUM,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED
+r-int-valhalla-1,,CANDIDATE,NOT_ASSESSED,NOT_ASSESSED,,NOT_ASSESSED,LOW,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED,NOT_ASSESSED

@@ -315,7 +315,14 @@ def test_csv_payload_has_canonical_columns(
         canonical_report_data, tier=ReportTier.MIDGARD, fmt=ReportFormat.CSV
     )
     text = bundle.content.decode("utf-8")
-    header = text.splitlines()[0].lower()
+    # The canonical CSV opens with ``#``-prefixed metadata comment lines and a
+    # blank separator; the column header is the first real (non-comment, non-blank)
+    # row. Locate it rather than assuming line 0.
+    header = next(
+        ln.lower()
+        for ln in text.splitlines()
+        if ln.strip() and not ln.lstrip().startswith("#")
+    )
     assert "severity" in header
     assert "title" in header
 
