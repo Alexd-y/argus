@@ -57,10 +57,9 @@ Coverage (8 cases):
   7. The Adapter rule's ``seriesQuery`` for the KEV emit-rate filters on
      ``kev_listed="true"`` (so non-KEV findings don't inflate the
      scaling signal).
-  8. The Grafana dashboard JSON gate is documented but skipped — no
-     ``infra/helm/argus/grafana/*.json`` exists yet (a future ticket
-     should land the operator-built dashboard JSON; until then this
-     test is xfail-marked so the absence remains visible in CI).
+  8. The Grafana dashboard JSON gate is enforced: the shipped
+     ``infra/helm/argus/grafana/*.json`` must parse AND reference the KEV
+     metric surface (source counter / Adapter rate metric).
 
 Determinism: no network, no real Celery, no Redis. Helm rendering uses the
 ``helm template`` CLI when available; tests requiring it skip gracefully on
@@ -448,7 +447,7 @@ def test_adapter_kev_series_query_filters_on_kev_listed_true() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Case 8 — Grafana dashboard JSON validation (xfail until dashboards ship).
+# Case 8 — Grafana dashboard JSON validation (dashboards shipped; enforced).
 # ---------------------------------------------------------------------------
 
 
@@ -456,10 +455,9 @@ def test_grafana_dashboards_reference_kev_metric_surface() -> None:
     """Validate every Grafana dashboard JSON parses AND references the KEV
     metric surface (source counter and / or the Adapter-derived rate metric).
 
-    Strict-False xfail: the moment ANY dashboard JSON lands, this turns into
-    a real assertion. If the JSON is valid + references the metrics, pytest
-    reports XPASS — the operator can then flip ``strict=True`` to make CI
-    enforce the dashboards stay valid forever."""
+    Enforced gate: the dashboards have shipped under ``infra/helm/argus/grafana/``,
+    so this fails CI if a dashboard is missing, is invalid JSON, or stops
+    referencing the KEV metric surface."""
     if not GRAFANA_DASHBOARDS_DIR.exists():
         pytest.fail(
             "Expected Grafana dashboards under "
@@ -478,7 +476,7 @@ def test_grafana_dashboards_reference_kev_metric_surface() -> None:
 
     for dashboard_path in dashboards:
         # Parse first — invalid JSON is a hard failure (caught by the
-        # outer xfail until dashboards ship).
+        # enforced gate: a parse failure fails the test).
         try:
             content = json.loads(dashboard_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:

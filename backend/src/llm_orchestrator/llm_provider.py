@@ -12,10 +12,11 @@ Three concerns live in this module:
 * :class:`EchoLLMProvider` / :class:`OpenAILLMProvider` — concrete providers.
   ``EchoLLMProvider`` is the default for unit tests and dev mode (no
   network, deterministic, canned responses keyed on ``prompt_id``).
-  ``OpenAILLMProvider`` is the placeholder for real-vendor integration: it
-  raises :class:`LLMProviderUnavailableError` when no API key is configured
-  and a clear :class:`NotImplementedError` when one is present (real HTTP
-  integration is out-of-scope for this cycle).
+  ``OpenAILLMProvider`` is the real-vendor provider: an async httpx call to any
+  OpenAI-compatible ``/chat/completions`` endpoint (OpenAI / OpenRouter / DeepSeek
+  / local gateway via ``base_url``). It raises
+  :class:`LLMProviderUnavailableError` when no API key is configured or on any
+  transport / non-200 / malformed-response condition (routing miss).
 
 Security notes
 --------------
@@ -279,7 +280,7 @@ def _safe_parse_json(content: str) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# OpenAI provider stub
+# OpenAI-compatible provider (real async HTTP)
 # ---------------------------------------------------------------------------
 
 
