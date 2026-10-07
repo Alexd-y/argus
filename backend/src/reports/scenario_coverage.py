@@ -243,10 +243,71 @@ def build_scenario_coverage(
     }
 
 
+def _coverage_status_from_state(
+    applicability: Any, execution_status: Any, outcome: Any
+) -> CoverageStatus:
+    """Map a WSTG per-test state (applicability/execution/outcome) to a honest
+    scenario :class:`CoverageStatus`. A WSTG ``fail`` outcome means a vulnerability
+    was confirmed; ``pass``/``not_evaluated`` on a completed test means it ran with
+    no finding — running is never silently 'covered'."""
+    a, es, oc = str(applicability), str(execution_status), str(outcome)
+    if a == "not_applicable":
+        return CoverageStatus.NOT_APPLICABLE
+    if es == "failed":
+        return CoverageStatus.ERROR
+    if es == "blocked":
+        return CoverageStatus.BLOCKED
+    if es in ("not_started", "running"):
+        return CoverageStatus.NOT_RUN
+    if es == "partial":
+        return CoverageStatus.PARTIAL
+    if oc == "fail":
+        return CoverageStatus.CONFIRMED_FINDING
+    if oc == "inconclusive":
+        return CoverageStatus.PARTIAL
+    return CoverageStatus.EXECUTED_NO_FINDING
+
+
+def scenario_coverage_from_wstg_states(states: Iterable[Any]) -> dict[str, Any]:
+    """Materialise per-scenario coverage from the computed WSTG per-test states.
+
+    Bridges test-level coverage to the per-scenario model for the common report path
+    (no executed ``ScenarioResult`` stream available): each WSTG test's declared
+    ``scenario_ids`` (or the test id itself when it declares none) becomes a scenario
+    record whose status is derived from the test's applicability/execution/outcome.
+    """
+    records: list[ScenarioCoverageRecord] = []
+    for s in states or []:
+        test_id = str(getattr(s, "test_id", "") or "")
+        applicability = getattr(s, "applicability", "")
+        execution_status = getattr(s, "execution_status", "")
+        outcome = getattr(s, "outcome", "")
+        status = _coverage_status_from_state(applicability, execution_status, outcome)
+        applicable = str(applicability) != "not_applicable"
+        executed = str(execution_status) in ("partial", "completed")
+        evidence_sufficient = bool(getattr(s, "evidence_validated", False)) or bool(
+            getattr(s, "evidence_refs", None)
+        )
+        scenario_ids = [str(x) for x in (getattr(s, "scenario_ids", []) or []) if str(x).strip()]
+        for sid in scenario_ids or ([test_id] if test_id else []):
+            records.append(
+                ScenarioCoverageRecord(
+                    scenario_id=sid,
+                    coverage_status=status,
+                    applicable=applicable,
+                    executed=executed,
+                    wstg=[test_id] if test_id else [],
+                    evidence_sufficient=evidence_sufficient,
+                )
+            )
+    return build_scenario_coverage(records)
+
+
 __all__ = [
     "CoverageStatus",
     "ScenarioCoverageRecord",
     "build_scenario_coverage",
     "build_scenario_coverage_record",
     "map_scenario_status",
+    "scenario_coverage_from_wstg_states",
 ]

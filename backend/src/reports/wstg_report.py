@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.reports.scenario_coverage import scenario_coverage_from_wstg_states
 from src.reports.wstg_applicability import RULE_VERSION, decide_applicability
 from src.reports.wstg_coverage import wstg_ids_for_finding
 from src.reports.wstg_evidence import any_validated, validate_evidence
@@ -31,9 +32,10 @@ from src.reports.wstg_surface import (
 )
 
 # Version of the scenario registry the coverage block is computed against. The
-# per-scenario model is not yet fully materialised (test-level coverage only),
-# so this is surfaced for forward-compat and drift detection (spec §13).
-SCENARIO_REGISTRY_VERSION = "argus-wstg-scn-0"
+# per-scenario model is now materialised (``scenario_coverage`` block): from an
+# executed ScenarioResult stream when supplied, else derived from the per-test WSTG
+# states (test_id/scenario_ids). Bumped from scn-0 (test-level only) accordingly.
+SCENARIO_REGISTRY_VERSION = "argus-wstg-scn-1"
 
 # Features without a dedicated discovery detector default to ``unknown`` (kept in
 # the denominator) — running a tool is never proof of presence/absence (§Surface).
@@ -78,6 +80,7 @@ def build_wstg_block(
     scope_version: str = "default",
     surface: list[SurfaceObservation] | None = None,
     evidence_entries: list[dict[str, Any]] | None = None,
+    scenario_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute the canonical WSTG coverage block from finding facts.
 
@@ -138,6 +141,14 @@ def build_wstg_block(
     block["scope_version"] = scope_version
     block["scenario_registry_version"] = SCENARIO_REGISTRY_VERSION
     block["applicability_rules_version"] = RULE_VERSION
+    # Per-scenario coverage (additive): prefer an explicit executed-ScenarioResult
+    # block when the caller supplies one, else materialise it from the per-test WSTG
+    # states so the block is never a null placeholder.
+    block["scenario_coverage"] = (
+        scenario_coverage
+        if scenario_coverage is not None
+        else scenario_coverage_from_wstg_states(states)
+    )
     block["tests"] = [
         {
             "test_id": s.test_id,
