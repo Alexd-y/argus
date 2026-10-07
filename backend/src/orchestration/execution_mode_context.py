@@ -8,9 +8,11 @@ Boundary / missing-lease denies stay fail-closed.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr, ValidationError
 
@@ -579,3 +581,74 @@ def resolve_tool_policy_from_options(
 
 # Alias used by handlers / MCP callers (same as resolve_tool_policy_from_options).
 resolve_tool_policy_for_scan = resolve_tool_policy_from_options
+
+
+def _host_of(value: str) -> str:
+    """Extract host from a URL / host:port / bare host (best-effort)."""
+    v = (value or "").strip()
+    if not v:
+        return ""
+    if "://" in v:
+        return urlparse(v).hostname or v
+    if ":" in v and not v.startswith("["):
+        return v.split(":")[0]
+    return v
+
+
+def _target_in_lab_scope(target: str, allowed: list[str]) -> bool:
+    """True when ``target`` matches an allowed CIDR/IP or domain (exact/subdomain)."""
+    host = _host_of(target)
+    if not host:
+        return False
+    target_ip: ipaddress._BaseAddress | None
+    try:
+        target_ip = ipaddress.ip_address(host)
+    except ValueError:
+        target_ip = None
+    host_l = host.lower()
+    for entry in allowed:
+        a = entry.strip()
+        if not a:
+            continue
+        try:
+            net = ipaddress.ip_network(a, strict=False)
+            if target_ip is not None and target_ip in net:
+                return True
+            continue  # numeric entry can't match a domain
+        except ValueError:
+            pass
+        dom = a.lower().lstrip("*").lstrip(".")
+        if host_l == dom or host_l.endswith("." + dom):
+            return True
+    return False
+
+
+def lab_authorized_target(
+    target: str,
+    options: dict[str, Any] | None,
+    *,
+    settings: Any | None = None,
+) -> bool:
+    """Whether ``target`` is authorized for the lab guardrail bypass.
+
+    Returns ``True`` ONLY when both hold:
+      * ``execution_mode`` resolves to ``lab_unrestricted`` (not production/quick), and
+      * ``target`` lies inside the operator-declared lab scope
+        (``settings.argus_lab_allowed_targets`` — CIDR/IP/domain entries).
+
+    Fail-closed: a non-lab mode or an empty allow-list returns ``False``. This is the
+    only sanctioned source of the ``lab_authorized`` flag passed to
+    :func:`src.tools.guardrails.validate_target_for_tool`; it binds the internal-network
+    guardrail bypass to the authorized scope, never making it global.
+    """
+    if extract_execution_mode(options) is not ExecutionMode.LAB_UNRESTRICTED:
+        return False
+    if settings is None:
+        from src.core.config import settings as app_settings
+
+        settings = app_settings
+    raw = str(getattr(settings, "argus_lab_allowed_targets", "") or "")
+    allowed = [t.strip() for t in raw.split(",") if t.strip()]
+    if not allowed:
+        return False
+    return _target_in_lab_scope(target, allowed)
