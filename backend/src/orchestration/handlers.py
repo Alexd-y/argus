@@ -3428,7 +3428,13 @@ async def run_exploit_attempt(
 
     for _exploit in exploit_out.exploits or []:
         _sev = str(_exploit.get("severity", "")).lower()
-        if _sev in ("critical", "high"):
+        # Symbolic execution proves paths through a real BINARY. Only run it when the
+        # exploit carries an actual binary artifact — never a web target_url (angr
+        # cannot prove anything over a URL, and doing so would fabricate a proof).
+        _bin_path = str(
+            _exploit.get("binary_path") or _exploit.get("target_binary") or ""
+        ).strip()
+        if _sev in ("critical", "high") and _bin_path:
             try:
                 from src.orchestration.symbolic_execution import (
                     SymbolicExecutionRequest,
@@ -3436,7 +3442,7 @@ async def run_exploit_attempt(
                 )
 
                 _ser = SymbolicExecutionRequest(
-                    binary_path=str(_exploit.get("target_url", target)),
+                    binary_path=_bin_path,
                     source_function=str(_exploit.get("parameter", "input")),
                     sink_function=str(_exploit.get("vuln_type", "unknown")),
                     scan_id=scan_id or "",
@@ -3445,7 +3451,7 @@ async def run_exploit_attempt(
                 _sym_result = await run_symbolic_execution(
                     _ser, use_sandbox=bool(settings.sandbox_enabled)
                 )
-                if _sym_result.vulnerable:
+                if _sym_result.proven:
                     _exploit["symbolic_execution_proven"] = True
                     _exploit["symbolic_input_values"] = json.dumps(
                         _sym_result.input_values, default=str

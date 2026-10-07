@@ -9,12 +9,40 @@ providing mathematical proof that user input can reach a dangerous sink.
 from __future__ import annotations
 
 import logging
+import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_URL_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*://", re.IGNORECASE)
+_HOSTNAME_ONLY = re.compile(r"^[a-z0-9\-]+(\.[a-z0-9\-]+)+$", re.IGNORECASE)
+
+
+def _is_binary_target(binary_path: str) -> bool:
+    """True only for a plausible *local binary file* — never a URL or web host.
+
+    angr needs a real binary to prove a path; handing it a ``target_url`` (http://…)
+    or a bare hostname can never produce a sound proof, so such inputs must not be
+    run or labelled ``symbolic_execution_proven``. Rejects: empty, any ``scheme://``
+    value, and domain-shaped hosts (``app.example.com``). Accepts filesystem paths
+    (with a separator or that exist on disk) and simple local binary names.
+    """
+    p = (binary_path or "").strip()
+    if not p:
+        return False
+    if "://" in p or _URL_SCHEME.match(p):
+        return False
+    if "/" in p or "\\" in p or os.path.exists(p):
+        return True
+    # No path separator: reject hostname-shaped values (web targets like
+    # "app.example.com"); allow plain undotted local binary names (e.g. "fuzz_bin").
+    # Dotted bare names without a path are ambiguous and are skipped — the safe
+    # direction (no run, no proof) rather than risk a false proof over a web host.
+    return not _HOSTNAME_ONLY.match(p)
 
 SYMBOLIC_ENGINES = {
     "angr": {
@@ -199,24 +227,78 @@ def _parse_angr_output(
     )
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip a leading/trailing ```python fence an LLM may wrap the script in."""
+    s = (text or "").strip()
+    if s.startswith("```"):
+        lines = s.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        s = "\n".join(lines).strip()
+    return s
+
+
+async def synthesize_angr_script(request: SymbolicExecutionRequest) -> str:
+    """Synthesize a target-specific angr script via the LLM (WRB, local).
+
+    Falls back to :func:`generate_angr_stub` (a valid generic explore script) when
+    the LLM is unavailable or returns nothing usable.
+    """
+    system, user = build_symbolic_prompt(request)
+    try:
+        from src.llm.facade import LLMTask, call_llm_unified
+
+        out = await call_llm_unified(
+            system,
+            user,
+            task=LLMTask.EXPLOIT_GENERATION,
+            scan_id=request.scan_id or None,
+            phase="symbolic_execution",
+        )
+        code = _strip_code_fences(out or "")
+        if code.strip() and "angr" in code:
+            return code
+    except Exception:
+        logger.debug(
+            "synthesize_angr_script: LLM unavailable, using generic stub", exc_info=True
+        )
+    return generate_angr_stub(
+        request.binary_path,
+        source_function=request.source_function,
+        sink_function=request.sink_function,
+    )
+
+
 async def run_symbolic_execution(
     request: SymbolicExecutionRequest,
     use_sandbox: bool = True,
 ) -> SymbolicExecutionResult:
     """Execute symbolic analysis via angr/Z3 in a sandbox container.
 
-    1. Generate angr script from request
-    2. Write script to temp file
-    3. Run in sandbox via execute_command
-    4. Parse results for vulnerability proof
-    5. Return SymbolicExecutionResult
+    0. HONESTY GATE: angr needs a real binary. A non-binary / web (URL) target can
+       never be proven, so we skip it (``proven=False``) instead of running angr on
+       a URL and mislabelling the result ``symbolic_execution_proven``.
+    1. Synthesize a target-specific angr script (LLM, local) or fall back to a stub.
+    2. Write script to temp file.
+    3. Run in sandbox via execute_command.
+    4. Parse results for vulnerability proof.
     """
     start = time.monotonic()
-    angr_script = generate_angr_stub(
-        request.binary_path,
-        source_function=request.source_function,
-        sink_function=request.sink_function,
-    )
+
+    if not _is_binary_target(request.binary_path):
+        return SymbolicExecutionResult(
+            vulnerable=False,
+            proven=False,
+            error=(
+                "symbolic execution requires a local binary target; non-binary/web "
+                f"input skipped (angr cannot prove paths over {request.binary_path!r})"
+            ),
+            duration_seconds=round(time.monotonic() - start, 2),
+        )
+
+    angr_script = await synthesize_angr_script(request)
 
     from src.tools.executor import execute_command
 
@@ -268,4 +350,5 @@ __all__ = [
     "build_symbolic_prompt",
     "generate_angr_stub",
     "run_symbolic_execution",
+    "synthesize_angr_script",
 ]
