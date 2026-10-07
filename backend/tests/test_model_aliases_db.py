@@ -33,8 +33,10 @@ class _FakeSession:
     def __init__(self, rows: list | None = None, raise_exc: Exception | None = None) -> None:
         self._rows = rows or []
         self._exc = raise_exc
+        self.last_sql: str = ""
 
-    async def execute(self, *_a, **_k) -> _Result:
+    async def execute(self, statement, *_a, **_k) -> _Result:
+        self.last_sql = str(statement)
         if self._exc is not None:
             raise self._exc
         return _Result(self._rows)
@@ -53,11 +55,13 @@ async def test_db_row_overrides_default_alias() -> None:
             )
         ]
     )
-    await reg.load_from_db(session)
+    await reg.load_from_db(session, tenant_id="t1")
     entry = reg.resolve("argus-pentest-primary")
     assert entry is not None
     assert entry.providers[0].key == "custom-7b"
     assert entry.providers[0].base_url == "http://local:8000"
+    # query is explicitly tenant-scoped (no reliance on RLS alone)
+    assert "WHERE" in session.last_sql and "tenant_id" in session.last_sql
 
 
 @pytest.mark.asyncio
@@ -74,7 +78,7 @@ async def test_db_row_adds_new_alias_and_filters_unknown_keys() -> None:
             )
         ]
     )
-    await reg.load_from_db(session)
+    await reg.load_from_db(session, tenant_id="t1")
     entry = reg.resolve("tenant-custom")
     assert entry is not None
     assert entry.role == "code"
@@ -88,7 +92,16 @@ async def test_db_error_keeps_defaults() -> None:
     before = reg.resolve("argus-pentest-primary")
     assert before is not None
     session = _FakeSession(raise_exc=RuntimeError("relation does not exist"))
-    await reg.load_from_db(session)  # must not raise
+    await reg.load_from_db(session, tenant_id="t1")  # must not raise
     after = reg.resolve("argus-pentest-primary")
     assert after is not None
     assert after.providers[0].key == before.providers[0].key  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_empty_tenant_id_is_noop() -> None:
+    reg = AliasRegistry()
+    session = _FakeSession(rows=[_Row("x", "code", [{"key": "k"}])])
+    await reg.load_from_db(session, tenant_id="")  # no tenant → skip, no query
+    assert reg.resolve("x") is None
+    assert session.last_sql == ""  # execute never called

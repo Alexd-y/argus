@@ -217,20 +217,27 @@ class AliasRegistry:
                 providers=providers,
             )
 
-    async def load_from_db(self, session) -> None:
-        """Merge per-tenant alias overrides from the ``llm_model_aliases`` table.
+    async def load_from_db(self, session, *, tenant_id: str) -> None:
+        """Merge ONE tenant's alias overrides from the ``llm_model_aliases`` table.
 
-        DB rows take precedence over the env/config defaults (same semantics as
-        :meth:`load_from_config`); tenant scoping is enforced by row-level security
-        on the session. Best-effort: a missing table or query error leaves the
-        env/config defaults intact (logged) rather than failing startup.
+        The query is explicitly scoped by ``tenant_id`` (never relying on RLS alone):
+        :class:`AliasRegistry` is a process-wide singleton, so pulling every tenant's
+        rows into it would cross-contaminate aliases between tenants. Callers load a
+        specific tenant's overrides into a registry scoped to that tenant. DB rows
+        take precedence over env/config defaults (same semantics as
+        :meth:`load_from_config`). Best-effort: a missing/empty ``tenant_id`` or any
+        query error leaves the env/config defaults intact (logged), never failing.
         """
+        if not tenant_id:
+            logger.debug("load_from_db: empty tenant_id; keeping env/config defaults")
+            return
         try:
             from sqlalchemy import select
 
             from src.db.models import LlmModelAlias
 
-            result = await session.execute(select(LlmModelAlias))
+            stmt = select(LlmModelAlias).where(LlmModelAlias.tenant_id == tenant_id)
+            result = await session.execute(stmt)
             rows = list(result.scalars().all())
         except Exception:
             logger.debug(
