@@ -1280,6 +1280,10 @@ class Settings(BaseSettings):
     recon_max_concurrent_jobs: int = 5
     # VA active scan / sandbox (OWASP-002): max concurrent async tool runs
     active_scan_max_concurrent_jobs: int = 10
+    # Active-scan concurrency when the ambient execution mode is lab_unrestricted
+    # (deep authorized runs). Production/quick keep active_scan_max_concurrent_jobs.
+    # Env: ACTIVE_SCAN_LAB_MAX_CONCURRENT_JOBS.
+    active_scan_lab_max_concurrent_jobs: int = 50
     active_scan_max_capture_bytes: int = 4 * 1024 * 1024
     # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
     sqlmap_va_enabled: bool = False
