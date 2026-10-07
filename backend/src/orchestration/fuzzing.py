@@ -38,9 +38,15 @@ FUZZER_ENGINES = {
     },
 }
 
+#: Stable marker emitted ONLY by ``generate_harness_stub``; survives target-name
+#: substitution and lets ``_is_stub_harness`` reliably tell a no-op template apart
+#: from a real LLM-synthesized harness.
+_STUB_SENTINEL = "ARGUS-FUZZ-STUB"
+
 HARNESS_TEMPLATES = {
     "c": (
         "#include <stdint.h>\n#include <stddef.h>\n"
+        "// ARGUS-FUZZ-STUB — no-op placeholder, not a usable harness\n"
         "int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {{\n"
         "    // TODO: LLM-generated target-specific harness\n"
         "    return 0;\n"
@@ -48,6 +54,7 @@ HARNESS_TEMPLATES = {
     ),
     "java": (
         "import com.code_intelligence.jazzer.api.FuzzedDataProvider;\n"
+        "// ARGUS-FUZZ-STUB — no-op placeholder, not a usable harness\n"
         "public class FuzzTarget {{\n"
         "    public static void fuzzerTestOneInput(FuzzedDataProvider data) {{\n"
         "        // TODO: LLM-generated target-specific harness\n"
@@ -196,23 +203,103 @@ def _parse_crashes_from_output(output_dir_listing: str, stderr: str) -> list[Fuz
     return crashes
 
 
+#: Languages whose harness must be compiled into an instrumented binary before the
+#: fuzzer can run. (Java/Jazzer loads classes directly, so it is excluded.)
+_COMPILED_LANGS = frozenset({"c", "cpp", "rust", "go"})
+
+#: Compile the harness (+ optional target source) into an instrumented fuzz binary.
+_LIBFUZZER_COMPILE = "clang -g -O1 -fsanitize=fuzzer,address {harness} {sources} -o {fuzz_bin}"
+_AFL_COMPILE = "afl-cc -g -O1 -fsanitize=address {harness} {sources} -o {fuzz_bin}"
+
+
+def _strip_code_fences(text: str) -> str:
+    """Strip a leading/trailing ```lang fence an LLM may wrap the harness in."""
+    s = (text or "").strip()
+    if s.startswith("```"):
+        lines = s.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        s = "\n".join(lines).strip()
+    return s
+
+
+def _is_stub_harness(harness: str) -> bool:
+    """True when the harness is the shipped no-op template (cannot find real bugs).
+
+    Detection keys off ``_STUB_SENTINEL`` which only ``generate_harness_stub`` emits
+    and which survives target-name substitution, so a template is caught whether or
+    not a target name was substituted. A real LLM harness never carries it.
+    """
+    if not harness or not harness.strip():
+        return True
+    return _STUB_SENTINEL in harness
+
+
+async def synthesize_harness(request: FuzzingRequest) -> tuple[str, bool]:
+    """Synthesize a target-specific fuzzing harness via the LLM (WRB, local).
+
+    Returns ``(harness_source, is_stub)``. ``is_stub`` is True when no real harness
+    could be produced (LLM unavailable / empty / still a no-op template), in which
+    case the caller MUST NOT run the fuzzer — a no-op harness fabricates findings.
+    """
+    system, user = build_fuzz_harness_prompt(
+        language=request.language,
+        target=request.target_binary or request.target_class,
+        framework="",
+        source_context=request.source_code or "",
+    )
+    try:
+        from src.llm.facade import LLMTask, call_llm_unified
+
+        out = await call_llm_unified(
+            system,
+            user,
+            task=LLMTask.EXPLOIT_GENERATION,
+            scan_id=request.scan_id or None,
+            phase="fuzzing",
+        )
+        code = _strip_code_fences(out or "")
+        if code.strip() and not _is_stub_harness(code):
+            return code, False
+    except Exception:
+        logger.debug("synthesize_harness: LLM unavailable, falling back to stub", exc_info=True)
+    return generate_harness_stub(request.language, request.target_binary), True
+
+
 async def run_fuzzing_campaign(
     request: FuzzingRequest,
     use_sandbox: bool = True,
 ) -> FuzzingResult:
     """Execute a fuzzing campaign via sandbox container.
 
-    1. Generate or use provided harness
-    2. Write harness + seed corpus to temp directory
-    3. Run fuzzer in sandbox via execute_command
-    4. Parse crashes from output
-    5. Return FuzzingResult with crashes
+    1. Use the provided harness, else synthesize a target-specific one via the LLM.
+       A no-op stub harness short-circuits (honesty gate) — no fuzzer run, no crashes.
+    2. Write harness + target source + seed corpus to a temp directory.
+    3. Compile the harness into an instrumented binary (compiled languages).
+    4. Run the fuzzer in the sandbox and parse crashes from a *successful* run only.
     """
     start = time.monotonic()
     engine_config = FUZZER_ENGINES.get(request.engine, FUZZER_ENGINES["afl_plus_plus"])
-    harness = request.harness_source or generate_harness_stub(
-        request.language, request.target_binary
-    )
+
+    if request.harness_source and request.harness_source.strip():
+        harness, is_stub = request.harness_source, _is_stub_harness(request.harness_source)
+    else:
+        harness, is_stub = await synthesize_harness(request)
+
+    if is_stub:
+        # Honesty gate (P0-1): a no-op harness cannot find real bugs, so running it and
+        # reporting "crashes" would fabricate findings. Skip and say why instead.
+        return FuzzingResult(
+            engine=request.engine,
+            harness_source=harness,
+            error=(
+                "fuzzing skipped: no target-specific harness could be synthesized "
+                "(LLM unavailable or returned a no-op template)"
+            ),
+            duration_seconds=round(time.monotonic() - start, 2),
+        )
 
     from src.tools.executor import execute_command
 
@@ -220,33 +307,51 @@ async def run_fuzzing_campaign(
     input_dir = os.path.join(crash_dir, "input")
     output_dir = os.path.join(crash_dir, "output")
     harness_path = os.path.join(crash_dir, f"harness.{request.language}")
+    fuzz_bin = os.path.join(crash_dir, "fuzz_bin")
 
     try:
         os.makedirs(input_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 
-        seed_file = os.path.join(input_dir, "seed")
-        with open(seed_file, "w") as f:
+        with open(os.path.join(input_dir, "seed"), "w") as f:
             f.write("AA")
-
         with open(harness_path, "w") as f:
             f.write(harness)
+
+        source_path = ""
+        if request.source_code.strip():
+            source_path = os.path.join(crash_dir, f"target.{request.language}")
+            with open(source_path, "w") as f:
+                f.write(request.source_code)
+
+        # Compile the harness into an instrumented binary for compiled languages;
+        # a failed compile means we cannot fuzz, so we report that (no fabricated crashes).
+        run_target = request.target_binary
+        if request.language.lower() in _COMPILED_LANGS:
+            compile_tmpl = _AFL_COMPILE if request.engine == "afl_plus_plus" else _LIBFUZZER_COMPILE
+            compile_cmd = compile_tmpl.format(
+                harness=harness_path, sources=source_path, fuzz_bin=fuzz_bin
+            )
+            comp = execute_command(compile_cmd, use_sandbox=use_sandbox, timeout_sec=120)
+            if not comp.get("success", False):
+                return FuzzingResult(
+                    engine=request.engine,
+                    harness_source=harness,
+                    error="harness compilation failed: " + (comp.get("stderr", "") or "")[:1500],
+                    duration_seconds=round(time.monotonic() - start, 2),
+                )
+            run_target = fuzz_bin
 
         command = engine_config["command_template"].format(
             input_dir=input_dir,
             output_dir=output_dir,
-            target_binary=request.target_binary,
+            target_binary=run_target,
             target_class=request.target_class,
             classpath=getattr(request, "classpath", ""),
         )
 
         timeout = min(request.timeout_seconds, 600)
-
-        result = execute_command(
-            command,
-            use_sandbox=use_sandbox,
-            timeout_sec=timeout,
-        )
+        result = execute_command(command, use_sandbox=use_sandbox, timeout_sec=timeout)
 
         crashes = _parse_crashes_from_output(
             result.get("stdout", ""),
@@ -296,4 +401,5 @@ __all__ = [
     "generate_harness_stub",
     "run_fuzzing_campaign",
     "select_engine",
+    "synthesize_harness",
 ]

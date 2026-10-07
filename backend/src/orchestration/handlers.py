@@ -2319,7 +2319,27 @@ async def _va_fuzzing(llm_output, scan_id, scan_options, source_analysis):
             for _cf in (_code_files or [])[:3]:
                 _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
                 _engine = select_engine(_lang)
-                _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
+                # Pass the file PATH as the target identity and its CONTENT as source
+                # context for LLM harness synthesis — never the dict repr (which the
+                # fuzzer/compiler cannot use).
+                _name = (
+                    str(_cf.get("path") or _cf.get("file") or _cf.get("name") or "target")
+                    if isinstance(_cf, dict)
+                    else "target"
+                )
+                _src = (
+                    str(_cf.get("content") or _cf.get("snippet") or _cf.get("source") or "")
+                    if isinstance(_cf, dict)
+                    else ""
+                )
+                _fuzz_targets.append(
+                    {
+                        "file": _name,
+                        "engine": _engine,
+                        "language": _lang,
+                        "source": _src,
+                    }
+                )
             if _fuzz_targets:
                 logger.info(
                     "fuzzing_campaign_starting",
@@ -2332,6 +2352,7 @@ async def _va_fuzzing(llm_output, scan_id, scan_options, source_analysis):
                             language=_ft["language"],
                             engine=_ft["engine"],
                             scan_id=scan_id or "",
+                            source_code=_ft.get("source", ""),
                             timeout_seconds=min(int(scan_options.get("fuzz_timeout", 300)), 600),
                         )
                         _fresult = await run_fuzzing_campaign(
