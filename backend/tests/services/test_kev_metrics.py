@@ -452,15 +452,6 @@ def test_adapter_kev_series_query_filters_on_kev_listed_true() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "C7-T06 follow-up — operator-built Grafana dashboards have not landed "
-        "in infra/helm/argus/grafana/. Runbook §6.3 documents the expected "
-        "panel set; a future ticket should ship the dashboard JSON and flip "
-        "this gate from xfail to passing."
-    ),
-    strict=False,
-)
 def test_grafana_dashboards_reference_kev_metric_surface() -> None:
     """Validate every Grafana dashboard JSON parses AND references the KEV
     metric surface (source counter and / or the Adapter-derived rate metric).

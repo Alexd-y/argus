@@ -1,0 +1,95 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "schemaVersion": 39,
+  "tags": ["argus", "kev", "hpa", "autoscaling"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "",
+  "title": "ARGUS — KEV-aware HPA",
+  "uid": "argus-kev-hpa",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "description": "Derived external metric that drives the KEV-aware HPA scale-up decision. Per-replica target is 1 finding/sec sustained >=5m.",
+      "targets": [
+        {
+          "expr": "argus_kev_findings_emit_rate_5m",
+          "legendFormat": "KEV emit rate (5m)",
+          "refId": "A"
+        }
+      ],
+      "title": "KEV findings emit rate (5m) — HPA driver",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "description": "Source counter (rate) behind the derived metric: KEV-listed findings emitted by the enrichment pipeline.",
+      "targets": [
+        {
+          "expr": "sum(rate(argus_findings_emitted_total{kev_listed=\"true\"}[5m]))",
+          "legendFormat": "KEV findings/sec",
+          "refId": "A"
+        }
+      ],
+      "title": "KEV findings emitted (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "description": "Celery scan-worker queue depth — the lagging indicator the KEV-aware HPA is meant to get ahead of.",
+      "targets": [
+        {
+          "expr": "argus_celery_queue_depth",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Celery queue depth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "description": "Cumulative KEV-listed findings emitted (all time within retention).",
+      "targets": [
+        {
+          "expr": "sum(argus_findings_emitted_total{kev_listed=\"true\"})",
+          "legendFormat": "KEV findings total",
+          "refId": "A"
+        }
+      ],
+      "title": "KEV findings emitted (cumulative)",
+      "type": "stat"
+    }
+  ]
+}
