@@ -17,7 +17,7 @@ def _bypass_gates(monkeypatch: pytest.MonkeyPatch) -> None:
         "evaluate_kal_mcp_policy",
         lambda **_k: SimpleNamespace(allowed=True, reason=None, policy_id="test"),
     )
-    monkeypatch.setattr(ke, "validate_target_for_tool", lambda _h, _b: {"allowed": True})
+    monkeypatch.setattr(ke, "validate_target_for_tool", lambda _h, _b, **_k: {"allowed": True})
     monkeypatch.setattr(ke, "_upload_kal_raw_streams", lambda *_a, **_k: [])
 
 

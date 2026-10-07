@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
+from src.orchestration.execution_mode_context import lab_authorized_target
 from src.orchestration.signed_tool_runner import run_coro_sync, run_signed_tool
 from src.pipeline.contracts.tool_job import TargetKind
 from src.recon.mcp.policy import evaluate_kal_mcp_policy, normalize_kal_binary
@@ -162,7 +163,11 @@ def run_kal_mcp_tool(
 
     host = _host_from_target(target)
     if host:
-        vr = validate_target_for_tool(host, bin_name or "kal_mcp")
+        vr = validate_target_for_tool(
+            host,
+            bin_name or "kal_mcp",
+            lab_authorized=lab_authorized_target(host, scan_options),
+        )
         if not vr["allowed"]:
             elapsed = time.perf_counter() - start
             logger.info(
