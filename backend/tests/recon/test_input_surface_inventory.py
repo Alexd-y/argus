@@ -71,6 +71,49 @@ def test_graphql_variables_minimal() -> None:
     assert it.method == "POST"
 
 
+def test_graphql_operation_document_variables() -> None:
+    """P2-001 — variable declarations are parsed from the operation document."""
+    inv = build_input_surface_inventory(
+        {
+            "graphql": {
+                "endpoint": "https://api.example.com/graphql",
+                "query": "query Foo($id: ID!, $limit: Int) { user(id: $id) { name } }",
+            }
+        }
+    )
+    params = sorted(it.param_name for it in inv.items)
+    assert params == ["id", "limit"]
+    assert all(not it.param_name.startswith("__op__") for it in inv.items)
+
+
+def test_graphql_sdl_field_arguments() -> None:
+    """P2-001 — SDL field arguments are parsed when no operation variables exist."""
+    inv = build_input_surface_inventory(
+        {
+            "graphql": {
+                "endpoint": "https://api.example.com/graphql",
+                "sdl": "type Query { user(login: String!, id: ID): User }",
+            }
+        }
+    )
+    params = sorted(it.param_name for it in inv.items)
+    assert params == ["id", "login"]
+
+
+def test_graphql_synthetic_fallback_without_doc() -> None:
+    """No variables and no document → synthetic operation-only surface (unchanged)."""
+    inv = build_input_surface_inventory(
+        {
+            "graphql": {
+                "endpoint": "https://api.example.com/graphql",
+                "operation_name": "Me",
+            }
+        }
+    )
+    assert len(inv.items) == 1
+    assert inv.items[0].param_name == "__op__:Me"
+
+
 def test_dedup_same_method_path_param_location() -> None:
     row = {"param": "a", "full_url": "https://dup.example/path?a=1", "method": "GET"}
     inv = build_input_surface_inventory({"params_inventory": [row, row]})
