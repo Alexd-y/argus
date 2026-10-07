@@ -8,15 +8,7 @@ binaries.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
 from src.orchestration import symbolic_execution as se
 from src.orchestration.symbolic_execution import (
     SymbolicExecutionRequest,

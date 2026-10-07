@@ -7,15 +7,7 @@ when only a no-op stub harness is available (which would fabricate findings).
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
 from src.orchestration import fuzzing
 from src.orchestration.fuzzing import (
     FuzzingRequest,
