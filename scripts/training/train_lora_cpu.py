@@ -211,9 +211,35 @@ def main() -> None:
                     help="Merge an already-trained adapter into the base, then exit.")
     ap.add_argument("--adapter-dir", default=None,
                     help="Adapter dir for --merge-only (default: cfg.output_dir).")
+    # Per-run overrides (so one config serves several model/scope runs).
+    ap.add_argument("--base-model", default=None, help="Override cfg.base_model.")
+    ap.add_argument("--tokenizer", default=None, help="Override cfg.tokenizer_config.")
+    ap.add_argument("--task-filter", default=None,
+                    help="Override cfg.task_filter. Pass '' (empty) to train on ALL of final/.")
+    ap.add_argument("--output-dir", default=None, help="Override cfg.output_dir.")
+    ap.add_argument("--merged-dir", default=None, help="Override cfg.merged_output_dir.")
+    ap.add_argument("--num-epochs", type=float, default=None, help="Override cfg.num_epochs.")
+    ap.add_argument("--sequence-len", type=int, default=None, help="Override cfg.sequence_len.")
     args = ap.parse_args()
 
     cfg = _load_cfg(args.config)
+    # apply overrides (None = keep config value; '' is a real value for task_filter)
+    if args.base_model is not None:
+        cfg["base_model"] = args.base_model
+        cfg["tokenizer_config"] = args.tokenizer or args.base_model
+    if args.tokenizer is not None:
+        cfg["tokenizer_config"] = args.tokenizer
+    if args.task_filter is not None:
+        cfg["task_filter"] = args.task_filter or None  # '' -> no filter (all tasks)
+    if args.output_dir is not None:
+        cfg["output_dir"] = args.output_dir
+    if args.merged_dir is not None:
+        cfg["merged_output_dir"] = args.merged_dir
+    if args.num_epochs is not None:
+        cfg["num_epochs"] = args.num_epochs
+    if args.sequence_len is not None:
+        cfg["sequence_len"] = args.sequence_len
+
     if args.merge_only:
         merge_adapter(cfg, args.adapter_dir or cfg.get("output_dir"))
         return
