@@ -27,10 +27,21 @@ VALID_TASK_TYPES = [
     "tool_command_generation", "payload_generation", "payload_family_selection",
     "tool_selection", "finding_triage", "validation_plan",
     "methodology_checklist", "finding_to_remediation", "attack_chain_summary",
-    "report_section",
+    "report_section", "shell_command_generation",
+    # ARGUS 8-phase runtime-aligned task types (match prompt_registry contracts)
+    "phase_source_analysis", "phase_recon", "phase_threat_modeling",
+    "phase_vuln_analysis", "phase_exploitation", "phase_post_exploitation",
+    "phase_report_section", "phase_report_assembly", "phase_report_prose",
 ]
 
-VALID_PHASES = ["recon", "vuln_analysis", "exploitation", "post_exploitation", "cross_phase", "reporting"]
+# Task types whose assistant output is free-form text / code blocks, not JSON.
+# These are exempt from the strict-JSON assistant-content check below.
+NON_JSON_TASK_TYPES = {
+    "report_section", "shell_command_generation", "phase_report_prose",
+}
+
+VALID_PHASES = ["source_analysis", "recon", "quick_fuzz", "threat_modeling",
+                "vuln_analysis", "exploitation", "post_exploitation", "cross_phase", "reporting"]
 
 VALID_SOURCES = [
     "zha0_pentest_playbook", "dievus_internal_pentest_playbook",
@@ -74,6 +85,16 @@ MIN_EXAMPLES_PER_TASK = {
     "finding_to_remediation": {"train": 200, "valid": 25, "test": 25},
     "attack_chain_summary": {"train": 100, "valid": 15, "test": 15},
     "report_section": {"train": 100, "valid": 15, "test": 15},
+    "shell_command_generation": {"train": 400, "valid": 50, "test": 50},
+    "phase_recon": {"train": 40, "valid": 5, "test": 5},
+    "phase_threat_modeling": {"train": 40, "valid": 5, "test": 5},
+    "phase_vuln_analysis": {"train": 40, "valid": 5, "test": 5},
+    "phase_exploitation": {"train": 40, "valid": 5, "test": 5},
+    "phase_post_exploitation": {"train": 15, "valid": 2, "test": 2},
+    "phase_source_analysis": {"train": 30, "valid": 4, "test": 4},
+    "phase_report_section": {"train": 30, "valid": 4, "test": 4},
+    "phase_report_assembly": {"train": 30, "valid": 4, "test": 4},
+    "phase_report_prose": {"train": 60, "valid": 8, "test": 8},
 }
 
 
@@ -126,7 +147,7 @@ def validate_record(record: dict, line_num: int) -> list[str]:
     if isinstance(messages, list) and len(messages) >= 3:
         assistant_content = messages[2].get("content", "")
 
-    if metadata.get("task") != "report_section":
+    if metadata.get("task") not in NON_JSON_TASK_TYPES:
         try:
             if isinstance(assistant_content, str):
                 json.loads(assistant_content)

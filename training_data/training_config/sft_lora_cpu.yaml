@@ -1,0 +1,101 @@
+# ARGUS WhiteRabbitNeo — CPU LoRA fine-tuning config
+# ============================================================================
+# CPU-ONLY. The GPU config (sft_qlora.yaml) uses 4-bit bitsandbytes + flash-
+# attention + paged_adamw_8bit — all CUDA-only and WILL NOT run on a CPU server.
+# This profile replaces them with a plain fp32 LoRA run (adapter weights only;
+# base model stays frozen), runnable via scripts/training/train_lora_cpu.py
+# (HF Trainer + PEFT) or LLaMA-Factory in CPU mode.
+#
+# Target deployment: local models served on a CPU server (WhiteRabbitNeo-V3-7B
+# GGUF + qwythos-9b) via llama.cpp / Ollama. Fine-tune the adapter here, merge,
+# then export to GGUF for CPU inference (see README_cpu.md).
+#
+# Reality check: fp32 LoRA on a 7B base on CPU is slow (hours→days/epoch) and
+# needs ~32-40 GB RAM (frozen fp32 base ~28 GB + activations; LoRA optimizer
+# state is tiny). Reduce `sequence_len`, `num_epochs`, or train only the
+# phase-aligned subset (--filter) to iterate faster.
+# ============================================================================
+
+cpu_lora_config:
+  # === Model (choose the model deployed on your CPU server) ===
+  base_model: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  # alt: "qwythos-9b" (heavier on CPU — expect ~1.3x the 7B time/RAM)
+  tokenizer_config: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  model_type: "AutoModelForCausalLM"
+  trust_remote_code: false
+
+  # === Device / precision (NO bitsandbytes, NO flash-attention) ===
+  device: "cpu"
+  load_in_4bit: false
+  load_in_8bit: false
+  torch_dtype: "float32"      # bf16 only if your CPU has AVX512_BF16; fp32 is safest
+  attn_implementation: "eager"
+  flash_attention: false
+  sdp_attention: false
+  low_cpu_mem_usage: true
+
+  # === LoRA (adapter-only training; base frozen) ===
+  adapter: "lora"
+  lora_r: 16                  # smaller than GPU r=64 → fewer params, faster on CPU
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  # Do NOT save embed_tokens/lm_head on CPU (doubles trainable params + RAM).
+
+  # === Dataset (messages format: system/user/assistant) ===
+  datasets:
+    - path: "training_data/final/train.jsonl"
+      type: "chatml"
+      split: "train"
+  val_datasets:
+    - path: "training_data/final/valid.jsonl"
+      type: "chatml"
+      split: "valid"
+  chat_template: "chatml"
+  train_on_inputs: false      # mask prompt tokens; learn only assistant outputs
+
+  # Optional: train only the ARGUS 8-phase + command subset for faster iteration.
+  # Consumed by train_lora_cpu.py --filter (comma-separated metadata.task prefixes).
+  task_filter: "phase_,shell_command_generation"
+
+  # === Sequence length (lower = less RAM + faster on CPU) ===
+  sequence_len: 2048          # raise to 3072/4096 if RAM allows; phase prompts are long
+  pad_to_sequence_len: false
+
+  # === Training hyperparameters (match the spec: 3-5 epochs, LR 2e-4) ===
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+  num_epochs: 3
+  learning_rate: 2.0e-4
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  # === Optimization (CPU-safe optimizer; NOT paged_adamw_8bit) ===
+  optimizer: "adamw_torch"
+  gradient_checkpointing: true
+  gradient_checkpointing_kwargs:
+    use_reentrant: false
+  dataloader_num_workers: 2
+
+  # === Logging / checkpoints ===
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  output_dir: "training_data/output/sft_lora_cpu"
+
+  # === Post-training (CPU inference path) ===
+  merge_adapter: true                         # merge LoRA into base for GGUF export
+  merged_output_dir: "training_data/output/wrb7b_argus_merged"
+  gguf_quantization: "Q4_K_M"                 # llama.cpp quant for CPU serving
+  # convert: python llama.cpp/convert_hf_to_gguf.py <merged_output_dir> --outfile wrb7b-argus.gguf
+  # quantize: ./llama.cpp/llama-quantize wrb7b-argus.gguf wrb7b-argus-Q4_K_M.gguf Q4_K_M

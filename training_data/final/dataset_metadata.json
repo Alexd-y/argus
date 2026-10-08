@@ -1,8 +1,8 @@
 {
-  "total_records": 1927,
+  "total_records": 4383,
   "splits": {
     "train": {
-      "count": 1375,
+      "count": 3339,
       "task_distribution": {
         "tool_command_generation": 129,
         "payload_generation": 432,
@@ -13,7 +13,17 @@
         "finding_to_remediation": 216,
         "methodology_checklist": 16,
         "attack_chain_summary": 6,
-        "report_section": 4
+        "report_section": 4,
+        "shell_command_generation": 1200,
+        "phase_recon": 84,
+        "phase_source_analysis": 84,
+        "phase_vuln_analysis": 84,
+        "phase_threat_modeling": 84,
+        "phase_report_prose": 204,
+        "phase_report_section": 84,
+        "phase_report_assembly": 32,
+        "phase_exploitation": 84,
+        "phase_post_exploitation": 24
       },
       "family_distribution": {
         "integer_overflow": 20,
@@ -73,7 +83,7 @@
       }
     },
     "valid": {
-      "count": 255,
+      "count": 497,
       "task_distribution": {
         "tool_command_generation": 16,
         "payload_generation": 54,
@@ -84,7 +94,17 @@
         "finding_to_remediation": 54,
         "methodology_checklist": 2,
         "attack_chain_summary": 2,
-        "report_section": 1
+        "report_section": 1,
+        "shell_command_generation": 150,
+        "phase_recon": 10,
+        "phase_source_analysis": 10,
+        "phase_vuln_analysis": 10,
+        "phase_threat_modeling": 10,
+        "phase_report_prose": 25,
+        "phase_report_section": 10,
+        "phase_report_assembly": 4,
+        "phase_exploitation": 10,
+        "phase_post_exploitation": 3
       },
       "family_distribution": {
         "integer_overflow": 4,
@@ -144,7 +164,7 @@
       }
     },
     "test": {
-      "count": 297,
+      "count": 547,
       "task_distribution": {
         "tool_command_generation": 17,
         "payload_generation": 105,
@@ -153,7 +173,17 @@
         "validation_plan": 52,
         "finding_to_remediation": 51,
         "methodology_checklist": 3,
-        "attack_chain_summary": 1
+        "attack_chain_summary": 1,
+        "shell_command_generation": 150,
+        "phase_recon": 11,
+        "phase_source_analysis": 11,
+        "phase_vuln_analysis": 11,
+        "phase_threat_modeling": 11,
+        "phase_report_prose": 26,
+        "phase_report_section": 11,
+        "phase_report_assembly": 5,
+        "phase_exploitation": 11,
+        "phase_post_exploitation": 3
       },
       "family_distribution": {
         "integer_overflow": 5,
@@ -286,6 +316,16 @@
     "methodology_checklist",
     "finding_to_remediation",
     "attack_chain_summary",
-    "report_section"
+    "report_section",
+    "shell_command_generation",
+    "phase_source_analysis",
+    "phase_recon",
+    "phase_threat_modeling",
+    "phase_vuln_analysis",
+    "phase_exploitation",
+    "phase_post_exploitation",
+    "phase_report_section",
+    "phase_report_assembly",
+    "phase_report_prose"
   ]
 }
