@@ -108,8 +108,13 @@ def _render_and_tokenize(examples: list[dict], tokenizer, max_len: int,
 def do_train(cfg: dict, dry_run: bool) -> None:
     train_examples = build_examples(cfg, cfg["datasets"][0]["path"])
     val_examples = build_examples(cfg, cfg["val_datasets"][0]["path"]) if cfg.get("val_datasets") else []
+    cap = cfg.get("max_train_samples")
+    if cap:
+        train_examples = train_examples[: int(cap)]
+        val_examples = val_examples[: max(1, int(cap) // 10)]
     print(f"[data] train={len(train_examples)} valid={len(val_examples)} "
-          f"(task_filter={cfg.get('task_filter')!r})")
+          f"(task_filter={cfg.get('task_filter')!r}"
+          + (f", max_train_samples={cap}" if cap else "") + ")")
     if not train_examples:
         sys.exit("[error] no training examples after task_filter")
 
@@ -186,7 +191,7 @@ def do_train(cfg: dict, dry_run: bool) -> None:
     tok.save_pretrained(args.output_dir)
     print(f"[done] adapter saved -> {args.output_dir}")
 
-    if cfg.get("merge_adapter"):
+    if cfg.get("merge_adapter") and not cfg.get("no_merge"):
         merge_adapter(cfg, args.output_dir)
 
 
@@ -227,6 +232,10 @@ def main() -> None:
     ap.add_argument("--merged-dir", default=None, help="Override cfg.merged_output_dir.")
     ap.add_argument("--num-epochs", type=float, default=None, help="Override cfg.num_epochs.")
     ap.add_argument("--sequence-len", type=int, default=None, help="Override cfg.sequence_len.")
+    ap.add_argument("--max-train-samples", type=int, default=None,
+                    help="Truncate the (filtered) train set to N examples — fast smoke runs.")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="Skip the post-training adapter merge (faster; saves disk).")
     args = ap.parse_args()
 
     cfg = _load_cfg(args.config)
@@ -246,6 +255,10 @@ def main() -> None:
         cfg["num_epochs"] = args.num_epochs
     if args.sequence_len is not None:
         cfg["sequence_len"] = args.sequence_len
+    if args.max_train_samples is not None:
+        cfg["max_train_samples"] = args.max_train_samples
+    if args.no_merge:
+        cfg["no_merge"] = True
 
     if args.merge_only:
         merge_adapter(cfg, args.adapter_dir or cfg.get("output_dir"))
