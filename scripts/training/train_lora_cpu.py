@@ -76,17 +76,24 @@ def _render_and_tokenize(examples: list[dict], tokenizer, max_len: int,
                          train_on_inputs: bool) -> "Dataset":  # noqa: F821
     from datasets import Dataset
 
+    def _ids(msgs: list, add_gen: bool) -> list[int]:
+        # Render the chat template to a STRING first, then tokenize to plain
+        # list[int]. Robust across transformers versions (5.x returns a
+        # tokenizers.Encoding from apply_chat_template(tokenize=True), which
+        # Arrow/Datasets cannot serialize). add_special_tokens=False because the
+        # chat template already injects any BOS/special tokens.
+        text = tokenizer.apply_chat_template(
+            msgs, tokenize=False, add_generation_prompt=add_gen)
+        enc = tokenizer(text, add_special_tokens=False)
+        return list(enc["input_ids"])
+
     def encode(ex: dict) -> dict:
         msgs = ex["messages"]
-        # full conversation
-        full = tokenizer.apply_chat_template(msgs, tokenize=True,
-                                             add_generation_prompt=False)
+        full = _ids(msgs, False)
         labels = list(full)
         if not train_on_inputs:
             # mask everything up to the assistant turn (prompt tokens = -100)
-            prompt_msgs = msgs[:-1]
-            prompt_ids = tokenizer.apply_chat_template(
-                prompt_msgs, tokenize=True, add_generation_prompt=True)
+            prompt_ids = _ids(msgs[:-1], True)
             n = min(len(prompt_ids), len(labels))
             for i in range(n):
                 labels[i] = -100
