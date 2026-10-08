@@ -145,12 +145,16 @@ def do_train(cfg: dict, dry_run: bool) -> None:
 
     dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16,
              "float16": torch.float16}.get(cfg.get("torch_dtype", "float32"), torch.float32)
-    model = AutoModelForCausalLM.from_pretrained(
-        cfg["base_model"], torch_dtype=dtype,
+    _load_kw = dict(
         low_cpu_mem_usage=bool(cfg.get("low_cpu_mem_usage", True)),
         attn_implementation=cfg.get("attn_implementation", "eager"),
         trust_remote_code=bool(cfg.get("trust_remote_code", False)),
     )
+    # transformers 5.x renamed torch_dtype -> dtype; try the new name first.
+    try:
+        model = AutoModelForCausalLM.from_pretrained(cfg["base_model"], dtype=dtype, **_load_kw)
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(cfg["base_model"], torch_dtype=dtype, **_load_kw)
     model.config.use_cache = False
     lora = LoraConfig(
         r=int(cfg.get("lora_r", 16)), lora_alpha=int(cfg.get("lora_alpha", 32)),
@@ -163,26 +167,39 @@ def do_train(cfg: dict, dry_run: bool) -> None:
     if cfg.get("gradient_checkpointing"):
         model.gradient_checkpointing_enable()
 
-    args = TrainingArguments(
-        output_dir=cfg.get("output_dir", "training_data/output/sft_lora_cpu"),
-        per_device_train_batch_size=int(cfg.get("micro_batch_size", 1)),
-        gradient_accumulation_steps=int(cfg.get("gradient_accumulation_steps", 16)),
-        num_train_epochs=float(cfg.get("num_epochs", 3)),
-        learning_rate=float(cfg.get("learning_rate", 2e-4)),
-        lr_scheduler_type=cfg.get("lr_scheduler", "cosine"),
-        warmup_ratio=float(cfg.get("warmup_ratio", 0.05)),
-        weight_decay=float(cfg.get("weight_decay", 0.01)),
-        max_grad_norm=float(cfg.get("max_grad_norm", 1.0)),
-        logging_steps=int(cfg.get("logging_steps", 10)),
-        save_steps=int(cfg.get("save_steps", 200)),
-        save_total_limit=int(cfg.get("save_total_limit", 2)),
-        eval_strategy="steps" if val_ds is not None else "no",
-        eval_steps=int(cfg.get("eval_steps", 200)),
-        optim=cfg.get("optimizer", "adamw_torch"),
-        bf16=False, fp16=False, use_cpu=True,
-        dataloader_num_workers=int(cfg.get("dataloader_num_workers", 2)),
-        report_to=[],
-    )
+    # Build TrainingArguments robustly across transformers versions: only pass
+    # kwargs the installed signature actually accepts (5.x dropped/renamed some,
+    # e.g. warmup_ratio, use_cpu, eval_strategy). Unsupported keys are skipped.
+    import inspect
+    desired = {
+        "output_dir": cfg.get("output_dir", "training_data/output/sft_lora_cpu"),
+        "per_device_train_batch_size": int(cfg.get("micro_batch_size", 1)),
+        "gradient_accumulation_steps": int(cfg.get("gradient_accumulation_steps", 16)),
+        "num_train_epochs": float(cfg.get("num_epochs", 3)),
+        "learning_rate": float(cfg.get("learning_rate", 2e-4)),
+        "lr_scheduler_type": cfg.get("lr_scheduler", "cosine"),
+        "warmup_ratio": float(cfg.get("warmup_ratio", 0.05)),
+        "weight_decay": float(cfg.get("weight_decay", 0.01)),
+        "max_grad_norm": float(cfg.get("max_grad_norm", 1.0)),
+        "logging_steps": int(cfg.get("logging_steps", 10)),
+        "save_steps": int(cfg.get("save_steps", 200)),
+        "save_total_limit": int(cfg.get("save_total_limit", 2)),
+        "eval_strategy": "steps" if val_ds is not None else "no",
+        "eval_steps": int(cfg.get("eval_steps", 200)),
+        "optim": cfg.get("optimizer", "adamw_torch"),
+        "bf16": False, "fp16": False, "use_cpu": True,
+        "dataloader_num_workers": int(cfg.get("dataloader_num_workers", 2)),
+        "report_to": [],
+    }
+    ta_params = set(inspect.signature(TrainingArguments.__init__).parameters)
+    # handle the eval_strategy/evaluation_strategy rename across versions
+    if "eval_strategy" not in ta_params and "evaluation_strategy" in ta_params:
+        desired["evaluation_strategy"] = desired.pop("eval_strategy")
+    accepted = {k: v for k, v in desired.items() if k in ta_params}
+    dropped = sorted(set(desired) - set(accepted))
+    if dropped:
+        print(f"[warn] TrainingArguments: skipping unsupported kwargs: {dropped}")
+    args = TrainingArguments(**accepted)
     collator = DataCollatorForSeq2Seq(tok, padding=True, label_pad_token_id=-100)
     trainer = Trainer(model=model, args=args, train_dataset=train_ds,
                       eval_dataset=val_ds, data_collator=collator)
@@ -201,8 +218,12 @@ def merge_adapter(cfg: dict, adapter_dir: str) -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     out = cfg.get("merged_output_dir", "training_data/output/merged")
-    base = AutoModelForCausalLM.from_pretrained(
-        cfg["base_model"], torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    try:
+        base = AutoModelForCausalLM.from_pretrained(
+            cfg["base_model"], dtype=torch.float32, low_cpu_mem_usage=True)
+    except TypeError:
+        base = AutoModelForCausalLM.from_pretrained(
+            cfg["base_model"], torch_dtype=torch.float32, low_cpu_mem_usage=True)
     merged = PeftModel.from_pretrained(base, adapter_dir).merge_and_unload()
     merged.save_pretrained(out)
     AutoTokenizer.from_pretrained(cfg["tokenizer_config"]).save_pretrained(out)
