@@ -1537,10 +1537,15 @@ class ReportGenerator:
             if status == "ok":
                 continue
             error = res.get("error")
+            # A no-LLM skip carries status="skipped_no_llm" AND error="llm_unavailable"
+            # (WRB-only deployments). The skip is a benign no-data state, not a failure, so
+            # its reason_code must stay the skip sentinel — the pipeline keys the
+            # skip-vs-fail routing and the release gate on it (RC-15).
+            reason_code = status if status == "skipped_no_llm" else str(error or status)
             records.append(
                 {
                     "where": f"ai_section:{key}",
-                    "reason_code": str(error or status),
+                    "reason_code": reason_code,
                     "message": (
                         f"AI section '{key}' not generated "
                         f"(status={status}, error={error})"

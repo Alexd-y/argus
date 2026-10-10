@@ -72,7 +72,7 @@
 
 1. **entry**: t (F-1) · evidence: `E-1`
 
-## Evidence
+## Evidence Register
 
 | Evidence ID | Kind | Collector | Collected (UTC) | SHA-256 | Chain hash | Redacted | Producer run | Size | MIME | Object Key | Description |
 |---|---|---|---|---|---|---|---|---|---|---|---|

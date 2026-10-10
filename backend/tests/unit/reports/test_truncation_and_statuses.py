@@ -59,6 +59,16 @@ def test_ai_section_failures_records_non_ok():
     assert all(r["reason_code"] for r in records)
 
 
+def test_ai_section_failures_no_llm_skip_keeps_skip_reason_code():
+    # A no-LLM skip carries BOTH status=skipped_no_llm AND error=llm_unavailable in prod
+    # (WRB-only deploy). reason_code must stay the skip sentinel, not the error, so the
+    # pipeline treats it as a benign skip rather than a release-blocking failure.
+    records = ReportGenerator.ai_section_failures(
+        {"b": {"status": "skipped_no_llm", "error": "llm_unavailable", "text": "x"}}
+    )
+    assert records[0]["reason_code"] == "skipped_no_llm"
+
+
 def test_snapshot_threads_failures_and_skipped_from_meta():
     report_data = types.SimpleNamespace(findings=[], evidence=[], target="https://t")
     doc = build_snapshot_from_report_data(

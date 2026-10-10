@@ -55,8 +55,31 @@ def test_mime_for_logical_format():
 
 
 def test_build_report_object_key_uses_real_extension():
+    # The object key must END in a real extension (for tooling / content sniffing) …
     key = build_report_object_key("ten", "scan", "valhalla", "rep", "canonical_json")
-    assert key.endswith("rep.json")
-    assert ".canonical_json" not in key
+    assert key.endswith(".json")
     key_kit = build_report_object_key("ten", "scan", "valhalla", "rep", "valhalla_verification_kit")
-    assert key_kit.endswith("rep.zip")
+    assert key_kit.endswith(".zip")
+    # … while base formats keep the plain ``{rid}.{ext}`` key.
+    assert build_report_object_key("ten", "scan", "v", "rep", "json").endswith("rep.json")
+
+
+def test_build_report_object_key_unique_per_logical_format():
+    """RC-19 regression: distinct logical formats sharing an extension must NOT collide
+    on the same object key, or artifacts overwrite each other in storage (data loss)."""
+    formats = [
+        "json",
+        "canonical_json",
+        "valhalla_llm_json",
+        "valhalla_llm_manifest",
+        "export_validation_report",
+        "csv",
+        "valhalla_sections.csv",
+        "technologies_csv",
+        "outdated_components_csv",
+        "tool_health_csv",
+        "canonical_pdf",
+        "pdf",
+    ]
+    keys = [build_report_object_key("ten", "scan", "valhalla", "rep", f) for f in formats]
+    assert len(set(keys)) == len(formats), f"object key collision: {keys}"
