@@ -235,9 +235,11 @@ class TestRpt004NoLlmPlaceholders:
         assert out["status"] == "skipped_no_llm"
         assert out.get("text") == REPORT_AI_SKIPPED_NO_LLM
 
-    def test_ai_results_to_text_map_includes_skipped_no_llm(
+    def test_ai_results_to_text_map_excludes_skipped_no_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # RC-15: a skipped (no-LLM) section must NOT be published as a complete section;
+        # it is recorded as a failure instead, so the release does not look clean.
         for k in (
             "OPENAI_API_KEY",
             "DEEPSEEK_API_KEY",
@@ -255,8 +257,11 @@ class TestRpt004NoLlmPlaceholders:
             {"finding_count": 1},
             redis_client=None,
         )
+        assert raw["status"] == "skipped_no_llm"
         mapped = ReportGenerator.ai_results_to_text_map({"remediation_step": raw})
-        assert mapped["remediation_step"] == REPORT_AI_SKIPPED_NO_LLM
+        assert "remediation_step" not in mapped
+        failures = ReportGenerator.ai_section_failures({"remediation_step": raw})
+        assert any(r["where"] == "ai_section:remediation_step" for r in failures)
 
 
 # Verbatim fragment observed leaking into a real remediation_step section

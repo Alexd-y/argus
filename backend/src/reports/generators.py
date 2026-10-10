@@ -48,6 +48,12 @@ from src.reports.infra_recommendations import (
     build_verification_commands,
     generate_infra_recommendations,
 )
+from src.reports.limits import (
+    EVIDENCE_IDS_PREVIEW,
+    EVIDENCE_PER_CATEGORY_PREVIEW,
+    cap_with_overflow,
+    overflow_note,
+)
 from src.reports.report_quality_gate import (
     classify_evidence,
     score_evidence_quality,
@@ -676,6 +682,9 @@ def build_owasp_compliance_rows(
     """
     counts: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
     evidence_by_category: dict[str, list[str]] = {cid: [] for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    # RC-14 — track evidence ids dropped by the per-category / per-row preview caps so the
+    # row can report "showing N of M" instead of silently hiding the remainder.
+    evidence_dropped: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
     for row in findings:
         oc = row.get("owasp_category")
         if isinstance(oc, str) and oc in counts:
@@ -691,7 +700,9 @@ def build_owasp_compliance_rows(
                 ev_items = [str(x)[:80] for x in ev if str(x).strip()]
             elif ev:
                 ev_items = [str(ev)[:80]]
-            for item in ev_items[:4]:
+            kept_ev, dropped_ev = cap_with_overflow(ev_items, EVIDENCE_PER_CATEGORY_PREVIEW)
+            evidence_dropped[oc] += dropped_ev
+            for item in kept_ev:
                 if item not in evidence_by_category[oc]:
                     evidence_by_category[oc].append(item)
     entries = _resolve_owasp_summary_for_rows(counts, owasp_summary)
@@ -760,6 +771,10 @@ def build_owasp_compliance_rows(
                 else "No finding after assessment"
             )
             findings_present = "0"
+        shown_ev, dropped_tail = cap_with_overflow(
+            evidence_by_category.get(cid, []), EVIDENCE_IDS_PREVIEW
+        )
+        ev_overflow = evidence_dropped.get(cid, 0) + dropped_tail
         row_out: dict[str, Any] = {
             "category_id": cid,
             "title": title_en,
@@ -772,8 +787,13 @@ def build_owasp_compliance_rows(
             "findings_present": findings_present,
             "count": n,
             "row_class": row_class,
-            "evidence_ids": evidence_by_category.get(cid, [])[:8],
+            "evidence_ids": shown_ev,
         }
+        if ev_overflow:
+            row_out["evidence_overflow"] = ev_overflow
+            row_out["evidence_note"] = overflow_note(
+                shown=len(shown_ev), total=len(shown_ev) + ev_overflow
+            )
         if use_valhalla_owasp_2021_misconfig_labels:
             row_out["display_category_code"] = display_code
         out.append(row_out)

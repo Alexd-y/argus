@@ -85,8 +85,28 @@ def _snapshot_pdf_bytes(html: str, completed_at: str) -> bytes | None:
 def _scan_meta_for_snapshot(
     built: Any, report_data: Any, scan_id: str, tenant_id: str
 ) -> dict[str, Any]:
-    """Assemble snapshot scan-meta from ScanReportData.scan (tolerant getattr)."""
+    """Assemble snapshot scan-meta from ScanReportData.scan (tolerant getattr).
+
+    Also folds generation-time degradations into the snapshot so they reach the client
+    bundle, not only the logs: failed AI sections (RC-15) become ``failures`` /
+    ``skipped_reasons``, and a branded-PDF template fallback recorded on the template
+    context (RC-18) becomes a ``failure``.
+    """
     scan_row = getattr(getattr(built, "scan_report_data", None), "scan", None)
+    failures: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    ai_results = getattr(built, "ai_section_results", None)
+    if isinstance(ai_results, dict):
+        for rec in ReportGenerator.ai_section_failures(ai_results):
+            if rec.get("reason_code") == "skipped_no_llm":
+                skipped.append(rec)
+            else:
+                failures.append(rec)
+    tctx = getattr(built, "template_context", None)
+    if isinstance(tctx, dict):
+        for rf in tctx.get("render_failures") or []:
+            if isinstance(rf, dict) and rf.get("where"):
+                failures.append(rf)
     return {
         "scan_id": scan_id,
         "tenant_id": tenant_id,
@@ -98,6 +118,8 @@ def _scan_meta_for_snapshot(
         "quick_profile": getattr(scan_row, "quick_profile", None),
         "nuclei_profile": getattr(scan_row, "nuclei_profile", None),
         "completed_at": getattr(report_data, "created_at", None),
+        "failures": failures,
+        "skipped_reasons": skipped,
     }
 
 
@@ -243,6 +265,7 @@ def _compute_valhalla_release_blockers(
     actual_tier: str,
     valhalla_llm_status: str,
     llm_merge_failed: bool = False,
+    ai_section_failed: bool = False,
 ) -> list[str]:
     """Evaluate the Valhalla release blockers fail-closed (Phase G, RC-01…RC-04).
 
@@ -402,6 +425,10 @@ def _compute_valhalla_release_blockers(
     #     incomplete; surface it as a blocker (logged always, enforced when enabled).
     if llm_merge_failed:
         blockers.append("GATE-ERROR: llm_merge failed; canonical remediation/closure incomplete")
+
+    # --- RC-15 — a mandatory AI section failed to generate; the report is not complete.
+    if ai_section_failed:
+        blockers.append("GATE-ERROR: AI section generation failed; report is incomplete")
 
     return blockers
 
@@ -1217,6 +1244,15 @@ async def run_generate_report_pipeline(
         release_status = "ready"
         release_error: str | None = None
         if tier_str == "valhalla":
+            # RC-15 — a real AI-section failure (not a no-LLM skip) blocks the release
+            # when mandatory LLM remediation is expected.
+            _ai_fail = any(
+                rec.get("reason_code") != "skipped_no_llm"
+                for rec in ReportGenerator.ai_section_failures(
+                    getattr(built, "ai_section_results", {}) or {}
+                )
+            )
+            ai_section_failed = _ai_fail and settings.valhalla_llm_remediation_enabled
             blockers = _compute_valhalla_release_blockers(
                 report_data=report_data,
                 template_context=built.template_context,
@@ -1224,6 +1260,7 @@ async def run_generate_report_pipeline(
                 actual_tier=tier_str,
                 valhalla_llm_status=valhalla_llm_status,
                 llm_merge_failed=llm_merge_failed,
+                ai_section_failed=ai_section_failed,
             )
             if blockers:
                 logger.warning(

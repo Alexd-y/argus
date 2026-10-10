@@ -56,6 +56,7 @@ from src.recon.stage3_storage import download_stage3_artifact, get_stage3_root_f
 from src.recon.stage4_storage import STAGE4_ROOT_FILES, download_stage4_artifact
 from src.recon.stage_object_download import StageObjectFetchError
 from src.reports.canonical_findings import apply_canonical_finding_pipeline
+from src.reports.limits import EVIDENCE_REFS_MAX, EVIDENCE_SNIPPET_MAXLEN, cap_with_overflow
 from src.reports.report_quality_gate import (
     apply_security_header_table_gap_to_findings,
 )
@@ -76,6 +77,29 @@ from src.storage.s3 import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _cap_evidence_refs(raw: Any, row: Any) -> list[str]:
+    """Cap a finding row's evidence refs (count + per-ref length) via shared limits.
+
+    The cap is not silent: when refs are dropped a structured event records the count,
+    and the full, uncapped chain lives in the snapshot's Evidence Register / JSON (RC-14).
+    """
+    if not isinstance(raw, list):
+        return []
+    cleaned = [str(x)[:EVIDENCE_SNIPPET_MAXLEN] for x in raw if x is not None]
+    kept, dropped = cap_with_overflow(cleaned, EVIDENCE_REFS_MAX)
+    if dropped:
+        logger.info(
+            "finding_evidence_refs_capped",
+            extra={
+                "event": "finding_evidence_refs_capped",
+                "finding_id": str(getattr(row, "id", "") or getattr(row, "finding_id", "")),
+                "shown": len(kept),
+                "dropped": dropped,
+            },
+        )
+    return kept
 
 _MAX_TEXT_BYTES = 512 * 1024
 _MAX_JSON_PARSE_PREVIEW = 2048
@@ -381,11 +405,7 @@ def finding_rows_from_models(rows: list[Any]) -> list[FindingRow]:
             ),
             confidence=str(getattr(row, "confidence", None) or "likely")[:20],
             evidence_type=getattr(row, "evidence_type", None),
-            evidence_refs=(
-                [str(x)[:500] for x in getattr(row, "evidence_refs", [])[:64] if x is not None]
-                if isinstance(getattr(row, "evidence_refs", None), list)
-                else []
-            ),
+            evidence_refs=_cap_evidence_refs(getattr(row, "evidence_refs", None), row),
             reproducible_steps=getattr(row, "reproducible_steps", None),
             applicability_notes=getattr(row, "applicability_notes", None),
             created_at=row.created_at,

@@ -1501,20 +1501,53 @@ class ReportGenerator:
     def ai_results_to_text_map(
         ai_section_results: dict[str, dict[str, Any]],
     ) -> dict[str, str]:
+        """Only ``status == "ok"`` sections reach the report text (RC-15).
+
+        A skipped (``skipped_no_llm``) or failed (``llm_unavailable`` /
+        ``generation_failed``) generation must NOT be published as if it were a complete
+        section — that passed broken text off as normal and let the release look clean.
+        Non-``ok`` sections are reported by :meth:`ai_section_failures` and recorded in
+        the snapshot (``doc.failures`` / ``doc.skipped_reasons``) instead, so the
+        degradation is visible in the client bundle. A partial result that is genuinely
+        wanted must be marked inside its own section text, not emitted as a whole one.
+        """
         out: dict[str, str] = {}
         for key, res in ai_section_results.items():
-            text = res.get("text")
-            if not isinstance(text, str) or not text.strip():
+            if res.get("status") != "ok":
                 continue
-            st = res.get("status")
-            err = res.get("error")
-            if (
-                st == "ok"
-                or st == "skipped_no_llm"
-                or err in ("llm_unavailable", "generation_failed")
-            ):
+            text = res.get("text")
+            if isinstance(text, str) and text.strip():
                 out[key] = text.strip()
         return out
+
+    @staticmethod
+    def ai_section_failures(
+        ai_section_results: dict[str, dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        """Return a failure record per non-``ok`` AI section (RC-15).
+
+        Each record is a ``ReportFailure``-shaped dict (``where`` / ``reason_code`` /
+        ``message``) so the pipeline can fold it into the snapshot's failures /
+        skipped-reasons and the degradation shows up in every client format rather than
+        only in the logs.
+        """
+        records: list[dict[str, str]] = []
+        for key, res in ai_section_results.items():
+            status = str(res.get("status") or "unknown")
+            if status == "ok":
+                continue
+            error = res.get("error")
+            records.append(
+                {
+                    "where": f"ai_section:{key}",
+                    "reason_code": str(error or status),
+                    "message": (
+                        f"AI section '{key}' not generated "
+                        f"(status={status}, error={error})"
+                    ),
+                }
+            )
+        return records
 
     def resolve_celery_ai_results(
         self,

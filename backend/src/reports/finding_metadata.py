@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from src.findings.cvss import parse_cvss_vector
 from src.reports.framework_mapping import map_finding_frameworks
+from src.reports.limits import EVIDENCE_REFS_PREVIEW, cap_with_overflow
 
 FindingConfidence = Literal["confirmed", "likely", "possible", "advisory"]
 FindingEvidenceType = Literal[
@@ -256,9 +257,10 @@ def format_evidence_cell(evidence_type: str | None, evidence_refs: list[str]) ->
     et = (evidence_type or "").strip().lower().replace("-", "_") or "—"
     if not evidence_refs:
         return et
-    refs = "; ".join(evidence_refs[:8])
-    if len(evidence_refs) > 8:
-        refs += "…"
+    shown, dropped = cap_with_overflow(list(evidence_refs), EVIDENCE_REFS_PREVIEW)
+    refs = "; ".join(shown)
+    if dropped:
+        refs += f" (+{dropped} more — see Evidence Register / JSON)"
     return f"{et}: {refs}"
 
 
