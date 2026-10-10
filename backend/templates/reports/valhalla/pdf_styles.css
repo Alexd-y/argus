@@ -437,3 +437,12 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 }
 
 .report-footer code { color: var(--argus-primary-dark); }
+
+/* RC-16 — collapse variable-length flex/grid containers to block in print so WeasyPrint
+   paginates them instead of clipping content past the first page (the roadmap grid and
+   the metadata grid are the long ones; the cover tiles / severity pills are single-page). */
+@media print {
+  .meta-grid { display: block; }
+  .roadmap-grid { display: block; }
+  .phase-header { display: block; }
+}

@@ -40,7 +40,12 @@ from src.reports.generators import (
     generate_valhalla_sections_csv,
     generate_xml,
 )
-from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
+from src.reports.report_bundle import (
+    ReportBundle,
+    ReportFormat,
+    ReportTier,
+    extension_for_logical_format,
+)
 from src.reports.report_findings_scope import (
     load_findings_for_report,
     scan_id_hint_for_report_findings,
@@ -388,7 +393,7 @@ async def download_report(
                         return RedirectResponse(url=presigned_url, status_code=302)
                 data = download_by_key(ro.object_key)
                 if data:
-                    fname = f"report-{report_id}.{fmt}"
+                    fname = f"report-{report_id}.{extension_for_logical_format(fmt)}"
                     return StreamingResponse(
                         io.BytesIO(data),
                         media_type=CONTENT_TYPES[fmt],
@@ -407,7 +412,7 @@ async def download_report(
                         return RedirectResponse(url=presigned_url, status_code=302)
                 data = storage_download(t_id, effective_scan_id, "reports", filename)
                 if data:
-                    fname = f"report-{report_id}.{fmt}"
+                    fname = f"report-{report_id}.{extension_for_logical_format(fmt)}"
                     return StreamingResponse(
                         io.BytesIO(data),
                         media_type=CONTENT_TYPES[fmt],
@@ -511,7 +516,7 @@ async def download_report(
             if presigned_url:
                 return RedirectResponse(url=presigned_url, status_code=302)
 
-    fname = f"report-{report_id}.{fmt}"
+    fname = f"report-{report_id}.{extension_for_logical_format(fmt)}"
     return StreamingResponse(
         io.BytesIO(content),
         media_type=CONTENT_TYPES[fmt],

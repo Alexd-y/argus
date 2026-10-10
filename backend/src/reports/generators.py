@@ -3280,6 +3280,18 @@ def generate_pdf(
                     "error_type": type(exc).__name__,
                 },
             )
+            # RC-18 — record the degradation so the consumer can tell a branded PDF from
+            # an aborted-to-legacy one. _scan_meta_for_snapshot folds render_failures into
+            # the snapshot's doc.failures, making it visible in the client bundle.
+            if isinstance(jinja_context, dict):
+                jinja_context.setdefault("render_failures", []).append(
+                    {
+                        "where": "branded_pdf_template",
+                        "reason_code": "template_render_failed",
+                        "message": f"{tier_str} branded PDF template failed ({type(exc).__name__}); "
+                        "rendered legacy layout instead",
+                    }
+                )
             html_str = generate_html(data, jinja_context=jinja_context, tier=tier).decode("utf-8")
             base_url = _legacy_base_url()
         else:

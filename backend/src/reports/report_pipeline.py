@@ -266,6 +266,7 @@ def _compute_valhalla_release_blockers(
     valhalla_llm_status: str,
     llm_merge_failed: bool = False,
     ai_section_failed: bool = False,
+    pdf_missing: bool = False,
 ) -> list[str]:
     """Evaluate the Valhalla release blockers fail-closed (Phase G, RC-01…RC-04).
 
@@ -429,6 +430,11 @@ def _compute_valhalla_release_blockers(
     # --- RC-15 — a mandatory AI section failed to generate; the report is not complete.
     if ai_section_failed:
         blockers.append("GATE-ERROR: AI section generation failed; report is incomplete")
+
+    # --- RC-17 — a Valhalla deliverable with no PDF is incomplete; the absence must be
+    #     noticed (honest draft) rather than shipped silently.
+    if pdf_missing:
+        blockers.append("GATE-ERROR: no PDF in the Valhalla bundle; deliverable is incomplete")
 
     return blockers
 
@@ -1253,6 +1259,9 @@ async def run_generate_report_pipeline(
                 )
             )
             ai_section_failed = _ai_fail and settings.valhalla_llm_remediation_enabled
+            # RC-17 — the client Valhalla bundle must carry a PDF (canonical or legacy);
+            # its absence is an honest-draft blocker, not a silent omission.
+            pdf_missing = not any(k in generated for k in ("pdf", "canonical_pdf"))
             blockers = _compute_valhalla_release_blockers(
                 report_data=report_data,
                 template_context=built.template_context,
@@ -1261,6 +1270,7 @@ async def run_generate_report_pipeline(
                 valhalla_llm_status=valhalla_llm_status,
                 llm_merge_failed=llm_merge_failed,
                 ai_section_failed=ai_section_failed,
+                pdf_missing=pdf_missing,
             )
             if blockers:
                 logger.warning(
