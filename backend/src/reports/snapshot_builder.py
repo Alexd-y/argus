@@ -25,6 +25,7 @@ from src.reports.report_document import (
     ReportCoverageItem,
     ReportDocumentV1,
     ReportEvidenceRef,
+    ReportFailure,
     ReportFinding,
     ReportPoC,
     ReportSurfaceItem,
@@ -620,6 +621,16 @@ def build_snapshot_from_report_data(
     engagement = build_engagement_metadata(meta)
     engagement_arg = None if engagement_is_empty(engagement) else engagement
 
+    # RC-15/RC-18 — generation-time degradations (failed AI sections, branded-PDF
+    # fallback) threaded in via scan_meta so they appear in the client bundle, not
+    # only the logs. Dicts are coerced to ReportFailure; anything already typed passes.
+    failures = [
+        f if isinstance(f, ReportFailure) else ReportFailure(**f)
+        for f in (meta.get("failures") or [])
+        if isinstance(f, (ReportFailure, dict))
+    ]
+    skipped_reasons = list(meta.get("skipped_reasons") or [])
+
     return build_report_document(
         scan_id=str(meta.get("scan_id") or getattr(report_data, "scan_id", "") or "unknown"),
         tenant_id=str(meta.get("tenant_id") or getattr(report_data, "tenant_id", "") or "unknown"),
@@ -633,6 +644,8 @@ def build_snapshot_from_report_data(
         completed_at=meta.get("completed_at") or getattr(report_data, "created_at", None),
         scope_summary=meta.get("scope_summary") or {},
         profile_limits=meta.get("profile_limits") or {},
+        failures=failures,
+        skipped_reasons=skipped_reasons,
         tool_runs=tool_runs,
         tested_capabilities=tested,
         not_assessed_capabilities=not_assessed,
