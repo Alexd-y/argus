@@ -38,7 +38,9 @@ from src.reports.report_data_validation import (
     report_validation_failure_payload,
     validate_report_data,
 )
+from src.reports.report_document import ReportDocumentV1, ReportFailure
 from src.reports.report_parity import count_findings_in_markdown, finding_count_parity
+from src.reports.section_registry import iter_sections
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.snapshot_completeness_gate import snapshot_release_blockers
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
@@ -156,6 +158,83 @@ def normalize_generation_formats(
     return out if out else list(DEFAULT_REPORT_FORMATS)
 
 
+def _guarded(label: str, fn: Callable[[], list[str]], blockers: list[str]) -> None:
+    """Run one release sub-check fail-closed (RC-01).
+
+    An exception inside a check ADDS a ``GATE-ERROR`` blocker instead of silently
+    dropping the check. A gate that cannot be evaluated is a gate that fails.
+    """
+    try:
+        blockers.extend(fn())
+    except Exception as exc:  # noqa: BLE001 — fail-closed: an errored gate blocks release
+        blockers.append(f"GATE-ERROR: {label} failed: {type(exc).__name__}")
+        logger.warning(
+            "release_gate_errored",
+            extra={
+                "event": "release_gate_errored",
+                "gate": label,
+                "error_type": type(exc).__name__,
+            },
+        )
+
+
+def _vp04_inputs(doc: ReportDocumentV1) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Bridge the snapshot + ordered-section registry to the VALHALLA_REQUIRED_SOURCES
+    vocabulary so VP-04 (source present / section empty) fires for real (RC-03).
+
+    ``validate_valhalla_completeness`` pairs ``snapshot[src.key]`` with
+    ``sections[src.section]`` over ``VALHALLA_REQUIRED_SOURCES`` — whose key/section
+    names differ from the section-registry ids. Passing ``iter_sections`` verbatim would
+    false-positive on every report that has findings; this builds both maps in the
+    table's own vocabulary: the snap-map from the collected data, the sections-map from
+    the registry's per-section presence.
+    """
+    present = {st.section_id: st.present for st in iter_sections(doc)}
+    snap: dict[str, Any] = {
+        "findings": list(doc.findings),
+        "evidence": list(doc.evidence_references),
+        "tool_runs": list(doc.tool_runs),
+        "raw_artifacts": [t for t in doc.tool_runs if t.raw_artifact_ref]
+        + [f for f in doc.findings if f.raw_artifact_ref],
+        "ports_services": [s for s in doc.surface_inventory if (s.port or s.service)],
+        "tech_stack": [s for s in doc.surface_inventory if s.technology],
+        "wstg_coverage": doc.wstg or {},
+        "exploitation": list(doc.exploit_chains),
+    }
+    sections: dict[str, Any] = {
+        "findings_registry": present.get("findings"),
+        "finding_cards": present.get("findings"),
+        "execution_log": present.get("tool_runs"),
+        "appendix_grouped": present.get("appendix_tool_runs")
+        or present.get("appendix_all_findings"),
+        "surface_inventory": present.get("surface_inventory"),
+        "methodology_completeness": present.get("wstg") or present.get("methodology"),
+        "confirmed_chains": present.get("exploit_chains"),
+    }
+    return snap, sections
+
+
+def _degrade_doc_for_llm_merge_failure(doc: ReportDocumentV1, reason: str) -> ReportDocumentV1:
+    """Reflect an LLM-merge failure IN the canonical document (RC-04).
+
+    Marks the release ``partial`` / LLM ``failed`` and records a ``ReportFailure`` so the
+    degradation is visible in all four canonical formats, not only the logs.
+    """
+    failures = [
+        *doc.failures,
+        ReportFailure(
+            where="llm_merge", reason_code="llm_merge_failed", message=str(reason)[:480]
+        ),
+    ]
+    return doc.model_copy(
+        update={
+            "generation_status": "partial",
+            "llm_analysis_status": "failed",
+            "failures": failures,
+        }
+    ).finalized()
+
+
 def _compute_valhalla_release_blockers(
     *,
     report_data: Any,
@@ -163,27 +242,36 @@ def _compute_valhalla_release_blockers(
     requested_tier: str,
     actual_tier: str,
     valhalla_llm_status: str,
+    llm_merge_failed: bool = False,
 ) -> list[str]:
-    """Evaluate ``valhalla_release_blockers`` from the prod pipeline state (Phase G, D4).
+    """Evaluate the Valhalla release blockers fail-closed (Phase G, RC-01…RC-04).
 
-    Runs the rules that are correctly evaluable from the current release state:
-      * VP-01 — requested tier must equal the rendered tier;
-      * VP-02 — no stop-list / placeholder phrases in the rendered report text;
-      * VP-05 — no unclassified observation sits in the findings registry;
-      * §9   — mandatory LLM analysis must be complete for a ``ready`` release.
-
-    VP-04 (source-present/section-empty parity) needs the ordered-section registry
-    from Phase C to build a faithful ``sections`` map; until then ``snapshot`` and
-    ``sections`` are passed empty so ``validate_valhalla_completeness`` yields no
-    false positives. The manifest ``generation_status`` of the VH-LLM release is
-    ``ready`` on success; normalise it to the gate's ``completed`` vocabulary.
+    Every sub-check is guarded independently via :func:`_guarded`: an exception inside
+    one ADDS a ``GATE-ERROR`` blocker instead of dropping it and the checks behind it
+    (RC-01). A failed report-text render is itself a blocker, never a silent clean pass
+    (RC-02). VP-04 runs against the real snapshot through the ordered-section registry
+    bridge (RC-03). An upstream LLM-merge failure is surfaced as a blocker (RC-04). The
+    VH-LLM manifest ``generation_status`` is ``ready`` on success; normalise it to the
+    gate's ``completed`` vocabulary.
     """
+    blockers: list[str] = []
+
+    # --- Rendered report text (RC-02): a failed render is a blocker, not a clean pass.
+    report_text: str | None = None
     try:
         report_text = generate_markdown(
             report_data, jinja_context=template_context, tier=actual_tier
         ).decode("utf-8", "replace")
-    except Exception:  # noqa: BLE001 — gate must not crash generation
-        report_text = ""
+    except Exception as exc:  # noqa: BLE001 — fail-closed
+        blockers.append(f"GATE-ERROR: report_text unavailable: {type(exc).__name__}")
+        logger.warning(
+            "release_gate_errored",
+            extra={
+                "event": "release_gate_errored",
+                "gate": "report_text",
+                "error_type": type(exc).__name__,
+            },
+        )
 
     findings: list[dict[str, Any]] = []
     for f in getattr(report_data, "findings", None) or []:
@@ -201,55 +289,91 @@ def _compute_valhalla_release_blockers(
         "completed" if str(valhalla_llm_status).strip().lower() == "ready" else valhalla_llm_status
     )
 
-    blockers = valhalla_release_blockers(
-        snapshot={},
-        sections={},
-        report_text=report_text,
-        findings=findings,
-        requested_tier=requested_tier,
-        actual_tier=actual_tier,
-        llm_analysis_status=llm_analysis_status,
-    )
-
-    # Phase N — prose discipline on the rendered text. Reference-requirement defaults
-    # off (per-claim [CL-…]/[E-…] linking is Phase 14.3; references are minted by
-    # evidence_references but not yet emitted into free LLM prose, so enforcing would
-    # block current reports). Operators who emit references opt in via
-    # settings.report_require_prose_references; the unconditional stop-list /
-    # absolute-safety BLOCK rules always apply.
-    _require_refs = bool(settings.report_require_prose_references)
-    for pv in blocking_prose_violations(
-        evaluate_prose(report_text, require_references=_require_refs)
-    ):
-        blockers.append(f"PROSE: {pv.rule}: {pv.detail}")
-
-    # Phase O — severity / CVSS / review consistency on the snapshot findings.
-    # Phase T — model-output consistency on the rendered text (chain claims,
-    # truncated finding IDs, insecure verify commands, counters, WSTG coverage).
+    # --- Canonical snapshot (built once; several checks consume it). Guarded (RC-01).
+    snapshot: Any = None
     try:
         snapshot = build_snapshot_from_report_data(report_data, scan_meta={"tier": actual_tier})
-        blockers.extend(severity_review_blockers(snapshot.findings))
-        known_ids = {f.finding_id for f in snapshot.findings if f.finding_id}
-        has_proven = any(c.kind == "proven" for c in snapshot.exploit_chains)
-        wstg_pct = None
-        if isinstance(snapshot.wstg, dict):
-            raw_pct = snapshot.wstg.get("coverage_pct")
-            wstg_pct = float(raw_pct) if isinstance(raw_pct, (int, float)) else None
-        for cv in blocking_prose_violations(
-            check_output_consistency(
-                report_text,
-                known_finding_ids=known_ids,
-                has_proven_chains=has_proven,
-                wstg_coverage_pct=wstg_pct,
-            )
-        ):
-            blockers.append(f"OUTPUT: {cv.rule}: {cv.detail}")
-        # Phase U — snapshot completeness + evidence-chain (R-13…R-18).
-        blockers.extend(snapshot_release_blockers(snapshot))
-        # Phase 9 — content parity across the four canonical formats + no internal
-        # paths (C-01…C-09/C-29): render the four projections from the snapshot and
-        # compare their content (counts, id set, per-field, section headers).
-        try:
+    except Exception as exc:  # noqa: BLE001 — fail-closed
+        blockers.append(f"GATE-ERROR: snapshot build failed: {type(exc).__name__}")
+        logger.warning(
+            "release_gate_errored",
+            extra={
+                "event": "release_gate_errored",
+                "gate": "snapshot",
+                "error_type": type(exc).__name__,
+            },
+        )
+
+    # --- VP-01/02/04/05/§9 — tier swap, stop-list, source/section parity (RC-03),
+    #     unclassified-in-registry, mandatory-LLM. VP-04 now uses the real snapshot.
+    def _completeness() -> list[str]:
+        snap_map, sections_map = _vp04_inputs(snapshot) if snapshot is not None else ({}, {})
+        return valhalla_release_blockers(
+            snapshot=snap_map,
+            sections=sections_map,
+            report_text=report_text or "",
+            findings=findings,
+            requested_tier=requested_tier,
+            actual_tier=actual_tier,
+            llm_analysis_status=llm_analysis_status,
+        )
+
+    _guarded("completeness", _completeness, blockers)
+
+    # --- Phase N — prose discipline on the rendered text (only when text is available).
+    # Reference-requirement defaults off; the unconditional stop-list / absolute-safety
+    # BLOCK rules always apply. Operators opt in via report_require_prose_references.
+    _require_refs = bool(settings.report_require_prose_references)
+    if report_text is not None:
+
+        def _prose() -> list[str]:
+            return [
+                f"PROSE: {pv.rule}: {pv.detail}"
+                for pv in blocking_prose_violations(
+                    evaluate_prose(report_text, require_references=_require_refs)
+                )
+            ]
+
+        _guarded("prose", _prose, blockers)
+
+    # --- Phase O/T/U/9/Q — all consume the snapshot; each guarded independently (RC-01).
+    if snapshot is not None:
+        _guarded(
+            "severity_review",
+            lambda: list(severity_review_blockers(snapshot.findings)),
+            blockers,
+        )
+
+        if report_text is not None:
+
+            def _output_consistency() -> list[str]:
+                known_ids = {f.finding_id for f in snapshot.findings if f.finding_id}
+                has_proven = any(c.kind == "proven" for c in snapshot.exploit_chains)
+                wstg_pct = None
+                if isinstance(snapshot.wstg, dict):
+                    raw_pct = snapshot.wstg.get("coverage_pct")
+                    wstg_pct = float(raw_pct) if isinstance(raw_pct, (int, float)) else None
+                return [
+                    f"OUTPUT: {cv.rule}: {cv.detail}"
+                    for cv in blocking_prose_violations(
+                        check_output_consistency(
+                            report_text,
+                            known_finding_ids=known_ids,
+                            has_proven_chains=has_proven,
+                            wstg_coverage_pct=wstg_pct,
+                        )
+                    )
+                ]
+
+            _guarded("output_consistency", _output_consistency, blockers)
+
+        _guarded(
+            "snapshot_completeness",
+            lambda: list(snapshot_release_blockers(snapshot)),
+            blockers,
+        )
+
+        def _content_parity() -> list[str]:
             from src.reports.renderers import render_html, render_json, render_markdown, render_xml
             from src.reports.report_content_parity import content_parity_blockers
 
@@ -259,20 +383,25 @@ def _compute_valhalla_release_blockers(
                 "xml": render_xml(snapshot).encode("utf-8"),
                 "html": render_html(snapshot).encode("utf-8"),
             }
-            for pb in content_parity_blockers(canon):
-                blockers.append(f"PARITY: {pb}")
-        except Exception:  # noqa: BLE001 — parity check must not crash generation
-            pass
-        # Phase Q — finding-count parity: main .md vs canonical snapshot (R-11).
-        counts: dict[str, int] = {
-            "snapshot": len(snapshot.findings) + len(snapshot.unconfirmed_observations)
-        }
-        md_count = count_findings_in_markdown(report_text)
-        if md_count is not None:
-            counts["main_md"] = md_count
-        blockers.extend(finding_count_parity(counts))
-    except Exception:  # noqa: BLE001 — gate must not crash generation
-        pass
+            return [f"PARITY: {pb}" for pb in content_parity_blockers(canon)]
+
+        _guarded("content_parity", _content_parity, blockers)
+
+        def _count_parity() -> list[str]:
+            counts: dict[str, int] = {
+                "snapshot": len(snapshot.findings) + len(snapshot.unconfirmed_observations)
+            }
+            md_count = count_findings_in_markdown(report_text or "")
+            if md_count is not None:
+                counts["main_md"] = md_count
+            return list(finding_count_parity(counts))
+
+        _guarded("count_parity", _count_parity, blockers)
+
+    # --- RC-04 — an upstream LLM-merge failure makes the canonical remediation/closure
+    #     incomplete; surface it as a blocker (logged always, enforced when enabled).
+    if llm_merge_failed:
+        blockers.append("GATE-ERROR: llm_merge failed; canonical remediation/closure incomplete")
 
     return blockers
 
@@ -362,6 +491,7 @@ async def _rgp_valhalla_llm_remediation(
     valhalla_llm_status,
     vfmt,
 ):
+    llm_merge_failed = False
     if tier_str == "valhalla" and settings.valhalla_llm_remediation_enabled:
         try:
             from src.reports.llm_remediation.facade_binding import (
@@ -501,14 +631,65 @@ async def _rgp_valhalla_llm_remediation(
                         "assessment_completeness": merged_doc.assessment_completeness,
                     },
                 )
-            except Exception:  # noqa: BLE001 — merge is additive; keep base canon
+            except Exception as merge_exc:  # noqa: BLE001 — surface, don't hide (RC-04)
+                llm_merge_failed = True
                 logger.warning(
                     "canonical_snapshot_llm_merge_failed",
                     extra={
                         "event": "canonical_snapshot_llm_merge_failed",
                         "report_id": report_id,
+                        "error_type": type(merge_exc).__name__,
                     },
                 )
+                # Re-render the canonical bundle from a degraded copy so the failure is
+                # visible in all four client formats, not only the logs (RC-04). The
+                # degraded doc carries generation_status=partial / llm_analysis_status=
+                # failed + a ReportFailure(where="llm_merge").
+                try:
+                    degraded_doc = _degrade_doc_for_llm_merge_failure(
+                        vsnapshot, safe_report_task_error_message(merge_exc)
+                    )
+                    degraded_completed_at = degraded_doc.completed_at or ""
+                    degraded_artifacts = render_canonical_bundle(
+                        degraded_doc,
+                        include_pdf=True,
+                        html_to_pdf=lambda html: _snapshot_pdf_bytes(html, degraded_completed_at),
+                        scan_id=scan_id,
+                        tenant_id=tenant_id,
+                    )
+                    assert_canonical_parity(degraded_artifacts)
+                    for artifact in degraded_artifacts:
+                        canon_fmt = f"canonical_{artifact.format}"
+                        canon_key = upload(
+                            tenant_id,
+                            scan_id,
+                            tier_str,
+                            report_id,
+                            canon_fmt,
+                            artifact.content,
+                            content_type=_CANONICAL_CONTENT_TYPES.get(
+                                canon_fmt, artifact.mime_type
+                            ),
+                        )
+                        if canon_key:
+                            await _upsert_report_object(
+                                session,
+                                tenant_id=tenant_id,
+                                scan_id=scan_id,
+                                report_id=report_id,
+                                fmt=canon_fmt,
+                                object_key=canon_key,
+                                size_bytes=artifact.size,
+                            )
+                            generated[canon_fmt] = canon_key
+                except Exception:  # noqa: BLE001 — degraded re-render is itself best-effort
+                    logger.warning(
+                        "canonical_snapshot_llm_merge_degrade_failed",
+                        extra={
+                            "event": "canonical_snapshot_llm_merge_degrade_failed",
+                            "report_id": report_id,
+                        },
+                    )
             for vfmt, artifact in vrelease.artifacts.items():
                 llm_fmt = f"valhalla_llm_{vfmt}"
                 llm_key = upload(
@@ -572,7 +753,7 @@ async def _rgp_valhalla_llm_remediation(
                     "report_id": report_id,
                 },
             )
-    return (valhalla_llm_status,)
+    return (valhalla_llm_status, llm_merge_failed)
 
 
 async def _rgp_canonical_snapshot(
@@ -982,7 +1163,7 @@ async def run_generate_report_pipeline(
         # per-finding remediation plan + closure conclusion projected into
         # MD/XML/HTML/JSON + a release manifest, all from one document tree.
         # Opt-in + fail-soft: never breaks the standard Valhalla outputs.
-        (valhalla_llm_status,) = await _rgp_valhalla_llm_remediation(
+        (valhalla_llm_status, llm_merge_failed) = await _rgp_valhalla_llm_remediation(
             artifact,
             built,
             canon_fmt,
@@ -1042,6 +1223,7 @@ async def run_generate_report_pipeline(
                 requested_tier=str(report.tier or tier_str),
                 actual_tier=tier_str,
                 valhalla_llm_status=valhalla_llm_status,
+                llm_merge_failed=llm_merge_failed,
             )
             if blockers:
                 logger.warning(
