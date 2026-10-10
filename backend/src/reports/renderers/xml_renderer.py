@@ -25,6 +25,50 @@ def _text(parent: Element, tag: str, value: object) -> Element:
     return el
 
 
+def _list_el(parent: Element, tag: str, items, item_tag: str = "item") -> None:
+    """Emit ``<tag><item>…</item>…</tag>`` for a list of scalars."""
+    container = SubElement(parent, tag)
+    for value in items or []:
+        _text(container, item_tag, value)
+
+
+def _dict_el(parent: Element, tag: str, mapping: dict) -> None:
+    """Emit ``<tag><entry key="k">v</entry>…</tag>`` for a free-form mapping (RC-07)."""
+    container = SubElement(parent, tag)
+    for key, value in (mapping or {}).items():
+        entry = SubElement(container, "entry")
+        entry.set("key", str(key))
+        if value is None:
+            entry.set("xsi:nil", "true")
+        else:
+            entry.text = str(value)
+
+
+def _dict_list_el(parent: Element, tag: str, items, item_tag: str = "item") -> None:
+    """Emit a list whose items may be dicts (``oast_references``/``skipped_reasons``)."""
+    container = SubElement(parent, tag)
+    for value in items or []:
+        if isinstance(value, dict):
+            entry = SubElement(container, item_tag)
+            for k, v in value.items():
+                _text(entry, "field", f"{k}={v}")
+        else:
+            _text(container, item_tag, value)
+
+
+def _attack_step_xml(parent: Element, step) -> None:  # noqa: ANN001 - ReportAttackStep
+    """Render one attack step with its claim/evidence refs + timestamp (RC-11/RC-12)."""
+    ste = SubElement(parent, "step")
+    ste.set("order_index", str(step.order_index))
+    ste.set("phase", step.phase)
+    _text(ste, "tactic", step.tactic)
+    _text(ste, "technique_id", step.technique_id)
+    _text(ste, "description", step.description)
+    _text(ste, "timestamp", step.timestamp)
+    _list_el(ste, "claim_ids", step.claim_ids, "claim_id")
+    _list_el(ste, "evidence_ids", step.evidence_ids, "evidence_id")
+
+
 def render_xml(doc: ReportDocumentV1) -> str:
     root = Element("argus_report")
     root.set("xmlns", VALHALLA_REPORT_XML_NS)
@@ -72,6 +116,21 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(fe, "downgrade_reason", f.downgrade_reason)
         _text(fe, "review_status", f.review_status)
         _text(fe, "reviewer", f.reviewer)
+        _text(fe, "priority_rationale", f.priority_rationale)
+        # Object identity / location (RC-05/RC-06/RC-10) — a finding must be locatable.
+        loc = SubElement(fe, "location")
+        for attr in ("asset", "ip", "port", "protocol", "scheme"):
+            value = getattr(f, attr)
+            if value is not None:
+                loc.set(attr, str(value))
+        _text(loc, "url", f.url)
+        _text(loc, "path", f.path)
+        _text(loc, "parameter", f.parameter)
+        _text(loc, "component", f.component)
+        _text(loc, "observed_version", f.observed_version)
+        _list_el(fe, "wstg_test_ids", f.wstg_test_ids, "wstg_test_id")
+        _list_el(fe, "acceptance_criteria", f.acceptance_criteria, "criterion")
+        _list_el(fe, "retest_plan", f.retest_plan, "step")
         ev = SubElement(fe, "evidence_ids")
         for eid in f.evidence_ids:
             _text(ev, "evidence_id", eid)
@@ -135,6 +194,13 @@ def render_xml(doc: ReportDocumentV1) -> str:
         te.set("status", t.status)
         _text(te, "parser_status", t.parser_status)
         _text(te, "raw_artifact_ref", t.raw_artifact_ref)
+        # RC-09 — provable execution log: timing, exit code, redacted argv, sandbox, source.
+        _text(te, "started_at", t.started_at)
+        _text(te, "finished_at", t.finished_at)
+        _text(te, "exit_code", t.exit_code)
+        _text(te, "argv", t.argv)
+        _text(te, "sandbox_id", t.sandbox_id)
+        _text(te, "source_ip", t.source_ip)
 
     cov_el = SubElement(root, "coverage")
     for c in doc.coverage:
@@ -142,6 +208,10 @@ def render_xml(doc: ReportDocumentV1) -> str:
         ce.set("capability_id", c.capability_id)
         ce.set("status", c.status)
         _text(ce, "reason_code", c.reason_code)
+        _list_el(ce, "evidence_ids", c.evidence_ids, "evidence_id")
+
+    _list_el(root, "tested_capabilities", doc.tested_capabilities, "capability")
+    _list_el(root, "not_assessed_capabilities", doc.not_assessed_capabilities, "capability")
 
     ev_refs = SubElement(root, "evidence_references")
     for e in doc.evidence_references:
@@ -149,6 +219,25 @@ def render_xml(doc: ReportDocumentV1) -> str:
         ee.set("evidence_id", e.evidence_id)
         ee.set("kind", e.kind)
         _text(ee, "object_key", e.object_key)
+        _text(ee, "description", e.description)
+        # Evidence Register chain-of-custody (RC-08 / R-16).
+        _text(ee, "sha256", e.sha256)
+        _text(ee, "size", e.size)
+        _text(ee, "mime", e.mime)
+        _text(ee, "collected_at_utc", e.collected_at_utc)
+        _text(ee, "collector", e.collector)
+        _text(ee, "producer_tool_run_id", e.producer_tool_run_id)
+        _text(ee, "redaction_applied", e.redaction_applied)
+        _text(ee, "chain_hash", e.chain_hash)
+
+    # RC-07 — scope/limits, budget, provenance, OAST, skipped containers.
+    _dict_el(root, "scope_summary", doc.scope_summary)
+    _dict_el(root, "profile_limits", doc.profile_limits)
+    _dict_el(root, "budget_usage", doc.budget_usage)
+    _dict_el(root, "prompt_model_versions", doc.prompt_model_versions)
+    _dict_el(root, "registry_versions", doc.registry_versions)
+    _dict_list_el(root, "oast_references", doc.oast_references, "oast_reference")
+    _dict_list_el(root, "skipped_reasons", doc.skipped_reasons, "skipped")
 
     if doc.wstg:
         w = doc.wstg
@@ -293,15 +382,11 @@ def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
         _text(te, "control", t.control)
         _text(te, "method", t.method)
         _text(te, "executed_at", t.executed_at)
+        _list_el(te, "evidence_ids", t.evidence_ids, "evidence_id")
 
     narrative = SubElement(root, "attack_narrative")
     for step in sorted(doc.attack_narrative, key=lambda s: s.order_index):
-        ste = SubElement(narrative, "step")
-        ste.set("order_index", str(step.order_index))
-        ste.set("phase", step.phase)
-        _text(ste, "tactic", step.tactic)
-        _text(ste, "technique_id", step.technique_id)
-        _text(ste, "description", step.description)
+        _attack_step_xml(narrative, step)
 
     chains = SubElement(root, "exploit_chains")
     for ch in doc.exploit_chains:
@@ -312,6 +397,9 @@ def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
         _text(che, "preconditions", ch.preconditions)
         _text(che, "outcome", ch.outcome)
         _text(che, "breaks_at", ch.breaks_at)
+        steps_el = SubElement(che, "steps")
+        for step in ch.steps:
+            _attack_step_xml(steps_el, step)
         tv = SubElement(che, "to_verify")
         for item in ch.to_verify:
             _text(tv, "item", item)
@@ -344,6 +432,11 @@ def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
         cle.set("claim_id", cl.claim_id)
         cle.set("claim_type", cl.claim_type)
         _text(cle, "text", cl.text)
+        _text(cle, "subject", cl.subject)
+        _text(cle, "validator", cl.validator)
+        _text(cle, "reviewer", cl.reviewer)
+        _text(cle, "limitations", cl.limitations)
+        _list_el(cle, "derived_from", cl.derived_from, "ref")
         cev = SubElement(cle, "evidence_ids")
         for eid in cl.evidence_ids:
             _text(cev, "evidence_id", eid)
