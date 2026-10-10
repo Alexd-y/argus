@@ -11,11 +11,15 @@ for presence of the JSON finding ids and (MD↔HTML) an equal section-header set
 
 from __future__ import annotations
 
+import html as _html
 import json
 import re
 from typing import Any
 
 from defusedxml.ElementTree import fromstring
+from pydantic import BaseModel
+
+from src.reports.report_document import ReportDocumentV1, field_render_policy
 
 #: A real internal storage path leaking into a client format: a UUID (tenant/scan id)
 #: followed by a path. Matches "00000000-…-0001/<scan-uuid>/poc/x.json"; does NOT match
@@ -47,11 +51,88 @@ def _xml_findings(text: str) -> list[dict[str, str]]:
     return out
 
 
-def content_parity_blockers(artifacts: dict[str, bytes]) -> list[str]:
+_ALNUM_RE = re.compile(r"[A-Za-z0-9]")
+_READABLE_FORMATS = ("md", "xml", "html")
+
+
+def _norm(value: object) -> str:
+    """Normalise so a value matches across formats: unescape HTML entities, drop the
+    Markdown escape backslashes, collapse whitespace, lowercase. This lets one check work
+    for MD (``\\|`` escaping, ``\\n``→space), XML/HTML (``&lt;``/``&amp;`` entities)."""
+    text = _html.unescape(str(value)).replace("\\", "")
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _checkable(value: str) -> bool:
+    """A string worth asserting presence of: at least two alphanumeric chars. Single-char
+    / pure-punctuation values are too ambiguous to check without false positives."""
+    return len(_ALNUM_RE.findall(value)) >= 2
+
+
+def _walk_value(value: Any, label: str, norm_texts: dict[str, str], problems: list[str]) -> None:
+    """Recurse into a snapshot value, asserting each render:"all" string leaf is present
+    in every readable format. Numbers/bools are skipped (their formatting differs per
+    format — covered by the static coverage script + full-document parity test)."""
+    if value is None:
+        return
+    if isinstance(value, BaseModel):
+        _walk_model(value, norm_texts, problems)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _walk_value(item, label, norm_texts, problems)
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _walk_value(item, label, norm_texts, problems)
+        return
+    if isinstance(value, (bool, int, float)):
+        return  # bool is an int subclass; numeric formatting differs per format
+    if isinstance(value, str) and _checkable(value):
+        nv = _norm(value)
+        missing = sorted(fmt for fmt, text in norm_texts.items() if nv not in text)
+        if missing:
+            problems.append(f"parity: {label} value not rendered in {','.join(missing)}")
+
+
+def _walk_model(obj: BaseModel, norm_texts: dict[str, str], problems: list[str]) -> None:
+    model = type(obj)
+    for field_name in model.model_fields:
+        if field_render_policy(model, field_name) != "all":
+            continue
+        _walk_value(
+            getattr(obj, field_name, None),
+            f"{model.__name__}.{field_name}",
+            norm_texts,
+            problems,
+        )
+
+
+def _declarative_parity_blockers(doc: ReportDocumentV1, texts: dict[str, str]) -> list[str]:
+    """RC-13: every field marked ``render="all"`` with a non-empty value must appear in
+    MD/XML/HTML. Returns one blocker per missing ``model.field`` + the formats it is
+    missing from. JSON is lossless (``model_dump``) and is not checked here."""
+    norm_texts = {fmt: _norm(texts[fmt]) for fmt in _READABLE_FORMATS if fmt in texts}
+    if not norm_texts:
+        return []
+    problems: list[str] = []
+    _walk_model(doc, norm_texts, problems)
+    return problems
+
+
+def content_parity_blockers(
+    artifacts: dict[str, bytes], *, doc: ReportDocumentV1 | None = None
+) -> list[str]:
     """Compare JSON/MD/XML/HTML content; return blocking mismatch reasons (empty == ok).
 
     ``artifacts`` maps a canonical format name (``json``/``md``/``xml``/``html``) to its
     rendered bytes. Missing formats are skipped (presence is enforced separately).
+
+    When ``doc`` (the source snapshot) is supplied, a declarative field-coverage check
+    runs on top of the structural checks (RC-13): every field marked ``render="all"``
+    with a non-empty value must be present in all three readable formats, reported as a
+    precise ``model.field`` blocker. Without ``doc`` only the structural checks run
+    (backward compatible).
     """
     problems: list[str] = []
     texts = {k: v.decode("utf-8", "replace") for k, v in artifacts.items()}
@@ -121,6 +202,10 @@ def content_parity_blockers(artifacts: dict[str, bytes]) -> list[str]:
             problems.append(
                 f"parity: {fmt} contains an internal path / tenant_id / object_key (C-29)"
             )
+
+    # --- RC-13: declarative per-field coverage across the readable formats.
+    if doc is not None:
+        problems.extend(_declarative_parity_blockers(doc, texts))
 
     return problems
 

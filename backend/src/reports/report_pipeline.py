@@ -383,7 +383,7 @@ def _compute_valhalla_release_blockers(
                 "xml": render_xml(snapshot).encode("utf-8"),
                 "html": render_html(snapshot).encode("utf-8"),
             }
-            return [f"PARITY: {pb}" for pb in content_parity_blockers(canon)]
+            return [f"PARITY: {pb}" for pb in content_parity_blockers(canon, doc=snapshot)]
 
         _guarded("content_parity", _content_parity, blockers)
 
