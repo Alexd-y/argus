@@ -23,6 +23,19 @@ def _li(parts: list[str], label: str, value: object) -> None:
         parts.append(f"<li>{escape(label)}: <code>{escape(str(value))}</code></li>")
 
 
+def _li_list(parts: list[str], label: str, items) -> None:
+    """Emit ``<li>label: a, b, c</li>`` for a non-empty list of scalars."""
+    if items:
+        cells = ", ".join(f"<code>{escape(str(i))}</code>" for i in items)
+        parts.append(f"<li>{escape(label)}: {cells}</li>")
+
+
+def _dict_items_html(parts: list[str], mapping: dict) -> None:
+    """Render a free-form mapping as ``<li>key: value</li>`` (RC-07)."""
+    for key, value in (mapping or {}).items():
+        parts.append(f"<li>{escape(str(key))}: <code>{escape(str(value))}</code></li>")
+
+
 def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportFinding
     parts.append(f'<div class="finding-card" id="finding-{escape(f.finding_id)}">')
     parts.append(
@@ -36,7 +49,23 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
     parts.append(f"<li>verification_status: <code>{escape(f.verification_status)}</code></li>")
     parts.append(f"<li>confidence: <code>{f.confidence:.4f}</code></li>")
     parts.append(f"<li>cwe: <code>{_na(f.cwe)}</code></li>")
+    _li(parts, "category", f.category)
     _li(parts, "owasp_category", f.owasp_category)
+    # Object identity / location (RC-05/RC-06/RC-10) — a finding must be locatable.
+    _li(parts, "asset", f.asset)
+    _li(parts, "ip", f.ip)
+    _li(parts, "port", f.port)
+    _li(parts, "protocol", f.protocol)
+    _li(parts, "scheme", f.scheme)
+    _li(parts, "url", f.url)
+    _li(parts, "path", f.path)
+    _li(parts, "parameter", f.parameter)
+    _li(parts, "component", f.component)
+    _li(parts, "observed_version", f.observed_version)
+    _li_list(parts, "wstg_test_ids", f.wstg_test_ids)
+    _li(parts, "priority_rationale", f.priority_rationale)
+    _li_list(parts, "acceptance_criteria", f.acceptance_criteria)
+    _li_list(parts, "retest_plan", f.retest_plan)
     if f.cvss_vector:
         parts.append(
             f"<li>cvss: <code>{_na(f.cvss_score)}</code> "
@@ -172,6 +201,23 @@ def _render_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
         parts.append("</table>")
 
 
+def _attack_step_html(step) -> str:  # noqa: ANN001 - ReportAttackStep
+    """One attack step with MITRE tags, claim/evidence refs and timestamp (RC-11/RC-12)."""
+    att = (
+        f" [{escape(str(step.tactic))}/{escape(str(step.technique_id))}]"
+        if step.technique_id
+        else ""
+    )
+    refs = "".join(f" <code>[{escape(c)}]</code>" for c in step.claim_ids)
+    ev = (
+        " · evidence: " + ", ".join(f"<code>{escape(e)}</code>" for e in step.evidence_ids)
+        if step.evidence_ids
+        else ""
+    )
+    ts = f" · {escape(str(step.timestamp))}" if step.timestamp else ""
+    return f"<strong>{escape(step.phase)}</strong>{att}: {escape(step.description)}{refs}{ev}{ts}"
+
+
 def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
     if doc.unconfirmed_observations:
         parts.append(f"<h2>Unconfirmed Observations ({len(doc.unconfirmed_observations)})</h2><ul>")
@@ -186,25 +232,27 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
 
     if doc.test_executions:
         parts.append("<h2>Executed Checks Without Findings</h2><table>")
-        parts.append("<tr><th>Test</th><th>Control</th><th>Method</th><th>Result</th></tr>")
+        parts.append(
+            "<tr><th>Test</th><th>Control</th><th>Method</th><th>Result</th>"
+            "<th>Executed</th><th>Evidence</th></tr>"
+        )
         for t in doc.test_executions:
+            ev = (
+                ", ".join(f"<code>{escape(e)}</code>" for e in t.evidence_ids)
+                if t.evidence_ids
+                else "—"
+            )
             parts.append(
                 f"<tr><td><code>{escape(t.test_id)}</code></td><td>{escape(t.control)}</td>"
-                f"<td>{_na(t.method)}</td><td><code>{escape(t.result)}</code></td></tr>"
+                f"<td>{_na(t.method)}</td><td><code>{escape(t.result)}</code></td>"
+                f"<td>{_na(t.executed_at)}</td><td>{ev}</td></tr>"
             )
         parts.append("</table>")
 
     if doc.attack_narrative:
         parts.append("<h2>Attack Narrative</h2><ol>")
         for step in sorted(doc.attack_narrative, key=lambda s: s.order_index):
-            att = (
-                f" [{escape(str(step.tactic))}/{escape(str(step.technique_id))}]"
-                if step.technique_id
-                else ""
-            )
-            parts.append(
-                f"<li><strong>{escape(step.phase)}</strong>{att}: {escape(step.description)}</li>"
-            )
+            parts.append(f"<li>{_attack_step_html(step)}</li>")
         parts.append("</ol>")
 
     if doc.exploit_chains:
@@ -216,7 +264,9 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
             _li(parts, "preconditions", ch.preconditions)
             _li(parts, "outcome", ch.outcome)
             _li(parts, "breaks_at", ch.breaks_at)
-            if ch.kind == "hypothetical" and ch.to_verify:
+            for step in ch.steps:
+                parts.append(f"<li>{_attack_step_html(step)}</li>")
+            if ch.to_verify:
                 parts.append(f"<li>to_verify: {escape('; '.join(ch.to_verify))}</li>")
             parts.append("</ul>")
 
@@ -233,16 +283,31 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
         parts.append("</ol>")
 
     if doc.evidence_references:
-        parts.append("<h2>Evidence Inventory</h2><table>")
+        # Evidence Register (RC-08) — the chain-of-custody a reader can verify.
+        parts.append("<h2>Evidence Register</h2><table>")
         parts.append(
-            "<tr><th>Evidence ID</th><th>Kind</th><th>Object Key</th><th>Description</th></tr>"
+            "<tr><th>Evidence ID</th><th>Kind</th><th>Collector</th><th>Collected (UTC)</th>"
+            "<th>SHA-256</th><th>Chain hash</th><th>Redacted</th><th>Producer run</th>"
+            "<th>Size</th><th>MIME</th><th>Object Key</th><th>Description</th></tr>"
         )
         for e in doc.evidence_references:
             parts.append(
                 f"<tr><td><code>{escape(e.evidence_id)}</code></td><td>{escape(e.kind)}</td>"
+                f"<td>{_na(e.collector)}</td><td>{_na(e.collected_at_utc)}</td>"
+                f"<td><code>{_na(e.sha256)}</code></td><td><code>{_na(e.chain_hash)}</code></td>"
+                f"<td>{_na(e.redaction_applied)}</td><td><code>{_na(e.producer_tool_run_id)}</code></td>"
+                f"<td>{_na(e.size)}</td><td>{_na(e.mime)}</td>"
                 f"<td>{_na(e.object_key)}</td><td>{_na(e.description)}</td></tr>"
             )
         parts.append("</table>")
+    if doc.oast_references:
+        parts.append("<h3>OAST references</h3><ul>")
+        for ref in doc.oast_references:
+            if isinstance(ref, dict):
+                _dict_items_html(parts, ref)
+            else:
+                parts.append(f"<li><code>{escape(str(ref))}</code></li>")
+        parts.append("</ul>")
 
     if doc.client_impact is not None:
         c = doc.client_impact
@@ -269,8 +334,78 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
             ev = ", ".join(f"<code>{escape(e)}</code>" for e in cl.evidence_ids) or "<em>none</em>"
             parts.append(
                 f"<li><code>{escape(cl.claim_id)}</code> [{escape(cl.claim_type)}] "
-                f"{escape(cl.text)} — evidence: {ev}</li>"
+                f"{escape(cl.text)} — evidence: {ev}"
             )
+            sub: list[str] = []
+            _li(sub, "subject", cl.subject)
+            _li_list(sub, "derived_from", cl.derived_from)
+            _li(sub, "validator", cl.validator)
+            _li(sub, "reviewer", cl.reviewer)
+            _li(sub, "limitations", cl.limitations)
+            if sub:
+                parts.append("<ul>" + "".join(sub) + "</ul>")
+            parts.append("</li>")
+        parts.append("</ul>")
+
+
+def _render_scope_limits_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Scope & Limits."""
+    if not (doc.scope_summary or doc.profile_limits):
+        return
+    parts.append("<h2>Scope &amp; Limits</h2>")
+    if doc.scope_summary:
+        parts.append("<h3>Scope</h3><ul>")
+        _dict_items_html(parts, doc.scope_summary)
+        parts.append("</ul>")
+    if doc.profile_limits:
+        parts.append("<h3>Profile limits</h3><ul>")
+        _dict_items_html(parts, doc.profile_limits)
+        parts.append("</ul>")
+
+
+def _render_skipped_failed_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Skipped & Failed (failures + skipped reasons)."""
+    if not (doc.skipped_reasons or doc.failures):
+        return
+    parts.append("<h2>Skipped &amp; Failed</h2><ul>")
+    for fl in doc.failures:
+        parts.append(
+            f"<li>failure <code>{escape(fl.where)}</code> "
+            f"(<code>{escape(fl.reason_code)}</code>): {escape(fl.message)}</li>"
+        )
+    for sk in doc.skipped_reasons:
+        if isinstance(sk, dict):
+            parts.append(
+                "<li>skipped: "
+                + ", ".join(f"{escape(str(k))}=<code>{escape(str(v))}</code>" for k, v in sk.items())
+                + "</li>"
+            )
+        else:
+            parts.append(f"<li>skipped: {escape(str(sk))}</li>")
+    parts.append("</ul>")
+
+
+def _render_budget_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Budget usage."""
+    if not doc.budget_usage:
+        return
+    parts.append("<h2>Budget</h2><ul>")
+    _dict_items_html(parts, doc.budget_usage)
+    parts.append("</ul>")
+
+
+def _render_provenance_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Provenance: prompt/model and registry versions."""
+    if not (doc.prompt_model_versions or doc.registry_versions):
+        return
+    parts.append("<h2>Provenance</h2>")
+    if doc.prompt_model_versions:
+        parts.append("<h3>Prompt / model versions</h3><ul>")
+        _dict_items_html(parts, doc.prompt_model_versions)
+        parts.append("</ul>")
+    if doc.registry_versions:
+        parts.append("<h3>Registry versions</h3><ul>")
+        _dict_items_html(parts, doc.registry_versions)
         parts.append("</ul>")
 
 
@@ -363,14 +498,17 @@ def render_html(doc: ReportDocumentV1) -> str:
     parts.append('<ul class="meta">')
     for label, value in (
         ("scan_id", doc.scan_id),
+        ("tenant_id", doc.tenant_id),
         ("scan_profile", doc.scan_profile),
         ("resolved_scan_mode", doc.resolved_scan_mode),
         ("execution_mode", doc.execution_mode),
+        ("quick_profile", doc.quick_profile),
         ("nuclei_profile", doc.nuclei_profile),
         ("started_at", doc.started_at),
         ("completed_at", doc.completed_at),
         ("schema_version", doc.schema_version),
         ("snapshot_hash", doc.snapshot_hash),
+        ("generated_at", doc.generated_at),
     ):
         parts.append(f"<li>{label}: <code>{_na(value)}</code></li>")
     parts.append("</ul>")
@@ -392,6 +530,7 @@ def render_html(doc: ReportDocumentV1) -> str:
         parts.append("<h2>Executive Summary</h2>")
         parts.append(f"<p>{escape(doc.conclusions.executive_summary)}</p>")
 
+    _render_scope_limits_html(parts, doc)
     _render_sections_html(parts, doc)
 
     parts.append(f"<h2>Findings ({len(doc.findings)})</h2>")
@@ -416,17 +555,23 @@ def render_html(doc: ReportDocumentV1) -> str:
     _render_tail_sections_html(parts, doc)
 
     parts.append("<h2>Coverage</h2>")
+    parts.append("<ul>")
+    _li_list(parts, "tested_capabilities", doc.tested_capabilities)
+    _li_list(parts, "not_assessed_capabilities", doc.not_assessed_capabilities)
     if not doc.coverage:
-        parts.append("<p><em>not_assessed</em></p>")
-    else:
-        parts.append("<ul>")
-        for c in doc.coverage:
-            reason = f" (reason: <code>{escape(c.reason_code)}</code>)" if c.reason_code else ""
-            parts.append(
-                f"<li><code>{escape(c.capability_id)}</code>: "
-                f"<code>{escape(c.status)}</code>{reason}</li>"
-            )
-        parts.append("</ul>")
+        parts.append("<li><em>not_assessed</em></li>")
+    for c in doc.coverage:
+        reason = f" (reason: <code>{escape(c.reason_code)}</code>)" if c.reason_code else ""
+        ev = (
+            " · evidence: " + ", ".join(f"<code>{escape(e)}</code>" for e in c.evidence_ids)
+            if c.evidence_ids
+            else ""
+        )
+        parts.append(
+            f"<li><code>{escape(c.capability_id)}</code>: "
+            f"<code>{escape(c.status)}</code>{reason}{ev}</li>"
+        )
+    parts.append("</ul>")
 
     parts.append("<h2>Tool runs</h2>")
     if not doc.tool_runs:
@@ -437,8 +582,20 @@ def render_html(doc: ReportDocumentV1) -> str:
             ps = f" parser_status=<code>{escape(t.parser_status)}</code>" if t.parser_status else ""
             parts.append(
                 f"<li><code>{escape(t.tool_run_id)}</code> {escape(t.tool_name)}: "
-                f"<code>{escape(t.status)}</code>{ps}</li>"
+                f"<code>{escape(t.status)}</code>{ps}"
             )
+            # RC-09 — timing / exit code / redacted argv / sandbox / source / artifact.
+            sub: list[str] = []
+            _li(sub, "started_at", t.started_at)
+            _li(sub, "finished_at", t.finished_at)
+            _li(sub, "exit_code", t.exit_code)
+            _li(sub, "argv", t.argv)
+            _li(sub, "sandbox_id", t.sandbox_id)
+            _li(sub, "source_ip", t.source_ip)
+            _li(sub, "raw_artifact_ref", t.raw_artifact_ref)
+            if sub:
+                parts.append("<ul>" + "".join(sub) + "</ul>")
+            parts.append("</li>")
         parts.append("</ul>")
 
     if doc.wstg:
@@ -506,6 +663,10 @@ def render_html(doc: ReportDocumentV1) -> str:
                     f"{escape(str(tid))}: {escape(str(detail))}</li>"
                 )
             parts.append("</ul>")
+
+    _render_skipped_failed_html(parts, doc)
+    _render_budget_html(parts, doc)
+    _render_provenance_html(parts, doc)
 
     parts.append("<h2>Limitations</h2>")
     if not doc.limitations:

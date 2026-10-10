@@ -27,6 +27,18 @@ def _kv(lines: list[str], label: str, value: object) -> None:
         lines.append(f"- {label}: `{value}`")
 
 
+def _mrow(lines: list[str], label: str, value: object) -> None:
+    """Append a 2-col table row ``| label | value |`` only when ``value`` is non-empty."""
+    if value not in (None, "", [], {}):
+        lines.append(f"| {label} | {_esc_md(value)} |")
+
+
+def _dict_items_md(lines: list[str], mapping: dict) -> None:
+    """Render a free-form mapping as ``- key: value`` lines (RC-07)."""
+    for key, value in mapping.items():
+        lines.append(f"- {_esc_md(key)}: `{value}`")
+
+
 _SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
 
 
@@ -92,16 +104,28 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
     cvss = _cvss_cell(f)
     if cvss:
         lines.append(f"| CVSS | {cvss} |")
+    _mrow(lines, "CVSS версия", f.cvss_version)
     if f.cwe:
         lines.append(f"| CWE | {_esc_md(f.cwe)} |")
+    _mrow(lines, "Категория", f.category)
     lines.append(
         f"| OWASP | {_esc_md(f.owasp_category) if f.owasp_category else 'не сопоставлено'} |"
     )
     asset = _asset_cell(f)
     if asset:
         lines.append(f"| Актив | {_esc_md(asset)} |")
+    # Object identity / location (RC-05/RC-06/RC-10) — a finding must be locatable.
+    _mrow(lines, "IP", f.ip)
+    _mrow(lines, "Протокол", f.protocol)
+    _mrow(lines, "Схема", f.scheme)
+    _mrow(lines, "URL", f.url)
+    _mrow(lines, "Путь", f.path)
+    _mrow(lines, "Параметр", f.parameter)
+    _mrow(lines, "Компонент", f.component)
+    _mrow(lines, "Версия", f.observed_version)
     lines.append(f"| Статус верификации | {f.verification_status} |")
     lines.append(f"| Уверенность | {f.confidence:.2f} |")
+    _mrow(lines, "Установлено/гипотеза", f.established_or_hypothesis)
     if f.confirmation_class:
         lines.append(f"| Класс | {_esc_md(f.confirmation_class)} |")
     if f.downgrade_reason:
@@ -110,9 +134,22 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         lines.append(
             f"| Ревью | {f.review_status}{(' · ' + _esc_md(f.reviewer)) if f.reviewer else ''} |"
         )
+    _mrow(lines, "Валидатор", f.validator_id)
+    _mrow(lines, "Сырой артефакт", f.raw_artifact_ref)
+    if f.wstg_test_ids:
+        lines.append("| WSTG | " + ", ".join(f"`{w}`" for w in f.wstg_test_ids) + " |")
     if f.evidence_ids:
         lines.append("| Evidence | " + ", ".join(f"`{e}`" for e in f.evidence_ids) + " |")
     lines.append("")
+    if f.priority_rationale:
+        lines.append(f"**Почему приоритет.** {_esc_md(f.priority_rationale)}")
+        lines.append("")
+    if f.acceptance_criteria:
+        lines.append("- Критерии приёмки: " + "; ".join(_esc_md(c) for c in f.acceptance_criteria))
+    if f.retest_plan:
+        lines.append("- План ретеста: " + "; ".join(_esc_md(s) for s in f.retest_plan))
+    if f.acceptance_criteria or f.retest_plan:
+        lines.append("")
     if f.description:
         lines.append(f"**Что обнаружено.** {_esc_md(f.description)}")
     impact = f.observed_impact or f.potential_impact
@@ -142,6 +179,9 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
             ("Источник", p.source),
             ("Попытки", p.attempts),
             ("Воспроизводимость", p.reproducibility),
+            ("Очистка", p.cleanup),
+            ("Воспроизведение клиентом", p.client_repro),
+            ("Скриншот", p.screenshot_ref),
         ):
             if value not in (None, ""):
                 lines.append(f"- {label}: {_esc_md(value)}")
@@ -152,6 +192,7 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         lines.append("")
         lines.append(f"#### План устранения (LLM · {r.status})")
         for label, value in (
+            ("Установлено/гипотеза", r.established_or_hypothesis),
             ("Сдерживание", r.temporary_containment),
             ("Исправление", r.permanent_fix),
             ("Превентивные меры", r.preventive_measures),
@@ -257,12 +298,13 @@ def _render_test_executions_md(lines: list[str], doc: ReportDocumentV1) -> None:
         return
     lines.append("## Executed Checks Without Findings")
     lines.append("")
-    lines.append("| Test | Control | Method | Result | Executed |")
-    lines.append("|---|---|---|---|---|")
+    lines.append("| Test | Control | Method | Result | Executed | Evidence |")
+    lines.append("|---|---|---|---|---|---|")
     for t in doc.test_executions:
+        ev = ", ".join(f"`{e}`" for e in t.evidence_ids) if t.evidence_ids else "—"
         lines.append(
             f"| `{t.test_id}` | {t.control} | {_na(t.method)} | "
-            f"`{t.result}` | {_na(t.executed_at)} |"
+            f"`{t.result}` | {_na(t.executed_at)} | {ev} |"
         )
     lines.append("")
 
@@ -273,9 +315,15 @@ def _render_attack_narrative_md(lines: list[str], doc: ReportDocumentV1) -> None
     lines.append("## Attack Narrative")
     lines.append("")
     for step in sorted(doc.attack_narrative, key=lambda s: s.order_index):
-        att = f" [{step.tactic}/{step.technique_id}]" if step.technique_id else ""
+        att = f" [{_na(step.tactic)}/{step.technique_id}]" if step.technique_id else ""
         refs = "".join(f" [{c}]" for c in step.claim_ids)
-        lines.append(f"{step.order_index}. **{step.phase}**{att}: {step.description}{refs}")
+        ev = (
+            " · evidence: " + ", ".join(f"`{e}`" for e in step.evidence_ids)
+            if step.evidence_ids
+            else ""
+        )
+        ts = f" · {step.timestamp}" if step.timestamp else ""
+        lines.append(f"{step.order_index}. **{step.phase}**{att}: {step.description}{refs}{ev}{ts}")
     lines.append("")
 
 
@@ -290,8 +338,18 @@ def _render_chains_md(lines: list[str], doc: ReportDocumentV1) -> None:
         _kv(lines, "outcome", ch.outcome)
         _kv(lines, "breaks_at", ch.breaks_at)
         for step in ch.steps:
-            lines.append(f"- {step.order_index}. {step.phase}: {step.description}")
-        if ch.kind == "hypothetical" and ch.to_verify:
+            att = f" [{_na(step.tactic)}/{step.technique_id}]" if step.technique_id else ""
+            refs = "".join(f" [{c}]" for c in step.claim_ids)
+            ev = (
+                " · evidence: " + ", ".join(f"`{e}`" for e in step.evidence_ids)
+                if step.evidence_ids
+                else ""
+            )
+            ts = f" · {step.timestamp}" if step.timestamp else ""
+            lines.append(
+                f"- {step.order_index}. {step.phase}{att}: {step.description}{refs}{ev}{ts}"
+            )
+        if ch.to_verify:
             lines.append("- to_verify: " + "; ".join(ch.to_verify))
         lines.append("")
 
@@ -309,17 +367,34 @@ def _render_priority_plan_md(lines: list[str], doc: ReportDocumentV1) -> None:
 
 
 def _render_evidence_inventory_md(lines: list[str], doc: ReportDocumentV1) -> None:
-    if not doc.evidence_references:
+    if not (doc.evidence_references or doc.oast_references):
         return
-    lines.append("## Evidence Inventory")
+    lines.append("## Evidence")
     lines.append("")
-    lines.append("| Evidence ID | Kind | Object Key | Description |")
-    lines.append("|---|---|---|---|")
-    for e in doc.evidence_references:
+    if doc.evidence_references:
+        # Evidence Register (RC-08) — the chain-of-custody a reader can verify.
         lines.append(
-            f"| `{e.evidence_id}` | {e.kind} | `{_na(e.object_key)}` | {_na(e.description)} |"
+            "| Evidence ID | Kind | Collector | Collected (UTC) | SHA-256 | Chain hash "
+            "| Redacted | Producer run | Size | MIME | Object Key | Description |"
         )
-    lines.append("")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for e in doc.evidence_references:
+            lines.append(
+                f"| `{e.evidence_id}` | {e.kind} | {_na(e.collector)} | {_na(e.collected_at_utc)} "
+                f"| `{_na(e.sha256)}` | `{_na(e.chain_hash)}` | {_na(e.redaction_applied)} "
+                f"| `{_na(e.producer_tool_run_id)}` | {_na(e.size)} | {_na(e.mime)} "
+                f"| `{_na(e.object_key)}` | {_na(e.description)} |"
+            )
+        lines.append("")
+    if doc.oast_references:
+        lines.append("### OAST references")
+        lines.append("")
+        for ref in doc.oast_references:
+            if isinstance(ref, dict):
+                _dict_items_md(lines, ref)
+            else:
+                lines.append(f"- `{ref}`")
+        lines.append("")
 
 
 def _render_client_impact_md(lines: list[str], doc: ReportDocumentV1) -> None:
@@ -346,7 +421,70 @@ def _render_claims_md(lines: list[str], doc: ReportDocumentV1) -> None:
     lines.append("")
     for cl in doc.claims:
         ev = ", ".join(f"`{e}`" for e in cl.evidence_ids) or "_none_"
-        lines.append(f"- `{cl.claim_id}` [{cl.claim_type}] {cl.text} — evidence: {ev}")
+        lines.append(f"- `{cl.claim_id}` [{cl.claim_type}] {_esc_md(cl.text)} — evidence: {ev}")
+        _kv(lines, "  subject", cl.subject)
+        if cl.derived_from:
+            lines.append("  - derived_from: " + ", ".join(f"`{d}`" for d in cl.derived_from))
+        _kv(lines, "  validator", cl.validator)
+        _kv(lines, "  reviewer", cl.reviewer)
+        _kv(lines, "  limitations", cl.limitations)
+    lines.append("")
+
+
+def _render_scope_limits_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Scope & Limits: what the report's claims are bounded by."""
+    if not (doc.scope_summary or doc.profile_limits):
+        return
+    lines.append("## Scope & Limits")
+    lines.append("")
+    if doc.scope_summary:
+        lines.append("**Scope**")
+        _dict_items_md(lines, doc.scope_summary)
+    if doc.profile_limits:
+        lines.append("**Profile limits**")
+        _dict_items_md(lines, doc.profile_limits)
+    lines.append("")
+
+
+def _render_skipped_failed_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Skipped & Failed: why something was not done is part of the result."""
+    if not (doc.skipped_reasons or doc.failures):
+        return
+    lines.append("## Skipped & Failed")
+    lines.append("")
+    for fl in doc.failures:
+        lines.append(f"- failure `{fl.where}` (`{fl.reason_code}`): {_esc_md(fl.message)}")
+    for sk in doc.skipped_reasons:
+        if isinstance(sk, dict):
+            parts = ", ".join(f"{_esc_md(k)}=`{v}`" for k, v in sk.items())
+            lines.append(f"- skipped: {parts}")
+        else:
+            lines.append(f"- skipped: {_esc_md(sk)}")
+    lines.append("")
+
+
+def _render_budget_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Budget usage."""
+    if not doc.budget_usage:
+        return
+    lines.append("## Budget")
+    lines.append("")
+    _dict_items_md(lines, doc.budget_usage)
+    lines.append("")
+
+
+def _render_provenance_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """RC-07 — Provenance: the prompt/model and registry versions behind the analysis."""
+    if not (doc.prompt_model_versions or doc.registry_versions):
+        return
+    lines.append("## Provenance")
+    lines.append("")
+    if doc.prompt_model_versions:
+        lines.append("**Prompt / model versions**")
+        _dict_items_md(lines, doc.prompt_model_versions)
+    if doc.registry_versions:
+        lines.append("**Registry versions**")
+        _dict_items_md(lines, doc.registry_versions)
     lines.append("")
 
 
@@ -355,11 +493,13 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     lines.append(f"# ARGUS Report — {doc.target}")
     lines.append("")
     lines.append(f"- scan_id: `{doc.scan_id}`")
+    lines.append(f"- tenant_id: `{doc.tenant_id}`")
     # Passport scalars — print only what was actually recorded (no not_assessed spam).
     for label, value in (
         ("scan_profile", doc.scan_profile),
         ("resolved_scan_mode", doc.resolved_scan_mode),
         ("execution_mode", doc.execution_mode),
+        ("quick_profile", doc.quick_profile),
         ("nuclei_profile", doc.nuclei_profile),
         ("started_at", doc.started_at),
         ("completed_at", doc.completed_at),
@@ -368,6 +508,8 @@ def render_markdown(doc: ReportDocumentV1) -> str:
             lines.append(f"- {label}: `{value}`")
     lines.append(f"- schema_version: `{doc.schema_version}`")
     lines.append(f"- snapshot_hash: `{doc.snapshot_hash}`")
+    if doc.generated_at:
+        lines.append(f"- generated_at: `{doc.generated_at}`")
     lines.append("")
 
     # Report passport — independent release statuses (prompt E.2).
@@ -388,6 +530,7 @@ def render_markdown(doc: ReportDocumentV1) -> str:
         lines.append(doc.conclusions.executive_summary)
         lines.append("")
 
+    _render_scope_limits_md(lines, doc)
     _render_engagement_md(lines, doc)
     _render_methodology_md(lines, doc)
     _render_surface_md(lines, doc)
@@ -417,11 +560,21 @@ def render_markdown(doc: ReportDocumentV1) -> str:
 
     lines.append("## Coverage")
     lines.append("")
+    if doc.tested_capabilities:
+        lines.append("- tested_capabilities: " + ", ".join(f"`{c}`" for c in doc.tested_capabilities))
+    if doc.not_assessed_capabilities:
+        lines.append(
+            "- not_assessed_capabilities: "
+            + ", ".join(f"`{c}`" for c in doc.not_assessed_capabilities)
+        )
     if not doc.coverage:
         lines.append("_not_assessed_")
     for c in doc.coverage:
         reason = f" (reason: `{c.reason_code}`)" if c.reason_code else ""
-        lines.append(f"- `{c.capability_id}`: `{c.status}`{reason}")
+        ev = (
+            " · evidence: " + ", ".join(f"`{e}`" for e in c.evidence_ids) if c.evidence_ids else ""
+        )
+        lines.append(f"- `{c.capability_id}`: `{c.status}`{reason}{ev}")
     lines.append("")
 
     lines.append("## Tool runs")
@@ -431,6 +584,18 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     for t in doc.tool_runs:
         ps = f" parser_status=`{t.parser_status}`" if t.parser_status else ""
         lines.append(f"- `{t.tool_run_id}` {t.tool_name}: `{t.status}`{ps}")
+        # RC-09 — a tool run's timing / exit code / command (redacted) / sandbox / source.
+        for label, value in (
+            ("started_at", t.started_at),
+            ("finished_at", t.finished_at),
+            ("exit_code", t.exit_code),
+            ("argv", t.argv),
+            ("sandbox_id", t.sandbox_id),
+            ("source_ip", t.source_ip),
+            ("raw_artifact_ref", t.raw_artifact_ref),
+        ):
+            if value not in (None, ""):
+                lines.append(f"  - {label}: `{value}`")
     lines.append("")
 
     if doc.wstg:
@@ -489,6 +654,9 @@ def render_markdown(doc: ReportDocumentV1) -> str:
         lines.append("")
 
     _render_client_impact_md(lines, doc)
+    _render_skipped_failed_md(lines, doc)
+    _render_budget_md(lines, doc)
+    _render_provenance_md(lines, doc)
 
     if doc.conclusions and doc.conclusions.closure_summary:
         lines.append("## Closure Summary")

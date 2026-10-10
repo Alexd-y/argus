@@ -18,6 +18,7 @@ from typing import Any
 
 from defusedxml.ElementTree import fromstring
 from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 
 from src.reports.report_document import ReportDocumentV1, field_render_policy
 
@@ -83,8 +84,10 @@ def _walk_value(value: Any, label: str, norm_texts: dict[str, str], problems: li
             _walk_value(item, label, norm_texts, problems)
         return
     if isinstance(value, dict):
-        for item in value.values():
-            _walk_value(item, label, norm_texts, problems)
+        # Free-form dicts (wstg, scope_summary, budget_usage, …) are structurally
+        # variable: their rendering is verified by the static coverage script (the
+        # field name must appear in each renderer) and by targeted tests, not by
+        # value-walking — which would false-positive on any key a renderer summarises.
         return
     if isinstance(value, (bool, int, float)):
         return  # bool is an int subclass; numeric formatting differs per format
@@ -97,15 +100,17 @@ def _walk_value(value: Any, label: str, norm_texts: dict[str, str], problems: li
 
 def _walk_model(obj: BaseModel, norm_texts: dict[str, str], problems: list[str]) -> None:
     model = type(obj)
-    for field_name in model.model_fields:
+    for field_name, field in model.model_fields.items():
         if field_render_policy(model, field_name) != "all":
             continue
-        _walk_value(
-            getattr(obj, field_name, None),
-            f"{model.__name__}.{field_name}",
-            norm_texts,
-            problems,
-        )
+        value = getattr(obj, field_name, None)
+        # A value equal to the field's declared default is a "no-data" sentinel
+        # (e.g. review_status="not_required", status="not_generated") with nothing to
+        # render — skip it so defaults never produce a false parity blocker.
+        default = field.default
+        if default is not PydanticUndefined and value == default:
+            continue
+        _walk_value(value, f"{model.__name__}.{field_name}", norm_texts, problems)
 
 
 def _declarative_parity_blockers(doc: ReportDocumentV1, texts: dict[str, str]) -> list[str]:

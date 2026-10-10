@@ -1,13 +1,15 @@
 # ARGUS Report — https://example.com
 
 - scan_id: `scan-1`
+- tenant_id: `tenant-1`
 - scan_profile: `light`
 - resolved_scan_mode: `standard`
 - execution_mode: `production`
 - nuclei_profile: `vuln_default`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `549023acdf740d893298758b2b9c0a97f28619e4f231e5bb9ec4a3345c66004d`
+- snapshot_hash: `8b31b3d4fbcc12b0a138815e2e26ef13a95350f571be04819c9f6afba6da9cc5`
+- generated_at: `2026-01-01T00:00:00+00:00`
 
 ## Report Passport
 
@@ -42,6 +44,7 @@
 | OWASP | A03:2021 — Injection |
 | Статус верификации | confirmed |
 | Уверенность | 0.95 |
+| Сырой артефакт | E-1 |
 | Evidence | `E-1` |
 
 
@@ -67,17 +70,19 @@
 
 ## Attack Narrative
 
-1. **entry**: t (F-1)
+1. **entry**: t (F-1) · evidence: `E-1`
 
-## Evidence Inventory
+## Evidence
 
-| Evidence ID | Kind | Object Key | Description |
-|---|---|---|---|
-| `E-1` | http | `E-1` | not_assessed |
+| Evidence ID | Kind | Collector | Collected (UTC) | SHA-256 | Chain hash | Redacted | Producer run | Size | MIME | Object Key | Description |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `E-1` | http | not_assessed | not_assessed | `not_assessed` | `not_assessed` | not_assessed | `not_assessed` | not_assessed | not_assessed | `E-1` | not_assessed |
 
 ## Coverage
 
-- `cap.sqli`: `tested`
+- tested_capabilities: `cap.sqli`
+- not_assessed_capabilities: `cap.xss`
+- `cap.sqli`: `tested` · evidence: `E-1`
 - `cap.xss`: `not_assessed` (reason: `budget_exhausted`)
 
 ## Tool runs
@@ -86,7 +91,7 @@
 
 ## WSTG v4.2 Coverage
 
-- versions: policy `argus-wstg-cov-1`, rules `argus-wstg-cov-1`, scenarios `argus-wstg-scn-0`
+- versions: policy `argus-wstg-cov-1`, rules `argus-wstg-cov-1`, scenarios `argus-wstg-scn-1`
 > pass/fail is a control's security result; the percentage is execution completeness, not application security.
 
 - assessment: `incomplete`

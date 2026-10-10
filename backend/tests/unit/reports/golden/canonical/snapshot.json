@@ -214,7 +214,7 @@
   "schema_version": "v2",
   "scope_summary": {},
   "skipped_reasons": [],
-  "snapshot_hash": "549023acdf740d893298758b2b9c0a97f28619e4f231e5bb9ec4a3345c66004d",
+  "snapshot_hash": "8b31b3d4fbcc12b0a138815e2e26ef13a95350f571be04819c9f6afba6da9cc5",
   "started_at": null,
   "surface_inventory": [
     {
@@ -1355,7 +1355,1368 @@
     "policy_version": "argus-wstg-cov-1",
     "required_scenarios_completed": true,
     "running": 0,
-    "scenario_registry_version": "argus-wstg-scn-0",
+    "scenario_coverage": {
+      "by_status": {
+        "blocked": 0,
+        "confirmed_finding": 1,
+        "error": 0,
+        "executed_no_finding": 0,
+        "not_applicable": 0,
+        "not_run": 95,
+        "partial": 0
+      },
+      "confirmed_findings": 1,
+      "executed": 1,
+      "records": [
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INFO-10",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INFO-10"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-10",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-10"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CONF-11",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CONF-11"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-IDNT-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-IDNT-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-IDNT-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-IDNT-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-IDNT-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-IDNT-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-IDNT-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-IDNT-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-IDNT-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-IDNT-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHN-10",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHN-10"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHZ-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHZ-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHZ-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHZ-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHZ-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHZ-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ATHZ-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ATHZ-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-SESS-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-SESS-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "confirmed_finding",
+          "cwe": [],
+          "evidence_sufficient": true,
+          "executed": true,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "finding:F-1",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-10",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-10"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-11",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-11"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-12",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-12"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-13",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-13"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-14",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-14"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-15",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-15"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-16",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-16"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-17",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-17"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-18",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-18"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-INPV-19",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-INPV-19"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ERRH-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ERRH-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-ERRH-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-ERRH-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CRYP-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CRYP-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CRYP-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CRYP-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CRYP-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CRYP-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CRYP-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CRYP-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-BUSL-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-BUSL-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-01",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-01"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-02",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-02"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-03",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-03"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-04",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-04"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-05",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-05"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-06",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-06"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-07",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-07"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-08",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-08"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-09",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-09"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-10",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-10"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-11",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-11"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-12",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-12"
+          ]
+        },
+        {
+          "applicable": true,
+          "coverage_status": "not_run",
+          "cwe": [],
+          "evidence_sufficient": false,
+          "executed": false,
+          "finding_ids": [],
+          "owasp_api": [],
+          "scenario_id": "WSTG-CLNT-13",
+          "skip_or_error_reason": null,
+          "wstg": [
+            "WSTG-CLNT-13"
+          ]
+        }
+      ],
+      "total_scenarios": 96,
+      "wstg_version": "4.2"
+    },
+    "scenario_registry_version": "argus-wstg-scn-1",
     "schema_version": 2,
     "scope_version": "default",
     "surface": [
