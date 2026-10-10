@@ -444,5 +444,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 @media print {
   .meta-grid { display: block; }
   .roadmap-grid { display: block; }
-  .phase-header { display: block; }
+  /* Match the base selector's specificity (.roadmap-card .phase-header), or @media
+     cannot override it — a bare .phase-header rule would be dead. */
+  .roadmap-card .phase-header { display: block; }
 }

@@ -369,7 +369,7 @@ def _render_priority_plan_md(lines: list[str], doc: ReportDocumentV1) -> None:
 def _render_evidence_inventory_md(lines: list[str], doc: ReportDocumentV1) -> None:
     if not (doc.evidence_references or doc.oast_references):
         return
-    lines.append("## Evidence")
+    lines.append("## Evidence Register")
     lines.append("")
     if doc.evidence_references:
         # Evidence Register (RC-08) — the chain-of-custody a reader can verify.
@@ -435,7 +435,7 @@ def _render_scope_limits_md(lines: list[str], doc: ReportDocumentV1) -> None:
     """RC-07 — Scope & Limits: what the report's claims are bounded by."""
     if not (doc.scope_summary or doc.profile_limits):
         return
-    lines.append("## Scope & Limits")
+    lines.append("## Scope and Limits")
     lines.append("")
     if doc.scope_summary:
         lines.append("**Scope**")
@@ -450,7 +450,7 @@ def _render_skipped_failed_md(lines: list[str], doc: ReportDocumentV1) -> None:
     """RC-07 — Skipped & Failed: why something was not done is part of the result."""
     if not (doc.skipped_reasons or doc.failures):
         return
-    lines.append("## Skipped & Failed")
+    lines.append("## Skipped and Failed")
     lines.append("")
     for fl in doc.failures:
         lines.append(f"- failure `{fl.where}` (`{fl.reason_code}`): {_esc_md(fl.message)}")

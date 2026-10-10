@@ -352,9 +352,12 @@ def build_report_object_key(
     Report artifact key (5 path segments, single filename component):
     {tenant_id}/{scan_id}/reports/{tier}/{report_id}.{fmt}
     """
-    # RC-19 — the logical format (``canonical_json``, ``valhalla_llm_xml`` …) stays the
-    # DB/API key, but the on-disk extension is resolved to a real one (``.json``), never
-    # the raw logical name. Imported locally to keep this low-level module cycle-free.
+    # RC-19 — the on-disk filename must END in a real extension (``.json`` not
+    # ``.canonical_json``), but the object key must stay UNIQUE per logical format or
+    # distinct artifacts overwrite each other in storage. So the logical name is kept in
+    # the stem whenever it is not already a bare extension: ``canonical_json`` →
+    # ``{rid}.canonical_json.json`` (unique + real ext), while a base ``json`` stays
+    # ``{rid}.json``. Imported locally to keep this low-level module cycle-free.
     from src.reports.report_bundle import extension_for_logical_format
 
     t = _sanitize_path_component(tenant_id, "tenant_id")
@@ -362,8 +365,10 @@ def build_report_object_key(
     reports_seg = _sanitize_path_component(OBJECT_TYPE_REPORTS, "object_type")
     tier_c = _sanitize_path_component(tier, "tier")
     rid = _sanitize_path_component(report_id, "report_id")
+    logical = _sanitize_path_component(fmt, "fmt")
     ext = _sanitize_path_component(extension_for_logical_format(fmt), "fmt")
-    filename = f"{rid}.{ext}"
+    stem = rid if logical == ext else f"{rid}.{logical}"
+    filename = f"{stem}.{ext}"
     if _FORBIDDEN_PATTERN.search(filename):
         raise ValueError("Invalid report artifact filename")
     return f"{t}/{s}/{reports_seg}/{tier_c}/{filename}"

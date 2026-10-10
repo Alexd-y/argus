@@ -56,11 +56,19 @@ _ALNUM_RE = re.compile(r"[A-Za-z0-9]")
 _READABLE_FORMATS = ("md", "xml", "html")
 
 
-def _norm(value: object) -> str:
-    """Normalise so a value matches across formats: unescape HTML entities, drop the
-    Markdown escape backslashes, collapse whitespace, lowercase. This lets one check work
-    for MD (``\\|`` escaping, ``\\n``→space), XML/HTML (``&lt;``/``&amp;`` entities)."""
-    text = _html.unescape(str(value)).replace("\\", "")
+def _norm(value: object, *, unescape: bool) -> str:
+    """Normalise for cross-format substring matching: drop Markdown escape backslashes,
+    collapse whitespace, lowercase.
+
+    ``unescape`` undoes HTML entities and is applied ONLY to the XML/HTML rendered text
+    (which the renderers escape), never to the Markdown text (raw) nor to the snapshot
+    value itself. Unescaping the value too would turn a literal ``&amp;`` in the data into
+    ``&`` and then fail to match the (escaped→unescaped) HTML render — a false blocker on
+    any PoC body / payload that contains an entity string (RC-13 normalization fix)."""
+    text = str(value)
+    if unescape:
+        text = _html.unescape(text)
+    text = text.replace("\\", "")
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
@@ -92,7 +100,7 @@ def _walk_value(value: Any, label: str, norm_texts: dict[str, str], problems: li
     if isinstance(value, (bool, int, float)):
         return  # bool is an int subclass; numeric formatting differs per format
     if isinstance(value, str) and _checkable(value):
-        nv = _norm(value)
+        nv = _norm(value, unescape=False)
         missing = sorted(fmt for fmt, text in norm_texts.items() if nv not in text)
         if missing:
             problems.append(f"parity: {label} value not rendered in {','.join(missing)}")
@@ -117,7 +125,13 @@ def _declarative_parity_blockers(doc: ReportDocumentV1, texts: dict[str, str]) -
     """RC-13: every field marked ``render="all"`` with a non-empty value must appear in
     MD/XML/HTML. Returns one blocker per missing ``model.field`` + the formats it is
     missing from. JSON is lossless (``model_dump``) and is not checked here."""
-    norm_texts = {fmt: _norm(texts[fmt]) for fmt in _READABLE_FORMATS if fmt in texts}
+    # Markdown emits raw text; XML/HTML escape it — so only the latter are unescaped back
+    # to the source form before matching.
+    norm_texts = {
+        fmt: _norm(texts[fmt], unescape=(fmt != "md"))
+        for fmt in _READABLE_FORMATS
+        if fmt in texts
+    }
     if not norm_texts:
         return []
     problems: list[str] = []
@@ -188,8 +202,12 @@ def content_parity_blockers(
         md_secs = {
             t.strip().lower() for lvl, t in _MD_HEADER_RE.findall(texts["md"]) if lvl == "##"
         }
+        # Unescape HTML entities so an escaped header (``Scope &amp; Limits``) compares
+        # equal to the Markdown raw header (``Scope & Limits``) — the set-equality check
+        # is about which sections exist, not how a renderer escapes the title.
         html_secs = {
-            re.sub(r"<[^>]+>", "", t).strip().lower() for t in _HTML_H2_RE.findall(texts["html"])
+            _html.unescape(re.sub(r"<[^>]+>", "", t)).strip().lower()
+            for t in _HTML_H2_RE.findall(texts["html"])
         }
         html_secs = {re.sub(r"\s*\(\d+\)\s*$", "", s).strip() for s in html_secs}
         md_secs = {re.sub(r"\s*\(\d+\)\s*$", "", s).strip() for s in md_secs}

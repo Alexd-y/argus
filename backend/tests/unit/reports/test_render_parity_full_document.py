@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
+from src.reports.renderers import render_html, render_json, render_markdown, render_xml
 from src.reports.report_content_parity import content_parity_blockers
 from src.reports.report_document import (
     ClientImpact,
@@ -35,7 +35,6 @@ from src.reports.report_document import (
     ReportToolRun,
     ReportValidationError,
 )
-from src.reports.renderers import render_html, render_json, render_markdown, render_xml
 
 _TS = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -325,6 +324,19 @@ def test_declarative_parity_clean_on_full_document():
     blockers = content_parity_blockers(canon, doc=doc)
     field_blockers = [b for b in blockers if b.startswith("parity:") and " value not rendered" in b]
     assert field_blockers == [], field_blockers
+
+
+def test_md_html_section_headers_do_not_diverge():
+    """C-28 — the new/renamed sections must keep MD and HTML section-header sets equal, or
+    the content-parity gate fail-closed-blocks every report that has them (RC-07 headers)."""
+    doc = _full_document()
+    canon = {
+        "json": render_json(doc).encode(),
+        "md": render_markdown(doc).encode(),
+        "html": render_html(doc).encode(),
+    }
+    blockers = content_parity_blockers(canon)
+    assert not any("section headers differ" in b for b in blockers), blockers
 
 
 @pytest.mark.parametrize("render", [render_markdown, render_xml, render_html])

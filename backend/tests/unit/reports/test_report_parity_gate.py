@@ -55,6 +55,29 @@ def test_parity_gate_backward_compatible_without_doc():
     assert not any(b.startswith("parity: Report") for b in blockers), blockers
 
 
+def test_parity_gate_tolerates_html_entities_in_values():
+    """A value that literally contains HTML entities (routine in PoC HTTP bodies / XSS
+    payloads) must not trip a false 'value not rendered' blocker (RC-13 normalization)."""
+    from src.reports.report_document import ReportPoC
+
+    doc = build_report_document(
+        scan_id="s",
+        tenant_id="t",
+        target="https://t",
+        findings=[
+            ReportFinding(
+                finding_id="F-1",
+                title="x",
+                severity="high",
+                poc=ReportPoC(http_response="resp body foo &amp; bar <b>bold</b> &#39;q&#39;"),
+            )
+        ],
+    )
+    canon = _canon(doc)
+    blockers = content_parity_blockers(canon, doc=doc)
+    assert not any("http_response" in b and "value not rendered" in b for b in blockers), blockers
+
+
 def test_field_render_policy_defaults_to_all():
     assert field_render_policy(ReportFinding, "parameter") == "all"
     assert field_render_policy(ReportFinding, "finding_id") == "all"

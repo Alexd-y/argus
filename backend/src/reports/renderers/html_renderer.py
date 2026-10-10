@@ -282,32 +282,38 @@ def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
             parts.append(f"<li>{escape(str(rationale))} — {escape(', '.join(map(str, fids)))}</li>")
         parts.append("</ol>")
 
-    if doc.evidence_references:
-        # Evidence Register (RC-08) — the chain-of-custody a reader can verify.
-        parts.append("<h2>Evidence Register</h2><table>")
-        parts.append(
-            "<tr><th>Evidence ID</th><th>Kind</th><th>Collector</th><th>Collected (UTC)</th>"
-            "<th>SHA-256</th><th>Chain hash</th><th>Redacted</th><th>Producer run</th>"
-            "<th>Size</th><th>MIME</th><th>Object Key</th><th>Description</th></tr>"
-        )
-        for e in doc.evidence_references:
+    # One "Evidence Register" section whenever evidence refs OR OAST refs exist — the
+    # same gating as the Markdown renderer, so the MD/HTML section-header sets stay equal
+    # (C-28 parity gate).
+    if doc.evidence_references or doc.oast_references:
+        parts.append("<h2>Evidence Register</h2>")
+        if doc.evidence_references:
+            # Evidence Register (RC-08) — the chain-of-custody a reader can verify.
+            parts.append("<table>")
             parts.append(
-                f"<tr><td><code>{escape(e.evidence_id)}</code></td><td>{escape(e.kind)}</td>"
-                f"<td>{_na(e.collector)}</td><td>{_na(e.collected_at_utc)}</td>"
-                f"<td><code>{_na(e.sha256)}</code></td><td><code>{_na(e.chain_hash)}</code></td>"
-                f"<td>{_na(e.redaction_applied)}</td><td><code>{_na(e.producer_tool_run_id)}</code></td>"
-                f"<td>{_na(e.size)}</td><td>{_na(e.mime)}</td>"
-                f"<td>{_na(e.object_key)}</td><td>{_na(e.description)}</td></tr>"
+                "<tr><th>Evidence ID</th><th>Kind</th><th>Collector</th><th>Collected (UTC)</th>"
+                "<th>SHA-256</th><th>Chain hash</th><th>Redacted</th><th>Producer run</th>"
+                "<th>Size</th><th>MIME</th><th>Object Key</th><th>Description</th></tr>"
             )
-        parts.append("</table>")
-    if doc.oast_references:
-        parts.append("<h3>OAST references</h3><ul>")
-        for ref in doc.oast_references:
-            if isinstance(ref, dict):
-                _dict_items_html(parts, ref)
-            else:
-                parts.append(f"<li><code>{escape(str(ref))}</code></li>")
-        parts.append("</ul>")
+            for e in doc.evidence_references:
+                parts.append(
+                    f"<tr><td><code>{escape(e.evidence_id)}</code></td><td>{escape(e.kind)}</td>"
+                    f"<td>{_na(e.collector)}</td><td>{_na(e.collected_at_utc)}</td>"
+                    f"<td><code>{_na(e.sha256)}</code></td><td><code>{_na(e.chain_hash)}</code></td>"
+                    f"<td>{_na(e.redaction_applied)}</td>"
+                    f"<td><code>{_na(e.producer_tool_run_id)}</code></td>"
+                    f"<td>{_na(e.size)}</td><td>{_na(e.mime)}</td>"
+                    f"<td>{_na(e.object_key)}</td><td>{_na(e.description)}</td></tr>"
+                )
+            parts.append("</table>")
+        if doc.oast_references:
+            parts.append("<h3>OAST references</h3><ul>")
+            for ref in doc.oast_references:
+                if isinstance(ref, dict):
+                    _dict_items_html(parts, ref)
+                else:
+                    parts.append(f"<li><code>{escape(str(ref))}</code></li>")
+            parts.append("</ul>")
 
     if doc.client_impact is not None:
         c = doc.client_impact
@@ -352,7 +358,7 @@ def _render_scope_limits_html(parts: list[str], doc: ReportDocumentV1) -> None:
     """RC-07 — Scope & Limits."""
     if not (doc.scope_summary or doc.profile_limits):
         return
-    parts.append("<h2>Scope &amp; Limits</h2>")
+    parts.append("<h2>Scope and Limits</h2>")
     if doc.scope_summary:
         parts.append("<h3>Scope</h3><ul>")
         _dict_items_html(parts, doc.scope_summary)
@@ -367,7 +373,7 @@ def _render_skipped_failed_html(parts: list[str], doc: ReportDocumentV1) -> None
     """RC-07 — Skipped & Failed (failures + skipped reasons)."""
     if not (doc.skipped_reasons or doc.failures):
         return
-    parts.append("<h2>Skipped &amp; Failed</h2><ul>")
+    parts.append("<h2>Skipped and Failed</h2><ul>")
     for fl in doc.failures:
         parts.append(
             f"<li>failure <code>{escape(fl.where)}</code> "
