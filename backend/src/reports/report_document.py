@@ -475,6 +475,33 @@ class ReportDocumentV1(BaseModel):
         return self.model_copy(update={"snapshot_hash": digest, "generated_at": ts})
 
 
+#: Declarative render policy (RC-13). A field is printed in every readable format
+#: (Markdown/XML/HTML) unless it is explicitly marked
+#: ``Field(json_schema_extra={"render": "json_only"})`` — the allow-list of deliberately
+#: JSON-only fields (internal identifiers, storage keys), each with a justifying comment.
+#: Currently the allow-list is EMPTY: every snapshot field is rendered in every readable
+#: format. The absence of a field from a readable format must be a *decision*, so an
+#: unannotated field defaults to ``"all"`` and the coverage gate requires it everywhere.
+RENDER_POLICY_ALL: Final[str] = "all"
+RENDER_POLICY_JSON_ONLY: Final[str] = "json_only"
+
+
+def field_render_policy(model: type[BaseModel], field_name: str) -> str:
+    """Return the render policy for ``model.field_name``: ``"all"`` (default) or ``"json_only"``.
+
+    Reads ``Field(json_schema_extra={"render": ...})``; an unannotated field defaults to
+    ``"all"``. This is the single source of truth for both the static coverage script and
+    the runtime parity gate — a field is JSON-only *only* when the model says so.
+    """
+    field = model.model_fields.get(field_name)
+    extra = getattr(field, "json_schema_extra", None) if field is not None else None
+    if isinstance(extra, dict):
+        policy = extra.get("render")
+        if isinstance(policy, str):
+            return policy
+    return RENDER_POLICY_ALL
+
+
 def apply_evidence_gate(
     findings: list[ReportFinding],
     *,
@@ -651,6 +678,8 @@ def build_report_document(
 
 __all__ = [
     "NO_DATA_STATUSES",
+    "RENDER_POLICY_ALL",
+    "RENDER_POLICY_JSON_ONLY",
     "SNAPSHOT_SCHEMA_VERSION",
     "ClientImpact",
     "EngagementMetadata",
@@ -674,4 +703,5 @@ __all__ = [
     "VerificationStatus",
     "apply_evidence_gate",
     "build_report_document",
+    "field_render_policy",
 ]
