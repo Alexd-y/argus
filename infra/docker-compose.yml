@@ -134,6 +134,9 @@ services:
         GPU_MODE: ${WRB_GPU_MODE:-cpu}
     image: argus-whiterabbitneo
     container_name: argus-whiterabbitneo
+    # PID 1 reaper (catatonit): the LLM server as PID 1 does not reap children, so
+    # healthcheck curl/sh processes accumulate as zombies. init gives a reaping PID 1.
+    init: true
     restart: unless-stopped
     env_file: .env
     environment:
@@ -617,6 +620,9 @@ services:
         INSTALL_MSF: ${INSTALL_MSF:-false}
     image: argus-sandbox
     container_name: argus-sandbox
+    # PID 1 reaper (catatonit): `sleep infinity` as PID 1 does not reap children, so
+    # healthcheck id/sh processes accumulate as zombies. init gives a reaping PID 1.
+    init: true
     restart: unless-stopped
     # asnmap authenticates to ProjectDiscovery Cloud via PDCP_API_KEY; tools run
     # through `docker exec` inherit the container env, so exposing just this one
