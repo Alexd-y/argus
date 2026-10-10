@@ -103,6 +103,83 @@ def file_extension_for(fmt: ReportFormat) -> str:
     return _FILE_EXTENSIONS[fmt]
 
 
+# ---------------------------------------------------------------------------
+# Logical report-format resolver (RC-19)
+# ---------------------------------------------------------------------------
+# The pipeline / storage layer / API pass *logical* format names that are NOT in the
+# ``ReportFormat`` enum — the canonical bundle (``canonical_json`` …), the Valhalla LLM
+# deliverable (``valhalla_llm_xml`` …), the manifest, the verification kit, companion
+# CSVs and the export-validation report. Those names are the DB/API key, but the on-disk
+# extension and download filename must be a real extension. This table derives both.
+
+_LOGICAL_FORMAT_EXTENSIONS: dict[str, str] = {
+    # Base formats.
+    "html": "html",
+    "pdf": "pdf",
+    "json": "json",
+    "csv": "csv",
+    "md": "md",
+    "xml": "xml",
+    "sarif": "sarif",
+    "junit": "xml",
+    # Valhalla sections CSV constant (``valhalla_sections.csv``).
+    "valhalla_sections.csv": "csv",
+    # Companion CSVs + export validation report.
+    "technologies_csv": "csv",
+    "outdated_components_csv": "csv",
+    "tool_health_csv": "csv",
+    "export_validation_report": "json",
+    # Canonical immutable-snapshot bundle.
+    "canonical_json": "json",
+    "canonical_md": "md",
+    "canonical_xml": "xml",
+    "canonical_html": "html",
+    "canonical_pdf": "pdf",
+    # Valhalla mandatory-LLM deliverable + manifest + verification kit.
+    "valhalla_llm_json": "json",
+    "valhalla_llm_md": "md",
+    "valhalla_llm_xml": "xml",
+    "valhalla_llm_html": "html",
+    "valhalla_llm_pdf": "pdf",
+    "valhalla_llm_manifest": "json",
+    "valhalla_verification_kit": "zip",
+}
+
+_LOGICAL_FORMAT_MIME: dict[str, str] = {
+    "json": "application/json",
+    "md": "text/markdown",
+    "xml": "application/xml",
+    "html": "text/html; charset=utf-8",
+    "pdf": "application/pdf",
+    "csv": "text/csv; charset=utf-8",
+    "sarif": "application/sarif+json",
+    "zip": "application/zip",
+}
+
+
+def extension_for_logical_format(fmt: str) -> str:
+    """Resolve a logical report-format name to a file extension (no leading dot).
+
+    Known names map directly; a ``canonical_`` / ``valhalla_llm_`` prefix falls back to
+    its suffix's extension; anything still unresolved yields ``"bin"`` so a raw logical
+    name never becomes the on-disk extension (``….canonical_json``).
+    """
+    key = (fmt or "").strip().lower()
+    if key in _LOGICAL_FORMAT_EXTENSIONS:
+        return _LOGICAL_FORMAT_EXTENSIONS[key]
+    for prefix in ("canonical_", "valhalla_llm_"):
+        if key.startswith(prefix):
+            suffix = key[len(prefix) :]
+            if suffix in _LOGICAL_FORMAT_EXTENSIONS:
+                return _LOGICAL_FORMAT_EXTENSIONS[suffix]
+    return "bin"
+
+
+def mime_for_logical_format(fmt: str) -> str:
+    """Resolve a logical report-format name to a MIME type (via its extension)."""
+    return _LOGICAL_FORMAT_MIME.get(extension_for_logical_format(fmt), "application/octet-stream")
+
+
 class ReportBundle(BaseModel):
     """Immutable result of a single ReportService.generate call."""
 
@@ -164,6 +241,8 @@ __all__ = [
     "ReportBundle",
     "ReportFormat",
     "ReportTier",
+    "extension_for_logical_format",
     "file_extension_for",
+    "mime_for_logical_format",
     "mime_type_for",
 ]

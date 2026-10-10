@@ -377,3 +377,9 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .report-footer code {
   color: var(--argus-primary);
 }
+
+/* RC-16 — collapse variable-length flex/grid containers to block in print so WeasyPrint
+   paginates them instead of clipping content past the first page. */
+@media print {
+  .meta-grid { display: block; }
+}
