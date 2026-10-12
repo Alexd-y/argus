@@ -8,6 +8,10 @@ to re-declare the scale import the one shared definition.
 
 from __future__ import annotations
 
+import ast
+import importlib
+import pathlib
+
 from src.pipeline.contracts import evidence_scales as scales
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -68,7 +72,10 @@ def test_no_reverse_mapping_is_exported() -> None:
 
 
 def test_string_alias_is_consolidated() -> None:
-    # The former per-module copies now reference the one shared alias object.
+    # Cheap sanity: the exported names resolve to the shared alias. NOTE: because
+    # ``typing.Literal`` interns identical-argument Literals, ``is`` alone cannot
+    # detect a same-order re-declared copy — that anti-pattern is caught by the
+    # AST guard below, not here.
     from src.api import schemas as api_schemas
     from src.recon.vulnerability_analysis.active_scan import (
         injection_findings_normalize as inj,
@@ -83,6 +90,67 @@ def test_string_alias_is_consolidated() -> None:
     assert report_quality_gate.EvidenceClassification is scales.EvidenceGateName
     assert api_schemas.FindingEvidenceClassificationLiteral is scales.EvidenceGateName
     assert evidence_gates.EvidenceGate is scales.EvidenceGateName
+
+
+# --- Robust consolidation guard (R-5.1.3) ------------------------------------
+#
+# ``typing.Literal['none','weak','moderate','strong']`` interns to the SAME object
+# wherever it is written, so an ``is`` check cannot catch a re-introduced local
+# copy. This AST guard instead forbids any module below from re-declaring the
+# scale as a local ``Literal[...]`` and requires it to import the shared alias.
+_QUALITY_MEMBERS = frozenset({"none", "weak", "moderate", "strong"})
+_GATE_MEMBERS = frozenset({"validated", "observed", "candidate", "inconclusive"})
+
+#: consumer module -> alias names it must import from evidence_scales.
+_CONSUMERS: dict[str, frozenset[str]] = {
+    "src.reports.report_quality_gate": frozenset({"EvidenceQualityName", "EvidenceGateName"}),
+    "src.schemas.vulnerability_analysis.schemas": frozenset({"EvidenceQualityName"}),
+    "src.api.schemas": frozenset({"EvidenceQualityName", "EvidenceGateName"}),
+    "src.recon.vulnerability_analysis.active_scan.injection_findings_normalize": frozenset(
+        {"EvidenceQualityName"}
+    ),
+    "src.reports.evidence_gates": frozenset({"EvidenceGateName"}),
+}
+
+
+def _literal_members(subscript: ast.Subscript) -> frozenset[str]:
+    sl = subscript.slice
+    elts = sl.elts if isinstance(sl, ast.Tuple) else [sl]
+    return frozenset(e.value for e in elts if isinstance(e, ast.Constant) and isinstance(e.value, str))
+
+
+def test_no_local_literal_copies_of_the_scale() -> None:
+    for mod_path, required in _CONSUMERS.items():
+        module = importlib.import_module(mod_path)
+        tree = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
+
+        for node in ast.walk(tree):
+            value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign)) else None
+            if (
+                isinstance(value, ast.Subscript)
+                and isinstance(value.value, ast.Name)
+                and value.value.id == "Literal"
+            ):
+                members = _literal_members(value)
+                assert members != _QUALITY_MEMBERS, (
+                    f"{mod_path}:{node.lineno} re-declares the evidence-quality scale as a local "
+                    "Literal; import EvidenceQualityName from evidence_scales instead (R-5.1.3)."
+                )
+                assert members != _GATE_MEMBERS, (
+                    f"{mod_path}:{node.lineno} re-declares the evidence-gate scale as a local "
+                    "Literal; import EvidenceGateName from evidence_scales instead (R-5.1.3)."
+                )
+
+        imported = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and node.module == "src.pipeline.contracts.evidence_scales"
+            for alias in node.names
+        }
+        assert required <= imported, (
+            f"{mod_path} must import {set(required)} from evidence_scales; got {imported}"
+        )
 
 
 def test_informational_tier_floors() -> None:
