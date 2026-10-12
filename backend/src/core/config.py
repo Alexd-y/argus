@@ -874,6 +874,36 @@ class Settings(BaseSettings):
             return v.strip().lower() in ("true", "1", "yes", "on")
         return bool(v)
 
+    # F-M04 (companion): opt-OUT switch for the Ed25519 prompt-catalog startup
+    # verification driven by ``main._verify_prompt_catalog`` (see main.lifespan).
+    # The secure default is False → the signed prompt catalog is verified on
+    # every boot (fail-closed). Operators may skip it on a dev box with
+    # ARGUS_SKIP_PROMPT_VERIFICATION=true; unset/empty stays secure (verify ON).
+    # Declared here because main.py has referenced ``settings.skip_prompt_
+    # verification`` since the F-M04 hardening (58ebc22) without a backing field,
+    # which made every fresh-image boot abort with AttributeError.
+    skip_prompt_verification: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_SKIP_PROMPT_VERIFICATION",
+            "SKIP_PROMPT_VERIFICATION",
+            "skip_prompt_verification",
+        ),
+    )
+
+    @field_validator("skip_prompt_verification", mode="before")
+    @classmethod
+    def coerce_skip_prompt_verification(cls, v: object) -> bool:
+        # Fail-closed: unset/empty resolves to the secure default (do NOT skip →
+        # verify). Only an explicit truthy token disables verification.
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+
     # F-M05: wire the ABAC engine into request handling as an *opt-in* authZ
     # layer on top of the existing authN. ``abac_enabled`` is the master switch
     # (default off → require_access() is a no-op passthrough, zero behaviour
