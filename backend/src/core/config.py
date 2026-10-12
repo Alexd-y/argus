@@ -610,9 +610,7 @@ class Settings(BaseSettings):
     evidence_max_artifact_bytes: int = Field(
         default=10 * 1024 * 1024,
         ge=0,
-        validation_alias=AliasChoices(
-            "EVIDENCE_MAX_ARTIFACT_BYTES", "evidence_max_artifact_bytes"
-        ),
+        validation_alias=AliasChoices("EVIDENCE_MAX_ARTIFACT_BYTES", "evidence_max_artifact_bytes"),
     )
     evidence_max_run_bytes: int = Field(
         default=50 * 1024 * 1024,
@@ -1758,7 +1756,6 @@ class Settings(BaseSettings):
 
     # VDF-008 — optional gospider/parsero after robots/sitemap fetch. Env: VA_ROBOTS_EXTENDED_PIPELINE
     va_robots_extended_pipeline: bool = False
-
 
     # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
     # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN

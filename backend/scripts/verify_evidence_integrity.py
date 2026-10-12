@@ -37,7 +37,9 @@ def _engine() -> sa.engine.Engine:
     return sa.create_engine(_sync_url(url), future=True)
 
 
-def _load(engine: sa.engine.Engine, tenant_id: str, scan_id: str) -> tuple[str | None, list[ManifestEntry]]:
+def _load(
+    engine: sa.engine.Engine, tenant_id: str, scan_id: str
+) -> tuple[str | None, list[ManifestEntry]]:
     with engine.begin() as conn:
         conn.execute(text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'"))
         manifest = conn.execute(
@@ -55,7 +57,11 @@ def _load(engine: sa.engine.Engine, tenant_id: str, scan_id: str) -> tuple[str |
             {"t": tenant_id, "s": scan_id},
         ).all()
     entries = [
-        ManifestEntry(object_key=str(r.object_key), sha256=str(r.checksum_value or ""), size_bytes=r.size_bytes)
+        ManifestEntry(
+            object_key=str(r.object_key),
+            sha256=str(r.checksum_value or ""),
+            size_bytes=r.size_bytes,
+        )
         for r in rows
     ]
     return (manifest.root_hash if manifest else None), entries
@@ -84,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
 
     audit_ok = True
     try:
-        verified = AuditLogger(DatabaseAuditSink(engine)).verify_chain(tenant_id=UUID(args.tenant_id))
+        verified = AuditLogger(DatabaseAuditSink(engine)).verify_chain(
+            tenant_id=UUID(args.tenant_id)
+        )
         print(f"audit chain: {verified} events verified")
     except AuditChainError as exc:
         audit_ok = False

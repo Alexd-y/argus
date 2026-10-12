@@ -90,7 +90,9 @@ def verify_integrity(
     recomputed_root = compute_root_hash(entries)
     if recomputed_root != manifest_root_hash:
         discrepancies.append(
-            IntegrityDiscrepancy("<root>", "root_hash_mismatch", manifest_root_hash, recomputed_root)
+            IntegrityDiscrepancy(
+                "<root>", "root_hash_mismatch", manifest_root_hash, recomputed_root
+            )
         )
     return IntegrityReport(
         scan_id=scan_id,
@@ -141,7 +143,11 @@ async def build_and_persist_manifest(
         )
     ).all()
     entries = [
-        ManifestEntry(object_key=str(r.object_key), sha256=str(r.checksum_value or ""), size_bytes=r.size_bytes)
+        ManifestEntry(
+            object_key=str(r.object_key),
+            sha256=str(r.checksum_value or ""),
+            size_bytes=r.size_bytes,
+        )
         for r in rows
     ]
     root_hash = compute_root_hash(entries)

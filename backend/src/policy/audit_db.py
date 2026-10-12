@@ -70,7 +70,9 @@ class DatabaseAuditSink:
                 text(f"SET LOCAL app.current_tenant_id = '{self._tenant_literal(event.tenant_id)}'")
             )
             # Serialise all writers for this tenant across processes.
-            conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:t))"), {"t": str(event.tenant_id)})
+            conn.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:t))"), {"t": str(event.tenant_id)}
+            )
 
             # Idempotent on duplicate event_id.
             exists = conn.execute(
