@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from src.evidence.raw_evidence import (
     RawEvidence,
     classify_artifact,
@@ -61,3 +62,19 @@ def test_gather_respects_run_budget(tmp_path: Path) -> None:
 
 def test_gather_missing_workdir_returns_empty(tmp_path: Path) -> None:
     assert gather_workdir_evidence(tmp_path / "nope", max_artifact_bytes=10, max_run_bytes=10) == []
+
+
+def test_gather_skips_symlink_escape(tmp_path: Path) -> None:
+    """A tool-dropped symlink must not exfiltrate host files as evidence."""
+    secret = tmp_path / "secret.txt"
+    secret.write_bytes(b"TOPSECRET")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "real.txt").write_bytes(b"ok")
+    try:
+        (work / "escape").symlink_to(secret)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted on this platform")
+    out = gather_workdir_evidence(work, max_artifact_bytes=1000, max_run_bytes=10000)
+    assert {e.source for e in out} == {"artifact:real.txt"}
+    assert all(b"TOPSECRET" not in e.data for e in out)

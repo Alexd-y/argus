@@ -14,6 +14,8 @@ is recorded honestly instead of silently dropped.
 
 from __future__ import annotations
 
+import os
+import stat as _stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -109,37 +111,81 @@ def raw_evidence_from_bytes(
     )
 
 
+def _read_regular_file_capped(path: Path, limit: int) -> tuple[int, bytes] | None:
+    """Open ``path`` without following symlinks and read up to ``limit`` bytes.
+
+    Returns ``(original_size, data)`` for a regular file, or ``None`` if the
+    path is not a regular file (e.g. a symlink / device / fifo) or cannot be
+    read. ``O_NOFOLLOW`` closes the TOCTOU window between the symlink check in
+    the caller and the open here; ``fstat`` confirms it is a regular file.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not _stat.S_ISREG(st.st_mode):
+            return None
+        data = os.read(fd, limit) if limit > 0 else b""
+        return st.st_size, data
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
 def gather_workdir_evidence(
     workdir: Path,
     *,
     max_artifact_bytes: int,
     max_run_bytes: int,
 ) -> list[RawEvidence]:
-    """Walk ``workdir`` and return a :class:`RawEvidence` for every file.
+    """Walk ``workdir`` and return a :class:`RawEvidence` for every regular file.
 
     Each file is capped at ``max_artifact_bytes``; the cumulative run is capped
     at ``max_run_bytes``. When the run budget is exhausted an artifact is still
     recorded (possibly as an empty, ``truncated=True`` marker with its real
     ``original_size``) rather than silently skipped.
+
+    Security: the workdir is populated by a potentially hostile tool, so the
+    walk must never follow a symlink out of the tree (a ``evil -> /etc/passwd``
+    symlink must not be exfiltrated as "evidence"). Symlinked files and
+    directories are skipped, reads are confined to the resolved root, and
+    :func:`_read_regular_file_capped` opens with ``O_NOFOLLOW`` + ``fstat``.
     """
     out: list[RawEvidence] = []
-    root = Path(workdir)
+    try:
+        root = Path(workdir).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return out
     if not root.is_dir():
         return out
+
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        # Never descend into a symlinked subdirectory (sandbox-escape guard).
+        dirnames[:] = [d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))]
+        files.extend(Path(dirpath) / name for name in filenames)
+
     total = 0
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        try:
-            original_size = path.stat().st_size
-        except OSError:
+    for path in sorted(files):
+        if path.is_symlink():
             continue
-        kind, content_type = classify_artifact(path.name)
+        try:
+            real = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if not real.is_relative_to(root) or not real.is_file():
+            continue
         remaining = max(max_run_bytes - total, 0)
         per_artifact = min(max_artifact_bytes, remaining)
-        try:
-            with path.open("rb") as handle:
-                data = handle.read(per_artifact)
-        except OSError:
+        read = _read_regular_file_capped(real, per_artifact)
+        if read is None:
             continue
+        original_size, data = read
+        kind, content_type = classify_artifact(path.name)
         truncated = original_size > len(data)
         total += len(data)
         out.append(
