@@ -626,7 +626,6 @@ services:
     container_name: argus-sandbox
     # PID 1 reaper (catatonit): `sleep infinity` as PID 1 does not reap children, so
     # healthcheck id/sh processes accumulate as zombies. init gives a reaping PID 1.
-    init: true
     restart: unless-stopped
     # asnmap authenticates to ProjectDiscovery Cloud via PDCP_API_KEY; tools run
     # through `docker exec` inherit the container env, so exposing just this one
