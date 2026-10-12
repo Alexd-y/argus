@@ -15,12 +15,14 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from src.pipeline.contracts.evidence_scales import EvidenceGateName, EvidenceQualityName
 from src.reports.finding_severity_normalizer import severity_from_cvss
 
 logger = logging.getLogger(__name__)
 
-EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
-EvidenceClassification = Literal["validated", "observed", "candidate", "inconclusive"]
+# Shared scale aliases (R-5.1.3) — single definition in evidence_scales.
+EvidenceQuality = EvidenceQualityName
+EvidenceClassification = EvidenceGateName
 
 _EVIDENCE_QUALITY_RANK: dict[str, int] = {
     "none": 0,

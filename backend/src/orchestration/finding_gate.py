@@ -43,6 +43,14 @@ class EvidenceQuality(IntEnum):
     """Unified evidence-quality scale for findings.
 
     Ordered so ``a >= b`` comparisons work (STRONG is the highest bar).
+
+    Axis note (R-5.1.3): this enum is used by :func:`evidence_quality_of` to
+    *score a raw finding dict* (input scoring) — a different operation from
+    deriving a quality from the canonical ``EvidenceTier``. The tier->quality
+    derivation is the single source of truth in
+    :func:`src.pipeline.contracts.evidence_scales.evidence_quality_for_tier`;
+    the string names (none/weak/moderate/strong) come from the shared
+    :data:`~src.pipeline.contracts.evidence_scales.EvidenceQualityName` alias.
     """
 
     NONE = 0

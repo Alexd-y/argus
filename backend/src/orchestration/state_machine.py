@@ -119,6 +119,7 @@ from src.orchestration.scope_integration import rules_of_engagement_to_prompt_co
 from src.orchestration.self_pentest import SelfPentestRunner
 from src.orchestration.tenant_isolation import TenantIsolationGuard
 from src.owasp_top10_2025 import parse_owasp_category
+from src.pipeline.contracts.evidence_scales import validation_for_tier
 from src.pipeline.contracts.finding_dto import EvidenceTier
 from src.policy.scan_queue import notify_scan_finished
 from src.quick.budget import QuickBudgetError
@@ -887,6 +888,10 @@ async def _persist_report_and_findings(
         f["finding_id"] = finding_pk
         _et_raw = f.get("evidence_tier")
         _et = int(_et_raw) if isinstance(_et_raw, (int, float)) and 1 <= int(_et_raw) <= 4 else None
+        # R-5.1.4: the ``validation`` (evidence-strength) axis is a pure
+        # derivation of the canonical tier (the arbiter's verdict), never an
+        # independent judgement. NULL only when no tier is known yet.
+        _validation = validation_for_tier(EvidenceTier(_et)).value if _et is not None else None
         _pa = f.get("payload_attempted")
         _ps = f.get("payload_successful")
         _tp = f.get("taint_path")
@@ -915,6 +920,7 @@ async def _persist_report_and_findings(
             reproducible_steps=rep_steps,
             applicability_notes=app_notes,
             evidence_tier=_et,
+            validation=_validation,
             payload_attempted=_pa if isinstance(_pa, list) else None,
             payload_successful=_ps if isinstance(_ps, list) else None,
             taint_path=_tp if isinstance(_tp, list) else None,

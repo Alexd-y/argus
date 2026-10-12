@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.owasp_top10_2025 import OwaspTop102025CategoryId
+from src.pipeline.contracts.evidence_scales import EvidenceGateName, EvidenceQualityName
 
 # Target: URL or domain, 1-512 chars
 TARGET_PATTERN = r"^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$"
@@ -978,8 +979,9 @@ FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"
 FindingValidationStatusLiteral = Literal[
     "missing", "unverified", "partially_validated", "validated"
 ]
-FindingEvidenceQualityLiteral = Literal["none", "weak", "moderate", "strong"]
-FindingEvidenceClassificationLiteral = Literal["validated", "observed", "candidate", "inconclusive"]
+# Shared scale aliases (R-5.1.3) — single definition in evidence_scales.
+FindingEvidenceQualityLiteral = EvidenceQualityName
+FindingEvidenceClassificationLiteral = EvidenceGateName
 FindingEvidenceTypeLiteral = Literal[
     "observed",
     "tool_output",
