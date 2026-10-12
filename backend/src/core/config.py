@@ -604,6 +604,21 @@ class Settings(BaseSettings):
             "EXEC_BROKER_MAX_OUTPUT_BYTES", "exec_broker_max_output_bytes"
         ),
     )
+    # Wave 2 (R-5.3.1): evidence-capture size limits. Per-artifact cap and a
+    # cumulative per-tool-run cap; oversize artifacts are truncated (with the
+    # fact recorded), never silently dropped.
+    evidence_max_artifact_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=0,
+        validation_alias=AliasChoices(
+            "EVIDENCE_MAX_ARTIFACT_BYTES", "evidence_max_artifact_bytes"
+        ),
+    )
+    evidence_max_run_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=0,
+        validation_alias=AliasChoices("EVIDENCE_MAX_RUN_BYTES", "evidence_max_run_bytes"),
+    )
     exec_broker_max_timeout_sec: float = Field(
         default=600.0,
         ge=1.0,
