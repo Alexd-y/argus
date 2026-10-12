@@ -238,9 +238,12 @@ class EvidencePipeline:
             "sha256_prefix": sha256_hex[:16],
             "redactions_applied": min(max(redactions_applied, 0), 10_000),
         }
+        event_type = (
+            AuditEventType.EVIDENCE_PERSISTED if allowed else AuditEventType.EVIDENCE_PERSIST_FAILED
+        )
         try:
             self._audit.emit(
-                event_type=AuditEventType.POLICY_DECISION,
+                event_type=event_type,
                 tenant_id=tenant_id,
                 scan_id=scan_id,
                 decision_allowed=allowed,

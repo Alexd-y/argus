@@ -70,7 +70,7 @@ async def test_persist_redacts_uploads_and_emits_audit(
     assert evidence.sha256 == hashlib.sha256(upload_call.data).hexdigest()
     events = list(audit_logger.sink.iter_events(tenant_id=ids["tenant_id"]))
     assert len(events) == 1
-    assert events[0].event_type is AuditEventType.POLICY_DECISION
+    assert events[0].event_type is AuditEventType.EVIDENCE_PERSISTED
     assert events[0].decision_allowed is True
     assert events[0].payload["redactions_applied"] == 1
 

@@ -79,6 +79,11 @@ class AuditEventType(StrEnum):
     APPROVAL_REVOKED = "approval.revoked"
     PREFLIGHT_PASS = "preflight.pass"
     PREFLIGHT_DENY = "preflight.deny"
+    # Wave 2 (R-5.6.1): evidence-plane events. Persisting evidence is not a
+    # policy decision, so it gets its own taxonomy rather than POLICY_DECISION.
+    EVIDENCE_PERSISTED = "evidence.persisted"
+    EVIDENCE_PERSIST_FAILED = "evidence.persist_failed"
+    EVIDENCE_INTEGRITY_CHECK = "evidence.integrity_check"
 
 
 # ---------------------------------------------------------------------------

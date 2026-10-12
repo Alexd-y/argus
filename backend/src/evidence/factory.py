@@ -44,7 +44,14 @@ _audit_logger: AuditLogger | None = None
 
 
 def _default_audit_logger() -> AuditLogger:
-    return AuditLogger(InMemoryAuditSink())
+    # Wave 2 (R-5.6.1): persistent DatabaseAuditSink in production (Postgres),
+    # falling back to the in-process sink in dev / tests without a DB.
+    try:
+        from src.policy.audit_db import build_production_audit_logger
+
+        return build_production_audit_logger()
+    except Exception:
+        return AuditLogger(InMemoryAuditSink())
 
 
 def set_audit_logger(logger: AuditLogger) -> None:
