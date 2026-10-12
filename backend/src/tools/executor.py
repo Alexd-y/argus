@@ -220,6 +220,19 @@ def drain_pending_evidence(scan_id: str) -> list[dict[str, Any]]:
         return _PENDING_EVIDENCE.pop(scan_id, [])
 
 
+def buffer_evidence_row(scan_id: str, row: dict[str, Any]) -> None:
+    """Buffer one evidence row for the phase-boundary flush (R-5.3.4).
+
+    Shared seam so capture paths other than the tool executor (e.g. the recon
+    raw-artifact sink) can record a checksummed ``evidence`` row that
+    :func:`flush_tool_runs` persists alongside tool runs.
+    """
+    if not scan_id:
+        return
+    with _PENDING_EVIDENCE_LOCK:
+        _PENDING_EVIDENCE.setdefault(scan_id, []).append(row)
+
+
 def record_tool_run(
     tenant_id: str | None,
     scan_id: str | None,

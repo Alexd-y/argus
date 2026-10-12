@@ -14,12 +14,17 @@ is recorded honestly instead of silently dropped.
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
 import stat as _stat
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.pipeline.contracts.finding_dto import EvidenceKind
+
+_logger = logging.getLogger(__name__)
 
 #: Conventional stdout/stderr file-name stems a sandbox driver writes to workdir.
 _STREAM_PREFIXES: tuple[str, ...] = ("stdout", "stderr")
@@ -201,9 +206,69 @@ def gather_workdir_evidence(
     return out
 
 
+def record_raw_artifact_evidence(
+    *,
+    tenant_id: str,
+    scan_id: str,
+    object_key: str,
+    ext: str,
+    data: bytes,
+    description: str = "",
+) -> str | None:
+    """Buffer a checksummed ``evidence`` row for an already-uploaded raw artifact.
+
+    Wave 2 (R-5.3.4): converges the ``upload_raw_artifact`` capture path onto the
+    one evidence contract so every stored artifact gets a row + SHA-256 (over the
+    stored bytes). Best-effort: a failure here never breaks the (already-done)
+    upload. Returns the SHA-256 hex, or ``None`` when nothing was recorded.
+    """
+    if not scan_id or not object_key:
+        return None
+    body = bytes(data) if isinstance(data, (bytes, bytearray)) else b""
+    if not body:
+        return None
+    try:
+        from src.tools.executor import buffer_evidence_row
+
+        kind, content_type = classify_artifact(f"artifact.{ext}")
+        sha256_hex = hashlib.sha256(body).hexdigest()
+        buffer_evidence_row(
+            scan_id,
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "scan_id": scan_id,
+                "finding_id": None,
+                "tool_run_id": None,
+                "object_key": object_key,
+                "kind": kind.value,
+                "checksum_algorithm": "sha256",
+                "checksum_value": sha256_hex,
+                "size_bytes": len(body),
+                "content_type": content_type,
+                "tool_name": None,
+                "started_at": None,
+                "finished_at": None,
+                # NOTE: this legacy path stores the artifact as-is (no redaction).
+                # Redaction convergence onto the pipeline is a follow-up; the
+                # checksum here is over exactly what was stored.
+                "redaction_applied": False,
+                "description": str(description)[:500],
+            },
+        )
+        return sha256_hex
+    except Exception:
+        _logger.warning(
+            "raw_artifact_evidence_record_failed",
+            extra={"event": "argus.evidence.raw_artifact_record_failed", "scan_id": scan_id},
+        )
+        return None
+
+
 __all__ = [
     "RawEvidence",
     "classify_artifact",
     "gather_workdir_evidence",
     "raw_evidence_from_bytes",
+    "record_raw_artifact_evidence",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -664,11 +665,13 @@ async def _materialise_finding_evidence(
     """
     poc_key: str | None = None
     screenshot_key: str | None = None
+    uploaded_poc: dict[str, Any] | None = None
     try:
         if poc_db:
             poc_key = await asyncio.to_thread(
                 upload_finding_poc_json, tenant_id, scan_id, finding_id, poc_db
             )
+            uploaded_poc = poc_db
             screenshot_key = (
                 str(poc_db.get("screenshot_key") or "").strip() if isinstance(poc_db, dict) else ""
             ) or None
@@ -686,6 +689,7 @@ async def _materialise_finding_evidence(
                     finding_id,
                     observation_poc,
                 )
+                uploaded_poc = observation_poc
     except Exception:
         logger.warning(
             "finding_evidence_upload_failed",
@@ -703,9 +707,25 @@ async def _materialise_finding_evidence(
     )
     if not rows:
         return
+    # Wave 2 (R-5.3.4 / criterion 4): every evidence row carries a checksum.
+    # The PoC JSON object is hashed with the SAME serialisation s3 used so the
+    # stored object matches (``upload_finding_poc_json`` →
+    # ``json.dumps(..., ensure_ascii=False, default=str)``). The screenshot's
+    # bytes are not available here (uploaded upstream), so its checksum is a
+    # follow-up; the row is still tagged with its EvidenceKind.
+    poc_sha256: str | None = None
+    if poc_key and uploaded_poc is not None:
+        try:
+            poc_sha256 = hashlib.sha256(
+                json.dumps(uploaded_poc, ensure_ascii=False, default=str).encode("utf-8")
+            ).hexdigest()
+        except (TypeError, ValueError):
+            poc_sha256 = None
     try:
         async with session.begin_nested():
             for _row in rows:
+                _is_poc = poc_key is not None and _row.object_key == poc_key
+                _checksum = poc_sha256 if _is_poc else None
                 await session.merge(
                     Evidence(
                         id=_row.id,
@@ -715,6 +735,9 @@ async def _materialise_finding_evidence(
                         object_key=_row.object_key,
                         content_type=_row.content_type,
                         description=_row.description,
+                        kind="parsed" if _is_poc else "screenshot",
+                        checksum_algorithm="sha256" if _checksum else None,
+                        checksum_value=_checksum,
                     )
                 )
     except Exception:

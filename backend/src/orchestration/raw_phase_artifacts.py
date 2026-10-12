@@ -29,7 +29,7 @@ class RawPhaseSink:
 
     def upload_bytes(self, artifact_type: str, ext: str, body: bytes) -> None:
         ts = _artifact_timestamp()
-        upload_raw_artifact(
+        key = upload_raw_artifact(
             self.tenant_id,
             self.scan_id,
             self.phase,
@@ -38,6 +38,18 @@ class RawPhaseSink:
             ext,
             body,
         )
+        if key and isinstance(body, (bytes, bytearray)):
+            # Wave 2 (R-5.3.4): record a checksummed evidence row for the artifact.
+            from src.evidence.raw_evidence import record_raw_artifact_evidence
+
+            record_raw_artifact_evidence(
+                tenant_id=self.tenant_id,
+                scan_id=self.scan_id,
+                object_key=key,
+                ext=ext,
+                data=bytes(body),
+                description=artifact_type,
+            )
 
     def upload_text(self, artifact_type: str, text: str, ext: str = "txt") -> None:
         if len(text) > _MAX_TOOL_TEXT_CHARS:

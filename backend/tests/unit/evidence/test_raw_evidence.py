@@ -78,3 +78,42 @@ def test_gather_skips_symlink_escape(tmp_path: Path) -> None:
     out = gather_workdir_evidence(work, max_artifact_bytes=1000, max_run_bytes=10000)
     assert {e.source for e in out} == {"artifact:real.txt"}
     assert all(b"TOPSECRET" not in e.data for e in out)
+
+
+def test_record_raw_artifact_evidence_buffers_checksummed_row() -> None:
+    import hashlib
+    import uuid as _uuid
+
+    from src.evidence.raw_evidence import record_raw_artifact_evidence
+    from src.tools import executor
+
+    scan = str(_uuid.uuid4())
+    data = b"nmap raw output ..."
+    sha = record_raw_artifact_evidence(
+        tenant_id=str(_uuid.uuid4()),
+        scan_id=scan,
+        object_key=f"t/{scan}/recon/raw/nmap.txt",
+        ext="txt",
+        data=data,
+        description="nmap_stdout",
+    )
+    assert sha == hashlib.sha256(data).hexdigest()
+    rows = executor.drain_pending_evidence(scan)
+    assert len(rows) == 1
+    assert rows[0]["checksum_value"] == sha
+    assert rows[0]["finding_id"] is None
+    assert rows[0]["tool_run_id"] is None
+    assert rows[0]["kind"] == "raw_output"
+
+
+def test_record_raw_artifact_evidence_empty_data_noop() -> None:
+    import uuid as _uuid
+
+    from src.evidence.raw_evidence import record_raw_artifact_evidence
+    from src.tools import executor
+
+    scan = str(_uuid.uuid4())
+    assert record_raw_artifact_evidence(
+        tenant_id="t", scan_id=scan, object_key="k", ext="txt", data=b"", description="x"
+    ) is None
+    assert executor.drain_pending_evidence(scan) == []
