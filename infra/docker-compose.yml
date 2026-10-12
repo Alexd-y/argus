@@ -134,9 +134,13 @@ services:
         GPU_MODE: ${WRB_GPU_MODE:-cpu}
     image: argus-whiterabbitneo
     container_name: argus-whiterabbitneo
-    # PID 1 reaper (catatonit): the LLM server as PID 1 does not reap children, so
-    # healthcheck curl/sh processes accumulate as zombies. init gives a reaping PID 1.
-    init: true
+    # PID 1 reaper is now `tini`, baked into the image ENTRYPOINT (see whiterabbitneo/
+    # Dockerfile). We deliberately do NOT use compose `init: true` here: podman's
+    # injected --init (catatonit) breaks `podman exec` in rootless mode with
+    # "error executing setns process: exit status 1", which made the HEALTHCHECK
+    # fail on every tick (status stuck `unhealthy`, user-systemd `degraded`,
+    # near-miss false rollback in deploy_wrb_finetune.sh). tini reaps the same zombies
+    # without the --init bind-mount, so exec/healthcheck work again.
     restart: unless-stopped
     env_file: .env
     environment:

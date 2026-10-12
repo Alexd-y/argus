@@ -26,7 +26,7 @@ COPY ensure_gguf.py entrypoint_cpu.py /opt/argus/
 # huggingface_hub — автозагрузка GGUF в пустой volume /models при первом старте.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       build-essential ca-certificates curl git libgomp1 \
+       build-essential ca-certificates curl git libgomp1 tini \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir \
        "huggingface_hub>=0.23.0" \
@@ -35,7 +35,12 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 ENV MODEL_PATH=/models/WhiteRabbitNeo_WhiteRabbitNeo-V3-7B-Q4_K_M.gguf
-ENTRYPOINT ["python3", "/opt/argus/entrypoint_cpu.py"]
+# tini as the reaping PID 1 (baked into the image), instead of compose `init: true`.
+# podman's injected --init (catatonit via /run/podman-init) breaks `podman exec`
+# in rootless mode ("error executing setns process: exit status 1"), which made the
+# HEALTHCHECK fail every tick. tini reaps zombie healthcheck curls just the same,
+# but lets exec/healthcheck work — so drop `init: true` from docker-compose.yml.
+ENTRYPOINT ["tini", "-g", "--", "python3", "/opt/argus/entrypoint_cpu.py"]
 # --n_ctx intentionally omitted here: entrypoint_cpu.py injects it from WRB_N_CTX
 # (default 8192) so the context window is env-tunable without rebuilding.
 CMD ["--model", "/models/WhiteRabbitNeo_WhiteRabbitNeo-V3-7B-Q4_K_M.gguf", \
