@@ -1469,17 +1469,40 @@ async def _execute_phase(
             message=err_message,
             data=err_data,
         )
-        # Persist any tool-run provenance buffered before the failure.
-        with suppress(Exception):
+        # Persist any tool-run + evidence provenance buffered before the failure.
+        # Never fail the phase on a flush error, but surface it (R-5.3.4 / stage 4):
+        # the old silent ``suppress(Exception)`` hid lost provenance/evidence.
+        try:
             await flush_tool_runs(session, tenant_id, scan_id)
+        except Exception as _flush_exc:
+            logger.warning(
+                "tool_runs_flush_failed",
+                extra={
+                    "event": "argus.tool_run.flush_failed",
+                    "scan_id": scan_id,
+                    "phase": phase_str,
+                    "error_type": type(_flush_exc).__name__,
+                },
+            )
         await _update_scan_phase_status(session, scan_id, phase_str, "failed", progress)
         await session.commit()
         raise
 
-    # Persist buffered ToolRun provenance within this phase's transaction; the
-    # caller commits downstream. Best-effort — never fail a completed phase.
-    with suppress(Exception):
+    # Persist buffered ToolRun + evidence provenance within this phase's
+    # transaction; the caller commits downstream. Never fail a completed phase on
+    # a flush error, but surface it (R-5.3.4 / stage 4) instead of suppressing.
+    try:
         await flush_tool_runs(session, tenant_id, scan_id)
+    except Exception as _flush_exc:
+        logger.warning(
+            "tool_runs_flush_failed",
+            extra={
+                "event": "argus.tool_run.flush_failed",
+                "scan_id": scan_id,
+                "phase": phase_str,
+                "error_type": type(_flush_exc).__name__,
+            },
+        )
 
     return output_data
 
