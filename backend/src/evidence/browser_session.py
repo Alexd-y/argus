@@ -17,8 +17,8 @@ rather than reading the absence as "no vulnerability".
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,6 +66,26 @@ def playwright_available() -> bool:
         return False
 
 
+def _prepare_context(workdir: Path, spec: BrowserCaptureSpec) -> tuple[BrowserArtifacts, dict]:
+    """Shared setup: make the workdir, build the ``new_context`` kwargs, and
+    record where each recorded artifact will land. Used by both the async and
+    sync context managers so the two twins cannot drift."""
+    workdir = Path(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    artifacts = BrowserArtifacts(workdir=workdir)
+    context_kwargs: dict[str, object] = {
+        "viewport": {"width": spec.viewport_width, "height": spec.viewport_height},
+    }
+    if spec.record_har:
+        artifacts.har_path = workdir / "session.har"
+        context_kwargs["record_har_path"] = str(artifacts.har_path)
+    if spec.record_video:
+        artifacts.video_dir = workdir / "video"
+        artifacts.video_dir.mkdir(parents=True, exist_ok=True)
+        context_kwargs["record_video_dir"] = str(artifacts.video_dir)
+    return artifacts, context_kwargs
+
+
 @asynccontextmanager
 async def browser_context(
     *,
@@ -85,19 +105,7 @@ async def browser_context(
 
     from playwright.async_api import async_playwright
 
-    workdir = Path(workdir)
-    workdir.mkdir(parents=True, exist_ok=True)
-    artifacts = BrowserArtifacts(workdir=workdir)
-    context_kwargs: dict[str, object] = {
-        "viewport": {"width": spec.viewport_width, "height": spec.viewport_height},
-    }
-    if spec.record_har:
-        artifacts.har_path = workdir / "session.har"
-        context_kwargs["record_har_path"] = str(artifacts.har_path)
-    if spec.record_video:
-        artifacts.video_dir = workdir / "video"
-        artifacts.video_dir.mkdir(parents=True, exist_ok=True)
-        context_kwargs["record_video_dir"] = str(artifacts.video_dir)
+    artifacts, context_kwargs = _prepare_context(workdir, spec)
 
     pw = await async_playwright().start()
     browser = None
@@ -119,6 +127,50 @@ async def browser_context(
                 await browser.close()
         with _suppress("playwright.stop"):
             await pw.stop()
+
+
+@contextmanager
+def browser_context_sync(
+    *,
+    workdir: Path,
+    spec: BrowserCaptureSpec,
+) -> Iterator[tuple[object, BrowserArtifacts]]:
+    """Synchronous twin of :func:`browser_context`.
+
+    For call-sites that run under ``asyncio.to_thread`` or a plain sync entry
+    point (Playwright's sync API cannot be driven from a running event loop).
+    Identical guarantees: the context is created with ``record_har_path`` /
+    ``record_video_dir`` and is ALWAYS closed in ``finally`` so HAR / video are
+    finalised even if the caller raises. Raises :class:`BrowserUnavailable` when
+    Playwright/Chromium is missing — surface it explicitly, never swallow it.
+    """
+    if not playwright_available():
+        raise BrowserUnavailable("playwright is not installed in this runtime")
+
+    from playwright.sync_api import sync_playwright
+
+    artifacts, context_kwargs = _prepare_context(workdir, spec)
+
+    pw = sync_playwright().start()
+    browser = None
+    context = None
+    try:
+        try:
+            browser = pw.chromium.launch()
+        except Exception as exc:
+            raise BrowserUnavailable(f"chromium failed to launch: {type(exc).__name__}") from exc
+        context = browser.new_context(**context_kwargs)
+        yield context, artifacts
+    finally:
+        # Order matters: closing the CONTEXT flushes HAR + finalises video.
+        if context is not None:
+            with _suppress("context.close"):
+                context.close()
+        if browser is not None:
+            with _suppress("browser.close"):
+                browser.close()
+        with _suppress("playwright.stop"):
+            pw.stop()
 
 
 class _suppress:
@@ -144,5 +196,6 @@ __all__ = [
     "BrowserCaptureSpec",
     "BrowserUnavailable",
     "browser_context",
+    "browser_context_sync",
     "playwright_available",
 ]

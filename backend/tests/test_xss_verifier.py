@@ -1,11 +1,18 @@
-"""XSS-005 — XSS Verifier: headless browser verification with mocked Playwright."""
+"""XSS-005 — XSS Verifier: headless browser verification with a mocked browser context.
+
+Wave 2a (etap 2): the verifier no longer drives ``sync_playwright()`` directly —
+it goes through :func:`src.evidence.browser_session.browser_context_sync`, the
+single place that launches a Playwright *context* and always closes it. These
+tests therefore mock that wrapper boundary (yield a fake context whose
+``new_page()`` returns the wired page), not Playwright's internal API shape.
+"""
 
 from __future__ import annotations
 
-import sys
-from types import ModuleType
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
+from src.evidence.browser_session import BrowserUnavailable
 from src.recon.vulnerability_analysis.active_scan.xss_verifier import (
     _build_verification_url,
     _extract_snippet,
@@ -20,6 +27,8 @@ PAYLOAD = "<script>alert(1)</script>"
 SCAN_ID = "scan-xss-verify-001"
 TENANT_ID = "tenant-001"
 
+_WRAPPER = "src.evidence.browser_session.browser_context_sync"
+
 
 def _mock_settings(**overrides: object) -> MagicMock:
     mock = MagicMock()
@@ -28,14 +37,14 @@ def _mock_settings(**overrides: object) -> MagicMock:
     return mock
 
 
-def _make_mock_playwright(
+def _make_mock_page(
     dialog_type: str | None = None,
     dialog_message: str | None = None,
     page_content: str = "<html><body>result</body></html>",
     screenshot_bytes: bytes = b"\x89PNG\r\n",
     raise_on_goto: Exception | None = None,
 ) -> MagicMock:
-    """Build a fully wired mock for ``sync_playwright()`` context."""
+    """Build a fully wired mock Playwright *page* (the object the context yields)."""
     mock_dialog = MagicMock()
     if dialog_type:
         mock_dialog.type = dialog_type
@@ -63,45 +72,42 @@ def _make_mock_playwright(
     mock_page.goto.side_effect = _goto
     mock_page.set_default_timeout = MagicMock()
     mock_page.wait_for_timeout = MagicMock()
+    return mock_page
 
-    mock_browser = MagicMock()
-    mock_browser.new_page.return_value = mock_page
-    mock_browser.close = MagicMock()
 
-    mock_chromium = MagicMock()
-    mock_chromium.launch.return_value = mock_browser
+def _patch_context(mock_page: MagicMock):
+    """Patch the sync browser-context wrapper to yield a context whose
+    ``new_page()`` returns ``mock_page``."""
 
-    mock_pw = MagicMock()
-    mock_pw.chromium = mock_chromium
+    @contextmanager
+    def _fake(*, workdir, spec):
+        ctx = MagicMock()
+        ctx.new_page.return_value = mock_page
+        yield ctx, MagicMock()
 
-    mock_sync_pw = MagicMock()
-    mock_sync_pw.__enter__ = MagicMock(return_value=mock_pw)
-    mock_sync_pw.__exit__ = MagicMock(return_value=False)
+    return patch(_WRAPPER, _fake)
 
-    return mock_sync_pw
+
+def _patch_context_unavailable():
+    """Patch the wrapper to raise BrowserUnavailable on entry (no browser)."""
+
+    def _fake(*, workdir, spec):
+        raise BrowserUnavailable("playwright is not installed in this runtime")
+
+    return patch(_WRAPPER, _fake)
 
 
 class TestVerifiedTrueOnDialog:
     """XSS-005-T1: verified=True when JS dialog fires."""
 
     def test_alert_dialog_triggers_verified(self) -> None:
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type="alert",
             dialog_message="1",
             page_content=f"<html>{PAYLOAD}</html>",
         )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),
@@ -120,23 +126,13 @@ class TestVerifiedTrueOnDialog:
         assert result.dialog_type == "alert"
 
     def test_confirm_dialog_triggers_verified(self) -> None:
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type="confirm",
             dialog_message="are you sure",
             page_content=f"<html>{PAYLOAD}</html>",
         )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),
@@ -158,22 +154,12 @@ class TestVerifiedFalseNoDialog:
     """XSS-005-T2: verified=False when no dialog fires."""
 
     def test_no_dialog_returns_false(self) -> None:
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type=None,
             page_content="<html><body>safe</body></html>",
         )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),
@@ -193,27 +179,17 @@ class TestVerifiedFalseNoDialog:
 
 
 class TestPlaywrightNotInstalled:
-    """XSS-005-T3: returns error when Playwright not available."""
+    """XSS-005-T3: returns error when the browser is unavailable."""
 
-    def test_import_error_returns_graceful_error(self) -> None:
+    def test_browser_unavailable_returns_graceful_error(self) -> None:
         with (
-            patch.dict(sys.modules, {"playwright": None, "playwright.sync_api": None}),
+            _patch_context_unavailable(),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),
             ),
         ):
-            original_import = (
-                __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
-            )
-
-            def _mock_import(name, *args, **kwargs):
-                if name == "playwright.sync_api":
-                    raise ImportError("No module named 'playwright'")
-                return original_import(name, *args, **kwargs)
-
-            with patch("builtins.__import__", side_effect=_mock_import):
-                result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID)
+            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID)
 
         assert result.verified is False
         assert result.error is not None
@@ -227,21 +203,9 @@ class TestTimeoutHandling:
         class TimeoutError(Exception):
             pass
 
-        mock_pw = _make_mock_playwright(
-            raise_on_goto=TimeoutError("Timeout 30000ms exceeded"),
-        )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
+        mock_page = _make_mock_page(raise_on_goto=TimeoutError("Timeout 30000ms exceeded"))
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),
@@ -260,26 +224,15 @@ class TestScreenshotKey:
     """XSS-005-T5: screenshot_key populated when available."""
 
     def test_screenshot_key_set_on_verification(self) -> None:
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type="alert",
             dialog_message="1",
             page_content=f"<html>{PAYLOAD}</html>",
             screenshot_bytes=b"\x89PNG_fake_screenshot",
         )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
         expected_key = "screenshots/xss_verify_abc123.png"
-
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 _mock_settings(),

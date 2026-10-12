@@ -144,6 +144,11 @@ _OFFLINE_FILE_NAMES: Final[frozenset[str]] = frozenset(
         "test_xss_integration.py",
         "test_xss_payload_generator.py",
         "test_xss_payload_manager.py",
+        # XSS-005 (wave 2a, etap 2) — verifier unit suite. After the browser-
+        # context refactor it mocks the ``browser_context_sync`` wrapper boundary
+        # plus ``settings`` / ``_upload_screenshot``: no FastAPI app, DB session,
+        # broker, or network, so it belongs in dev's default ``pytest -q`` lane.
+        "test_xss_verifier.py",
     }
 )
 

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from types import ModuleType
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,7 +23,8 @@ def _mock_settings() -> MagicMock:
     return mock
 
 
-def _make_mock_playwright(dialog_type: str | None, page_content: str) -> MagicMock:
+def _make_mock_page(dialog_type: str | None, page_content: str) -> MagicMock:
+    """Build the wired mock Playwright *page* yielded by the browser context."""
     mock_dialog = MagicMock()
     if dialog_type:
         mock_dialog.type = dialog_type
@@ -50,21 +50,20 @@ def _make_mock_playwright(dialog_type: str | None, page_content: str) -> MagicMo
     mock_page.goto.side_effect = _goto
     mock_page.set_default_timeout = MagicMock()
     mock_page.wait_for_timeout = MagicMock()
+    return mock_page
 
-    mock_browser = MagicMock()
-    mock_browser.new_page.return_value = mock_page
-    mock_browser.close = MagicMock()
 
-    mock_chromium = MagicMock()
-    mock_chromium.launch.return_value = mock_browser
+def _patch_context(mock_page: MagicMock):
+    """Patch the sync browser-context wrapper to yield a context whose
+    ``new_page()`` returns ``mock_page`` (wave 2a, etap 2 boundary)."""
 
-    mock_pw = MagicMock()
-    mock_pw.chromium = mock_chromium
+    @contextmanager
+    def _fake(*, workdir, spec):
+        ctx = MagicMock()
+        ctx.new_page.return_value = mock_page
+        yield ctx, MagicMock()
 
-    mock_sync_pw = MagicMock()
-    mock_sync_pw.__enter__ = MagicMock(return_value=mock_pw)
-    mock_sync_pw.__exit__ = MagicMock(return_value=False)
-    return mock_sync_pw
+    return patch("src.evidence.browser_session.browser_context_sync", _fake)
 
 
 class TestXssFullPipeline:
@@ -98,22 +97,13 @@ class TestXssFullPipeline:
 
         # Step 4: verify top payload with mocked browser (alert fires)
         chosen_payload = payloads[0]
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type="alert",
             page_content=f"<html><body>{chosen_payload}</body></html>",
         )
 
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
-
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 settings_mock,
@@ -150,23 +140,14 @@ class TestXssFullPipeline:
         assert has_quote_breakout
 
         # Step 4: verify — no dialog fires → verified=False
-        mock_pw = _make_mock_playwright(
+        mock_page = _make_mock_page(
             dialog_type=None,
             page_content=f'<html><input value="{payloads[0]}"></html>',
         )
-
-        fake_module = ModuleType("playwright.sync_api")
-        fake_module.sync_playwright = MagicMock(return_value=mock_pw)
         settings_mock = _mock_settings()
 
         with (
-            patch.dict(
-                sys.modules,
-                {
-                    "playwright": ModuleType("playwright"),
-                    "playwright.sync_api": fake_module,
-                },
-            ),
+            _patch_context(mock_page),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
                 settings_mock,

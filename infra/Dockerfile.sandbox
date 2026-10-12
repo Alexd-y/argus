@@ -223,7 +223,7 @@ RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 # Append binary-profile extras to the argus-tool-check created in the standard stage.
 RUN printf '%s\n' \
     "echo '=== binary profile extras (fuzzing/symbolic/reverse) ==='" \
-    'for t in afl-fuzz r2 binwalk clang jazzer jazzer_standalone; do' \
+    'for t in afl-fuzz r2 binwalk clang jazzer jazzer_standalone tcpdump; do' \
     '  if command -v "$t" >/dev/null 2>&1; then echo "$t: OK"; else echo "$t: MISSING"; fi' \
     'done' \
     'python3 -c "import angr; print(\"angr: OK\")" 2>/dev/null || echo "angr: MISSING"' \
@@ -257,9 +257,16 @@ RUN echo "argus ALL=(ALL) NOPASSWD: /usr/local/bin/argus-tool-check" > /etc/sudo
 # disables file-capability elevation on execve, which is exactly what makes these
 # tools work as non-root. See docs/docker-socket-hardening.md §5a for the
 # trade-off (cap_drop ALL keeps the bounding set empty except NET_RAW).
+#
+# tcpdump is installed here (not above) so it sits in the same NET_RAW story:
+# the scoped-PCAP evidence producer (src/evidence/pcap_capture.py) runs it as the
+# non-root `argus` user, which needs cap_net_raw on the tcpdump ELF for the same
+# reason nmap does. We grant ONLY cap_net_raw — NOT cap_net_admin — so tcpdump can
+# open a raw socket to read packets but cannot reconfigure interfaces or go
+# promiscuous beyond what the kernel already allows the container.
 RUN set -eux; \
     apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcap2-bin; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcap2-bin tcpdump; \
     rm -rf /var/lib/apt/lists/*; \
     capit() { \
         f="$1"; [ -f "$f" ] || return 0; \
@@ -267,7 +274,7 @@ RUN set -eux; \
         if [ "$magic" = "7f454c46" ]; then setcap cap_net_raw+eip "$f" && echo "setcap cap_net_raw -> $f"; \
         else echo "skip (not ELF): $f"; fi; \
     }; \
-    for b in nmap masscan naabu; do \
+    for b in nmap masscan naabu tcpdump; do \
         p="$(command -v "$b" 2>/dev/null || true)"; \
         [ -n "$p" ] && capit "$(readlink -f "$p")"; \
     done; \
