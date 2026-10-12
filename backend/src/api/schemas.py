@@ -1123,10 +1123,21 @@ class FindingDetailResponse(BaseModel):
 
 
 class FindingValidationApiResponse(BaseModel):
-    """POST /findings/{id}/validate."""
+    """POST /findings/{id}/validate.
+
+    ``assessment`` is the exploitability *opinion* (``plausible`` /
+    ``implausible`` / ``undetermined``, R-5.1.7). ``status`` is the deprecated
+    legacy field (``confirmed`` / ``rejected`` / ``uncertain``) kept for one
+    release for existing API clients; new clients read ``assessment``.
+    """
 
     finding_id: str
-    status: str
+    assessment: str = "undetermined"
+    status: str = Field(
+        default="uncertain",
+        description="DEPRECATED: legacy exploitability status; use 'assessment'.",
+        deprecated=True,
+    )
     confidence: str = "medium"
     reasoning: str = ""
     poc_command: str | None = None

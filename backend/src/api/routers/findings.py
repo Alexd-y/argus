@@ -37,6 +37,7 @@ from src.quick.provenance import (
 )
 from src.skills import load_skill
 from src.validation.exploitability import validate_finding
+from src.validation.opinion_compat import legacy_status
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +252,9 @@ async def post_validate_finding(
         )
     return FindingValidationApiResponse(
         finding_id=result.finding_id,
-        status=result.status,
+        assessment=result.assessment,
+        # Deprecated legacy field (plausible→confirmed etc.), one release.
+        status=legacy_status(result.assessment),
         confidence=result.confidence,
         reasoning=result.reasoning,
         poc_command=result.poc_command,
