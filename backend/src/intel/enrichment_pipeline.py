@@ -158,9 +158,7 @@ async def run_enrichment_pipeline(
                     finding["exploit_sources"] = result.exploit_sources
             stats["validation_run"] = True
             stats["findings_plausible"] = sum(1 for r in results if r.assessment == "plausible")
-            stats["findings_implausible"] = sum(
-                1 for r in results if r.assessment == "implausible"
-            )
+            stats["findings_implausible"] = sum(1 for r in results if r.assessment == "implausible")
         except Exception as exc:
             logger.warning(
                 "Validation pipeline failed",

@@ -71,9 +71,7 @@ class DowngradeReason(StrEnum):
 # which would defeat the entire honesty goal of this work. Only genuine
 # request/response captures (HAR) and packet captures (PCAP) count as a raw
 # exchange here.
-_RAW_EXCHANGE_KINDS: frozenset[EvidenceKind] = frozenset(
-    {EvidenceKind.HAR, EvidenceKind.PCAP}
-)
+_RAW_EXCHANGE_KINDS: frozenset[EvidenceKind] = frozenset({EvidenceKind.HAR, EvidenceKind.PCAP})
 #: Kinds that record an achieved effect of the interaction (out-of-band
 #: callback, a captured visual effect, a recording).
 _IMPACT_PROOF_KINDS: frozenset[EvidenceKind] = frozenset(
@@ -101,7 +99,8 @@ class ArbiterVerdict:
 def adjudicate(
     *,
     artifacts: Sequence[EvidenceDTO],
-    vuln_class: str | None = None,  # noqa: ARG001 — reserved for the signed per-class policy (wave 3, R-5.4.1)
+    # vuln_class: reserved for the signed per-class policy (wave 3, R-5.4.1).
+    vuln_class: str | None = None,  # noqa: ARG001
 ) -> ArbiterVerdict:
     """Return the :class:`EvidenceTier` justified by ``artifacts`` alone.
 
