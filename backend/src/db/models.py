@@ -6,6 +6,7 @@ from typing import Any, Final, Literal
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -711,6 +712,31 @@ class Evidence(Base):
     content_type: Mapped[str] = mapped_column(String(100), nullable=True)
     description: Mapped[str] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Evidence-contract fields (R-7.1), prepared for waves 2–3. All nullable so
+    # existing rows stay valid. Populated by the evidence pipeline (wave 2) and
+    # the negative-control / repeatability gates (wave 3); content_type above
+    # already covers "content type".
+    #: EvidenceKind value (raw_output | diff | screenshot | har | pcap | …).
+    kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Checksum algorithm + lowercase-hex value over the stored object.
+    checksum_algorithm: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    checksum_value: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Producing tool run + tool identity/version.
+    tool_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    tool_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    tool_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Negative-control marker + link to the paired positive observation (wave 3).
+    is_negative_control: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    paired_evidence_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Repeatability attempt number (wave 3).
+    repro_attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Whether secret redaction was applied before storing the object.
+    redaction_applied: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: Artifact-ledger accounting state (unprocessed | presented | excluded; wave 4).
+    ledger_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class AuditLog(Base):
