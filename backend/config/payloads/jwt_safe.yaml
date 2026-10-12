@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_JWT_SAFE_CLAIM_LABEL"
     confidence: suspected
     notes: Claim-position text label for structure drills.
+  - id: exp_claim_label
+    template: "ARGUS_JWT_SAFE_EXP_CLAIM_LABEL"
+    confidence: suspected
+    notes: Text label standing in for an exp/nbf claim-position drill; not a signed token.
 mutations:
   - name: case_flip
     description: Case-flip the label to exercise case-insensitive detection rules.

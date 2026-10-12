@@ -25,6 +25,18 @@ payloads:
     template: "ARGUS_BLT_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without workflow semantics.
+  - id: idempotency_replay_marker
+    template: "argus-blt-safe-idempotency-replay"
+    confidence: suspected
+    notes: Replays a prior request under an identical idempotency key; differential reveals whether a duplicate side-effect occurs.
+  - id: coupon_stack_marker
+    template: "argus-blt-safe-coupon-stack"
+    confidence: suspected
+    notes: Multi-code batch marker for mutually-exclusive-coupon stacking drills (benign codes only).
+  - id: webhook_replay_marker
+    template: "argus-blt-safe-webhook-replay"
+    confidence: suspected
+    notes: Re-delivery marker for signed-but-non-idempotent webhook consumers.
 mutations:
   - name: case_flip
     description: Case-flip the state token to exercise case-insensitive rules.

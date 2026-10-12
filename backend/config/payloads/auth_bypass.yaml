@@ -36,6 +36,18 @@ payloads:
     template: 'admin:admin'
     confidence: suspected
     notes: Default-credential marker for fingerprinting only — never used in auto-login.
+  - id: legacy_xmlrpc_path
+    template: '/xmlrpc.php'
+    confidence: suspected
+    notes: Legacy alt-auth endpoint path; frequently retains native credential auth independent of SSO/MFA enforced on the main login UI.
+  - id: x_rewrite_url_admin
+    template: 'X-Rewrite-URL: /admin/{canary}'
+    confidence: suspected
+    notes: Alternate path-override header to X-Original-URL; some reverse-proxy configs honor it instead, bypassing front-end authn routing.
+  - id: method_override_delete
+    template: 'X-HTTP-Method-Override: DELETE'
+    confidence: suspected
+    notes: Verb-override smuggling; middleware that authorizes by the outer POST method misses the dispatched DELETE.
 mutations:
   - name: case_flip
     description: HTTP header names are case-insensitive; flips defeat substring filters.

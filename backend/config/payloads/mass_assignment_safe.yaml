@@ -20,6 +20,10 @@ payloads:
     template: "argusMassAssignSafeFieldC"
     confidence: suspected
     notes: Third benign identifier for binding-surface drills.
+  - id: field_d
+    template: "argusMassAssignSafeFieldD"
+    confidence: suspected
+    notes: Fourth benign identifier; nested-wrapper binding-surface drill companion.
 mutations:
   - name: case_flip
     description: Case-flip the identifier to exercise case-insensitive detection rules.

@@ -1,0 +1,51 @@
+family_id: account_takeover
+description: >-
+  Logical and protocol-level account-takeover probes: MFA response-manipulation
+  markers, password-reset host-header poisoning, reset-token predictability
+  and reuse, OTP verification race markers, and pre-auth session fixation.
+  Not a credential-list family — brute-force/spray is handled by the
+  hydra/patator/medusa/ncrack sandbox adapters; these are TOCTOU/workflow
+  probes the validator chains with the target's real identity flow.
+cwe_ids: [287, 307, 640, 613]
+owasp_top10:
+  - 'A07:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: mfa_resp_manipulation
+    template: '{"success":true,"mfaVerified":true}'
+    confidence: suspected
+    notes: Client-intercepted MFA-verify response tamper; flags client-side-only MFA enforcement.
+  - id: mfa_skip_cookie
+    template: 'Cookie: pre_mfa_session={canary}'
+    confidence: suspected
+    notes: Direct navigation past /mfa using the pre-MFA session cookie; tests workflow-layer MFA skip.
+  - id: reset_host_poison
+    template: 'X-Forwarded-Host: {oast_host}'
+    confidence: likely
+    notes: Password-reset link host poisoning; reset email built from request Host, confirm via OAST hit.
+  - id: reset_token_predictable
+    template: '{"email":"{target_email}","code":"000000"}'
+    confidence: suspected
+    notes: Numeric reset-code guess seed; validator sweeps low-entropy code space with rate-limit backoff.
+  - id: reset_token_reuse
+    template: '{"token":"{canary}","reuse":true}'
+    confidence: suspected
+    notes: Replays a consumed reset/OTP token; second-use success confirms missing invalidation.
+  - id: otp_race_verify
+    template: '{"otp":"{canary}"}'
+    confidence: suspected
+    notes: Same OTP code fired through a concurrent send-burst; tests TOCTOU on single-use OTP checks.
+  - id: session_fixation_preauth
+    template: 'Cookie: session={canary}'
+    confidence: suspected
+    notes: Attacker-forced pre-auth session ID; unchanged post-login value confirms no regeneration.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header / JSON payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string variants.

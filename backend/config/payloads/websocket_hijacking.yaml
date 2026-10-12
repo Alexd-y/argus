@@ -1,0 +1,38 @@
+family_id: websocket_hijacking
+description: >-
+  Cross-Site WebSocket Hijacking (CSWSH) and WS-layer authorization probes —
+  foreign-Origin handshake, unique exfil markers for OOB victim-data receipt,
+  unauthenticated privileged frames, in-flight message tampering, and
+  socket.io privileged-namespace join attempts.
+cwe_ids: [346, 1385]
+owasp_top10:
+  - 'A01:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: cswsh_origin_probe
+    template: 'Origin: {attacker_origin}'
+    confidence: suspected
+    notes: Cross-site WS handshake with a foreign Origin header; a bare 101 is only a candidate signal, not proof.
+  - id: cswsh_poc_marker
+    template: 'CSWSH-{canary}'
+    confidence: suspected
+    notes: Unique per-run marker embedded in the attacker-origin PoC; confirms victim-data receipt via OOB exfil.
+  - id: unauth_privileged_frame
+    template: '{"action":"deleteUser","userId":"{canary}"}'
+    confidence: suspected
+    notes: Privileged WS frame sent without per-message auth; validates handshake-only auth vs per-frame authorization.
+  - id: message_tamper_marker
+    template: '{"amount":1,"argusCanary":"{canary}"}'
+    confidence: suspected
+    notes: In-flight financial-field tamper marker; validator confirms server-side persistence via REST/order API.
+  - id: namespace_join_admin
+    template: '40/admin,'
+    confidence: suspected
+    notes: socket.io CONNECT packet targeting a privileged namespace; a success ack as a low-priv user is the bug.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw WS frame / header payload.

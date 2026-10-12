@@ -36,6 +36,18 @@ payloads:
     template: 'secret'
     confidence: suspected
     notes: Weak HMAC key candidate for offline brute-force.
+  - id: jwk_self_signed
+    template: '{"alg":"RS256","typ":"JWT","jwk":{"kty":"RSA","n":"{canary}","e":"AQAB"}}'
+    confidence: suspected
+    notes: Embedded self-signed jwk header; tests verifiers that trust an attacker-supplied key without provenance checks.
+  - id: exp_claim_removed
+    template: '{"sub":"administrator","nbf":1000000000}'
+    confidence: suspected
+    notes: Payload with exp omitted; tests validators that skip expiry enforcement when the claim is absent.
+  - id: tenant_claim_swap
+    template: '{"org_id":"{canary}"}'
+    confidence: suspected
+    notes: Cross-tenant claim-swap probe; tests whether authz trusts token org_id/tenant_id without server-side ownership check.
 mutations:
   - name: case_flip
     description: Header values are processed case-sensitively by some libs.

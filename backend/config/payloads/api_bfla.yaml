@@ -21,6 +21,14 @@ payloads:
     template: "ARGUS_API_BFLA_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without route semantics.
+  - id: shadow_version_route_marker
+    template: "argus-bfla-safe-shadow-route"
+    confidence: suspected
+    notes: Probes deprecated/undocumented API version routes (v1/legacy/beta) for weaker function-level auth than the current version.
+  - id: method_override_header
+    template: "X-HTTP-Method-Override: {canary}"
+    confidence: suspected
+    notes: Header-based method-override probe; some routers dispatch the overridden verb to a handler missing auth middleware.
 mutations:
   - name: case_flip
     description: Case-flip the route token to exercise case-insensitive rules.

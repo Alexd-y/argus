@@ -21,6 +21,10 @@ payloads:
     template: "argus-unsafe-api-safe-redirect"
     confidence: suspected
     notes: Redirect-following marker; benign, no live location.
+  - id: zombie_version_marker
+    template: "argus-unsafe-api-safe-zombie-version"
+    confidence: suspected
+    notes: Benign marker for deprecated/zombie upstream API version consumption; validates that stale-version responses are not trusted without re-validation.
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

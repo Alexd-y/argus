@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_LDAP_SAFE_LITERAL_C"
     confidence: suspected
     notes: Third literal for filter-grammar triangulation.
+  - id: control_nonexistent
+    template: "ARGUS_LDAP_SAFE_CONTROL_NONEXIST"
+    confidence: suspected
+    notes: Known-nonexistent negative control literal; pairs with literal_a/b/c for true/false oracle differential in blind-injection confirmation.
 mutations:
   - name: case_flip
     description: Case-flip the literal to exercise case-insensitive detection rules.

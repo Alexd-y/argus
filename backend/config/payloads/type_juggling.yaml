@@ -25,6 +25,14 @@ payloads:
     template: "9223372036854775808"
     confidence: suspected
     notes: 64-bit overflow integer via json_decode; bypasses JWT iat/exp numeric checks.
+  - id: magic_hash_sha1_variant
+    template: "QNKCDZO"
+    confidence: suspected
+    notes: Alternate magic-hash collision string (distinct from the numeric md5 variant); loose-compares equal to 0 against another 0e-prefixed hash.
+  - id: preg_match_array_bypass
+    template: "token[]=1"
+    confidence: suspected
+    notes: preg_match() returns NULL (not FALSE) when given an array subject; loose comparison against falsy bypasses regex format/token checks.
 mutations:
   - name: case_flip
     description: Flip case of magic-hash / literal markers to probe case-sensitive comparisons.

