@@ -2492,6 +2492,31 @@ async def _finalize_scan(
     with suppress(Exception):
         await _materialise_scan_evidence(session, tenant_id, scan_id)
 
+    # Wave 2 (R-5.6.2): form the evidence-base manifest once all evidence for the
+    # scan is materialised — a reproducible root hash over the evidence
+    # checksums, linked to a tamper-evident audit event. Best-effort: never fail
+    # scan completion on a manifest error.
+    try:
+        from src.evidence.manifest import build_and_persist_manifest
+        from src.policy.audit_db import build_production_audit_logger
+
+        await build_and_persist_manifest(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            audit_logger=build_production_audit_logger(),
+        )
+        await session.commit()
+    except Exception as _manifest_exc:
+        logger.warning(
+            "evidence_manifest_build_failed",
+            extra={
+                "event": "argus.evidence.manifest_failed",
+                "scan_id": scan_id,
+                "error_type": type(_manifest_exc).__name__,
+            },
+        )
+
     # Notification dispatch
     try:
         findings_for_notify = (

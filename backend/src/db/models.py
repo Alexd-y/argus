@@ -745,6 +745,35 @@ class Evidence(Base):
     __table_args__ = (Index("ix_evidence_tool_run_id", "tool_run_id"),)
 
 
+class EvidenceManifest(Base):
+    """Per-scan evidence-base manifest (wave 2, R-5.6.2 / R-7.3).
+
+    A tamper-evident summary formed at scan completion: the root hash over the
+    deterministically-sorted evidence checksums, the artifact count + total
+    size, and a link to the audit event that recorded its formation. The
+    integrity-check command recomputes the root hash from storage and compares.
+    """
+
+    __tablename__ = "evidence_manifests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+    )
+    #: SHA-256 (lowercase hex) over the sorted "object_key:sha256" lines.
+    root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Link to the audit event recording manifest formation (R-5.6.2).
+    audit_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_evidence_manifests_scan_id", "scan_id"),)
+
+
 class AuditLog(Base):
     """Audit log — append-only, immutable. No UPDATE/DELETE."""
 
