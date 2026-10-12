@@ -122,10 +122,15 @@ def test_success_ignores_stderr():
 async def test_output_truncated_to_cap():
     scan_id = "scan-trunc-1"
     _clear(scan_id)
-    big = "x" * (executor._TOOL_RUN_OUTPUT_MAX_CHARS + 500)
+    full_len = executor._TOOL_RUN_OUTPUT_MAX_CHARS + 500
+    big = "x" * full_len
     _schedule_tool_run_record("t1", scan_id, "nmap", _result(True, big), _now(), _now(), "nmap t")
-    records = drain_pending_tool_runs(scan_id)
-    assert len(records[0]["output_raw"]) == executor._TOOL_RUN_OUTPUT_MAX_CHARS
+    out = drain_pending_tool_runs(scan_id)[0]["output_raw"]
+    # Wave 2 / stage 4: output_raw keeps the first N chars of content, then an
+    # explicit truncation marker naming the full size (no silent truncation).
+    assert out.startswith("x" * executor._TOOL_RUN_OUTPUT_MAX_CHARS)
+    assert "truncated" in out
+    assert str(full_len) in out
 
 
 async def test_flush_empty_returns_zero():
