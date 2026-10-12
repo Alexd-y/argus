@@ -4,8 +4,10 @@ import logging
 import shlex
 import threading
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
 from src.cache.tool_cache import cache_key_for_execute, get_tool_cache, ttl_for_tool
 from src.cache.tool_recovery import (
@@ -52,6 +54,13 @@ def _current_scan_phase(scan_id: str) -> str:
 _PENDING_TOOL_RUNS: dict[str, list[dict[str, Any]]] = {}
 _PENDING_TOOL_RUNS_LOCK = threading.Lock()
 
+# Wave 2 (R-5.3.2): evidence rows are buffered per scan next to tool runs and
+# written by ``flush_tool_runs`` at the phase boundary. The *object* is uploaded
+# to storage immediately after the run (see ``_capture_tool_run_evidence``), so
+# a lost buffer still leaves the artifact in MinIO linked by ``tool_run_id``.
+_PENDING_EVIDENCE: dict[str, list[dict[str, Any]]] = {}
+_PENDING_EVIDENCE_LOCK = threading.Lock()
+
 
 def _schedule_tool_run_record(
     tenant_id: str | None,
@@ -61,6 +70,10 @@ def _schedule_tool_run_record(
     started_at: datetime,
     finished_at: datetime,
     command: str,
+    *,
+    tool_run_id: UUID | None = None,
+    evidence_saved: bool | None = None,
+    output_object_key: str | None = None,
 ) -> None:
     """Buffer a ToolRun record for later flush (no-op when scan context is missing)."""
     if not tenant_id or not scan_id:
@@ -72,17 +85,139 @@ def _schedule_tool_run_record(
     # empty for a crashed/denied tool). Persist stderr into ``output_raw`` so the
     # cause is visible directly in ``tool_runs`` instead of only worker logs.
     output_raw = stdout if success else "\n".join(part for part in (stderr, stdout) if part)
+    full_len = len(output_raw)
+    clipped = output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else ""
+    # Wave 2 (R-5.3.4 / stage 4): output_raw is a convenience excerpt only. When
+    # it is clipped, say so explicitly with the full length and a pointer to the
+    # complete output in object storage, so a reader of output_raw knows it is a
+    # part, not the whole.
+    if full_len > _TOOL_RUN_OUTPUT_MAX_CHARS:
+        pointer = f" key={output_object_key}" if output_object_key else ""
+        clipped = (
+            f"{clipped}\n… [truncated: showing {_TOOL_RUN_OUTPUT_MAX_CHARS} of "
+            f"{full_len} chars; full output in object storage{pointer}]"
+        )
+    input_params: dict[str, Any] = {"command": command}
+    if evidence_saved is not None:
+        # Explicit, visible state — "evidence not saved" must not be inferred
+        # from an absence of rows (R-5.3.2).
+        input_params["evidence_saved"] = bool(evidence_saved)
     record = {
+        "id": str(tool_run_id) if tool_run_id is not None else None,
         "tenant_id": tenant_id,
         "tool_name": tool_name,
         "status": "success" if success else "error",
-        "input_params": {"command": command},
-        "output_raw": output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else "",
+        "input_params": input_params,
+        "output_raw": clipped,
+        "output_object_key": output_object_key,
         "started_at": started_at,
         "finished_at": finished_at,
     }
     with _PENDING_TOOL_RUNS_LOCK:
         _PENDING_TOOL_RUNS.setdefault(scan_id, []).append(record)
+
+
+def _capture_tool_run_evidence(
+    tenant_id: str,
+    scan_id: str,
+    tool_run_id: UUID,
+    tool_name: str,
+    result: dict[str, Any],
+    started_at: datetime,
+    finished_at: datetime,
+) -> tuple[bool, str | None]:
+    """Upload a run's stdout/stderr to object storage and buffer evidence rows.
+
+    The object upload happens immediately (survives a lost buffer); the DB rows
+    are drained by :func:`flush_tool_runs` at the phase boundary. Returns
+    ``(evidence_saved, stdout_object_key)``. Never raises — a pipeline failure is
+    logged and surfaced as ``evidence_saved=False`` (R-5.3.2: the "no evidence"
+    state is explicit, not inferred from missing rows).
+    """
+    try:
+        tenant_uuid = UUID(str(tenant_id))
+        scan_uuid = UUID(str(scan_id))
+    except (ValueError, TypeError):
+        return False, None
+    try:
+        from src.evidence.factory import get_evidence_pipeline
+        from src.pipeline.contracts.finding_dto import EvidenceKind
+
+        pipeline = get_evidence_pipeline()
+    except Exception:
+        logger.warning(
+            "evidence_pipeline_unavailable",
+            extra={"event": "argus.evidence.pipeline_unavailable", "tool": tool_name},
+        )
+        return False, None
+
+    rows: list[dict[str, Any]] = []
+    stdout_key: str | None = None
+    saved = True
+    produced_output = False
+    for stream_name, text in (
+        ("stdout", str(result.get("stdout") or "")),
+        ("stderr", str(result.get("stderr") or "")),
+    ):
+        if not text:
+            continue
+        produced_output = True
+        data = text.encode("utf-8", "replace")
+        try:
+            dto = pipeline.persist_sync(
+                tool_run_id=tool_run_id,
+                tenant_id=tenant_uuid,
+                scan_id=scan_uuid,
+                kind=EvidenceKind.RAW_OUTPUT,
+                raw_data=data,
+                content_type="text/plain",
+            )
+        except Exception:
+            logger.warning(
+                "tool_run_evidence_persist_failed",
+                extra={
+                    "event": "argus.evidence.persist_failed",
+                    "tool": tool_name,
+                    "stream": stream_name,
+                },
+            )
+            saved = False
+            continue
+        rows.append(
+            {
+                "id": str(dto.id),
+                "tenant_id": str(tenant_id),
+                "scan_id": str(scan_id),
+                "finding_id": None,
+                "tool_run_id": str(tool_run_id),
+                "object_key": dto.s3_key,
+                "kind": dto.kind.value,
+                "checksum_algorithm": "sha256",
+                "checksum_value": dto.sha256,
+                "size_bytes": len(data),
+                "content_type": "text/plain",
+                "tool_name": tool_name[:128],
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "redaction_applied": dto.redactions_applied > 0,
+                "description": f"{stream_name} of {tool_name}"[:500],
+            }
+        )
+        if stream_name == "stdout":
+            stdout_key = dto.s3_key
+
+    if rows:
+        with _PENDING_EVIDENCE_LOCK:
+            _PENDING_EVIDENCE.setdefault(scan_id, []).extend(rows)
+    if produced_output and not rows:
+        saved = False
+    return saved, stdout_key
+
+
+def drain_pending_evidence(scan_id: str) -> list[dict[str, Any]]:
+    """Atomically remove and return buffered evidence rows for a scan."""
+    with _PENDING_EVIDENCE_LOCK:
+        return _PENDING_EVIDENCE.pop(scan_id, [])
 
 
 def record_tool_run(
@@ -114,33 +249,68 @@ def drain_pending_tool_runs(scan_id: str) -> list[dict[str, Any]]:
 
 
 async def flush_tool_runs(session: Any, tenant_id: str, scan_id: str) -> int:
-    """Persist buffered ToolRun records for a scan using the caller's session.
+    """Persist buffered ToolRun + Evidence records for a scan.
 
-    Best-effort and idempotent-safe: rows are added to ``session`` but not
-    committed here — the caller (phase runner) owns the transaction boundary.
-    Returns the number of records flushed.
+    Rows are added to ``session`` but not committed here — the caller (phase
+    runner) owns the transaction boundary. Tool runs are flushed before their
+    evidence rows so the ``evidence.tool_run_id`` FK is satisfied. Returns the
+    number of ToolRun records flushed.
     """
     records = drain_pending_tool_runs(scan_id)
-    if not records:
+    evidence_rows = drain_pending_evidence(scan_id)
+    if not records and not evidence_rows:
         return 0
-    from src.db.models import ToolRun
+    from src.db.models import Evidence, ToolRun
 
     for rec in records:
+        tr_kwargs: dict[str, Any] = {
+            "tenant_id": str(rec.get("tenant_id") or tenant_id),
+            "scan_id": scan_id,
+            "tool_name": str(rec.get("tool_name") or "unknown")[:100],
+            "status": str(rec.get("status") or "success")[:50],
+            "input_params": rec.get("input_params"),
+            "output_raw": rec.get("output_raw") or "",
+            "output_object_key": rec.get("output_object_key"),
+            "started_at": rec.get("started_at"),
+            "finished_at": rec.get("finished_at"),
+        }
+        # Use the pre-assigned id so evidence.tool_run_id references this row.
+        if rec.get("id"):
+            tr_kwargs["id"] = str(rec["id"])
+        session.add(ToolRun(**tr_kwargs))
+
+    # Flush tool runs first so the FK target exists before evidence inserts.
+    if evidence_rows:
+        with suppress(Exception):
+            await session.flush()
+    for ev in evidence_rows:
         session.add(
-            ToolRun(
-                tenant_id=str(rec.get("tenant_id") or tenant_id),
+            Evidence(
+                id=str(ev["id"]),
+                tenant_id=str(ev.get("tenant_id") or tenant_id),
                 scan_id=scan_id,
-                tool_name=str(rec.get("tool_name") or "unknown")[:100],
-                status=str(rec.get("status") or "success")[:50],
-                input_params=rec.get("input_params"),
-                output_raw=rec.get("output_raw") or "",
-                started_at=rec.get("started_at"),
-                finished_at=rec.get("finished_at"),
+                finding_id=ev.get("finding_id"),
+                tool_run_id=ev.get("tool_run_id"),
+                object_key=str(ev.get("object_key") or ""),
+                content_type=ev.get("content_type"),
+                description=ev.get("description"),
+                kind=ev.get("kind"),
+                checksum_algorithm=ev.get("checksum_algorithm"),
+                checksum_value=ev.get("checksum_value"),
+                size_bytes=ev.get("size_bytes"),
+                tool_name=ev.get("tool_name"),
+                started_at=ev.get("started_at"),
+                finished_at=ev.get("finished_at"),
+                redaction_applied=ev.get("redaction_applied"),
             )
         )
     logger.info(
         "tool_runs_flushed",
-        extra={"event": "argus.tool_run.flushed", "count": len(records)},
+        extra={
+            "event": "argus.tool_run.flushed",
+            "count": len(records),
+            "evidence_count": len(evidence_rows),
+        },
     )
     return len(records)
 
@@ -305,14 +475,36 @@ def execute_command(
                     },
                 )
 
+        finished_at = datetime.now(UTC)
+        # Wave 2 (R-5.3.2): upload this run's raw output to object storage NOW
+        # (before the phase-boundary flush), so the artifact survives even if the
+        # in-memory buffer is lost to a crash. evidence_saved is recorded on the
+        # tool run so "no evidence" is an explicit, visible state.
+        tool_run_id = uuid4()
+        evidence_saved: bool | None = None
+        output_object_key: str | None = None
+        if scan_id and tenant_id:
+            evidence_saved, output_object_key = _capture_tool_run_evidence(
+                tenant_id,
+                scan_id,
+                tool_run_id,
+                tool_name or "unknown",
+                result,
+                started_at,
+                finished_at,
+            )
+
         _schedule_tool_run_record(
             tenant_id=tenant_id,
             scan_id=scan_id,
             tool_name=tool_name or "unknown",
             result=result,
             started_at=started_at,
-            finished_at=datetime.now(UTC),
+            finished_at=finished_at,
             command=command,
+            tool_run_id=tool_run_id,
+            evidence_saved=evidence_saved,
+            output_object_key=output_object_key,
         )
 
         return result

@@ -298,3 +298,28 @@ async def test_persist_without_finding_id(
     assert evidence.finding_id is None
     assert evidence.tool_run_id == ids["tool_run_id"]
     assert len(evidence.sha256) == 64
+
+
+def test_persist_sync_without_finding_id(
+    uploader: InMemoryUploader,
+    audit_logger: AuditLogger,
+    ids: dict[str, object],
+) -> None:
+    """Sync persist path (used by the sync tool executor)."""
+    pipeline = EvidencePipeline(
+        storage_uploader=uploader,
+        redactor=Redactor(),
+        audit_logger=audit_logger,
+    )
+    evidence = pipeline.persist_sync(
+        tool_run_id=ids["tool_run_id"],  # type: ignore[arg-type]
+        tenant_id=ids["tenant_id"],  # type: ignore[arg-type]
+        scan_id=ids["scan_id"],  # type: ignore[arg-type]
+        kind=EvidenceKind.RAW_OUTPUT,
+        raw_data=b"Authorization: Bearer sekret.tok\nout",
+        content_type="text/plain",
+    )
+    assert isinstance(evidence, EvidenceDTO)
+    assert evidence.finding_id is None
+    assert len(evidence.sha256) == 64
+    assert len(uploader.calls) == 1

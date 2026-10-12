@@ -705,8 +705,10 @@ class Evidence(Base):
     scan_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
-    finding_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    # Wave 2 (R-5.3.1): raw tool-run evidence exists before any finding, so
+    # finding_id is nullable; the natural owner is tool_run_id.
+    finding_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=True
     )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -722,8 +724,10 @@ class Evidence(Base):
     checksum_algorithm: Mapped[str | None] = mapped_column(String(20), nullable=True)
     checksum_value: Mapped[str | None] = mapped_column(String(128), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    #: Producing tool run + tool identity/version.
-    tool_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Producing tool run (wave 2: evidence's natural owner) + tool identity/version.
+    tool_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tool_runs.id", ondelete="SET NULL"), nullable=True
+    )
     tool_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     tool_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -737,6 +741,8 @@ class Evidence(Base):
     redaction_applied: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     #: Artifact-ledger accounting state (unprocessed | presented | excluded; wave 4).
     ledger_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (Index("ix_evidence_tool_run_id", "tool_run_id"),)
 
 
 class AuditLog(Base):
