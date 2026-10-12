@@ -21,6 +21,18 @@ payloads:
     template: "ARGUS_SAML_VALIDATION_SAFE"
     confidence: suspected
     notes: Plain assertion marker; not a signed document.
+  - id: xsw_sibling_marker
+    template: "argus-saml-safe-xsw-sibling-marker"
+    confidence: suspected
+    notes: Inert marker standing in for an XSW sibling-assertion injection drill; no live XML document generated.
+  - id: signature_strip_marker
+    template: "argus-saml-safe-signature-strip-marker"
+    confidence: suspected
+    notes: Inert marker for a signature-presence validation drill; no Signature element is actually removed.
+  - id: recipient_audience_marker
+    template: "argus-saml-safe-audience-marker"
+    confidence: suspected
+    notes: Inert marker for a Recipient/AudienceRestriction cross-SP validation drill.
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

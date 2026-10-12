@@ -266,7 +266,7 @@ def _json_diff_paths(left: object, right: object, prefix: str = "") -> set[str]:
     return set() if left == right else {here}
 
 
-class EvidenceBundle(BaseModel):
+class PlaybookEvidenceBundle(BaseModel):
     """Redacted baseline + mutated exchanges with a diff and stable hash."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -312,7 +312,12 @@ class EvidenceBundle(BaseModel):
         )
 
 
-def build_evidence_bundle(baseline: HttpExchange, mutated: HttpExchange) -> EvidenceBundle:
+#: Transitional alias (R-5.2.1): distinct class names per layer, back-compat
+#: name kept so existing importers do not break.
+EvidenceBundle = PlaybookEvidenceBundle
+
+
+def build_evidence_bundle(baseline: HttpExchange, mutated: HttpExchange) -> PlaybookEvidenceBundle:
     """Redact both exchanges, compute the diff, and assemble a bundle.
 
     Redaction happens *before* the bundle is constructed, so the persisted
@@ -332,7 +337,7 @@ def build_evidence_bundle(baseline: HttpExchange, mutated: HttpExchange) -> Evid
             redacted_baseline.response.headers, redacted_mutated.response.headers
         ),
     )
-    return EvidenceBundle(
+    return PlaybookEvidenceBundle(
         baseline=redacted_baseline,
         mutated=redacted_mutated,
         diff=diff,
@@ -352,6 +357,7 @@ __all__ = [
     "REDACTED",
     "EvidenceBundle",
     "NormalizedDiff",
+    "PlaybookEvidenceBundle",
     "build_evidence_bundle",
     "redact",
     "redact_body",

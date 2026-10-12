@@ -31,8 +31,11 @@ async def run_enrichment_pipeline(
         "findings_deduplicated": 0,
         "validation_run": False,
         "pocs_generated": 0,
-        "findings_confirmed": 0,
-        "findings_rejected": 0,
+        # Counts of the exploitability *opinion* (model judgement, not a
+        # confirmation) — renamed from findings_confirmed/findings_rejected
+        # (R-5.1.7).
+        "findings_plausible": 0,
+        "findings_implausible": 0,
     }
 
     shodan_result = None
@@ -137,10 +140,14 @@ async def run_enrichment_pipeline(
     if os.environ.get("EXPLOITABILITY_VALIDATION_ENABLED", "true").lower() == "true":
         try:
             from src.validation.exploitability import validate_findings_batch
+            from src.validation.opinion_compat import legacy_status
 
             results = await validate_findings_batch(findings)
             for finding, result in zip(findings, results, strict=False):
-                finding["validation_status"] = result.status
+                # Keep the legacy ``validation_status`` vocabulary for the
+                # reporting pipeline (back-compat, R-5.1.7); the opinion itself
+                # now uses plausible/implausible/undetermined.
+                finding["validation_status"] = legacy_status(result.assessment)
                 finding["validation_confidence"] = result.confidence
                 if result.poc_command:
                     finding.setdefault("proof_of_concept", {})[
@@ -150,8 +157,8 @@ async def run_enrichment_pipeline(
                     finding["exploit_public"] = True
                     finding["exploit_sources"] = result.exploit_sources
             stats["validation_run"] = True
-            stats["findings_confirmed"] = sum(1 for r in results if r.status == "confirmed")
-            stats["findings_rejected"] = sum(1 for r in results if r.status == "rejected")
+            stats["findings_plausible"] = sum(1 for r in results if r.assessment == "plausible")
+            stats["findings_implausible"] = sum(1 for r in results if r.assessment == "implausible")
         except Exception as exc:
             logger.warning(
                 "Validation pipeline failed",

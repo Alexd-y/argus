@@ -117,9 +117,16 @@ def _get_audit_logger() -> AuditLogger:
     """
     global _audit_logger
     if _audit_logger is None:
-        from src.policy.audit import InMemoryAuditSink
+        # Wave 2 (R-5.6.1 / ARG-049): persistent DatabaseAuditSink in production
+        # (Postgres), in-process sink in dev / tests without a DB.
+        try:
+            from src.policy.audit_db import build_production_audit_logger
 
-        _audit_logger = AuditLogger(InMemoryAuditSink())
+            _audit_logger = build_production_audit_logger()
+        except Exception:
+            from src.policy.audit import InMemoryAuditSink
+
+            _audit_logger = AuditLogger(InMemoryAuditSink())
     return _audit_logger
 
 

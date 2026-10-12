@@ -70,7 +70,7 @@ async def test_persist_redacts_uploads_and_emits_audit(
     assert evidence.sha256 == hashlib.sha256(upload_call.data).hexdigest()
     events = list(audit_logger.sink.iter_events(tenant_id=ids["tenant_id"]))
     assert len(events) == 1
-    assert events[0].event_type is AuditEventType.POLICY_DECISION
+    assert events[0].event_type is AuditEventType.EVIDENCE_PERSISTED
     assert events[0].decision_allowed is True
     assert events[0].payload["redactions_applied"] == 1
 
@@ -268,3 +268,58 @@ async def test_audit_emit_failure_is_swallowed(
 
 def test_storage_uploader_protocol_runtime_check(uploader: InMemoryUploader) -> None:
     assert isinstance(uploader, StorageUploaderProtocol)
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 / stage 1 — evidence exists before a finding
+# ---------------------------------------------------------------------------
+
+
+async def test_persist_without_finding_id(
+    uploader: InMemoryUploader,
+    audit_logger: AuditLogger,
+    ids: dict[str, object],
+) -> None:
+    """Raw tool-run evidence can be persisted before any finding is parsed."""
+    pipeline = EvidencePipeline(
+        storage_uploader=uploader,
+        redactor=Redactor(),
+        audit_logger=audit_logger,
+    )
+    evidence = await pipeline.persist(
+        tool_run_id=ids["tool_run_id"],  # type: ignore[arg-type]
+        tenant_id=ids["tenant_id"],  # type: ignore[arg-type]
+        scan_id=ids["scan_id"],  # type: ignore[arg-type]
+        kind=EvidenceKind.RAW_OUTPUT,
+        raw_data=b"nmap scan report ...",
+        content_type="text/plain",
+    )
+    assert isinstance(evidence, EvidenceDTO)
+    assert evidence.finding_id is None
+    assert evidence.tool_run_id == ids["tool_run_id"]
+    assert len(evidence.sha256) == 64
+
+
+def test_persist_sync_without_finding_id(
+    uploader: InMemoryUploader,
+    audit_logger: AuditLogger,
+    ids: dict[str, object],
+) -> None:
+    """Sync persist path (used by the sync tool executor)."""
+    pipeline = EvidencePipeline(
+        storage_uploader=uploader,
+        redactor=Redactor(),
+        audit_logger=audit_logger,
+    )
+    evidence = pipeline.persist_sync(
+        tool_run_id=ids["tool_run_id"],  # type: ignore[arg-type]
+        tenant_id=ids["tenant_id"],  # type: ignore[arg-type]
+        scan_id=ids["scan_id"],  # type: ignore[arg-type]
+        kind=EvidenceKind.RAW_OUTPUT,
+        raw_data=b"Authorization: Bearer sekret.tok\nout",
+        content_type="text/plain",
+    )
+    assert isinstance(evidence, EvidenceDTO)
+    assert evidence.finding_id is None
+    assert len(evidence.sha256) == 64
+    assert len(uploader.calls) == 1

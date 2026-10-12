@@ -25,6 +25,14 @@ payloads:
     template: "ARGUS_API_BOPLA_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without property semantics.
+  - id: nested_object_marker
+    template: '{"data":{"argusBoplaSafeNested":"{canary}"}}'
+    confidence: suspected
+    notes: Nested-JSON wrapper probe; property-level filters often inspect only top-level keys.
+  - id: array_wrap_marker
+    template: '{"argusBoplaSafeArray":["{canary}"]}'
+    confidence: suspected
+    notes: Array-wrapped property probe; some binders flatten arrays, bypassing scalar-property denylists.
 mutations:
   - name: case_flip
     description: Case-flip the property name to exercise case-insensitive rules.

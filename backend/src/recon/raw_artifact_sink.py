@@ -52,7 +52,7 @@ def sink_raw_bytes(
     if not scan_id or not scan_id.strip():
         return None
     ts = raw_artifact_timestamp()
-    return upload_raw_artifact(
+    key = upload_raw_artifact(
         tenant_id=tenant_id.strip(),
         scan_id=scan_id.strip(),
         phase=phase,
@@ -62,6 +62,19 @@ def sink_raw_bytes(
         data=data,
         content_type=content_type,
     )
+    if key and isinstance(data, (bytes, bytearray)):
+        # Wave 2 (R-5.3.4): record a checksummed evidence row for the artifact.
+        from src.evidence.raw_evidence import record_raw_artifact_evidence
+
+        record_raw_artifact_evidence(
+            tenant_id=tenant_id.strip(),
+            scan_id=scan_id.strip(),
+            object_key=key,
+            ext=ext,
+            data=bytes(data),
+            description=artifact_type,
+        )
+    return key
 
 
 def sink_raw_json(

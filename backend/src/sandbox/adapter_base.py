@@ -33,14 +33,18 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
-from src.pipeline.contracts.finding_dto import EvidenceDTO, FindingDTO
+from src.core.config import settings
+from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, ToolJob
 from src.sandbox.templating import render_argv, validate_template
+
+if TYPE_CHECKING:
+    from src.evidence.raw_evidence import RawEvidence
 
 _logger = logging.getLogger(__name__)
 
@@ -275,8 +279,12 @@ class ToolAdapter(Protocol):
         """Convert raw tool output and side-effect files into :class:`FindingDTO` records."""
         ...
 
-    def collect_evidence(self, job: ToolJob, workdir: Path) -> list[EvidenceDTO]:
-        """Walk ``workdir`` and yield :class:`EvidenceDTO` records for upload."""
+    def collect_evidence(self, job: ToolJob, workdir: Path) -> list[RawEvidence]:
+        """Walk ``workdir`` and yield :class:`RawEvidence` candidates for upload.
+
+        The pipeline (:class:`~src.evidence.pipeline.EvidencePipeline`) redacts,
+        hashes, uploads, and audits each candidate into an ``EvidenceDTO``.
+        """
         ...
 
 
@@ -375,9 +383,10 @@ class ShellToolAdapter:
     ) -> list[FindingDTO]:
         """Dispatch to the registered parser for this tool's parse strategy.
 
-        ``ParseStrategy.BINARY_BLOB`` short-circuits to ``[]`` because the
-        evidence is consumed downstream by the binary-evidence pipeline,
-        not by the FindingDTO normaliser.
+        ``ParseStrategy.BINARY_BLOB`` short-circuits to ``[]`` findings on
+        purpose — a binary artifact yields no ``FindingDTO`` rows. The artifact
+        itself is NOT lost: :meth:`collect_evidence` registers it as evidence
+        through the pipeline (wave 2, R-5.3.3).
 
         Every other strategy delegates to
         :func:`src.sandbox.parsers.dispatch_parse`. The dispatcher is
@@ -403,13 +412,21 @@ class ShellToolAdapter:
             self._descriptor.tool_id,
         )
 
-    def collect_evidence(self, job: ToolJob, workdir: Path) -> list[EvidenceDTO]:
-        """Default: returns ``[]`` — the evidence pipeline (ARG-009) wires this up.
+    def collect_evidence(self, job: ToolJob, workdir: Path) -> list[RawEvidence]:
+        """Gather raw evidence from ``workdir`` for every tool (wave 2, R-5.3.1).
 
-        Subclasses that produce side-effect artifacts (e.g. nmap XML) override
-        this to emit :class:`EvidenceDTO` rows pointing at the uploaded S3
-        objects. The default is a no-op so a basic shell tool is still
-        runnable end-to-end without the evidence pipeline.
+        Returns one :class:`RawEvidence` per file in ``workdir`` — the sandbox
+        driver writes the tool's ``stdout`` / ``stderr`` there alongside any
+        side-effect artifacts, so a plain shell tool still yields its raw output
+        without the subclass overriding anything. Per-artifact and per-run size
+        caps (from settings) truncate oversize files, recording the fact rather
+        than dropping them silently. The pipeline hashes and uploads each.
         """
-        del job, workdir
-        return []
+        del job
+        from src.evidence.raw_evidence import gather_workdir_evidence
+
+        return gather_workdir_evidence(
+            workdir,
+            max_artifact_bytes=settings.evidence_max_artifact_bytes,
+            max_run_bytes=settings.evidence_max_run_bytes,
+        )

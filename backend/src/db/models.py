@@ -6,6 +6,7 @@ from typing import Any, Final, Literal
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -704,13 +705,73 @@ class Evidence(Base):
     scan_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
-    finding_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    # Wave 2 (R-5.3.1): raw tool-run evidence exists before any finding, so
+    # finding_id is nullable; the natural owner is tool_run_id.
+    finding_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=True
     )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=True)
     description: Mapped[str] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Evidence-contract fields (R-7.1), prepared for waves 2–3. All nullable so
+    # existing rows stay valid. Populated by the evidence pipeline (wave 2) and
+    # the negative-control / repeatability gates (wave 3); content_type above
+    # already covers "content type".
+    #: EvidenceKind value (raw_output | diff | screenshot | har | pcap | …).
+    kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Checksum algorithm + lowercase-hex value over the stored object.
+    checksum_algorithm: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    checksum_value: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Producing tool run (wave 2: evidence's natural owner) + tool identity/version.
+    tool_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tool_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    tool_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    tool_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Negative-control marker + link to the paired positive observation (wave 3).
+    is_negative_control: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    paired_evidence_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Repeatability attempt number (wave 3).
+    repro_attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Whether secret redaction was applied before storing the object.
+    redaction_applied: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: Artifact-ledger accounting state (unprocessed | presented | excluded; wave 4).
+    ledger_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (Index("ix_evidence_tool_run_id", "tool_run_id"),)
+
+
+class EvidenceManifest(Base):
+    """Per-scan evidence-base manifest (wave 2, R-5.6.2 / R-7.3).
+
+    A tamper-evident summary formed at scan completion: the root hash over the
+    deterministically-sorted evidence checksums, the artifact count + total
+    size, and a link to the audit event that recorded its formation. The
+    integrity-check command recomputes the root hash from storage and compares.
+    """
+
+    __tablename__ = "evidence_manifests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+    )
+    #: SHA-256 (lowercase hex) over the sorted "object_key:sha256" lines.
+    root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Link to the audit event recording manifest formation (R-5.6.2).
+    audit_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_evidence_manifests_scan_id", "scan_id"),)
 
 
 class AuditLog(Base):

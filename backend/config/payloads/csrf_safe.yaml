@@ -20,6 +20,10 @@ payloads:
     template: "argus-csrf-blank-token-marker"
     confidence: suspected
     notes: Curriculum marker standing in for a request that sends an empty CSRF token value.
+  - id: samesite_lax_get_marker
+    template: "argus-csrf-samesite-lax-get-marker"
+    confidence: suspected
+    notes: Curriculum marker standing in for a top-level GET navigation state-change drill under SameSite=Lax.
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

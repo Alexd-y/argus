@@ -37,6 +37,18 @@ payloads:
     template: '{"createdAt":"1970-01-01T00:00:00Z"}'
     confidence: suspected
     notes: Server-managed timestamp override; differential confirms accept.
+  - id: permissions_wildcard
+    template: '{"permissions":["*"]}'
+    confidence: likely
+    notes: Wildcard-permissions array append; probes whether update endpoint grants permission escalation via an array field.
+  - id: email_verified_true
+    template: '{"emailVerified":true}'
+    confidence: likely
+    notes: Verification-flag append; probes UI-only verification gates with no server-side enforcement.
+  - id: nested_data_role
+    template: '{"data":{"role":"admin"}}'
+    confidence: suspected
+    notes: Nested-wrapper variant; some binders unwrap one level of nesting before merge, bypassing flat-key denylists.
 mutations:
   - name: case_flip
     description: JSON property names are case-sensitive — flips produce known errors.

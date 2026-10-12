@@ -74,8 +74,8 @@ class EvidencePipeline:
     async def persist(
         self,
         *,
-        finding_id: UUID,
         tool_run_id: UUID,
+        finding_id: UUID | None = None,
         tenant_id: UUID,
         scan_id: UUID,
         kind: EvidenceKind,
@@ -84,22 +84,7 @@ class EvidencePipeline:
         redact: bool = True,
     ) -> EvidenceDTO:
         """Persist a single evidence blob and return its :class:`EvidenceDTO`."""
-        if not isinstance(raw_data, (bytes, bytearray)):
-            raise TypeError(f"raw_data must be bytes-like, got {type(raw_data).__name__}")
-
-        redacted: RedactedContent
-        if redact:
-            redacted = self._redactor.redact(bytes(raw_data))
-        else:
-            redacted = RedactedContent(
-                content=bytes(raw_data),
-                redactions_applied=0,
-                report=(),
-            )
-
-        sha256_hex = hashlib.sha256(redacted.content).hexdigest()
-        filename = f"{kind.value}-{sha256_hex[:_FILENAME_HASH_PREFIX]}.bin"
-
+        redacted, sha256_hex, filename = self._prepare(kind, raw_data, redact=redact)
         try:
             object_key = await asyncio.to_thread(
                 self._storage.upload,
@@ -111,29 +96,90 @@ class EvidencePipeline:
                 content_type,
             )
         except Exception as exc:
-            self._emit_audit(
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                allowed=False,
-                kind=kind,
-                sha256_hex=sha256_hex,
-                redactions_applied=redacted.redactions_applied,
-                failure="storage_upload_exception",
-            )
-            raise EvidencePersistError(f"evidence upload failed for finding {finding_id}") from exc
+            self._audit_failure(tenant_id, scan_id, kind, sha256_hex, redacted, "storage_upload_exception")
+            raise EvidencePersistError(f"evidence upload failed for tool_run {tool_run_id}") from exc
+        return self._finish(
+            object_key=object_key,
+            redacted=redacted,
+            sha256_hex=sha256_hex,
+            kind=kind,
+            tool_run_id=tool_run_id,
+            finding_id=finding_id,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+        )
 
+    def persist_sync(
+        self,
+        *,
+        tool_run_id: UUID,
+        finding_id: UUID | None = None,
+        tenant_id: UUID,
+        scan_id: UUID,
+        kind: EvidenceKind,
+        raw_data: bytes,
+        content_type: str = _DEFAULT_CONTENT_TYPE,
+        redact: bool = True,
+    ) -> EvidenceDTO:
+        """Synchronous twin of :meth:`persist` for sync callers (the tool executor).
+
+        Same redact → hash → upload → audit contract; the storage client is sync
+        so there is no event loop to hop into.
+        """
+        redacted, sha256_hex, filename = self._prepare(kind, raw_data, redact=redact)
+        try:
+            object_key = self._storage.upload(
+                str(tenant_id),
+                str(scan_id),
+                _OBJECT_TYPE_EVIDENCE,
+                filename,
+                redacted.content,
+                content_type,
+            )
+        except Exception as exc:
+            self._audit_failure(tenant_id, scan_id, kind, sha256_hex, redacted, "storage_upload_exception")
+            raise EvidencePersistError(f"evidence upload failed for tool_run {tool_run_id}") from exc
+        return self._finish(
+            object_key=object_key,
+            redacted=redacted,
+            sha256_hex=sha256_hex,
+            kind=kind,
+            tool_run_id=tool_run_id,
+            finding_id=finding_id,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+        )
+
+    def _prepare(
+        self, kind: EvidenceKind, raw_data: bytes, *, redact: bool
+    ) -> tuple[RedactedContent, str, str]:
+        """Redact (optionally), hash the redacted bytes, and name the object."""
+        if not isinstance(raw_data, (bytes, bytearray)):
+            raise TypeError(f"raw_data must be bytes-like, got {type(raw_data).__name__}")
+        if redact:
+            redacted = self._redactor.redact(bytes(raw_data))
+        else:
+            redacted = RedactedContent(content=bytes(raw_data), redactions_applied=0, report=())
+        sha256_hex = hashlib.sha256(redacted.content).hexdigest()
+        filename = f"{kind.value}-{sha256_hex[:_FILENAME_HASH_PREFIX]}.bin"
+        return redacted, sha256_hex, filename
+
+    def _finish(
+        self,
+        *,
+        object_key: str | None,
+        redacted: RedactedContent,
+        sha256_hex: str,
+        kind: EvidenceKind,
+        tool_run_id: UUID,
+        finding_id: UUID | None,
+        tenant_id: UUID,
+        scan_id: UUID,
+    ) -> EvidenceDTO:
+        """Validate the upload result, build the DTO, and emit the success audit."""
         if object_key is None:
-            self._emit_audit(
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                allowed=False,
-                kind=kind,
-                sha256_hex=sha256_hex,
-                redactions_applied=redacted.redactions_applied,
-                failure="storage_upload_none",
-            )
-            raise EvidencePersistError(f"evidence upload returned None for finding {finding_id}")
-
+            self._audit_failure(tenant_id, scan_id, kind, sha256_hex, redacted, "storage_upload_none")
+            raise EvidencePersistError(f"evidence upload returned None for tool_run {tool_run_id}")
         evidence = EvidenceDTO(
             id=uuid4(),
             finding_id=finding_id,
@@ -143,7 +189,6 @@ class EvidencePipeline:
             sha256=sha256_hex,
             redactions_applied=min(redacted.redactions_applied, 10_000),
         )
-
         self._emit_audit(
             tenant_id=tenant_id,
             scan_id=scan_id,
@@ -154,6 +199,25 @@ class EvidencePipeline:
             failure=None,
         )
         return evidence
+
+    def _audit_failure(
+        self,
+        tenant_id: UUID,
+        scan_id: UUID,
+        kind: EvidenceKind,
+        sha256_hex: str,
+        redacted: RedactedContent,
+        failure: str,
+    ) -> None:
+        self._emit_audit(
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            allowed=False,
+            kind=kind,
+            sha256_hex=sha256_hex,
+            redactions_applied=redacted.redactions_applied,
+            failure=failure,
+        )
 
     def _emit_audit(
         self,
@@ -174,9 +238,12 @@ class EvidencePipeline:
             "sha256_prefix": sha256_hex[:16],
             "redactions_applied": min(max(redactions_applied, 0), 10_000),
         }
+        event_type = (
+            AuditEventType.EVIDENCE_PERSISTED if allowed else AuditEventType.EVIDENCE_PERSIST_FAILED
+        )
         try:
             self._audit.emit(
-                event_type=AuditEventType.POLICY_DECISION,
+                event_type=event_type,
                 tenant_id=tenant_id,
                 scan_id=scan_id,
                 decision_allowed=allowed,

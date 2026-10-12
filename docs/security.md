@@ -134,3 +134,21 @@ Security model and how the port differs from upstream:
   must exceed `CAIRN_TICK_INTERVAL_SEC` (validated at startup, upstream D-02).
 
 Deliberate deviations from upstream are tracked in `docs/cairn_port_deviations.md`.
+
+## Evidence object integrity (wave 2, R-5.6.4)
+
+Evidence objects in the `argus` / evidence bucket should be protected from
+post-write overwrite for the tenant's retention period. Preferred mechanism:
+MinIO **object lock** (requires bucket versioning + object-lock enabled at
+bucket creation). Where the deployed MinIO/S3 does not support object lock,
+prevention is unavailable and ARGUS falls back to **detection**:
+
+- Each stored artifact has a SHA-256 recorded on its `evidence` row and folded
+  into the per-scan manifest root hash (`evidence_manifests`), itself linked to
+  the append-only, hash-chained `audit_logs`.
+- `src.evidence.manifest.detect_overwrite` flags "an object with this key
+  already exists and its hash differs" at write time.
+- `scripts/verify_evidence_integrity.py` re-downloads every artifact, recomputes
+  its SHA-256, re-derives the root hash, and replays the audit chain — exiting
+  non-zero on any discrepancy. This is how an auditor confirms an evidence base
+  was not edited after release, trusting only the data.

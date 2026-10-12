@@ -26,6 +26,14 @@ payloads:
     template: "{canary}"
     confidence: suspected
     notes: SameSite=Lax cookie probe via top-level GET navigation; tests CSRF under lax policy.
+  - id: json_text_plain_bypass
+    template: '{"status":"ok","x":"=padding"}'
+    confidence: suspected
+    notes: JSON body delivered via enctype=text/plain form submission; bypasses naive Content-Type allow-list CSRF checks (CVE-2022-21703 pattern).
+  - id: method_override_csrf
+    template: 'X-HTTP-Method-Override: DELETE'
+    confidence: suspected
+    notes: Method-override header smuggles a protected verb past CSRF middleware that only inspects the outer POST method.
 mutations:
   - name: case_flip
     description: Flip case of the CSRF token/header names to probe case-sensitive validation.

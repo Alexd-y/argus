@@ -1,0 +1,41 @@
+family_id: grpc_misconfig
+description: >-
+  gRPC trust-boundary probes — server-reflection enumeration, unauthenticated
+  calls to sensitive RPC methods, proxy-trusted identity-metadata spoofing,
+  binary (-bin) metadata smuggling, and a message-size confirmation marker
+  for DoS-hardening checks (not a real flood).
+cwe_ids: [200, 284]
+owasp_top10:
+  - 'A01:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: reflection_list_probe
+    template: 'grpcurl -plaintext {target_host}:{target_port} list'
+    confidence: suspected
+    notes: Server-reflection enumeration; lists exposed services/methods without authentication.
+  - id: admin_method_noauth
+    template: '{"user_id":"{canary}"}'
+    confidence: suspected
+    notes: Calls a sensitive RPC method with no auth metadata; an OK status with data confirms unauthenticated access.
+  - id: metadata_header_spoof
+    template: 'x-user-id: {canary}'
+    confidence: suspected
+    notes: Proxy-trusted identity-metadata spoofing; tests whether the backend re-trusts proxy-injected headers.
+  - id: message_size_dos_marker
+    template: '{"payload":"{canary}"}'
+    confidence: suspected
+    notes: Oversized-message confirmation marker only, not a real flood; checks max-message-size enforcement.
+  - id: binary_metadata_bin_key
+    template: 'auth-token-bin: {canary}'
+    confidence: suspected
+    notes: Binary (-bin suffix) metadata smuggling; some auth middleware inspects only text metadata keys.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw gRPC metadata / message fragment.
+  - name: base64
+    stages: [base64]
+    description: Base64-encoded for -bin metadata key sinks.

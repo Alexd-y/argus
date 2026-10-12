@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -119,6 +120,8 @@ from src.orchestration.scope_integration import rules_of_engagement_to_prompt_co
 from src.orchestration.self_pentest import SelfPentestRunner
 from src.orchestration.tenant_isolation import TenantIsolationGuard
 from src.owasp_top10_2025 import parse_owasp_category
+from src.pipeline.contracts.evidence_scales import validation_for_tier
+from src.pipeline.contracts.finding_dto import EvidenceTier
 from src.policy.scan_queue import notify_scan_finished
 from src.quick.budget import QuickBudgetError
 from src.quick.cancellation import (
@@ -662,11 +665,13 @@ async def _materialise_finding_evidence(
     """
     poc_key: str | None = None
     screenshot_key: str | None = None
+    uploaded_poc: dict[str, Any] | None = None
     try:
         if poc_db:
             poc_key = await asyncio.to_thread(
                 upload_finding_poc_json, tenant_id, scan_id, finding_id, poc_db
             )
+            uploaded_poc = poc_db
             screenshot_key = (
                 str(poc_db.get("screenshot_key") or "").strip() if isinstance(poc_db, dict) else ""
             ) or None
@@ -684,6 +689,7 @@ async def _materialise_finding_evidence(
                     finding_id,
                     observation_poc,
                 )
+                uploaded_poc = observation_poc
     except Exception:
         logger.warning(
             "finding_evidence_upload_failed",
@@ -701,9 +707,25 @@ async def _materialise_finding_evidence(
     )
     if not rows:
         return
+    # Wave 2 (R-5.3.4 / criterion 4): every evidence row carries a checksum.
+    # The PoC JSON object is hashed with the SAME serialisation s3 used so the
+    # stored object matches (``upload_finding_poc_json`` →
+    # ``json.dumps(..., ensure_ascii=False, default=str)``). The screenshot's
+    # bytes are not available here (uploaded upstream), so its checksum is a
+    # follow-up; the row is still tagged with its EvidenceKind.
+    poc_sha256: str | None = None
+    if poc_key and uploaded_poc is not None:
+        try:
+            poc_sha256 = hashlib.sha256(
+                json.dumps(uploaded_poc, ensure_ascii=False, default=str).encode("utf-8")
+            ).hexdigest()
+        except (TypeError, ValueError):
+            poc_sha256 = None
     try:
         async with session.begin_nested():
             for _row in rows:
+                _is_poc = poc_key is not None and _row.object_key == poc_key
+                _checksum = poc_sha256 if _is_poc else None
                 await session.merge(
                     Evidence(
                         id=_row.id,
@@ -713,6 +735,9 @@ async def _materialise_finding_evidence(
                         object_key=_row.object_key,
                         content_type=_row.content_type,
                         description=_row.description,
+                        kind="parsed" if _is_poc else "screenshot",
+                        checksum_algorithm="sha256" if _checksum else None,
+                        checksum_value=_checksum,
                     )
                 )
     except Exception:
@@ -886,6 +911,10 @@ async def _persist_report_and_findings(
         f["finding_id"] = finding_pk
         _et_raw = f.get("evidence_tier")
         _et = int(_et_raw) if isinstance(_et_raw, (int, float)) and 1 <= int(_et_raw) <= 4 else None
+        # R-5.1.4: the ``validation`` (evidence-strength) axis is a pure
+        # derivation of the canonical tier (the arbiter's verdict), never an
+        # independent judgement. NULL only when no tier is known yet.
+        _validation = validation_for_tier(EvidenceTier(_et)).value if _et is not None else None
         _pa = f.get("payload_attempted")
         _ps = f.get("payload_successful")
         _tp = f.get("taint_path")
@@ -914,6 +943,7 @@ async def _persist_report_and_findings(
             reproducible_steps=rep_steps,
             applicability_notes=app_notes,
             evidence_tier=_et,
+            validation=_validation,
             payload_attempted=_pa if isinstance(_pa, list) else None,
             payload_successful=_ps if isinstance(_ps, list) else None,
             taint_path=_tp if isinstance(_tp, list) else None,
@@ -1462,17 +1492,40 @@ async def _execute_phase(
             message=err_message,
             data=err_data,
         )
-        # Persist any tool-run provenance buffered before the failure.
-        with suppress(Exception):
+        # Persist any tool-run + evidence provenance buffered before the failure.
+        # Never fail the phase on a flush error, but surface it (R-5.3.4 / stage 4):
+        # the old silent ``suppress(Exception)`` hid lost provenance/evidence.
+        try:
             await flush_tool_runs(session, tenant_id, scan_id)
+        except Exception as _flush_exc:
+            logger.warning(
+                "tool_runs_flush_failed",
+                extra={
+                    "event": "argus.tool_run.flush_failed",
+                    "scan_id": scan_id,
+                    "phase": phase_str,
+                    "error_type": type(_flush_exc).__name__,
+                },
+            )
         await _update_scan_phase_status(session, scan_id, phase_str, "failed", progress)
         await session.commit()
         raise
 
-    # Persist buffered ToolRun provenance within this phase's transaction; the
-    # caller commits downstream. Best-effort — never fail a completed phase.
-    with suppress(Exception):
+    # Persist buffered ToolRun + evidence provenance within this phase's
+    # transaction; the caller commits downstream. Never fail a completed phase on
+    # a flush error, but surface it (R-5.3.4 / stage 4) instead of suppressing.
+    try:
         await flush_tool_runs(session, tenant_id, scan_id)
+    except Exception as _flush_exc:
+        logger.warning(
+            "tool_runs_flush_failed",
+            extra={
+                "event": "argus.tool_run.flush_failed",
+                "scan_id": scan_id,
+                "phase": phase_str,
+                "error_type": type(_flush_exc).__name__,
+            },
+        )
 
     return output_data
 
@@ -2324,7 +2377,11 @@ async def _finalize_scan(
                                 finding_id=f"self-pentest-{_spf.target}",
                                 title=_spf.vulnerability,
                                 severity=_spf.severity,
-                                evidence_tier=2,
+                                # TODO(wave-2) [R-5.1.2]: self-pentest findings carry no
+                                # collected EvidenceDTO artifacts yet, so the arbiter cannot
+                                # run here. Record the honest INFORMATIONAL floor rather than
+                                # a hardcoded tier (was ``evidence_tier=2``, unjustified).
+                                evidence_tier=int(EvidenceTier.INFORMATIONAL),
                             )
                         except Exception as _sp_ev_exc:
                             logger.warning(
@@ -2434,6 +2491,31 @@ async def _finalize_scan(
     await session.commit()
     with suppress(Exception):
         await _materialise_scan_evidence(session, tenant_id, scan_id)
+
+    # Wave 2 (R-5.6.2): form the evidence-base manifest once all evidence for the
+    # scan is materialised — a reproducible root hash over the evidence
+    # checksums, linked to a tamper-evident audit event. Best-effort: never fail
+    # scan completion on a manifest error.
+    try:
+        from src.evidence.manifest import build_and_persist_manifest
+        from src.policy.audit_db import build_production_audit_logger
+
+        await build_and_persist_manifest(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            audit_logger=build_production_audit_logger(),
+        )
+        await session.commit()
+    except Exception as _manifest_exc:
+        logger.warning(
+            "evidence_manifest_build_failed",
+            extra={
+                "event": "argus.evidence.manifest_failed",
+                "scan_id": scan_id,
+                "error_type": type(_manifest_exc).__name__,
+            },
+        )
 
     # Notification dispatch
     try:
@@ -2963,11 +3045,21 @@ async def run_scan_state_machine(
                 if phase == ScanPhase.VULN_ANALYSIS and ctx.vuln_out:
                     for _f in (ctx.vuln_out.findings or [])[:20]:
                         fid = str(_f.get("finding_id", _f.get("id", "")))
+                        _raw_tier = _f.get("evidence_tier")
+                        # 0 is outside the valid 1..4 range (the old default silently
+                        # produced it). Use the tier the finding already carries when it
+                        # is valid, else fall back to the honest INFORMATIONAL floor.
+                        # TODO(wave-2) [R-5.1.2]: adjudicate from collected artifacts here.
+                        _tier = (
+                            int(_raw_tier)
+                            if isinstance(_raw_tier, (int, float)) and 1 <= int(_raw_tier) <= 4
+                            else int(EvidenceTier.INFORMATIONAL)
+                        )
                         evidence_chain.add_finding_link(
                             finding_id=fid,
                             title=str(_f.get("title", _f.get("name", ""))),
                             severity=str(_f.get("severity", "info")),
-                            evidence_tier=int(_f.get("evidence_tier", 0)),
+                            evidence_tier=_tier,
                         )
                 elif phase == ScanPhase.EXPLOITATION and ctx.exploit_out:
                     for _e in (ctx.exploit_out.exploits or [])[:20]:

@@ -131,6 +131,13 @@ def classify_finding_evidence_tier(finding: Any) -> EvidenceTier:
         or _get_attr(finding, "screenshot_urls")
     )
 
+    # TODO(wave-2) [R-5.1.2]: this report-side path receives already-shaped
+    # finding records, not collected ``EvidenceDTO`` artifacts, so it cannot yet
+    # call ``evidence_arbiter.adjudicate``. Once wave 2 wires evidence collection
+    # through, pass the finding's artifacts to the arbiter here instead of
+    # deriving the tier from the model's self-assessed confidence. Until then the
+    # explicit ``evidence_tier`` set upstream (by the arbiter) is preferred above;
+    # this is only the no-artifacts fallback.
     return classify_finding(confidence, has_payload=has_payload, has_evidence=has_evidence)
 
 

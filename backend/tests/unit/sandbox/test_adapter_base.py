@@ -279,13 +279,59 @@ def test_shell_adapter_parse_output_binary_blob_does_not_warn(
     assert not any("parsers.dispatch" in r.message for r in caplog.records)
 
 
-def test_shell_adapter_collect_evidence_default_returns_empty(
+def test_shell_adapter_collect_evidence_empty_workdir_returns_empty(
     sample_descriptor_payload: Callable[..., dict[str, object]],
+    tmp_path: Path,
 ) -> None:
     descriptor = _make_descriptor(sample_descriptor_payload)
     adapter = ShellToolAdapter(descriptor)
     job = _make_job(descriptor)
-    assert adapter.collect_evidence(job, Path("/tmp")) == []
+    assert adapter.collect_evidence(job, tmp_path) == []
+
+
+def test_shell_adapter_collect_evidence_gathers_workdir_files(
+    sample_descriptor_payload: Callable[..., dict[str, object]],
+    tmp_path: Path,
+) -> None:
+    """Wave 2 (R-5.3.1): any tool yields raw evidence for its workdir files."""
+    from src.pipeline.contracts.finding_dto import EvidenceKind
+
+    (tmp_path / "stdout.log").write_bytes(b"scan output ...")
+    (tmp_path / "stderr.log").write_bytes(b"a warning")
+    (tmp_path / "report.xml").write_bytes(b"<x/>")
+
+    descriptor = _make_descriptor(sample_descriptor_payload)
+    adapter = ShellToolAdapter(descriptor)
+    job = _make_job(descriptor)
+
+    evidence = adapter.collect_evidence(job, tmp_path)
+    assert len(evidence) == 3
+    assert all(e.kind is EvidenceKind.RAW_OUTPUT for e in evidence)
+    assert all(not e.truncated for e in evidence)
+    sources = {e.source for e in evidence}
+    assert sources == {"artifact:stdout.log", "artifact:stderr.log", "artifact:report.xml"}
+
+
+def test_shell_adapter_collect_evidence_truncates_oversize_artifact(
+    sample_descriptor_payload: Callable[..., dict[str, object]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An oversize artifact is truncated and the fact is recorded, not dropped."""
+    from src.core.config import settings
+
+    monkeypatch.setattr(settings, "evidence_max_artifact_bytes", 8, raising=False)
+    monkeypatch.setattr(settings, "evidence_max_run_bytes", 1_000_000, raising=False)
+    (tmp_path / "big.bin").write_bytes(b"0123456789abcdef")  # 16 bytes, cap 8
+
+    descriptor = _make_descriptor(sample_descriptor_payload)
+    adapter = ShellToolAdapter(descriptor)
+    job = _make_job(descriptor)
+
+    [ev] = adapter.collect_evidence(job, tmp_path)
+    assert ev.truncated is True
+    assert ev.original_size == 16
+    assert ev.size == 8
 
 
 def test_shell_adapter_constructor_rejects_invalid_template(

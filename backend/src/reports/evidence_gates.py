@@ -2,7 +2,13 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-EvidenceGate = Literal["validated", "observed", "candidate", "inconclusive"]
+from src.pipeline.contracts.evidence_scales import EvidenceGateName
+
+# Shared scale alias (R-5.1.3) — single definition in evidence_scales. The
+# canonical tier->gate derivation is evidence_scales.evidence_gate_for_tier;
+# ``calculate_evidence_gate`` below is a distinct axis (it scores PoC-field
+# completeness from raw inputs, not from a tier) and is intentionally retained.
+EvidenceGate = EvidenceGateName
 
 
 class EvidenceQuality(BaseModel):

@@ -94,10 +94,14 @@ def _request(
 def _build_attack_template() -> tuple[str, list[dict[str, int]]]:
     """Return ``(base64_template, positions)`` for a sniper GET with one marker.
 
-    The payload is injected byte-exact over the ``§INJECT§`` span, so the
-    position offsets are computed against the raw bytes of the template.
+    The ARGUS intruder engine parses insertion points from the template using
+    the Mustache-style ``{{ }}`` delimiters (``positions.DEFAULT_OPEN`` /
+    ``DEFAULT_CLOSE``); the stored ``positions`` array is metadata only and is
+    not consumed by ``parse_template``. The payload is injected byte-exact over
+    the ``{{INJECT}}`` span, so the position offsets are computed against the
+    raw bytes of the template (``{{INJECT}}`` is 10 bytes, like the old marker).
     """
-    marker = "§INJECT§".encode()
+    marker = b"{{INJECT}}"
     prefix = b"GET /rest/products/search?q="
     suffix = (
         f" HTTP/1.1\r\n"

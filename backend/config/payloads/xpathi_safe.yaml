@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_XPATH_SAFE_TOKEN_C"
     confidence: suspected
     notes: Third literal token for grammar triangulation.
+  - id: token_control_nonexistent
+    template: "ARGUS_XPATH_SAFE_CONTROL_NONEXIST"
+    confidence: suspected
+    notes: Known-nonexistent negative-control token; pairs with token_a/b/c for oracle differential confirmation drills.
 mutations:
   - name: case_flip
     description: Case-flip the token to exercise case-insensitive detection rules.

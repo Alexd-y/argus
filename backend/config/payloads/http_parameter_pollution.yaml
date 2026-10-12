@@ -25,6 +25,18 @@ payloads:
     template: "ARGUS_HPP_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without parameter semantics.
+  - id: nested_json_wrapper
+    template: '{"data":{"argus_hpp_safe":"{canary}"}}'
+    confidence: suspected
+    notes: Nested-JSON wrapper; bypasses naive top-level-key filters/WAF rules that only inspect flat keys.
+  - id: backend_path_fragment_terminator
+    template: "argus_hpp_safe%23"
+    confidence: suspected
+    notes: URL-encoded fragment terminator; probes server-side URL-router parameter pollution when the value interpolates into a backend REST path.
+  - id: cache_key_divergence_marker
+    template: "argus_hpp_safe=A&cb={canary}"
+    confidence: suspected
+    notes: Cache-key-vs-origin divergence probe; the cache may key on a subset of params while origin reads the full set, or vice versa.
 mutations:
   - name: case_flip
     description: Case-flip the parameter key to exercise case-insensitive rules.

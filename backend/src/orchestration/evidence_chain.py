@@ -111,7 +111,7 @@ class EvidenceChain:
         finding_id: str,
         title: str,
         severity: str,
-        evidence_tier: int = 0,
+        evidence_tier: int = 1,  # 1 = INFORMATIONAL; 0 is outside the valid 1..4 range
     ) -> EvidenceLink:
         content = json.dumps(
             {

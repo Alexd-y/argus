@@ -249,6 +249,25 @@ services:
     image: ${ARGUS_CELERY_IMAGE:-ghcr.io/alexd-y/argus-worker:latest}
     container_name: argus-e2e-celery
     pull_policy: missing
+    # In production the queues are split across dedicated workers (worker-scans,
+    # worker-general, worker-reports, worker-cairn, worker-intruder). The e2e
+    # lane runs a SINGLE worker, so it must consume the UNION of their queues —
+    # the image CMD only covers scans/reports/tools/recon/exploitation/default,
+    # which left argus.intruder.highvol (web-workbench intruder attacks) and the
+    # cairn queues unconsumed, so those attacks sat `queued` forever and the
+    # intruder e2e cases timed out. Override here (e2e-only; prod workers and the
+    # image CMD are untouched).
+    command:
+      - celery
+      - -A
+      - src.celery_app
+      - worker
+      - -l
+      - INFO
+      - -Q
+      - argus.scans,argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default,argus.cairn,argus.cairn.workers,argus.intruder.highvol
+      - --concurrency
+      - "4"
     networks:
       - argus-e2e
     environment:

@@ -47,7 +47,7 @@ def _make_shodan_result():
 @dataclass
 class MockValidationResult:
     finding_id: str = "f-001"
-    status: str = "confirmed"
+    assessment: str = "plausible"  # R-5.1.7: opinion vocabulary (was status="confirmed")
     confidence: str = "high"
     poc_command: str = "curl -s https://target.example/login"
     exploit_public: bool = False
@@ -224,7 +224,8 @@ class TestValidationStep:
             result = await run_enrichment_pipeline(findings)
 
         assert result["stats"]["validation_run"] is True
-        assert result["stats"]["findings_confirmed"] == 1
+        assert result["stats"]["findings_plausible"] == 1
+        # validation_status keeps the legacy vocabulary for the report pipeline.
         assert result["findings"][0]["validation_status"] == "confirmed"
 
 

@@ -25,6 +25,14 @@ payloads:
     template: "ARGUS_API_BOLA_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without object semantics.
+  - id: graphql_node_id_swap
+    template: 'node(id: "{canary}")'
+    confidence: suspected
+    notes: Relay-style global-ID node() resolver probe; often skips the per-type ownership check enforced by named resolvers.
+  - id: graphql_batch_alias
+    template: 'q0: node(id:"{baseline_id_minus_one}") q1: node(id:"{baseline_id_plus_one}")'
+    confidence: suspected
+    notes: Aliased batch-query marker; enumerates multiple objects in one request, bypassing per-request rate limiting.
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

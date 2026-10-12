@@ -26,6 +26,18 @@ payloads:
     template: "read+write+admin+offline_access"
     confidence: suspected
     notes: Scope upgrade probe; tests whether the AS ignores incremental scope requests.
+  - id: redirect_uri_idn_homograph
+    template: "https://xn--{canary}--homograph.{oast_host}/cb"
+    confidence: suspected
+    notes: Punycode/IDN-homograph redirect_uri; tests ASCII-only string validators that skip Unicode confusable normalization.
+  - id: pkce_verifier_omitted
+    template: "grant_type=authorization_code&code={canary}"
+    confidence: suspected
+    notes: Token-exchange request with code_verifier omitted entirely; tests whether PKCE is actually enforced server-side.
+  - id: state_fixed_replay
+    template: "argus-oauth-fixed-state-{canary}"
+    confidence: suspected
+    notes: Constant/predictable state value reused across sessions; tests state-CSRF binding to the session rather than format-only checks.
 mutations:
   - name: case_flip
     description: Flip case of redirect_uri host/scheme to probe case-sensitive redirect validation.

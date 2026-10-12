@@ -604,6 +604,19 @@ class Settings(BaseSettings):
             "EXEC_BROKER_MAX_OUTPUT_BYTES", "exec_broker_max_output_bytes"
         ),
     )
+    # Wave 2 (R-5.3.1): evidence-capture size limits. Per-artifact cap and a
+    # cumulative per-tool-run cap; oversize artifacts are truncated (with the
+    # fact recorded), never silently dropped.
+    evidence_max_artifact_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=0,
+        validation_alias=AliasChoices("EVIDENCE_MAX_ARTIFACT_BYTES", "evidence_max_artifact_bytes"),
+    )
+    evidence_max_run_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=0,
+        validation_alias=AliasChoices("EVIDENCE_MAX_RUN_BYTES", "evidence_max_run_bytes"),
+    )
     exec_broker_max_timeout_sec: float = Field(
         default=600.0,
         ge=1.0,
@@ -855,6 +868,36 @@ class Settings(BaseSettings):
         # an explicit falsey token disables the check.
         if v is None or v == "":
             return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+
+    # F-M04 (companion): opt-OUT switch for the Ed25519 prompt-catalog startup
+    # verification driven by ``main._verify_prompt_catalog`` (see main.lifespan).
+    # The secure default is False → the signed prompt catalog is verified on
+    # every boot (fail-closed). Operators may skip it on a dev box with
+    # ARGUS_SKIP_PROMPT_VERIFICATION=true; unset/empty stays secure (verify ON).
+    # Declared here because main.py has referenced ``settings.skip_prompt_
+    # verification`` since the F-M04 hardening (58ebc22) without a backing field,
+    # which made every fresh-image boot abort with AttributeError.
+    skip_prompt_verification: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_SKIP_PROMPT_VERIFICATION",
+            "SKIP_PROMPT_VERIFICATION",
+            "skip_prompt_verification",
+        ),
+    )
+
+    @field_validator("skip_prompt_verification", mode="before")
+    @classmethod
+    def coerce_skip_prompt_verification(cls, v: object) -> bool:
+        # Fail-closed: unset/empty resolves to the secure default (do NOT skip →
+        # verify). Only an explicit truthy token disables verification.
+        if v is None or v == "":
+            return False
         if isinstance(v, bool):
             return v
         if isinstance(v, str):
@@ -1743,7 +1786,6 @@ class Settings(BaseSettings):
 
     # VDF-008 — optional gospider/parsero after robots/sitemap fetch. Env: VA_ROBOTS_EXTENDED_PIPELINE
     va_robots_extended_pipeline: bool = False
-
 
     # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
     # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN
