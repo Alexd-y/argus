@@ -17,6 +17,8 @@ callers that do not yet have collected artifacts available.
 
 from __future__ import annotations
 
+import warnings
+
 from src.pipeline.contracts.finding_dto import (
     EVIDENCE_TIER_DESCRIPTIONS,
     EVIDENCE_TIER_LABELS,
@@ -31,6 +33,17 @@ def classify_finding(
     has_evidence: bool = False,
 ) -> EvidenceTier:
     """Map an existing ``ConfidenceLevel`` to an ``EvidenceTier``.
+
+    .. deprecated:: wave-1
+        This derives the evidence tier from the model's *self-assessed*
+        ``ConfidenceLevel`` rather than from collected artifacts — exactly the
+        conflation of "the model is confident" with "it is proven" that wave 1
+        removes (R-5.1.2, R-5.1.6). Decide tiers with
+        :func:`src.pipeline.contracts.evidence_arbiter.adjudicate`, which takes
+        only collected ``EvidenceDTO`` artifacts. This shim is kept only for
+        callers that do not yet have artifacts available (see their
+        ``TODO(wave-2)`` markers) and will be removed once wave 2 wires
+        evidence collection everywhere.
 
     Mapping rules:
 
@@ -54,6 +67,13 @@ def classify_finding(
     -------
     EvidenceTier
     """
+    warnings.warn(
+        "classify_finding derives an evidence tier from the model's "
+        "self-assessed ConfidenceLevel; use evidence_arbiter.adjudicate with "
+        "collected artifacts instead (R-5.1.2/R-5.1.6).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if confidence == ConfidenceLevel.EXPLOITABLE:
         if has_payload:
             return EvidenceTier.EXPLOITED

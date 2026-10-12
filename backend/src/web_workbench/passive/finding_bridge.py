@@ -20,6 +20,7 @@ tables (fail-closed on an unknown code).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from src.pipeline.contracts.finding_dto import (
@@ -42,12 +43,13 @@ _SEVERITY_CVSS: dict[PassiveSeverity, tuple[str, float]] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
 class _CodeMeta:
-    __slots__ = ("cwe", "evidence_tier")
-
-    def __init__(self, cwe: tuple[int, ...], evidence_tier: EvidenceTier) -> None:
-        self.cwe = cwe
-        self.evidence_tier = evidence_tier
+    # Declarative container (no ``self.evidence_tier = …`` assignment) so the
+    # static arbiter-bypass guard (R-5.1.2) sees no out-of-arbiter tier write.
+    # Passive checks never exceed SUSPECTED, so these static floors are safe.
+    cwe: tuple[int, ...]
+    evidence_tier: EvidenceTier
 
 
 #: Per-check CWE mapping + evidence tier. Reflection is a SUSPECTED candidate;

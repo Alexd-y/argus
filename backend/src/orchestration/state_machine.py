@@ -119,6 +119,7 @@ from src.orchestration.scope_integration import rules_of_engagement_to_prompt_co
 from src.orchestration.self_pentest import SelfPentestRunner
 from src.orchestration.tenant_isolation import TenantIsolationGuard
 from src.owasp_top10_2025 import parse_owasp_category
+from src.pipeline.contracts.finding_dto import EvidenceTier
 from src.policy.scan_queue import notify_scan_finished
 from src.quick.budget import QuickBudgetError
 from src.quick.cancellation import (
@@ -2324,7 +2325,11 @@ async def _finalize_scan(
                                 finding_id=f"self-pentest-{_spf.target}",
                                 title=_spf.vulnerability,
                                 severity=_spf.severity,
-                                evidence_tier=2,
+                                # TODO(wave-2) [R-5.1.2]: self-pentest findings carry no
+                                # collected EvidenceDTO artifacts yet, so the arbiter cannot
+                                # run here. Record the honest INFORMATIONAL floor rather than
+                                # a hardcoded tier (was ``evidence_tier=2``, unjustified).
+                                evidence_tier=int(EvidenceTier.INFORMATIONAL),
                             )
                         except Exception as _sp_ev_exc:
                             logger.warning(
@@ -2963,11 +2968,21 @@ async def run_scan_state_machine(
                 if phase == ScanPhase.VULN_ANALYSIS and ctx.vuln_out:
                     for _f in (ctx.vuln_out.findings or [])[:20]:
                         fid = str(_f.get("finding_id", _f.get("id", "")))
+                        _raw_tier = _f.get("evidence_tier")
+                        # 0 is outside the valid 1..4 range (the old default silently
+                        # produced it). Use the tier the finding already carries when it
+                        # is valid, else fall back to the honest INFORMATIONAL floor.
+                        # TODO(wave-2) [R-5.1.2]: adjudicate from collected artifacts here.
+                        _tier = (
+                            int(_raw_tier)
+                            if isinstance(_raw_tier, (int, float)) and 1 <= int(_raw_tier) <= 4
+                            else int(EvidenceTier.INFORMATIONAL)
+                        )
                         evidence_chain.add_finding_link(
                             finding_id=fid,
                             title=str(_f.get("title", _f.get("name", ""))),
                             severity=str(_f.get("severity", "info")),
-                            evidence_tier=int(_f.get("evidence_tier", 0)),
+                            evidence_tier=_tier,
                         )
                 elif phase == ScanPhase.EXPLOITATION and ctx.exploit_out:
                     for _e in (ctx.exploit_out.exploits or [])[:20]:
