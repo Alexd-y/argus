@@ -229,3 +229,23 @@ signed tools-каталог закрыт на 162 дескриптора и жё
 - [auth-flow.md](./auth-flow.md)
 - [sse-polling.md](./sse-polling.md)
 - [env-vars.md](./env-vars.md)
+
+## ADR: browser evidence runs in the sandbox (wave 2a, etap 1)
+
+**Decision: Variant A — the browser context that captures HAR / video /
+screenshot evidence runs in the sandbox container, not the worker.**
+
+Context: wave 2a adds HAR/video/screenshot producers, which require a Playwright
+browser context. The browser can live either in the sandbox (where every other
+target-touching tool runs) or in the worker process.
+
+Chosen A because it keeps the invariant "everything that touches the target runs
+in the isolated container": the worker never opens a connection to the target,
+and the worker image does not grow by the hundreds of MB a bundled Chromium
+costs. Cost: browser operations cross a process boundary and return results via
+artifact files (the `src/evidence/browser_session.py` context wrapper).
+
+Consequence: `infra/Dockerfile.sandbox` must carry Playwright + Chromium (+
+`tcpdump` for PCAP). Browser/capture unavailability is surfaced explicitly
+(`BrowserUnavailable` / `CaptureUnavailable`) and caps the arbiter level rather
+than reading as "no vulnerability" — it is NOT a silent INFO log.
