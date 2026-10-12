@@ -141,49 +141,79 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
         return control_from_status(_run_coro_in_thread(_read()))
 
     try:
-        async with session_factory() as session:
-            await set_session_tenant(session, tenant_id)
-            attack = await repository.get_attack(session, tenant_id, attack_id)
-            if attack is None:
-                raise ValueError(f"attack {attack_id!r} not found")
-            project = await projects.get(session, tenant_id, attack.project_id)
-            if project is None:
-                raise ValueError("project not found")
-            if project.status is not ProjectStatus.ACTIVE:
-                # Kill-switch: never run against a paused/archived project.
-                await repository.save_progress(
+        try:
+            async with session_factory() as session:
+                await set_session_tenant(session, tenant_id)
+                attack = await repository.get_attack(session, tenant_id, attack_id)
+                if attack is None:
+                    raise ValueError(f"attack {attack_id!r} not found")
+                project = await projects.get(session, tenant_id, attack.project_id)
+                if project is None:
+                    raise ValueError("project not found")
+                if project.status is not ProjectStatus.ACTIVE:
+                    # Kill-switch: never run against a paused/archived project.
+                    await repository.save_progress(
+                        session,
+                        tenant_id,
+                        attack_id,
+                        status=STATUS_FAILED,
+                        error_reason="project_not_active",
+                    )
+                    await session.commit()
+                    return {"attack_id": attack_id, "status": STATUS_FAILED}
+
+                registry = PayloadRegistry(payloads_dir=_payloads_dir())
+                registry.load()
+                builder = PayloadBuilder(registry)
+                payload_sets, labels = materialize_payload_sets(
+                    attack.payload_config, builder=builder
+                )
+
+                scope_service = ProjectScopeService(project.scope_rules)
+                service = IntruderService(
+                    repository, sender=HttpxSender(), control_hook=_control_hook
+                )
+                summary = await service.run_attack(
                     session,
                     tenant_id,
                     attack_id,
-                    status=STATUS_FAILED,
-                    error_reason="project_not_active",
+                    scope_service=scope_service,
+                    payload_sets=payload_sets,
+                    payload_labels=labels,
                 )
                 await session.commit()
-                return {"attack_id": attack_id, "status": STATUS_FAILED}
-
-            registry = PayloadRegistry(payloads_dir=_payloads_dir())
-            registry.load()
-            builder = PayloadBuilder(registry)
-            payload_sets, labels = materialize_payload_sets(attack.payload_config, builder=builder)
-
-            scope_service = ProjectScopeService(project.scope_rules)
-            service = IntruderService(repository, sender=HttpxSender(), control_hook=_control_hook)
-            summary = await service.run_attack(
-                session,
-                tenant_id,
-                attack_id,
-                scope_service=scope_service,
-                payload_sets=payload_sets,
-                payload_labels=labels,
-            )
-            await session.commit()
-            return {
-                "attack_id": attack_id,
-                "status": summary.status,
-                "forwarded": summary.forwarded,
-                "blocked": summary.blocked,
-                "flagged": summary.flagged,
-            }
+                return {
+                    "attack_id": attack_id,
+                    "status": summary.status,
+                    "forwarded": summary.forwarded,
+                    "blocked": summary.blocked,
+                    "flagged": summary.flagged,
+                }
+        except Exception as exc:
+            # Robustness (wave 2a follow-up): a crash mid-run — a payload-catalog
+            # signature error, a sender failure, a bug — MUST leave the attack in
+            # a terminal `failed` state, never stuck `queued`/`running`, so the
+            # API and operators can observe the failure instead of waiting out a
+            # timeout. The session above may be in a rolled-back transaction, so
+            # record the terminal state on a FRESH session. Best-effort: never
+            # mask the original error if the status write itself fails.
+            try:
+                async with session_factory() as err_session:
+                    await set_session_tenant(err_session, tenant_id)
+                    await repository.save_progress(
+                        err_session,
+                        tenant_id,
+                        attack_id,
+                        status=STATUS_FAILED,
+                        error_reason=f"task_error:{type(exc).__name__}",
+                    )
+                    await err_session.commit()
+            except Exception:
+                logger.exception(
+                    "wb.intruder.mark_failed_failed",
+                    extra={"event": "wb.intruder.mark_failed_failed", "attack_id": attack_id},
+                )
+            raise
     finally:
         await engine.dispose()
 
