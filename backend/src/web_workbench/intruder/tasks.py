@@ -197,6 +197,12 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
             # timeout. The session above may be in a rolled-back transaction, so
             # record the terminal state on a FRESH session. Best-effort: never
             # mask the original error if the status write itself fails.
+            #
+            # Keep the exception message (not just the class name) so operators
+            # see the specific cause: the precise error_reason a deeper layer
+            # (e.g. service.run_attack) may have flushed onto the MAIN session is
+            # rolled back with that session, so this handler is the only record.
+            reason = f"task_error:{type(exc).__name__}: {exc}".strip()[:256]
             try:
                 async with session_factory() as err_session:
                     await set_session_tenant(err_session, tenant_id)
@@ -205,7 +211,7 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
                         tenant_id,
                         attack_id,
                         status=STATUS_FAILED,
-                        error_reason=f"task_error:{type(exc).__name__}",
+                        error_reason=reason,
                     )
                     await err_session.commit()
             except Exception:
