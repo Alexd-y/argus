@@ -21,7 +21,10 @@ from __future__ import annotations
 import ast
 import pathlib
 
-_SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+import src.pipeline.contracts.finding_dto as _anchor
+
+# src/ root, derived from a known module's location (robust to this test's path).
+_SRC = pathlib.Path(_anchor.__file__).resolve().parents[2]
 
 # Files permitted to name ``evidence_tier`` as an assignment target. Kept short
 # on purpose (R-5.1.2). The arbiter and the derived-scale helpers are the only

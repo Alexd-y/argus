@@ -15,7 +15,8 @@ import pathlib
 from src.orchestration import evidence_tier as legacy
 from src.pipeline.contracts import finding_dto as canonical
 
-_SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+# src/ root, derived from a known module's location (robust to this test's path).
+_SRC = pathlib.Path(canonical.__file__).resolve().parents[2]
 
 
 def test_tier_is_the_same_object_from_both_import_paths() -> None:
