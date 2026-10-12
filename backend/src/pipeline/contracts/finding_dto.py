@@ -255,7 +255,11 @@ class EvidenceDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: UUID
-    finding_id: UUID
+    # Wave 2 (R-5.3.x): evidence is produced by a tool run *before* any finding
+    # is parsed — and some outputs never become a finding. The natural owner is
+    # ``tool_run_id`` (always known); ``finding_id`` is linked later, so it is
+    # optional here (NULL = raw tool-run evidence not yet tied to a finding).
+    finding_id: UUID | None = None
     tool_run_id: UUID
     kind: EvidenceKind
     s3_key: StrictStr = Field(min_length=1, max_length=1024)

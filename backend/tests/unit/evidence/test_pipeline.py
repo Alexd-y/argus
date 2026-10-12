@@ -268,3 +268,33 @@ async def test_audit_emit_failure_is_swallowed(
 
 def test_storage_uploader_protocol_runtime_check(uploader: InMemoryUploader) -> None:
     assert isinstance(uploader, StorageUploaderProtocol)
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 / stage 1 — evidence exists before a finding
+# ---------------------------------------------------------------------------
+
+
+async def test_persist_without_finding_id(
+    uploader: InMemoryUploader,
+    audit_logger: AuditLogger,
+    ids: dict[str, object],
+) -> None:
+    """Raw tool-run evidence can be persisted before any finding is parsed."""
+    pipeline = EvidencePipeline(
+        storage_uploader=uploader,
+        redactor=Redactor(),
+        audit_logger=audit_logger,
+    )
+    evidence = await pipeline.persist(
+        tool_run_id=ids["tool_run_id"],  # type: ignore[arg-type]
+        tenant_id=ids["tenant_id"],  # type: ignore[arg-type]
+        scan_id=ids["scan_id"],  # type: ignore[arg-type]
+        kind=EvidenceKind.RAW_OUTPUT,
+        raw_data=b"nmap scan report ...",
+        content_type="text/plain",
+    )
+    assert isinstance(evidence, EvidenceDTO)
+    assert evidence.finding_id is None
+    assert evidence.tool_run_id == ids["tool_run_id"]
+    assert len(evidence.sha256) == 64

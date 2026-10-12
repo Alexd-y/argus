@@ -74,8 +74,8 @@ class EvidencePipeline:
     async def persist(
         self,
         *,
-        finding_id: UUID,
         tool_run_id: UUID,
+        finding_id: UUID | None = None,
         tenant_id: UUID,
         scan_id: UUID,
         kind: EvidenceKind,

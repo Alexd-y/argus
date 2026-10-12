@@ -853,6 +853,11 @@ class ReportDataCollector:
             .where(
                 cast(EvidenceModel.scan_id, String) == sid,
                 cast(EvidenceModel.tenant_id, String) == tid,
+                # Wave 2 (R-5.3.1): raw tool-run evidence may have no finding yet
+                # (finding_id IS NULL). This finding-centric report view only
+                # carries finding-linked rows; unlinked raw evidence is surfaced
+                # via the Evidence Register / ledger (wave 4), not here.
+                EvidenceModel.finding_id.isnot(None),
             )
             .order_by(EvidenceModel.created_at.asc().nullsfirst(), EvidenceModel.id.asc())
         )
