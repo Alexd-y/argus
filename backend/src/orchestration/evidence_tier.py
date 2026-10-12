@@ -1,68 +1,28 @@
 """Evidence tier classification for pentest findings.
 
-Implements a 4-level evidence hierarchy inspired by Shannon's
-""No Exploit, No Report"" policy but more granular:
+The canonical ``EvidenceTier`` enum and its label/description tables live in
+:mod:`src.pipeline.contracts.finding_dto` (R-5.1.1) — the shared contracts
+package, where ``EvidenceDTO`` / ``FindingDTO`` already live. This module
+re-exports them so the existing consumers that import from
+``src.orchestration.evidence_tier`` keep working unchanged during the
+transition.
 
-- EXPLOITED (4): Working payload, proven impact.  The highest bar.
-- CONFIRMED (3): Vulnerability reproduced but full exploit not demonstrated.
-- SUSPECTED (2): Code analysis / taint analysis found a path; exploitation
-  did not succeed (WAF, timeout, context limit, etc.).
-- INFORMATIONAL (1): Recommendation or best-practice finding without
-  direct exploitation evidence.
-
-This replaces the binary ""exploited / not-exploited"" approach with a
-staircase that gives CISOs the full picture rather than silently
-discarding findings that couldn't be exploited within the scan window.
+``classify_finding`` is retained here as a *legacy* mapping from the model's
+self-assessed ``ConfidenceLevel`` to a tier. Deriving a tier from the model's
+own confidence is exactly what wave 1 moves away from; the sanctioned path is
+the artifact-driven arbiter in
+:mod:`src.pipeline.contracts.evidence_arbiter`. This function is kept only for
+callers that do not yet have collected artifacts available.
 """
 
 from __future__ import annotations
 
-from enum import IntEnum
-
-from src.pipeline.contracts.finding_dto import ConfidenceLevel
-
-
-class EvidenceTier(IntEnum):
-    """4-level evidence classification for pentest findings.
-
-    Higher values mean stronger evidence of exploitability.
-    Ordered so that ``tier_a > tier_b`` comparisons work naturally.
-    """
-
-    INFORMATIONAL = 1
-    SUSPECTED = 2
-    CONFIRMED = 3
-    EXPLOITED = 4
-
-
-EVIDENCE_TIER_LABELS: dict[EvidenceTier, str] = {
-    EvidenceTier.EXPLOITED: "Exploited",
-    EvidenceTier.CONFIRMED: "Confirmed",
-    EvidenceTier.SUSPECTED: "Suspected",
-    EvidenceTier.INFORMATIONAL: "Informational",
-}
-
-EVIDENCE_TIER_DESCRIPTIONS: dict[EvidenceTier, str] = {
-    EvidenceTier.EXPLOITED: (
-        "Working proof-of-concept exploit demonstrated. "
-        "Impact is proven with screenshot, pcap, or shell access."
-    ),
-    EvidenceTier.CONFIRMED: (
-        "Vulnerability is confirmed to exist (e.g., reflected input, "
-        "error leak, timing delta) but a full exploit chain was not "
-        "demonstrated."
-    ),
-    EvidenceTier.SUSPECTED: (
-        "Source code or taint analysis identified a vulnerable path, "
-        "but exploitation did not succeed (WAF, timeout, context limit, "
-        "or other environmental constraint)."
-    ),
-    EvidenceTier.INFORMATIONAL: (
-        "Recommendation or best-practice finding without direct "
-        "exploitation evidence (e.g., missing security headers, "
-        "verbose error messages, insecure configuration)."
-    ),
-}
+from src.pipeline.contracts.finding_dto import (
+    EVIDENCE_TIER_DESCRIPTIONS,
+    EVIDENCE_TIER_LABELS,
+    ConfidenceLevel,
+    EvidenceTier,
+)
 
 
 def classify_finding(

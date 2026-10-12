@@ -93,6 +93,38 @@ class EvidenceTier(IntEnum):
     EXPLOITED = 4
 
 
+#: Canonical home (R-5.1.1) of the human-readable tier label/description tables.
+#: ``src.orchestration.evidence_tier`` re-exports these for legacy consumers.
+EVIDENCE_TIER_LABELS: dict[EvidenceTier, str] = {
+    EvidenceTier.EXPLOITED: "Exploited",
+    EvidenceTier.CONFIRMED: "Confirmed",
+    EvidenceTier.SUSPECTED: "Suspected",
+    EvidenceTier.INFORMATIONAL: "Informational",
+}
+
+EVIDENCE_TIER_DESCRIPTIONS: dict[EvidenceTier, str] = {
+    EvidenceTier.EXPLOITED: (
+        "Working proof-of-concept exploit demonstrated. "
+        "Impact is proven with screenshot, pcap, or shell access."
+    ),
+    EvidenceTier.CONFIRMED: (
+        "Vulnerability is confirmed to exist (e.g., reflected input, "
+        "error leak, timing delta) but a full exploit chain was not "
+        "demonstrated."
+    ),
+    EvidenceTier.SUSPECTED: (
+        "Source code or taint analysis identified a vulnerable path, "
+        "but exploitation did not succeed (WAF, timeout, context limit, "
+        "or other environmental constraint)."
+    ),
+    EvidenceTier.INFORMATIONAL: (
+        "Recommendation or best-practice finding without direct "
+        "exploitation evidence (e.g., missing security headers, "
+        "verbose error messages, insecure configuration)."
+    ),
+}
+
+
 class EvidenceKind(StrEnum):
     """Type of evidence attached to a finding (Backlog/dev1_md §10)."""
 
