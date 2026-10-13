@@ -259,7 +259,7 @@ RUN echo "argus ALL=(ALL) NOPASSWD: /usr/local/bin/argus-tool-check" > /etc/sudo
 # trade-off (cap_drop ALL keeps the bounding set empty except NET_RAW).
 RUN set -eux; \
     apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcap2-bin; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcap2-bin tini; \
     rm -rf /var/lib/apt/lists/*; \
     capit() { \
         f="$1"; [ -f "$f" ] || return 0; \
@@ -277,3 +277,4 @@ WORKDIR /workspace
 USER argus
 
 HEALTHCHECK CMD id argus || exit 1
+ENTRYPOINT ["tini", "-g", "--"]
