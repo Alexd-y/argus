@@ -48,6 +48,9 @@ class EvidenceRequirement(StrEnum):
     NEGATIVE_CONTROL = "negative_control"
     #: Reserved — observation reproduced ≥2 times (wave 3, R-5.5.x).
     REPEATABILITY = "repeatability"
+    #: The per-class confirmation bar (poc_validation §15.2) was met — e.g. XSS
+    #: executed in a browser, not merely reflected.
+    CLASS_CONFIRMATION = "class_confirmation"
 
 
 class DowngradeReason(StrEnum):
@@ -67,6 +70,12 @@ class DowngradeReason(StrEnum):
     REPEATABILITY_MISSING = "repeatability_not_confirmed"
     REPEATABILITY_DIVERGED = "repeatability_diverged"
     INTERFERENCE_OBSERVED = "interference_observed"
+    #: Per-class confirmation bar not supplied by the caller (not classifiable,
+    #: or no class rule) — records honestly that the class bar was not checked.
+    CLASS_NOT_CHECKED = "class_bar_not_checked"
+    #: The finding's PoC does not meet its per-class confirmation bar
+    #: (poc_validation §15.2) — e.g. a reflected string that never executed.
+    CLASS_BAR_NOT_MET = "class_bar_not_met"
 
 
 @dataclass(frozen=True)
@@ -131,10 +140,12 @@ def adjudicate(
     *,
     artifacts: Sequence[EvidenceDTO],
     vuln_class: str | None = None,  # noqa: ARG001 — reserved for signed per-class policy
+    present_kinds: frozenset[EvidenceKind] | None = None,
     negative_control_required: bool = False,
     negative_control_present: bool = False,
     repeatability: RepeatabilityOutcome | None = None,
     interference: bool = False,
+    class_confirmed: bool | None = None,
 ) -> ArbiterVerdict:
     """Return the :class:`EvidenceTier` justified by ``artifacts`` and the
     wave-3 gates.
@@ -145,6 +156,16 @@ def adjudicate(
     * ``CONFIRMED``      — a raw exchange (request+response) is saved.
     * ``SUSPECTED``      — some artifact exists, but no raw exchange.
     * ``INFORMATIONAL``  — no artifacts at all.
+
+    ``present_kinds`` is for callers whose canonical :class:`EvidenceDTO` rows
+    are materialised out-of-band (e.g. a finding records the *content-addressed
+    object keys* of the HAR/screenshot it stored, so the kinds are known but the
+    DTO is persisted post-commit). Its members are OR-ed into the kinds derived
+    from ``artifacts``. It is **not** a model-judgement channel: a kind may only
+    be listed because an artifact of that kind was genuinely stored (the
+    producer wrote its key), and the object's integrity (sha256) is enforced at
+    the materialisation layer — there is no way to lift the tier by *asserting*
+    an artifact exists.
 
     Wave-3 gates then only ever LOWER the tier (R-5.4/5.5):
 
@@ -157,19 +178,31 @@ def adjudicate(
     * **Interference** — a tripped WAF / rate-limit / target-unreachable /
       fingerprint-change signal caps the tier at ``SUSPECTED`` (limited
       observability).
+    * **Class confirmation** — when ``class_confirmed`` is supplied and False,
+      the finding's PoC does not meet its per-class bar (poc_validation §15.2 —
+      e.g. a reflected string that never executed), so the tier is capped at
+      ``SUSPECTED``. ``True`` records the bar as satisfied (never raises);
+      ``None`` records "not checked".
 
     A gate whose input the caller does not supply records a "not checked" reason
     (and does not cap), so an unwired path keeps the wave-1 behaviour and stays
     honest. No parameter carries a language-model judgement.
     """
-    if not artifacts:
+    kinds = {artifact.kind for artifact in artifacts}
+    if present_kinds:
+        kinds |= set(present_kinds)
+    if not kinds:
+        pending: list[DowngradeReason] = [DowngradeReason.NO_ARTIFACTS, *_WAVE3_PENDING]
+        if class_confirmed is None:
+            pending.append(DowngradeReason.CLASS_NOT_CHECKED)
+        elif class_confirmed is False:
+            pending.append(DowngradeReason.CLASS_BAR_NOT_MET)
         return ArbiterVerdict(
             tier=EvidenceTier.INFORMATIONAL,
-            reasons=(DowngradeReason.NO_ARTIFACTS, *_WAVE3_PENDING),
+            reasons=tuple(pending),
             satisfied=frozenset(),
         )
 
-    kinds = {artifact.kind for artifact in artifacts}
     has_raw = bool(kinds & _RAW_EXCHANGE_KINDS)
     has_impact = bool(kinds & _IMPACT_PROOF_KINDS)
 
@@ -218,6 +251,15 @@ def adjudicate(
     if interference:
         tier = _cap(tier, _ceil)
         reasons.append(DowngradeReason.INTERFERENCE_OBSERVED)
+
+    # --- Per-class confirmation bar (poc_validation §15.2) ---
+    if class_confirmed is None:
+        reasons.append(DowngradeReason.CLASS_NOT_CHECKED)
+    elif class_confirmed:
+        satisfied.add(EvidenceRequirement.CLASS_CONFIRMATION)
+    else:
+        tier = _cap(tier, _ceil)
+        reasons.append(DowngradeReason.CLASS_BAR_NOT_MET)
 
     return ArbiterVerdict(
         tier=tier,

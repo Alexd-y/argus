@@ -76,6 +76,7 @@ from src.orchestration.exploit_verification_microvm import (
 )
 from src.orchestration.exploit_verify import verify_exploit_poc_async
 from src.orchestration.exploitation_queue import ExploitationQueue, ExploitHypothesis
+from src.orchestration.finding_adjudication import adjudicate_finding_tier
 from src.orchestration.handlers import (
     run_exploit_attempt,
     run_exploit_verify,
@@ -909,8 +910,48 @@ async def _persist_report_and_findings(
         rep_steps = clip_optional_text(f.get("reproducible_steps"), 16_000)
         app_notes = clip_optional_text(f.get("applicability_notes"), 8_000)
         f["finding_id"] = finding_pk
-        _et_raw = f.get("evidence_tier")
-        _et = int(_et_raw) if isinstance(_et_raw, (int, float)) and 1 <= int(_et_raw) <= 4 else None
+        # R-5.1.2 (wave 3, etap 4b): the artifact-driven arbiter is the source
+        # of truth for the evidence tier. It caps any tier the finding's
+        # collected artifacts (HAR/PCAP/screenshot + negative control + class
+        # bar) do not justify — cap-only, and only for findings in its domain
+        # (heuristic findings with no artifacts/class keep their tier). In
+        # shadow mode (``evidence_arbiter_enforced`` off) the verdict is still
+        # computed and logged, but the model tier is persisted unchanged.
+        try:
+            _adj = adjudicate_finding_tier(f)
+            _et = _adj.tier if settings.evidence_arbiter_enforced else _adj.model_tier
+            if _adj.applicable and _adj.model_tier != _adj.arbiter_tier:
+                logger.info(
+                    "evidence_arbiter_verdict",
+                    extra={
+                        "event": "evidence_arbiter_verdict",
+                        "scan_id": scan_id,
+                        "finding_id": finding_pk,
+                        "model_tier": _adj.model_tier,
+                        "arbiter_tier": _adj.arbiter_tier,
+                        "applied_tier": _et,
+                        "enforced": settings.evidence_arbiter_enforced,
+                        "reasons": list(_adj.reasons),
+                    },
+                )
+            if _adj.reasons:
+                f["evidence_tier_reasons"] = list(_adj.reasons)
+        except Exception:
+            # Tier adjudication must never break finding persistence: fall back
+            # to the finding's existing tier (honest wave-1 behaviour).
+            logger.warning(
+                "evidence_arbiter_failed",
+                extra={"scan_id": scan_id, "finding_id": finding_pk},
+                exc_info=True,
+            )
+            _et_raw = f.get("evidence_tier")
+            _et = (
+                int(_et_raw)
+                if isinstance(_et_raw, (int, float))
+                and not isinstance(_et_raw, bool)
+                and 1 <= int(_et_raw) <= 4
+                else None
+            )
         # R-5.1.4: the ``validation`` (evidence-strength) axis is a pure
         # derivation of the canonical tier (the arbiter's verdict), never an
         # independent judgement. NULL only when no tier is known yet.
@@ -3049,15 +3090,19 @@ async def run_scan_state_machine(
                 if phase == ScanPhase.VULN_ANALYSIS and ctx.vuln_out:
                     for _f in (ctx.vuln_out.findings or [])[:20]:
                         fid = str(_f.get("finding_id", _f.get("id", "")))
-                        _raw_tier = _f.get("evidence_tier")
-                        # 0 is outside the valid 1..4 range (the old default silently
-                        # produced it). Use the tier the finding already carries when it
-                        # is valid, else fall back to the honest INFORMATIONAL floor.
-                        # TODO(wave-2) [R-5.1.2]: adjudicate from collected artifacts here.
+                        # R-5.1.2 (wave 3, etap 4b): the audit chain records the
+                        # same arbiter-adjudicated tier that is persisted on the
+                        # Finding row (cap-only; min is idempotent, so a finding
+                        # adjudicated again at persistence yields the same tier).
+                        # In shadow mode the model tier is recorded unchanged.
+                        _adj = adjudicate_finding_tier(_f)
+                        _applied = (
+                            _adj.tier if settings.evidence_arbiter_enforced else _adj.model_tier
+                        )
+                        # 0/None is outside the valid 1..4 range — fall back to
+                        # the honest INFORMATIONAL floor.
                         _tier = (
-                            int(_raw_tier)
-                            if isinstance(_raw_tier, (int, float)) and 1 <= int(_raw_tier) <= 4
-                            else int(EvidenceTier.INFORMATIONAL)
+                            _applied if _applied is not None else int(EvidenceTier.INFORMATIONAL)
                         )
                         evidence_chain.add_finding_link(
                             finding_id=fid,

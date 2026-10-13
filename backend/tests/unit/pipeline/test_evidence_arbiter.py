@@ -132,10 +132,12 @@ def test_adjudicate_signature_takes_no_model_judgement() -> None:
     assert params == {
         "artifacts",
         "vuln_class",
+        "present_kinds",
         "negative_control_required",
         "negative_control_present",
         "repeatability",
         "interference",
+        "class_confirmed",
     }
     for banned in ("confidence", "opinion", "assessment", "status", "verdict", "level", "tier"):
         assert banned not in params
@@ -255,5 +257,60 @@ def test_gates_never_raise_tier_on_empty_artifacts() -> None:
         negative_control_present=True,
         repeatability=RepeatabilityOutcome(attempts=5, matched=5),
         interference=False,
+        class_confirmed=True,
     )
+    assert v.tier is EvidenceTier.INFORMATIONAL
+
+
+# --- present_kinds: artifacts materialised out-of-band -----------------------
+
+
+def test_present_kinds_alone_reaches_confirmed() -> None:
+    # A caller with no EvidenceDTOs in hand but a genuinely-stored HAR (recorded
+    # by its content-addressed key) reaches CONFIRMED via present_kinds.
+    v = adjudicate(artifacts=[], present_kinds=frozenset({EvidenceKind.HAR}))
+    assert v.tier is EvidenceTier.CONFIRMED
+    assert EvidenceRequirement.RAW_EXCHANGE in v.satisfied
+
+
+def test_present_kinds_merges_with_artifacts_for_exploited() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        present_kinds=frozenset({EvidenceKind.SCREENSHOT}),
+    )
+    assert v.tier is EvidenceTier.EXPLOITED
+
+
+def test_empty_present_kinds_is_informational() -> None:
+    v = adjudicate(artifacts=[], present_kinds=frozenset())
+    assert v.tier is EvidenceTier.INFORMATIONAL
+    assert DowngradeReason.NO_ARTIFACTS in v.reasons
+
+
+# --- class_confirmed gate (poc_validation §15.2) -----------------------------
+
+
+def test_class_bar_not_met_caps_at_suspected() -> None:
+    # A HAR is CONFIRMED in wave 1, but a finding whose per-class bar is not met
+    # (e.g. a reflected XSS string that never executed) cannot exceed SUSPECTED.
+    v = adjudicate(artifacts=[_ev(EvidenceKind.HAR)], class_confirmed=False)
+    assert v.tier is EvidenceTier.SUSPECTED
+    assert DowngradeReason.CLASS_BAR_NOT_MET in v.reasons
+
+
+def test_class_confirmed_keeps_tier_and_marks_satisfied() -> None:
+    v = adjudicate(artifacts=[_ev(EvidenceKind.HAR)], class_confirmed=True)
+    assert v.tier is EvidenceTier.CONFIRMED
+    assert EvidenceRequirement.CLASS_CONFIRMATION in v.satisfied
+    assert DowngradeReason.CLASS_BAR_NOT_MET not in v.reasons
+
+
+def test_class_not_supplied_records_not_checked() -> None:
+    v = adjudicate(artifacts=[_ev(EvidenceKind.HAR)])
+    assert DowngradeReason.CLASS_NOT_CHECKED in v.reasons
+
+
+def test_class_bar_cannot_raise_tier_on_empty_artifacts() -> None:
+    # class_confirmed=True never lifts a no-artifact finding above INFORMATIONAL.
+    v = adjudicate(artifacts=[], class_confirmed=True)
     assert v.tier is EvidenceTier.INFORMATIONAL

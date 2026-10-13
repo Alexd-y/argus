@@ -1233,6 +1233,13 @@ class Settings(BaseSettings):
     # fingerprint-only hits) and collapse duplicates before reporting. Env:
     # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
     finding_evidence_gate_enabled: bool = True
+    # Wave 3 (R-5.1.2) — let the artifact-driven evidence arbiter adjudicate
+    # each finding's EvidenceTier at persistence, capping any tier the collected
+    # artifacts do not justify (cap-only; in-domain findings only). When False
+    # the arbiter still runs in *shadow* (verdict computed and logged) but the
+    # model-assigned tier is persisted unchanged — use shadow to measure the
+    # before/after distribution before enforcing. Env: EVIDENCE_ARBITER_ENFORCED.
+    evidence_arbiter_enforced: bool = True
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True
