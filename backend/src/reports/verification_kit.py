@@ -24,11 +24,43 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import zipfile
 from typing import Any
 
 from src.reports.report_document import ReportDocumentV1, ReportFinding
 from src.reports.report_text_sanitizer import sanitize_ai_report_text
+
+
+class VerificationKitSecretError(RuntimeError):
+    """Raised when the kit would ship a secret — blocks release (R-5.7.3)."""
+
+
+# High-confidence credential formats scanned as a second layer on top of the
+# generic redactor (which catches patterned secrets). A hit blocks the release.
+_CREDENTIAL_PATTERNS: tuple[re.Pattern[bytes], ...] = (
+    re.compile(rb"AKIA[0-9A-Z]{16}"),  # AWS access key id
+    re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"),
+    re.compile(rb"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),  # JWT
+    re.compile(rb"xox[baprs]-[0-9A-Za-z-]{10,}"),  # Slack token
+    re.compile(rb"ghp_[0-9A-Za-z]{30,}"),  # GitHub PAT
+    re.compile(rb"(?i)aws_secret_access_key\s*[=:]\s*[0-9A-Za-z/+]{30,}"),
+)
+
+
+def _assert_no_secrets(files: dict[str, bytes]) -> None:
+    """Fail-closed secret scan before release (R-5.7.3): the generic redactor
+    PLUS high-confidence credential formats. A hit raises and blocks the kit."""
+    from src.evidence.redaction import Redactor, default_specs
+
+    redactor = Redactor(default_specs())
+    for name, content in files.items():
+        if redactor.redact(content).redactions_applied > 0:
+            raise VerificationKitSecretError(f"redactor flagged a secret in {name}")
+        for pattern in _CREDENTIAL_PATTERNS:
+            if pattern.search(content):
+                raise VerificationKitSecretError(f"credential-format secret in {name}")
+
 
 _CHECKS_PY = '''#!/usr/bin/env python
 """Non-exploiting verification runner for the ARGUS verification kit.
@@ -164,6 +196,10 @@ def build_verification_kit(doc: ReportDocumentV1) -> tuple[bytes, dict[str, Any]
         )
         files[f"evidence/{ref.evidence_id}.json"] = payload.encode("utf-8")
 
+    # R-5.7.3: a secret in the kit blocks the release (fail-closed), scanned on
+    # the dynamic finding/evidence content before anything is packaged.
+    _assert_no_secrets(files)
+
     files["checks.py"] = _CHECKS_PY.encode("utf-8")
     files["README.md"] = _README_MD.encode("utf-8")
 
@@ -192,4 +228,4 @@ def build_verification_kit(doc: ReportDocumentV1) -> tuple[bytes, dict[str, Any]
     return buf.getvalue(), manifest
 
 
-__all__ = ["build_verification_kit"]
+__all__ = ["VerificationKitSecretError", "build_verification_kit"]
