@@ -260,7 +260,9 @@ class EvidenceDTO(BaseModel):
     # ``tool_run_id`` (always known); ``finding_id`` is linked later, so it is
     # optional here (NULL = raw tool-run evidence not yet tied to a finding).
     finding_id: UUID | None = None
-    tool_run_id: UUID
+    # Optional too: browser/HTTP evidence (HAR, screenshot, video) is not a
+    # sandbox tool run. NULL = evidence not sourced from a tool run.
+    tool_run_id: UUID | None = None
     kind: EvidenceKind
     s3_key: StrictStr = Field(min_length=1, max_length=1024)
     sha256: StrictStr = Field(min_length=64, max_length=64)

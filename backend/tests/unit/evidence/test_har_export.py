@@ -143,3 +143,43 @@ def test_export_caps_entry_count_with_marker() -> None:
     assert len(doc["log"]["entries"]) == 2
     assert "truncated" in doc["log"]["creator"]["comment"]
     assert "2 of 5" in doc["log"]["creator"]["comment"]
+
+
+def test_http_evidence_to_har_produces_importable_har() -> None:
+    from src.evidence.har_export import http_evidence_to_har
+
+    class _Ev:
+        request_method = "POST"
+        request_url = "https://t.example/login?x=1"
+        request_headers = {"Authorization": "Bearer SECRET-tok", "Accept": "*/*"}
+        request_body = "user=admin&password=hunter2"
+        response_status = 401
+        response_headers = {"Content-Type": "text/plain"}
+        response_body_snippet = "denied"
+        timestamp = "2026-01-01T00:00:00.000Z"
+
+    raw = http_evidence_to_har([_Ev()], redact=True)
+    assert isinstance(raw, bytes)
+    # Redacted: the planted bearer token and password are gone.
+    assert b"SECRET-tok" not in raw
+    assert b"hunter2" not in raw
+    # Still a valid, importable HAR carrying the exchange.
+    exchanges = import_har(raw.decode("utf-8"))
+    assert len(exchanges) == 1 and exchanges[0].url == "https://t.example/login?x=1"
+
+
+def test_http_evidence_to_har_skips_urlless() -> None:
+    from src.evidence.har_export import http_evidence_to_har
+
+    class _NoUrl:
+        request_method = "GET"
+        request_url = ""
+        request_headers = {}
+        request_body = ""
+        response_status = None
+        response_headers = {}
+        response_body_snippet = ""
+        timestamp = ""
+
+    raw = http_evidence_to_har([_NoUrl()], redact=True)
+    assert len(import_har(raw.decode("utf-8"))) == 0

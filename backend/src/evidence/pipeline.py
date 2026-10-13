@@ -74,7 +74,7 @@ class EvidencePipeline:
     async def persist(
         self,
         *,
-        tool_run_id: UUID,
+        tool_run_id: UUID | None = None,
         finding_id: UUID | None = None,
         tenant_id: UUID,
         scan_id: UUID,
@@ -83,7 +83,12 @@ class EvidencePipeline:
         content_type: str = _DEFAULT_CONTENT_TYPE,
         redact: bool = True,
     ) -> EvidenceDTO:
-        """Persist a single evidence blob and return its :class:`EvidenceDTO`."""
+        """Persist a single evidence blob and return its :class:`EvidenceDTO`.
+
+        ``tool_run_id`` is optional: browser/HTTP evidence (HAR, screenshot,
+        video) is not a sandbox tool run, and the ``evidence.tool_run_id`` column
+        is nullable. The S3 key is content-addressed (``{kind}-{sha256}.bin``) so
+        it never depends on ``tool_run_id``."""
         redacted, sha256_hex, filename = self._prepare(kind, raw_data, redact=redact)
         try:
             object_key = await asyncio.to_thread(
@@ -112,7 +117,7 @@ class EvidencePipeline:
     def persist_sync(
         self,
         *,
-        tool_run_id: UUID,
+        tool_run_id: UUID | None = None,
         finding_id: UUID | None = None,
         tenant_id: UUID,
         scan_id: UUID,
@@ -171,7 +176,7 @@ class EvidencePipeline:
         redacted: RedactedContent,
         sha256_hex: str,
         kind: EvidenceKind,
-        tool_run_id: UUID,
+        tool_run_id: UUID | None = None,
         finding_id: UUID | None,
         tenant_id: UUID,
         scan_id: UUID,

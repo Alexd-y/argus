@@ -243,6 +243,20 @@ def exchange_from_http_evidence(ev: object) -> ImportedExchange:
     )
 
 
+def http_evidence_to_har(http_evidences: Sequence[object], *, redact: bool = True) -> bytes:
+    """Serialise captured ``HttpEvidence`` records into a redacted HAR document
+    (UTF-8 bytes), ready to hand to the evidence pipeline with ``kind=HAR``.
+
+    This is the non-browser HAR producer (wave 2a, R-5.2.3): most requests to a
+    target are made by tools/scanners, not a browser, so their captured
+    request/response pairs become the raw-exchange artifact the arbiter needs to
+    reach CONFIRMED. Evidences without a URL are skipped.
+    """
+    exchanges = [exchange_from_http_evidence(ev) for ev in http_evidences]
+    exchanges = [ex for ex in exchanges if ex.url]
+    return export_har(exchanges, redact=redact).encode("utf-8")
+
+
 def _as_pairs(headers: object) -> tuple[tuple[str, str], ...]:
     if isinstance(headers, Mapping):
         return tuple((str(k), str(v)) for k, v in headers.items())
@@ -256,4 +270,4 @@ def _origin_form(url: str) -> tuple[str, str | None]:
     return target, (split.netloc or None)
 
 
-__all__ = ["exchange_from_http_evidence", "export_har"]
+__all__ = ["exchange_from_http_evidence", "export_har", "http_evidence_to_har"]
