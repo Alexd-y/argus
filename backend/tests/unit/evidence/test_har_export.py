@@ -168,6 +168,31 @@ def test_http_evidence_to_har_produces_importable_har() -> None:
     assert len(exchanges) == 1 and exchanges[0].url == "https://t.example/login?x=1"
 
 
+def test_export_redacts_query_string_secrets() -> None:
+    from src.evidence.har_export import http_evidence_to_har
+
+    class _Ev:
+        request_method = "GET"
+        request_url = "https://t.example/cb?code=SECRETCODE&token=SECRETTOK&q=visible"
+        request_headers = {"Accept": "*/*"}
+        request_body = ""
+        response_status = 200
+        response_headers = {"Content-Type": "text/html"}
+        response_body_snippet = "ok"
+        timestamp = "2026-01-01T00:00:00.000Z"
+
+    raw = http_evidence_to_har([_Ev()], redact=True)
+    text = raw.decode("utf-8")
+    # Secret-bearing query values scrubbed from BOTH url and queryString.
+    assert "SECRETCODE" not in text
+    assert "SECRETTOK" not in text
+    # Non-sensitive query value + param names survive.
+    assert "visible" in text
+    doc = json.loads(text)
+    url = doc["log"]["entries"][0]["request"]["url"]
+    assert "code=[REDACTED]" in url and "token=[REDACTED]" in url and "q=visible" in url
+
+
 def test_http_evidence_to_har_skips_urlless() -> None:
     from src.evidence.har_export import http_evidence_to_har
 

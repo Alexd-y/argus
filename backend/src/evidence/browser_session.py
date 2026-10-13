@@ -173,6 +173,22 @@ def browser_context_sync(
             pw.stop()
 
 
+def _redacted_har_bytes(raw: bytes) -> tuple[bytes, bool]:
+    """Structurally redact a recorded HAR by round-tripping it through the
+    redacting exporter. Returns ``(har_bytes, pipeline_redact)``: on success the
+    bytes are already redacted (``pipeline_redact=False``); if the HAR cannot be
+    parsed, the raw bytes are returned with ``pipeline_redact=True`` so the
+    generic byte redactor still runs as a fallback layer."""
+    try:
+        from src.evidence.har_export import export_har
+        from src.web_workbench.imports.har import import_har
+
+        exchanges = import_har(raw.decode("utf-8", errors="replace"))
+        return export_har(exchanges, redact=True).encode("utf-8"), False
+    except Exception:
+        return raw, True
+
+
 async def persist_browser_artifacts(
     artifacts: BrowserArtifacts,
     *,
@@ -202,13 +218,20 @@ async def persist_browser_artifacts(
     har = artifacts.har_path
     if har is not None and har.is_file() and har.stat().st_size > 0:
         try:
+            # Playwright records a RAW HAR (full headers, cookies, query); re-
+            # serialise it through the redacting exporter so secrets in those
+            # STRUCTURED fields are scrubbed (the generic byte redactor alone
+            # cannot reliably see them). Fall back to the raw bytes under the
+            # generic redactor if the HAR cannot be parsed.
+            har_bytes, har_redact = _redacted_har_bytes(har.read_bytes())
             await pipeline.persist(  # type: ignore[attr-defined]
                 tenant_id=tenant_id,
                 scan_id=scan_id,
                 finding_id=finding_id,
                 kind=EvidenceKind.HAR,
-                raw_data=har.read_bytes(),
+                raw_data=har_bytes,
                 content_type="application/json",
+                redact=har_redact,
             )
             counts["har"] += 1
         except Exception as exc:
@@ -228,6 +251,9 @@ async def persist_browser_artifacts(
                     kind=EvidenceKind.VIDEO,
                     raw_data=video.read_bytes(),
                     content_type="video/webm",
+                    # Binary media: the text-oriented redactor would only waste
+                    # cycles / corrupt bytes, so skip it.
+                    redact=False,
                 )
                 counts["video"] += 1
             except Exception as exc:

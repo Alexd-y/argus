@@ -145,14 +145,24 @@ class CaptureResult:
 
 
 def _terminate(proc: object) -> None:
-    """Best-effort graceful stop so tcpdump flushes a valid pcap, then hard kill."""
+    """Idempotent best-effort stop: graceful terminate (so tcpdump flushes a valid
+    pcap), then hard kill — ALWAYS reaping with a final wait() so no zombie is
+    left behind. Safe to call more than once (the watchdog and the finally block
+    both call it): an already-exited process is a no-op."""
+    with contextlib.suppress(Exception):
+        if proc.poll() is not None:  # type: ignore[attr-defined]  # already exited
+            return
     with contextlib.suppress(Exception):
         proc.terminate()  # type: ignore[attr-defined]
-        try:
-            proc.wait(timeout=5)  # type: ignore[attr-defined]
-        except Exception:
-            with contextlib.suppress(Exception):
-                proc.kill()  # type: ignore[attr-defined]
+    try:
+        proc.wait(timeout=5)  # type: ignore[attr-defined]
+        return
+    except Exception:
+        pass
+    with contextlib.suppress(Exception):
+        proc.kill()  # type: ignore[attr-defined]
+    with contextlib.suppress(Exception):
+        proc.wait(timeout=5)  # type: ignore[attr-defined]  # reap the SIGKILL'd child
 
 
 def run_tcpdump_capture(
@@ -183,10 +193,18 @@ def run_tcpdump_capture(
     except subprocess.TimeoutExpired:
         reason = "wall_clock"
         _terminate(proc)
+    else:
+        # tcpdump exited on its own BEFORE the wall-clock. With ``-W 1 -C`` that
+        # normally means the size cap tripped (exit 0); a NON-zero exit means it
+        # failed to start (bad interface, missing CAP_NET_RAW, rejected BPF,
+        # unwritable path) — surface that as "error" rather than a clean capture.
+        rc = getattr(proc, "returncode", None)
+        if rc is not None and rc != 0:
+            reason = "error"
     duration = perf_counter() - start
 
     size = output_path.stat().st_size if output_path.exists() else 0
-    if spec.max_bytes and size >= spec.max_bytes:
+    if reason not in ("error", "wall_clock") and spec.max_bytes and size >= spec.max_bytes:
         reason = "size_cap"
     return CaptureResult(
         output_path=output_path,

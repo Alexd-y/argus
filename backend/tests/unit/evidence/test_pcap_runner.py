@@ -22,23 +22,30 @@ from src.evidence.pcap_capture import (
 class _FakeProc:
     """Minimal Popen stand-in recording terminate/kill and timing out on wait."""
 
-    def __init__(self, *, time_out: bool) -> None:
+    def __init__(self, *, time_out: bool, returncode: int = 0) -> None:
         self._time_out = time_out
+        self.returncode = returncode
         self.terminated = False
         self.killed = False
         self.waits = 0
+        self._exited = False
 
     def wait(self, timeout: float | None = None) -> int:
         self.waits += 1
         if self._time_out and self.waits == 1:
             raise subprocess.TimeoutExpired(cmd="tcpdump", timeout=timeout or 0)
-        return 0
+        self._exited = True
+        return self.returncode
+
+    def poll(self) -> int | None:
+        return self.returncode if self._exited else None
 
     def terminate(self) -> None:
         self.terminated = True
 
     def kill(self) -> None:  # pragma: no cover - only on a second timeout
         self.killed = True
+        self._exited = True
 
 
 def _spec() -> CaptureSpec:
@@ -64,6 +71,17 @@ def test_run_capture_completes_within_budget(tmp_path: Path) -> None:
         )
     assert result.stopped_reason == "completed"
     assert proc.terminated is False
+
+
+def test_run_capture_reports_error_on_failed_start(tmp_path: Path) -> None:
+    # tcpdump exits fast with a non-zero code (bad interface / no CAP_NET_RAW):
+    # this is NOT a clean "completed" capture — it must be surfaced as an error.
+    proc = _FakeProc(time_out=False, returncode=1)
+    with patch("src.evidence.pcap_capture.tcpdump_available", return_value=True):
+        result = run_tcpdump_capture(
+            _spec(), output_path=tmp_path / "c.pcap", runner=lambda *a, **k: proc
+        )
+    assert result.stopped_reason == "error"
 
 
 def test_run_capture_unavailable_raises(tmp_path: Path) -> None:

@@ -18,7 +18,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Mapping, Sequence
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from src.web_workbench.imports.har import ImportedExchange
 from src.web_workbench.proxy.transport import NormalizedRequest, NormalizedResponse
@@ -41,6 +41,50 @@ _SENSITIVE_HEADERS: frozenset[str] = frozenset(
     }
 )
 
+#: Query-parameter names (lowercased, substring match) whose VALUES are secrets
+#: and must be scrubbed from the URL and the queryString — credentials routinely
+#: ride in the query, and HAR stores the full URL verbatim otherwise.
+_SENSITIVE_QUERY_KEYS: tuple[str, ...] = (
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "api_key",
+    "apikey",
+    "access_key",
+    "auth",
+    "sig",
+    "signature",
+    "session",
+    "key",
+    "code",
+    "otp",
+)
+
+
+def _is_sensitive_query_key(name: str) -> bool:
+    low = name.lower()
+    return any(k in low for k in _SENSITIVE_QUERY_KEYS)
+
+
+def _redact_url(url: str, *, redact: bool) -> str:
+    """Scrub secret-bearing query-parameter VALUES from a URL, preserving the
+    path and the parameter names (so the shape stays legible)."""
+    if not redact:
+        return url
+    split = urlsplit(url)
+    if not split.query:
+        return url
+    parts = []
+    for pair in split.query.split("&"):
+        name, sep, _value = pair.partition("=")
+        if sep and _is_sensitive_query_key(name):
+            parts.append(f"{name}={_REDACTED}")
+        else:
+            parts.append(pair)
+    return urlunsplit((split.scheme, split.netloc, split.path, "&".join(parts), split.fragment))
+
+
 #: Default placeholder so every entry has a spec-required startedDateTime.
 _DEFAULT_STARTED_AT = "1970-01-01T00:00:00.000Z"
 
@@ -61,13 +105,15 @@ def _cap_body(body: bytes, max_body_bytes: int) -> tuple[bytes, int, bool]:
     return body, original, False
 
 
-def _query_string(url: str) -> list[dict[str, str]]:
+def _query_string(url: str, *, redact: bool) -> list[dict[str, str]]:
     query = urlsplit(url).query
     out: list[dict[str, str]] = []
     if not query:
         return out
     for pair in query.split("&"):
         name, _, value = pair.partition("=")
+        if redact and _is_sensitive_query_key(name):
+            value = _REDACTED
         out.append({"name": name, "value": value})
     return out
 
@@ -94,10 +140,10 @@ def _request_entry(
     body = exchange.request_body
     entry: dict[str, object] = {
         "method": req.method,
-        "url": exchange.url,
+        "url": _redact_url(exchange.url, redact=redact),
         "httpVersion": req.http_version or "HTTP/1.1",
         "headers": _har_headers(req.headers, redact=redact),
-        "queryString": _query_string(exchange.url),
+        "queryString": _query_string(exchange.url, redact=redact),
         "cookies": [],
         "headersSize": -1,
         "bodySize": len(body),
@@ -231,7 +277,9 @@ def exchange_from_http_evidence(ev: object) -> ImportedExchange:
             headers=_as_pairs(getattr(ev, "response_headers", {})),
         )
     req_body = str(getattr(ev, "request_body", "") or "").encode("utf-8", errors="replace")
-    resp_body = str(getattr(ev, "response_body_snippet", "") or "").encode("utf-8", errors="replace")
+    resp_body = str(getattr(ev, "response_body_snippet", "") or "").encode(
+        "utf-8", errors="replace"
+    )
     return ImportedExchange(
         url=url,
         request=request,
