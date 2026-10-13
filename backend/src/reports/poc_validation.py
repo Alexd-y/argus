@@ -5,6 +5,31 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+# Canonical negative-control keys are ``negative_control_url`` /
+# ``negative_control_result`` (poc_schema.PROOF_OF_CONCEPT_KEYS — what the
+# producers actually write). ``negative_control`` and ``baseline`` are accepted
+# as DEPRECATED synonyms for a transition period (R-5.4, wave 3 etap 1). Reading
+# only the old names is exactly the drift that kept IDOR/BOLA/AUTH_BYPASS
+# unconfirmable regardless of what was collected.
+_NEGATIVE_CONTROL_KEYS: tuple[str, ...] = (
+    "negative_control_result",
+    "negative_control_url",
+    "negative_control",  # deprecated synonym
+    "baseline",  # deprecated synonym
+)
+
+
+def _negative_control_value(root: dict[str, Any]) -> str | None:
+    """First non-empty negative-control value across the canonical keys and the
+    deprecated synonyms, or None."""
+    if not isinstance(root, dict):
+        return None
+    for key in _NEGATIVE_CONTROL_KEYS:
+        value = root.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
 
 class XssValidationResult(BaseModel):
     reflection_context: str | None = None
@@ -77,7 +102,7 @@ def validate_xss_poc(proof_of_concept: dict) -> XssValidationResult:
         or poc_obj.get("verified_via_browser"),
         browser_alert_text=xss_obj.get("browser_alert_text") or poc_obj.get("browser_alert_text"),
         affected_parameter=xss_obj.get("affected_parameter") or poc_obj.get("affected_parameter"),
-        negative_control=xss_obj.get("negative_control") or poc_obj.get("negative_control"),
+        negative_control=_negative_control_value(xss_obj) or _negative_control_value(poc_obj),
     )
 
 
@@ -91,7 +116,7 @@ def validate_csrf(proof_of_concept: dict) -> CsrfValidationResult:
         origin_referer=csrf_obj.get("origin_referer") or poc_obj.get("origin_referer"),
         csrftoken_status=csrf_obj.get("csrftoken_status") or poc_obj.get("csrftoken_status"),
         state_changing=csrf_obj.get("state_changing") or poc_obj.get("state_changing"),
-        negative_control=csrf_obj.get("negative_control") or poc_obj.get("negative_control"),
+        negative_control=_negative_control_value(csrf_obj) or _negative_control_value(poc_obj),
     )
 
 
@@ -102,7 +127,7 @@ def validate_cmdi(proof_of_concept: dict) -> CmdiValidationResult:
         harmless_marker=cmdi_obj.get("harmless_marker") or poc_obj.get("harmless_marker"),
         controlled_output=cmdi_obj.get("controlled_output") or poc_obj.get("controlled_output"),
         server_proof=cmdi_obj.get("server_proof") or poc_obj.get("server_proof"),
-        negative_control=cmdi_obj.get("negative_control") or poc_obj.get("negative_control"),
+        negative_control=_negative_control_value(cmdi_obj) or _negative_control_value(poc_obj),
     )
 
 
@@ -155,7 +180,7 @@ def _has_oast(root: dict[str, Any]) -> bool:
 
 
 def _has_negative_control(root: dict[str, Any]) -> bool:
-    return _nonempty(root.get("negative_control"), root.get("baseline"))
+    return _negative_control_value(root) is not None
 
 
 def _has_discriminator(root: dict[str, Any]) -> bool:

@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from src.pipeline.contracts.evidence_scales import EvidenceGateName
+from src.reports.poc_validation import _negative_control_value
 
 # Shared scale alias (R-5.1.3) — single definition in evidence_scales. The
 # canonical tier->gate derivation is evidence_scales.evidence_gate_for_tier;
@@ -61,7 +62,10 @@ def validate_xss_evidence(proof_of_concept: dict) -> EvidenceQuality:
 
     found = []
     for field_name, model_field in required:
-        value = xss.get(model_field, poc.get(model_field))
+        if model_field == "negative_control":
+            value = _negative_control_value(xss) or _negative_control_value(poc)
+        else:
+            value = xss.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
 
@@ -90,7 +94,10 @@ def validate_csrf_evidence(proof_of_concept: dict) -> EvidenceQuality:
 
     found = []
     for field_name, model_field in required:
-        value = csrf.get(model_field, poc.get(model_field))
+        if model_field == "negative_control":
+            value = _negative_control_value(csrf) or _negative_control_value(poc)
+        else:
+            value = csrf.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
 
@@ -116,7 +123,10 @@ def validate_cmdi_evidence(proof_of_concept: dict) -> EvidenceQuality:
 
     found = []
     for field_name, model_field in required:
-        value = cmdi.get(model_field, poc.get(model_field))
+        if model_field == "negative_control":
+            value = _negative_control_value(cmdi) or _negative_control_value(poc)
+        else:
+            value = cmdi.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
 
