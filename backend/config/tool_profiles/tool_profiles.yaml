@@ -85,3 +85,18 @@ profiles:
     tools: [semgrep]
   code_injection_pattern:
     tools: [semgrep]
+  # --- Account / session / protocol-layer ---
+  account_takeover:
+    tools: [hydra, ncrack]
+  mfa_bypass:
+    tools: [hydra]
+  clickjacking:
+    tools: [chrome_csp_probe]
+  host_header_injection:
+    tools: [nuclei]
+  llm_prompt_injection:
+    tools: [nuclei]
+  grpc_misconfig:
+    tools: [grpcurl_probe]
+  websocket_hijacking:
+    tools: [nuclei]
