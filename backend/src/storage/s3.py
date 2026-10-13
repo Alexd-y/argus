@@ -154,6 +154,30 @@ def _bucket_for_object_key(object_key: str) -> str:
     return settings.minio_bucket
 
 
+def object_key_exists(object_key: str) -> bool:
+    """Return True iff an object with ``object_key`` actually exists in storage.
+
+    Used as the integrity gate for evidence-tier adjudication (R-5.1.2, wave 3):
+    a model-authored PoC may *assert* a content-addressed artifact key, but only
+    a genuine, stored object passes this check. Fail-closed — any error (no
+    client, missing key, transport failure) returns False, so a finding is never
+    credited an artifact the store cannot confirm.
+    """
+    if not isinstance(object_key, str) or not object_key.strip():
+        return False
+    if not _validate_object_key(object_key):
+        return False
+    client = _get_client()
+    if not client:
+        return False
+    bucket = _bucket_for_object_key(object_key)
+    try:
+        client.head_object(Bucket=bucket, Key=object_key)
+        return True
+    except Exception:
+        return False
+
+
 def _normalize_raw_ext(ext: str) -> str:
     """Strip leading dot; validate extension (no path chars). Raises ValueError if invalid."""
     if not isinstance(ext, str):

@@ -168,7 +168,7 @@ from src.reports.finding_metadata import (
     normalize_evidence_type,
     resolve_finding_cross_refs,
 )
-from src.storage.s3 import upload_finding_poc_json
+from src.storage.s3 import object_key_exists, upload_finding_poc_json
 from src.tools.executor import flush_tool_runs
 
 logger = logging.getLogger(__name__)
@@ -918,7 +918,7 @@ async def _persist_report_and_findings(
         # shadow mode (``evidence_arbiter_enforced`` off) the verdict is still
         # computed and logged, but the model tier is persisted unchanged.
         try:
-            _adj = adjudicate_finding_tier(f)
+            _adj = adjudicate_finding_tier(f, verify_artifact=object_key_exists)
             _et = _adj.tier if settings.evidence_arbiter_enforced else _adj.model_tier
             if _adj.applicable and _adj.model_tier != _adj.arbiter_tier:
                 logger.info(
@@ -3095,7 +3095,7 @@ async def run_scan_state_machine(
                         # Finding row (cap-only; min is idempotent, so a finding
                         # adjudicated again at persistence yields the same tier).
                         # In shadow mode the model tier is recorded unchanged.
-                        _adj = adjudicate_finding_tier(_f)
+                        _adj = adjudicate_finding_tier(_f, verify_artifact=object_key_exists)
                         _applied = (
                             _adj.tier if settings.evidence_arbiter_enforced else _adj.model_tier
                         )
