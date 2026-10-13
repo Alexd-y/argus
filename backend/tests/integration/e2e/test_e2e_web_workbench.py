@@ -178,7 +178,9 @@ def created_attack(wb_project: WbProject) -> WbAttack:
                 }
             ]
         },
-        "config": {"max_requests": MAX_REQUESTS},
+        # scheme=http: the e2e target (juice-shop) serves plaintext HTTP on :3000,
+        # so the origin-form replay must not default to https (TLS handshake fail).
+        "config": {"max_requests": MAX_REQUESTS, "scheme": "http"},
     }
     status, body = _request(
         "POST",
@@ -243,7 +245,7 @@ def test_intruder_requests_recorded_metadata_only(
     assert isinstance(body, dict)
     items = body.get("items") or []
     assert items, "no intruder requests were recorded"
-    forwarded = [r for r in items if r.get("forward_outcome") == "forwarded"]
+    forwarded = [r for r in items if r.get("forward_outcome") == "forward"]
     assert forwarded, "no request passed the ForwardGate (scope) to the target"
     # Result rows are metadata-only — never a raw request/response body.
     for row in items:
@@ -252,7 +254,7 @@ def test_intruder_requests_recorded_metadata_only(
         assert "response_body" not in row
         assert "payload_value" not in row
         # A forwarded row carries a response fingerprint, not the body.
-        if row.get("forward_outcome") == "forwarded" and row.get("status_code") is not None:
+        if row.get("forward_outcome") == "forward" and row.get("status_code") is not None:
             assert row.get("response_sha256"), f"forwarded row missing sha256: {row}"
 
 

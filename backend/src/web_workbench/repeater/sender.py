@@ -52,19 +52,29 @@ class HttpxSender:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         verify: bool = False,
+        default_scheme: str = "https",
     ) -> None:
         if max_response_bytes < 0:
             raise ValueError("max_response_bytes must be non-negative")
+        scheme = (default_scheme or "https").strip().lower()
+        if scheme not in ("http", "https"):
+            raise ValueError(f"default_scheme must be 'http' or 'https', got {default_scheme!r}")
         self._client = client
         self._timeout = timeout_seconds
         self._max_response_bytes = max_response_bytes
         self._verify = verify
+        # Scheme used when the replayed raw request is in origin-form (path only,
+        # no absolute URL). Defaults to https — the safe choice for most pentest
+        # targets — but plaintext-HTTP targets (e.g. an app on :3000) can opt in
+        # via the attack config so the send does not TLS-handshake a cleartext
+        # listener and fail.
+        self._default_scheme = scheme
 
     def _forward_headers(self, request: NormalizedRequest) -> list[tuple[str, str]]:
         return [(name, value) for name, value in request.headers if name.lower() not in _HOP_BY_HOP]
 
     def send(self, request: NormalizedRequest, body: bytes) -> RawResponse:
-        target, _port = request.to_target_spec()
+        target, _port = request.to_target_spec(default_scheme=self._default_scheme)
         url = target.url
         assert url is not None  # to_target_spec always yields a URL-kind spec
         headers = self._forward_headers(request)

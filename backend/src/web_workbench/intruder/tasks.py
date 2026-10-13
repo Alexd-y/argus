@@ -83,6 +83,20 @@ def _payloads_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "config" / "payloads"
 
 
+def _scheme_from_config(config: dict[str, Any] | None) -> str:
+    """Scheme for origin-form replays. Defaults to https (safe for most pentest
+    targets); a plaintext-HTTP target opts in via the attack config
+    (``{"scheme": "http"}`` or ``{"use_tls": false}``) so the sender does not
+    TLS-handshake a cleartext listener and record every request as ``send_failed``."""
+    if isinstance(config, dict):
+        scheme = str(config.get("scheme") or "").strip().lower()
+        if scheme in ("http", "https"):
+            return scheme
+        if config.get("use_tls") is False:
+            return "http"
+    return "https"
+
+
 def materialize_payload_sets(
     payload_config: dict[str, Any] | None,
     *,
@@ -171,7 +185,9 @@ async def _execute(tenant_id: str, attack_id: str) -> dict[str, Any]:
 
                 scope_service = ProjectScopeService(project.scope_rules)
                 service = IntruderService(
-                    repository, sender=HttpxSender(), control_hook=_control_hook
+                    repository,
+                    sender=HttpxSender(default_scheme=_scheme_from_config(attack.config)),
+                    control_hook=_control_hook,
                 )
                 summary = await service.run_attack(
                     session,
