@@ -120,3 +120,55 @@ def test_mid_crash_har_is_valid_sync(tmp_path: Path) -> None:
     assert har_path is not None and har_path.is_file()
     doc = json.loads(har_path.read_text(encoding="utf-8"))
     assert "log" in doc and isinstance(doc["log"].get("entries"), list)
+
+
+class _FakePipeline:
+    """Records persist() calls (async) for the artifact-bridge test."""
+
+    def __init__(self) -> None:
+        self.kinds: list[str] = []
+
+    async def persist(self, *, kind, **kw) -> object:
+        self.kinds.append(kind.value)
+        return object()
+
+
+async def test_persist_browser_artifacts_confirmed_keeps_har_and_video(tmp_path: Path) -> None:
+    from src.evidence.browser_session import BrowserArtifacts, persist_browser_artifacts
+
+    har = tmp_path / "session.har"
+    har.write_text('{"log":{"entries":[]}}', encoding="utf-8")
+    vdir = tmp_path / "video"
+    vdir.mkdir()
+    vid = vdir / "a.webm"
+    vid.write_bytes(b"\x1aE\xdf\xa3fakewebm")
+    artifacts = BrowserArtifacts(workdir=tmp_path, har_path=har, video_dir=vdir)
+
+    pipe = _FakePipeline()
+    counts = await persist_browser_artifacts(
+        artifacts, pipeline=pipe, tenant_id="t", scan_id="s", confirmed=True
+    )
+    assert counts == {"har": 1, "video": 1}
+    assert sorted(pipe.kinds) == ["har", "video"]
+    assert vid.exists()  # confirmed → kept
+
+
+async def test_persist_browser_artifacts_unconfirmed_drops_video(tmp_path: Path) -> None:
+    from src.evidence.browser_session import BrowserArtifacts, persist_browser_artifacts
+
+    har = tmp_path / "session.har"
+    har.write_text('{"log":{"entries":[]}}', encoding="utf-8")
+    vdir = tmp_path / "video"
+    vdir.mkdir()
+    vid = vdir / "a.webm"
+    vid.write_bytes(b"\x1aE\xdf\xa3fakewebm")
+    artifacts = BrowserArtifacts(workdir=tmp_path, har_path=har, video_dir=vdir)
+
+    pipe = _FakePipeline()
+    counts = await persist_browser_artifacts(
+        artifacts, pipeline=pipe, tenant_id="t", scan_id="s", confirmed=False
+    )
+    # HAR (the exchange) kept; video of a non-event deleted and not persisted.
+    assert counts == {"har": 1, "video": 0}
+    assert pipe.kinds == ["har"]
+    assert not vid.exists()

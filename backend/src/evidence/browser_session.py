@@ -173,6 +173,80 @@ def browser_context_sync(
             pw.stop()
 
 
+async def persist_browser_artifacts(
+    artifacts: BrowserArtifacts,
+    *,
+    pipeline: object,
+    tenant_id: object,
+    scan_id: object,
+    confirmed: bool,
+    finding_id: object = None,
+) -> dict[str, int]:
+    """Bridge recorded browser artifacts into the evidence pipeline (wave 2a).
+
+    * **HAR** (the raw request/response exchange) is persisted whenever present —
+      it is the basis for CONFIRMED.
+    * **VIDEO** (the achieved effect) is persisted ONLY when ``confirmed`` (an
+      EXPLOITED-tier scenario); otherwise the recordings are DELETED. A video of
+      a scenario that did not fire is not kept (etap 5 policy) — unless a later
+      wave treats it as evidence of interference.
+
+    Best-effort: a per-artifact failure is logged, never raised, so evidence
+    capture can never break the verification that produced it. Returns the count
+    persisted per kind.
+    """
+    from src.pipeline.contracts.finding_dto import EvidenceKind
+
+    counts = {"har": 0, "video": 0}
+
+    har = artifacts.har_path
+    if har is not None and har.is_file() and har.stat().st_size > 0:
+        try:
+            await pipeline.persist(  # type: ignore[attr-defined]
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                finding_id=finding_id,
+                kind=EvidenceKind.HAR,
+                raw_data=har.read_bytes(),
+                content_type="application/json",
+            )
+            counts["har"] += 1
+        except Exception as exc:
+            _logger.info(
+                "browser_har_persist_skipped",
+                extra={"event": "argus.browser.har_persist_skipped", "error": type(exc).__name__},
+            )
+
+    videos = artifacts.video_paths()
+    if confirmed:
+        for video in videos:
+            try:
+                await pipeline.persist(  # type: ignore[attr-defined]
+                    tenant_id=tenant_id,
+                    scan_id=scan_id,
+                    finding_id=finding_id,
+                    kind=EvidenceKind.VIDEO,
+                    raw_data=video.read_bytes(),
+                    content_type="video/webm",
+                )
+                counts["video"] += 1
+            except Exception as exc:
+                _logger.info(
+                    "browser_video_persist_skipped",
+                    extra={
+                        "event": "argus.browser.video_persist_skipped",
+                        "error": type(exc).__name__,
+                    },
+                )
+    else:
+        # Delete-on-unconfirmed: a recording of a scenario that did not fire is
+        # not worth the storage (etap 5).
+        for video in videos:
+            with _suppress("video.unlink"):
+                video.unlink()
+    return counts
+
+
 class _suppress:
     """Log-and-swallow context manager for best-effort teardown steps."""
 
@@ -197,5 +271,6 @@ __all__ = [
     "BrowserUnavailable",
     "browser_context",
     "browser_context_sync",
+    "persist_browser_artifacts",
     "playwright_available",
 ]
