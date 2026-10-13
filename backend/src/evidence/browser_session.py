@@ -184,7 +184,11 @@ def _redacted_har_bytes(raw: bytes) -> tuple[bytes, bool]:
         from src.web_workbench.imports.har import import_har
 
         exchanges = import_har(raw.decode("utf-8", errors="replace"))
-        return export_har(exchanges, redact=True).encode("utf-8"), False
+        # Structural redaction (headers/cookies/query) here, AND keep the generic
+        # byte redactor on at persist time as defense-in-depth — it catches
+        # secrets in bodies / arbitrary text that structural rules miss. HAR is
+        # text, so the extra pass is cheap.
+        return export_har(exchanges, redact=True).encode("utf-8"), True
     except Exception:
         return raw, True
 
