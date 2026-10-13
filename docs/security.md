@@ -152,3 +152,29 @@ prevention is unavailable and ARGUS falls back to **detection**:
   its SHA-256, re-derives the root hash, and replays the audit chain — exiting
   non-zero on any discrepancy. This is how an auditor confirms an evidence base
   was not edited after release, trusting only the data.
+
+### Storage-growth bounds (wave 2 / 2a)
+
+Capturing per-tool-run and per-producer evidence grows the object store, so each
+producer is bounded by design rather than relying on an empirical cap. The
+dominant per-scan figure is scan-size- and producer-dependent, but every path is
+individually bounded:
+
+- **Raw tool output** is truncated to a byte cap before upload (a truncation
+  marker records that it was cut), so a chatty tool cannot write an unbounded
+  object.
+- **PCAP** is headers-only by default (`snaplen=96`, payload excluded) with a
+  file-size cap (`tcpdump -C <MiB> -W 1`) and a wall-clock limit — so a capture
+  can neither balloon nor leak payloads (`src/evidence/pcap_capture.py`).
+- **HAR / HTTP evidence** stores capped request/response bodies (not full
+  streams) and redacts secrets before persisting (`src/evidence/har_export.py`,
+  `redaction.py`).
+- **Browser video / screenshot** producers are opt-in and gated; absent an
+  explicit capture they write nothing.
+- **Manifest + audit rows** store only object keys and SHA-256 hashes, never a
+  second copy of the artifact, so integrity metadata adds O(#artifacts) small
+  rows, not bytes proportional to artifact size.
+
+An empirical per-scan footprint should be measured against a representative scan
+with the intended producer set enabled; the bounds above are the ceiling each
+run is held under.
