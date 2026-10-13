@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 
 from src.evidence.har_export import exchange_from_http_evidence, export_har
@@ -101,3 +102,44 @@ def test_exchange_from_http_evidence() -> None:
     assert ex.response is not None and ex.response.status_code == 200
     # Round-trips through export + import.
     assert import_har(export_har([ex], redact=False))[0].url == ex.url
+
+
+def _big_exchange(body_len: int):
+    class _Ev:
+        request_method = "GET"
+        request_url = "https://t.example/big"
+        request_headers = {"Accept": "*/*"}
+        request_body = ""
+        response_status = 200
+        response_headers = {"Content-Type": "text/plain"}
+        response_body_snippet = "A" * body_len
+        timestamp = "2026-01-01T00:00:00.000Z"
+
+    return exchange_from_http_evidence(_Ev())
+
+
+def test_export_caps_body_with_explicit_marker() -> None:
+    ex = _big_exchange(10_000)
+    doc = json.loads(export_har([ex], redact=False, max_body_bytes=100))
+    content = doc["log"]["entries"][0]["response"]["content"]
+    # size stays honest (original), stored text is cut, and the cut is marked.
+    assert content["size"] == 10_000
+    assert len(base64.b64decode(content["text"])) == 100
+    assert "truncated" in content["comment"] and "10000" in content["comment"]
+
+
+def test_export_does_not_truncate_under_cap() -> None:
+    # A body under the cap round-trips losslessly (no marker, no loss).
+    exchanges = import_har(json.dumps(_SOURCE_HAR))
+    doc = json.loads(export_har(exchanges, redact=False, max_body_bytes=1024))
+    for entry in doc["log"]["entries"]:
+        assert "comment" not in entry["response"]["content"]
+    assert import_har(export_har(exchanges, redact=False, max_body_bytes=1024)) == exchanges
+
+
+def test_export_caps_entry_count_with_marker() -> None:
+    exchanges = [_big_exchange(8) for _ in range(5)]
+    doc = json.loads(export_har(exchanges, redact=False, max_entries=2))
+    assert len(doc["log"]["entries"]) == 2
+    assert "truncated" in doc["log"]["creator"]["comment"]
+    assert "2 of 5" in doc["log"]["creator"]["comment"]

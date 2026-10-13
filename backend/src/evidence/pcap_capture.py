@@ -19,12 +19,18 @@ Capture is tenant-policy-gated and OFF by default (volume).
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import logging
 import re
 import shutil
+import subprocess
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import perf_counter
 
 _logger = logging.getLogger(__name__)
 
@@ -127,12 +133,105 @@ def capture_description(spec: CaptureSpec) -> str:
     return f"pcap capture: {scope}; snaplen={spec.snaplen} {note}; <= {spec.max_seconds}s"
 
 
+@dataclass(frozen=True)
+class CaptureResult:
+    """Outcome of a bounded capture."""
+
+    output_path: Path
+    size_bytes: int
+    duration_seconds: float
+    #: "completed" | "wall_clock" | "size_cap" — why the capture stopped.
+    stopped_reason: str
+
+
+def _terminate(proc: object) -> None:
+    """Best-effort graceful stop so tcpdump flushes a valid pcap, then hard kill."""
+    with contextlib.suppress(Exception):
+        proc.terminate()  # type: ignore[attr-defined]
+        try:
+            proc.wait(timeout=5)  # type: ignore[attr-defined]
+        except Exception:
+            with contextlib.suppress(Exception):
+                proc.kill()  # type: ignore[attr-defined]
+
+
+def run_tcpdump_capture(
+    spec: CaptureSpec,
+    *,
+    output_path: Path,
+    runner: Callable[..., object] = subprocess.Popen,
+) -> CaptureResult:
+    """Run tcpdump bounded by BOTH the wall-clock (``spec.max_seconds``, HARD —
+    enforced here, not delegated to a hypothetical caller) and the file size
+    (``spec.max_bytes`` via ``-C``). Blocks for up to ``max_seconds``, then stops
+    tcpdump gracefully so the pcap is flushed and valid. ``runner`` is injectable
+    so the control flow is unit-testable without a live tcpdump.
+
+    Raises :class:`CaptureUnavailable` when tcpdump is not installed.
+    """
+    if not tcpdump_available():
+        raise CaptureUnavailable("tcpdump is not available in this runtime")
+    # Validate scope fail-closed before spawning anything.
+    build_bpf_filter(spec)
+    argv = build_tcpdump_argv(spec, output_path=output_path)
+    proc = runner(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    reason = "completed"
+    start = perf_counter()
+    try:
+        proc.wait(timeout=spec.max_seconds)  # type: ignore[attr-defined]
+    except subprocess.TimeoutExpired:
+        reason = "wall_clock"
+        _terminate(proc)
+    duration = perf_counter() - start
+
+    size = output_path.stat().st_size if output_path.exists() else 0
+    if spec.max_bytes and size >= spec.max_bytes:
+        reason = "size_cap"
+    return CaptureResult(
+        output_path=output_path,
+        size_bytes=size,
+        duration_seconds=duration,
+        stopped_reason=reason,
+    )
+
+
+@contextmanager
+def pcap_session(
+    spec: CaptureSpec,
+    *,
+    output_path: Path,
+    runner: Callable[..., object] = subprocess.Popen,
+) -> Iterator[object]:
+    """Capture while the ``with`` body runs (e.g. a tool executes against the
+    target). tcpdump is always stopped on exit, and a watchdog enforces the
+    wall-clock cap even if the body overruns — so a hung tool cannot leave an
+    unbounded capture running. Yields the tcpdump process handle.
+    """
+    if not tcpdump_available():
+        raise CaptureUnavailable("tcpdump is not available in this runtime")
+    build_bpf_filter(spec)
+    argv = build_tcpdump_argv(spec, output_path=output_path)
+    proc = runner(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    watchdog = threading.Timer(float(spec.max_seconds), _terminate, args=(proc,))
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        yield proc
+    finally:
+        watchdog.cancel()
+        _terminate(proc)
+
+
 __all__ = [
+    "CaptureResult",
     "CaptureScopeError",
     "CaptureSpec",
     "CaptureUnavailable",
     "build_bpf_filter",
     "build_tcpdump_argv",
     "capture_description",
+    "pcap_session",
+    "run_tcpdump_capture",
     "tcpdump_available",
 ]
