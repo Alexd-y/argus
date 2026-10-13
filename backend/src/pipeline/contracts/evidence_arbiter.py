@@ -56,10 +56,36 @@ class DowngradeReason(StrEnum):
     NO_ARTIFACTS = "no_artifacts"
     NO_RAW_EXCHANGE = "no_raw_exchange"
     NO_IMPACT_PROOF = "no_impact_proof"
-    #: Reserved gates not implemented until wave 3 — recorded on every verdict
-    #: so a tier at/above CONFIRMED stays honest about what was not verified.
-    NEGATIVE_CONTROL_NOT_CHECKED = "negative_control_not_checked_wave3"
-    REPEATABILITY_NOT_CHECKED = "repeatability_not_checked_wave3"
+    #: Recorded when a wave-3 gate's input was not supplied by the caller (an
+    #: unwired path) — keeps a tier at/above CONFIRMED honest about what was not
+    #: verified. A caller that DOES supply the input gets the real gate reason
+    #: below instead.
+    NEGATIVE_CONTROL_NOT_CHECKED = "negative_control_not_checked"
+    REPEATABILITY_NOT_CHECKED = "repeatability_not_checked"
+    #: Wave-3 gates, enforced when the caller supplies the input (R-5.4/5.5).
+    NEGATIVE_CONTROL_MISSING = "negative_control_missing"
+    REPEATABILITY_MISSING = "repeatability_not_confirmed"
+    REPEATABILITY_DIVERGED = "repeatability_diverged"
+    INTERFERENCE_OBSERVED = "interference_observed"
+
+
+@dataclass(frozen=True)
+class RepeatabilityOutcome:
+    """Result of re-running an observation (R-5.5). ``required`` runs must all
+    match for a CONFIRMED-or-higher tier to stand."""
+
+    attempts: int
+    matched: int
+    required: int = 2
+
+    @property
+    def confirmed(self) -> bool:
+        return self.attempts >= self.required and self.matched >= self.attempts
+
+    @property
+    def diverged(self) -> bool:
+        # Ran enough times but at least one run disagreed — unstable behaviour.
+        return self.attempts >= 2 and self.matched < self.attempts
 
 
 # --- Which EvidenceKind satisfies which requirement --------------------------
@@ -96,28 +122,45 @@ class ArbiterVerdict:
     satisfied: frozenset[EvidenceRequirement]
 
 
+def _cap(tier: EvidenceTier, ceiling: EvidenceTier) -> EvidenceTier:
+    """Lower ``tier`` to ``ceiling`` if it is higher (a cap never raises)."""
+    return EvidenceTier(min(int(tier), int(ceiling)))
+
+
 def adjudicate(
     *,
     artifacts: Sequence[EvidenceDTO],
-    # vuln_class: reserved for the signed per-class policy (wave 3, R-5.4.1).
-    vuln_class: str | None = None,  # noqa: ARG001
+    vuln_class: str | None = None,  # noqa: ARG001 — reserved for signed per-class policy
+    negative_control_required: bool = False,
+    negative_control_present: bool = False,
+    repeatability: RepeatabilityOutcome | None = None,
+    interference: bool = False,
 ) -> ArbiterVerdict:
-    """Return the :class:`EvidenceTier` justified by ``artifacts`` alone.
+    """Return the :class:`EvidenceTier` justified by ``artifacts`` and the
+    wave-3 gates.
 
-    Rules (wave 1):
+    Base rules (wave 1), from the artifacts alone:
 
     * ``EXPLOITED``      — a raw exchange *and* an impact-proof artifact.
     * ``CONFIRMED``      — a raw exchange (request+response) is saved.
     * ``SUSPECTED``      — some artifact exists, but no raw exchange.
     * ``INFORMATIONAL``  — no artifacts at all.
 
-    ``vuln_class`` is accepted for forward-compatibility (a signed per-class
-    policy of which classes can even be proven exploitable lands in a later
-    wave, R-5.4.1). It never *raises* the tier in wave 1.
+    Wave-3 gates then only ever LOWER the tier (R-5.4/5.5):
 
-    No parameter carries a language-model judgement: with an empty
-    ``artifacts`` sequence the result is ``INFORMATIONAL`` regardless of any
-    other input, which is R-5.1.6 in executable form.
+    * **Negative control** — when ``negative_control_required`` (a per-class
+      policy decided by the caller) and it is not present, the tier is capped at
+      ``SUSPECTED``.
+    * **Repeatability** — when a :class:`RepeatabilityOutcome` is supplied and
+      the observation did not reproduce (or diverged across runs), the tier is
+      capped at ``SUSPECTED``; divergence is recorded, not discarded.
+    * **Interference** — a tripped WAF / rate-limit / target-unreachable /
+      fingerprint-change signal caps the tier at ``SUSPECTED`` (limited
+      observability).
+
+    A gate whose input the caller does not supply records a "not checked" reason
+    (and does not cap), so an unwired path keeps the wave-1 behaviour and stays
+    honest. No parameter carries a language-model judgement.
     """
     if not artifacts:
         return ArbiterVerdict(
@@ -146,9 +189,35 @@ def adjudicate(
         tier = EvidenceTier.SUSPECTED
         reasons.append(DowngradeReason.NO_RAW_EXCHANGE)
 
-    # Negative control + repeatability are not verifiable until wave 3; record
-    # that honestly on every verdict so the tier never over-claims.
-    reasons.extend(_WAVE3_PENDING)
+    _ceil = EvidenceTier.SUSPECTED
+
+    # --- Negative control (R-5.4) ---
+    if negative_control_required:
+        if negative_control_present:
+            satisfied.add(EvidenceRequirement.NEGATIVE_CONTROL)
+        else:
+            tier = _cap(tier, _ceil)
+            reasons.append(DowngradeReason.NEGATIVE_CONTROL_MISSING)
+    else:
+        reasons.append(DowngradeReason.NEGATIVE_CONTROL_NOT_CHECKED)
+
+    # --- Repeatability (R-5.5) ---
+    if repeatability is not None:
+        if repeatability.confirmed:
+            satisfied.add(EvidenceRequirement.REPEATABILITY)
+        elif repeatability.diverged:
+            tier = _cap(tier, _ceil)
+            reasons.append(DowngradeReason.REPEATABILITY_DIVERGED)
+        else:
+            tier = _cap(tier, _ceil)
+            reasons.append(DowngradeReason.REPEATABILITY_MISSING)
+    else:
+        reasons.append(DowngradeReason.REPEATABILITY_NOT_CHECKED)
+
+    # --- Interference (R-5.5.3) ---
+    if interference:
+        tier = _cap(tier, _ceil)
+        reasons.append(DowngradeReason.INTERFERENCE_OBSERVED)
 
     return ArbiterVerdict(
         tier=tier,
@@ -161,5 +230,6 @@ __all__ = [
     "ArbiterVerdict",
     "DowngradeReason",
     "EvidenceRequirement",
+    "RepeatabilityOutcome",
     "adjudicate",
 ]

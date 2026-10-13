@@ -15,6 +15,7 @@ from src.pipeline.contracts.evidence_arbiter import (
     ArbiterVerdict,
     DowngradeReason,
     EvidenceRequirement,
+    RepeatabilityOutcome,
     adjudicate,
 )
 from src.pipeline.contracts.finding_dto import (
@@ -74,7 +75,9 @@ def test_impact_without_exchange_is_only_suspected() -> None:
     assert DowngradeReason.NO_RAW_EXCHANGE in verdict.reasons
 
 
-@pytest.mark.parametrize("impact", [EvidenceKind.SCREENSHOT, EvidenceKind.OAST_CALLBACK, EvidenceKind.VIDEO])
+@pytest.mark.parametrize(
+    "impact", [EvidenceKind.SCREENSHOT, EvidenceKind.OAST_CALLBACK, EvidenceKind.VIDEO]
+)
 def test_raw_exchange_plus_impact_is_exploited(impact: EvidenceKind) -> None:
     verdict = adjudicate(artifacts=[_ev(EvidenceKind.HAR), _ev(impact)])
     assert verdict.tier is EvidenceTier.EXPLOITED
@@ -122,10 +125,19 @@ def test_verdict_is_frozen() -> None:
 
 def test_adjudicate_signature_takes_no_model_judgement() -> None:
     params = set(inspect.signature(adjudicate).parameters)
-    # Only artifacts (and the forward-compat vuln_class) are inputs. No
-    # confidence / opinion / assessment parameter exists at all.
-    assert params == {"artifacts", "vuln_class"}
-    for banned in ("confidence", "opinion", "assessment", "status", "verdict"):
+    # Inputs are artifacts + the forward-compat vuln_class + the wave-3 gate
+    # facts (negative control, repeatability outcome, interference) — all
+    # collected observations, NOT a model's self-assessment. No confidence /
+    # opinion / assessment parameter exists at all (R-5.1.6).
+    assert params == {
+        "artifacts",
+        "vuln_class",
+        "negative_control_required",
+        "negative_control_present",
+        "repeatability",
+        "interference",
+    }
+    for banned in ("confidence", "opinion", "assessment", "status", "verdict", "level", "tier"):
         assert banned not in params
 
 
@@ -157,3 +169,91 @@ def test_model_opinion_with_zero_artifacts_stays_informational(
     # The model's opinion is not even an input; the arbiter sees only artifacts.
     verdict = adjudicate(artifacts=[], vuln_class=finding.category.value)
     assert verdict.tier is EvidenceTier.INFORMATIONAL
+
+
+# --- Wave 3 gates (R-5.4 / R-5.5): negative control, repeatability, interference
+
+
+def test_negative_control_required_but_absent_caps_at_suspected() -> None:
+    # A HAR alone is CONFIRMED in wave 1; a class that REQUIRES a negative
+    # control, without one, cannot exceed SUSPECTED.
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        negative_control_required=True,
+        negative_control_present=False,
+    )
+    assert v.tier is EvidenceTier.SUSPECTED
+    assert DowngradeReason.NEGATIVE_CONTROL_MISSING in v.reasons
+    assert DowngradeReason.NEGATIVE_CONTROL_NOT_CHECKED not in v.reasons
+
+
+def test_negative_control_present_keeps_tier_and_marks_satisfied() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        negative_control_required=True,
+        negative_control_present=True,
+    )
+    assert v.tier is EvidenceTier.CONFIRMED
+    assert EvidenceRequirement.NEGATIVE_CONTROL in v.satisfied
+    assert DowngradeReason.NEGATIVE_CONTROL_MISSING not in v.reasons
+
+
+def test_repeatability_confirmed_keeps_tier() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        repeatability=RepeatabilityOutcome(attempts=2, matched=2),
+    )
+    assert v.tier is EvidenceTier.CONFIRMED
+    assert EvidenceRequirement.REPEATABILITY in v.satisfied
+
+
+def test_repeatability_divergence_lowers_and_records() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        repeatability=RepeatabilityOutcome(attempts=3, matched=2),
+    )
+    assert v.tier is EvidenceTier.SUSPECTED
+    assert DowngradeReason.REPEATABILITY_DIVERGED in v.reasons
+
+
+def test_repeatability_not_confirmed_caps_at_suspected() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR)],
+        repeatability=RepeatabilityOutcome(attempts=1, matched=1),
+    )
+    assert v.tier is EvidenceTier.SUSPECTED
+    assert DowngradeReason.REPEATABILITY_MISSING in v.reasons
+
+
+def test_interference_caps_at_suspected() -> None:
+    # Even a full EXPLOITED set is capped under interference (limited observability).
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR), _ev(EvidenceKind.SCREENSHOT)],
+        interference=True,
+    )
+    assert v.tier is EvidenceTier.SUSPECTED
+    assert DowngradeReason.INTERFERENCE_OBSERVED in v.reasons
+
+
+def test_all_gates_pass_allows_exploited() -> None:
+    v = adjudicate(
+        artifacts=[_ev(EvidenceKind.HAR), _ev(EvidenceKind.SCREENSHOT)],
+        negative_control_required=True,
+        negative_control_present=True,
+        repeatability=RepeatabilityOutcome(attempts=2, matched=2),
+        interference=False,
+    )
+    assert v.tier is EvidenceTier.EXPLOITED
+    assert {EvidenceRequirement.NEGATIVE_CONTROL, EvidenceRequirement.REPEATABILITY} <= v.satisfied
+
+
+def test_gates_never_raise_tier_on_empty_artifacts() -> None:
+    # R-5.1.6 invariant holds with every gate "satisfied": no artifacts → INFORMATIONAL.
+    v = adjudicate(
+        artifacts=[],
+        negative_control_required=True,
+        negative_control_present=True,
+        repeatability=RepeatabilityOutcome(attempts=5, matched=5),
+        interference=False,
+    )
+    assert v.tier is EvidenceTier.INFORMATIONAL
