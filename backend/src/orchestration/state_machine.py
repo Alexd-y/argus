@@ -1593,7 +1593,11 @@ async def _dispatch_phase_source_analysis(
                                         "description": _bv.description,
                                         "source": "binary_analysis",
                                         "cwe": "",
-                                        "evidence_tier": 2,
+                                        # Binary analysis yields an artifact (the
+                                        # analysis) but no raw network exchange, so
+                                        # the honest tier is SUSPECTED — via the enum,
+                                        # not a magic number (R-5.1.2 arbiter rule).
+                                        "evidence_tier": int(EvidenceTier.SUSPECTED),
                                     }
                                 )
                             logger.info(

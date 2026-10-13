@@ -72,6 +72,7 @@ from src.orchestration.phases import (
 from src.orchestration.progress import emit_scan_subprogress
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.owasp_top10_2025 import parse_owasp_category
+from src.pipeline.contracts.finding_dto import EvidenceTier
 from src.quick.cancellation import is_scan_cancelled
 from src.quick.circuit_breaker import default_circuit_breaker
 from src.quick.scheduler import (
@@ -2277,7 +2278,9 @@ async def _va_binary_analysis(llm_output, scan_id, scan_options, source_analysis
                                         "description": _bv.description,
                                         "source": "binary_analysis",
                                         "cwe": getattr(_bv, "cwe", ""),
-                                        "evidence_tier": 2,
+                                        # Analysis artifact, no raw network exchange
+                                        # → SUSPECTED (enum, not a magic number).
+                                        "evidence_tier": int(EvidenceTier.SUSPECTED),
                                         "code_location": _path_ba,
                                     }
                                 )
@@ -2369,7 +2372,9 @@ async def _va_fuzzing(llm_output, scan_id, scan_options, source_analysis):
                                         "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
                                         "source": "fuzzing",
                                         "cwe": "CWE-20",
-                                        "evidence_tier": 3,
+                                        # A fuzzer crash is a demonstrated, reproducible
+                                        # effect → CONFIRMED (enum, not a magic number).
+                                        "evidence_tier": int(EvidenceTier.CONFIRMED),
                                     }
                                 )
                             logger.info(

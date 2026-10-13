@@ -8,12 +8,15 @@ anti-pattern:
 
 * an **assignment** whose target is the attribute / dict-key ``evidence_tier``
   (``x.evidence_tier = …`` / ``d["evidence_tier"] = …``), or
-* a **call keyword** ``evidence_tier=<numeric literal>`` (a magic-number tier).
+* a **call keyword** ``evidence_tier=<numeric literal>`` (a magic-number tier), or
+* a **dict literal** key ``{"evidence_tier": <numeric literal>}`` (the same
+  magic-number tier, just in a dict constructor rather than a kwarg).
 
-Computed keyword values (``evidence_tier=tier``,
-``evidence_tier=EvidenceTier.INFORMATIONAL``, ``evidence_tier=verdict.tier``)
-are allowed — those carry a value decided elsewhere (ultimately the arbiter),
-not a fabricated constant. The whitelist is intentionally tiny.
+Computed values (``evidence_tier=tier``,
+``evidence_tier=EvidenceTier.INFORMATIONAL``, ``"evidence_tier": int(EvidenceTier.SUSPECTED)``,
+``evidence_tier=verdict.tier``) are allowed — those carry a value decided
+elsewhere (ultimately the arbiter), not a fabricated constant. The whitelist is
+intentionally tiny.
 """
 
 from __future__ import annotations
@@ -78,6 +81,19 @@ def _violations() -> list[str]:
                     ):
                         found.append(
                             f"{rel}:{kw.value.lineno}  hardcoded evidence_tier={kw.value.value!r}"
+                        )
+            # (c) dict literal {"evidence_tier": <numeric literal>}
+            if isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values, strict=False):
+                    if (
+                        isinstance(key, ast.Constant)
+                        and key.value == "evidence_tier"
+                        and isinstance(value, ast.Constant)
+                        and isinstance(value.value, (int, float))
+                        and not isinstance(value.value, bool)
+                    ):
+                        found.append(
+                            f"{rel}:{value.lineno}  hardcoded {{'evidence_tier': {value.value!r}}}"
                         )
     return sorted(found)
 
