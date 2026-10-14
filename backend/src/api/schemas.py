@@ -87,6 +87,12 @@ class ScanOptions(BaseModel):
     lab_allowed_targets: list[str] = Field(default_factory=list)
     argus_lab_allowed_targets: str | None = None
     scan_approval_flags: dict[str, bool] = Field(default_factory=dict)
+    # Operator-provided known-injectable endpoints, merged into the active-scan
+    # input surface so the injection planner targets them even when the crawler
+    # cannot discover them (e.g. a SPA's XHR login endpoint). Each entry:
+    # {"url","param_name","method"?,"location"?(query|form|json|path|header|cookie),
+    #  "content_type"?,"auth_context"?}. Enables precise sqlmap/dalfox targeting.
+    seed_injection_targets: list[dict[str, Any]] = Field(default_factory=list)
 
 
 ExecutionModeLiteral = Literal["production", "lab_unrestricted", "quick"]

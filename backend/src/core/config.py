@@ -1262,6 +1262,16 @@ class Settings(BaseSettings):
     active_scan_max_capture_bytes: int = 4 * 1024 * 1024
     # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
     sqlmap_va_enabled: bool = False
+    # sqlmap depth for the VA active-injection pass. 1/1 is conservative (fast,
+    # finds trivial injections); raise toward 5/3 for a thorough "maximum
+    # pentest" sweep on an authorized lab target (more params/places/techniques,
+    # slower). Env: SQLMAP_VA_LEVEL (1..5) / SQLMAP_VA_RISK (1..3).
+    sqlmap_va_level: int = Field(
+        default=1, ge=1, le=5, validation_alias=AliasChoices("SQLMAP_VA_LEVEL", "sqlmap_va_level")
+    )
+    sqlmap_va_risk: int = Field(
+        default=1, ge=1, le=3, validation_alias=AliasChoices("SQLMAP_VA_RISK", "sqlmap_va_risk")
+    )
     # Block 1.2/1.3 — gate evidence-less placeholder findings ("unknown finding",
     # fingerprint-only hits) and collapse duplicates before reporting. Env:
     # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
