@@ -239,7 +239,7 @@ def _loads_tolerant(candidate: str) -> Any | None:
         return json.loads(literal_fixed)
     except (json.JSONDecodeError, ValueError):
         pass
-    # Last resort: single-quoted dict/list (Python-literal) output.
+    # Single-quoted dict/list (Python-literal) output.
     try:
         obj = ast.literal_eval(candidate)
         if isinstance(obj, (dict, list)):
@@ -248,7 +248,57 @@ def _loads_tolerant(candidate: str) -> Any | None:
             return json.loads(json.dumps(obj, default=str))
     except (ValueError, SyntaxError, TypeError):
         pass
+    # Last resort: a TRUNCATED response (the small model hit max_tokens mid-JSON —
+    # finish_reason=="length"). Salvage the longest valid prefix by cutting after
+    # the last fully-formed element and balancing the open brackets, so the
+    # findings that DID come through are kept instead of retried into another
+    # (equally truncated) generation.
+    salvaged = _salvage_truncated(repaired)
+    if salvaged is not None and salvaged != repaired:
+        try:
+            return json.loads(salvaged)
+        except (json.JSONDecodeError, ValueError):
+            pass
     return None
+
+
+def _salvage_truncated(text: str) -> str | None:
+    """Recover the longest valid JSON prefix of a truncated array/object.
+
+    Cuts after the last complete ``}`` (a fully-formed element) and appends the
+    closers for whatever brackets remain open, so ``[{a},{b},{partial`` becomes
+    ``[{a},{b}]`` and ``{"findings":[{a},{"partial`` becomes
+    ``{"findings":[{a}]}``. Bracket counting is string-aware so braces inside
+    string values are not miscounted. Returns None when nothing can be salvaged.
+    """
+    text = text.strip()
+    if not text or text[0] not in "{[":
+        return None
+    cut = text.rfind("}")
+    if cut < 0:
+        return None
+    head = text[: cut + 1]
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    for ch in head:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "[{":
+            stack.append(ch)
+        elif ch in "]}" and stack:
+            stack.pop()
+    head = head.rstrip().rstrip(",")
+    closers = "".join("]" if opener == "[" else "}" for opener in reversed(stack))
+    return head + closers
 
 
 def _parse_llm_json(text: str) -> Any | None:

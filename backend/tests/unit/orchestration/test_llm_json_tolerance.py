@@ -45,6 +45,19 @@ class TestParseTolerant:
         out = _parse_llm_json('Sure! Here is the result:\n{"findings": []}\nHope that helps.')
         assert out == {"findings": []}
 
+    def test_truncated_bare_array_salvages_complete_elements(self) -> None:
+        # Model hit max_tokens mid-array → keep the two complete findings.
+        out = _parse_llm_json('[{"id": 1}, {"id": 2}, {"id": 3')
+        assert out == [{"id": 1}, {"id": 2}]
+
+    def test_truncated_findings_object_salvages(self) -> None:
+        out = _parse_llm_json('{"findings": [{"title": "a"}, {"title": "b')
+        assert out == {"findings": [{"title": "a"}]}
+
+    def test_truncated_mid_string_unrecoverable(self) -> None:
+        # No complete element at all → nothing to salvage.
+        assert _parse_llm_json('{"findings": [{"title": "abc') is None
+
     def test_unrecoverable_returns_none(self) -> None:
         assert _parse_llm_json("this is not json at all") is None
 
