@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     dev_login_bypass_enabled: bool = False
     api_keys: list[str] = Field(default_factory=list)
     log_level: str = "INFO"
+    # Log rendering: "json" = one NDJSON object per record (includes every
+    # structured ``extra={...}`` field — the operator stream for Loki/CloudWatch
+    # and the machine-parseable sink for e.g. evidence_arbiter_verdict). "console"
+    # = human-readable lines that still APPEND the extra fields (key=value) so the
+    # numbers are visible in a plain ``podman logs``. Env: ARGUS_LOG_FORMAT.
+    log_format: Literal["json", "console"] = Field(
+        default="json",
+        validation_alias=AliasChoices("ARGUS_LOG_FORMAT", "log_format"),
+    )
     version: str = "0.1.0"
     environment: str = Field(
         default="development",
@@ -233,6 +242,18 @@ class Settings(BaseSettings):
             "ARGUS_SCAN_SCHEMA_ENFORCEMENT",
             "argus_scan_schema_enforcement",
         ),
+    )
+    # Number of JSON-fixer re-prompts when a phase LLM returns unparseable JSON
+    # (a small local GGUF model intermittently emits malformed/truncated output).
+    # Each retry re-asks the model to repair its own output; the final attempt
+    # uses a stricter JSON-only re-prompt. 0 disables retries. Env:
+    # ARGUS_JSON_FIXER_RETRIES. Kept on WRB only (WRB-001 — no cloud fallback for
+    # pentest analysis).
+    argus_json_fixer_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias=AliasChoices("ARGUS_JSON_FIXER_RETRIES", "argus_json_fixer_retries"),
     )
     # Adaptive planner→critic→executor→verifier loop (overhaul §6). When true,
     # eligible scan work is driven by the runtime AssetGraph feedback loop

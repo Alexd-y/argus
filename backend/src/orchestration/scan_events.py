@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from src.core.config import settings
 from src.quick.audit import (
     QUICK_AUDIT_EVENT_TYPES,
     REDACTION_PLACEHOLDER,
@@ -69,7 +70,10 @@ class ScanEventBus:
         try:
             import redis
 
-            self._redis_client = redis.Redis.from_url("redis://localhost:6379/0")
+            # Use the configured broker URL — a hardcoded ``localhost`` refuses
+            # the connection inside the worker container (no local redis), which
+            # dumped transient ConnectionRefusedError tracebacks on every scan.
+            self._redis_client = redis.Redis.from_url(settings.redis_url)
             self._redis_client.ping()
             logger.info("Redis event bus connected")
         except Exception:
@@ -133,7 +137,7 @@ class ScanEventBus:
         try:
             import redis
 
-            pubsub_client = redis.Redis.from_url("redis://localhost:6379/0")
+            pubsub_client = redis.Redis.from_url(settings.redis_url)
             self._redis_pubsub = pubsub_client.pubsub()
             self._redis_pubsub.psubscribe(channel_pattern)
             self._redis_pubsub.psubscribe("argus:chat:*")

@@ -4,6 +4,7 @@ KAL-008: phase prompts embed Kali/MCP taxonomy, run_* vs pipeline guidance, and 
 via ``src.orchestration.prompt_registry`` (see ``ORCHESTRATION_PROMPT_VERSION``).
 """
 
+import ast
 import asyncio
 import json
 import logging
@@ -56,7 +57,10 @@ from src.orchestration.raw_phase_artifacts import RawPhaseSink
 
 logger = logging.getLogger(__name__)
 
-MAX_JSON_RETRIES = 1
+# Back-compat default; the effective, runtime-configurable value is
+# ``settings.argus_json_fixer_retries`` (env ARGUS_JSON_FIXER_RETRIES, default 2).
+# The fixer loop reads the setting — change the setting, not this constant.
+MAX_JSON_RETRIES = 2
 
 
 def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
@@ -187,55 +191,135 @@ def _react_llm_caller(
     return _caller
 
 
-def _parse_llm_json(text: str) -> dict[str, Any] | None:
-    """Extract and parse JSON from LLM response. Handles ```json blocks and truncated JSON."""
+#: Trailing comma before a closing bracket/brace — illegal in strict JSON but a
+#: very common small-model output ( ``[1,2,]`` / ``{"a":1,}`` ).
+_TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
+#: Line comments ( ``// ...`` or ``# ...`` ) small models sometimes add.
+_LINE_COMMENT_RE = re.compile(r"(?m)^\s*(?://|#).*$")
+#: Bare Python/JS literals that are not valid JSON tokens, matched on word
+#: boundaries so they never touch the inside of a quoted string value.
+_BARE_LITERALS = (
+    (re.compile(r"\bTrue\b"), "true"),
+    (re.compile(r"\bFalse\b"), "false"),
+    (re.compile(r"\b(?:None|NaN|Infinity|-Infinity)\b"), "null"),
+)
+
+
+def _loads_tolerant(candidate: str) -> Any | None:
+    """Parse ``candidate`` as JSON, trying a sequence of *isolated* repairs.
+
+    Each repair runs in its own try/except and is only accepted if it parses —
+    so this is a strict superset of ``json.loads`` and can never return a worse
+    result than parsing the raw text. Repairs (applied cumulatively): strip line
+    comments, remove trailing commas, map bare ``True``/``False``/``None``/``NaN``
+    literals, and — as a last resort for single-quoted dict/list output — an
+    ``ast.literal_eval`` round-trip. Each is tolerant of a small model's
+    not-quite-JSON output without loosening what counts as a valid value.
+    """
+    if not candidate or not candidate.strip():
+        return None
+    try:
+        return json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    repaired = candidate
+    for transform in (
+        lambda s: _LINE_COMMENT_RE.sub("", s),
+        lambda s: _TRAILING_COMMA_RE.sub(r"\1", s),
+    ):
+        repaired = transform(repaired)
+        try:
+            return json.loads(repaired)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    literal_fixed = repaired
+    for pattern, replacement in _BARE_LITERALS:
+        literal_fixed = pattern.sub(replacement, literal_fixed)
+    try:
+        return json.loads(literal_fixed)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Last resort: single-quoted dict/list (Python-literal) output.
+    try:
+        obj = ast.literal_eval(candidate)
+        if isinstance(obj, (dict, list)):
+            # Round-trip through json to normalise tuples/sets and reject
+            # anything json cannot represent.
+            return json.loads(json.dumps(obj, default=str))
+    except (ValueError, SyntaxError, TypeError):
+        pass
+    return None
+
+
+def _parse_llm_json(text: str) -> Any | None:
+    """Extract and parse JSON from an LLM response.
+
+    Returns the parsed object (dict OR list — callers must normalise the
+    container shape). Handles ```json fences, surrounding prose, truncation, and
+    — via :func:`_loads_tolerant` — common small-model malformations (trailing
+    commas, comments, bare literals, single quotes). Returns None only when no
+    JSON value can be recovered at all.
+    """
     if not text or not text.strip():
         return None
     text = text.strip()
     match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if match:
         text = match.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+    parsed = _loads_tolerant(text)
+    if parsed is not None:
+        return parsed
     if text.startswith("{") and not text.rstrip().endswith("}"):
-        try:
-            return json.loads(text.rstrip() + "}")
-        except json.JSONDecodeError:
-            pass
+        parsed = _loads_tolerant(text.rstrip() + "}")
+        if parsed is not None:
+            return parsed
     if text.startswith("[") and not text.rstrip().endswith("]"):
-        try:
-            return json.loads(text.rstrip() + "]")
-        except json.JSONDecodeError:
-            pass
-    try:
-        obj_start = text.find("{")
-        arr_start = text.find("[")
-        if obj_start >= 0 and (arr_start < 0 or obj_start <= arr_start):
-            depth = 0
-            for i in range(obj_start, len(text)):
-                if text[i] == "{":
-                    depth += 1
-                elif text[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return json.loads(text[obj_start : i + 1])
-        elif arr_start >= 0:
-            depth = 0
-            for i in range(arr_start, len(text)):
-                if text[i] == "[":
-                    depth += 1
-                elif text[i] == "]":
-                    depth -= 1
-                    if depth == 0:
-                        return json.loads(text[arr_start : i + 1])
-    except (json.JSONDecodeError, ValueError):
-        pass
+        parsed = _loads_tolerant(text.rstrip() + "]")
+        if parsed is not None:
+            return parsed
+    # Extract the first balanced JSON value embedded in surrounding prose.
+    obj_start = text.find("{")
+    arr_start = text.find("[")
+    start, open_ch, close_ch = -1, "", ""
+    if obj_start >= 0 and (arr_start < 0 or obj_start <= arr_start):
+        start, open_ch, close_ch = obj_start, "{", "}"
+    elif arr_start >= 0:
+        start, open_ch, close_ch = arr_start, "[", "]"
+    if start >= 0:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == open_ch:
+                depth += 1
+            elif text[i] == close_ch:
+                depth -= 1
+                if depth == 0:
+                    parsed = _loads_tolerant(text[start : i + 1])
+                    if parsed is not None:
+                        return parsed
+                    break
     return None
 
 
-def _phase_schema_ok(data: dict[str, Any], phase: str) -> bool:
+def _findings_from(data: Any) -> list[Any] | None:
+    """Extract the findings list from a parsed LLM value, tolerating shape drift.
+
+    A small model frequently returns the findings as a BARE top-level list, or
+    wraps them under a renamed key (``vulnerabilities`` / ``results`` / ``items``)
+    instead of ``findings``. Returning None here (not raising) lets the caller
+    route to the fixer-retry / graceful-empty path instead of crashing on
+    ``dict.get`` against a list.
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("findings", "vulnerabilities", "results", "items"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return value
+    return None
+
+
+def _phase_schema_ok(data: Any, phase: str) -> bool:
     """Whether ``data`` satisfies the phase's JSON schema.
 
     Returns ``True`` (accept) when enforcement is disabled
@@ -291,7 +375,7 @@ async def _call_llm_with_json_retry(
     if data is not None and _phase_schema_ok(data, phase):
         return data
 
-    for attempt in range(MAX_JSON_RETRIES):
+    for attempt in range(max(0, int(settings.argus_json_fixer_retries))):
         fixer_system, fixer_user = get_fixer_prompt(response, get_schema(phase))
         response = await call_llm_unified(
             fixer_system,
@@ -447,9 +531,9 @@ async def ai_vuln_analysis(
                     ),
                     scan_id=scan_id,
                 )
-                data = _parse_llm_json(_react_result.answer)
-                if data and isinstance(data.get("findings"), list):
-                    return VulnAnalysisOutput(findings=data["findings"])
+                _react_findings = _findings_from(_parse_llm_json(_react_result.answer))
+                if _react_findings is not None:
+                    return VulnAnalysisOutput(findings=_react_findings)
             except Exception:
                 logger.debug("ai_vuln_analysis: suppressed best-effort error", exc_info=True)
         threat_blob = json.dumps(inp.threat_model, default=str)[:1500]
@@ -477,9 +561,9 @@ async def ai_vuln_analysis(
             ),
             VULN_ANALYSIS,
         )
-        if not isinstance(data.get("findings"), list):
+        _findings = _findings_from(data)
+        if _findings is None:
             raise RuntimeError(f"LLM returned invalid response for {VULN_ANALYSIS}")
-        _findings = data["findings"]
         try:
             from src.orchestration.cost_aware_reasoning import ConfidenceEscalator
 
@@ -501,6 +585,18 @@ async def ai_vuln_analysis(
         except Exception:
             logger.debug("ai_vuln_analysis: suppressed best-effort error", exc_info=True)
         return VulnAnalysisOutput(findings=_findings)
+    except RuntimeError as exc:
+        # A flaky small model returning unparseable JSON is an EXPECTED, handled
+        # degradation (empty findings), not an unexpected crash — log it as a
+        # single warning line, not a full-traceback logger.exception.
+        if "invalid response" in str(exc):
+            logger.warning(
+                "vuln_analysis_llm_degraded",
+                extra={"scan_id": scan_id, "phase": "vuln_analysis", "reason": str(exc)},
+            )
+        else:
+            logger.exception("vuln_analysis_llm_failed")
+        return VulnAnalysisOutput(findings=[])
     except Exception:
         logger.exception("vuln_analysis_llm_failed")
         return VulnAnalysisOutput(findings=[])

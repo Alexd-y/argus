@@ -196,18 +196,22 @@ class TestAiPromptsRetryWithFixer:
             assert out.assets == ["x1"]
 
     @pytest.mark.asyncio
-    async def test_fixer_still_invalid_json_raises(self) -> None:
-        """When initial and all fixer retries return invalid JSON, ai_recon raises."""
-        from src.orchestration.ai_prompts import MAX_JSON_RETRIES
+    async def test_fixer_still_invalid_json_degrades_to_empty(self) -> None:
+        """When the initial call and all fixer retries return invalid JSON,
+        ai_recon degrades gracefully to an empty ReconOutput (it never lets a
+        flaky model abort the scan) after ``1 + argus_json_fixer_retries`` calls.
+        """
+        from src.core.config import settings
 
         invalid_responses = [
             "not valid json at all",
             '{"assets": ["broken", ',
             "still not json",
             "{bad}",
+            "nope",
         ]
 
-        expected_calls = 1 + MAX_JSON_RETRIES  # initial + each fixer retry
+        expected_calls = 1 + settings.argus_json_fixer_retries  # initial + each fixer retry
 
         with (
             patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
@@ -219,7 +223,7 @@ class TestAiPromptsRetryWithFixer:
             from src.orchestration.ai_prompts import ai_recon
             from src.orchestration.phases import ReconInput
 
-            with pytest.raises(RuntimeError, match="LLM returned invalid response"):
-                await ai_recon(ReconInput(target="x.com", options={}))
+            out = await ai_recon(ReconInput(target="x.com", options={}))
 
+            assert out.assets == []
             assert mock_call.call_count == expected_calls

@@ -66,6 +66,60 @@ _TOKEN_VALUE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 
 REDACTION_PLACEHOLDER: Final[str] = "[REDACTED]"
 
+#: Standard :class:`logging.LogRecord` attributes — everything else on a record
+#: is a caller-supplied ``extra`` field that the console formatter appends.
+_STD_LOGRECORD_ATTRS: Final[frozenset[str]] = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
+        "asctime",
+        "taskName",
+    },
+)
+
+
+class ConsoleExtraFormatter(logging.Formatter):
+    """Human-readable formatter that APPENDS structured ``extra`` fields.
+
+    The stdlib formatter silently drops ``extra={...}`` payloads — so a
+    ``logger.info("evidence_arbiter_verdict", extra={"model_tier": 3, ...})``
+    renders as the bare message. This formatter appends every non-standard
+    record attribute as ``key=value`` after the message, so the numbers are
+    visible in a plain ``podman logs`` stream (OTel ``trace_id`` / ``span_id``
+    included when present). JSON logging stays the machine-parseable sink.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        base = super().format(record)
+        extras = {
+            key: value
+            for key, value in record.__dict__.items()
+            if key not in _STD_LOGRECORD_ATTRS and not key.startswith("_")
+        }
+        if not extras:
+            return base
+        rendered = " ".join(f"{key}={value!r}" for key, value in extras.items())
+        return f"{base} {rendered}"
+
 
 # ---------------------------------------------------------------------------
 # OTel correlation filter
@@ -242,18 +296,25 @@ def configure_logging() -> None:
         root.removeHandler(handler)
 
     handler = logging.StreamHandler(sys.stdout)
-    try:
-        from pythonjsonlogger import jsonlogger
+    use_console = getattr(settings, "log_format", "json") == "console"
+    json_formatter = None
+    if not use_console:
+        try:
+            from pythonjsonlogger import jsonlogger
 
-        handler.setFormatter(
-            jsonlogger.JsonFormatter(
+            json_formatter = jsonlogger.JsonFormatter(
                 "%(asctime)s %(name)s %(levelname)s %(message)s",
                 timestamp=True,
-            ),
-        )
-    except ImportError:  # pragma: no cover — pythonjsonlogger is a hard dep
+            )
+        except ImportError:  # pragma: no cover — pythonjsonlogger is a hard dep
+            json_formatter = None
+    if json_formatter is not None:
+        handler.setFormatter(json_formatter)
+    else:
+        # Console mode, or the JSON logger is unavailable: a human-readable line
+        # that still appends the structured ``extra`` fields so nothing is lost.
         handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"),
+            ConsoleExtraFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"),
         )
     for flt in _build_filters():
         handler.addFilter(flt)
@@ -264,6 +325,7 @@ def configure_logging() -> None:
 __all__ = [
     "REDACTION_PLACEHOLDER",
     "SENSITIVE_HEADER_KEYS",
+    "ConsoleExtraFormatter",
     "OTelTraceContextFilter",
     "SensitiveHeaderRedactor",
     "configure_logging",

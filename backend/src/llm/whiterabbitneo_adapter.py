@@ -257,6 +257,19 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
             "completion_tokens": int(usage_raw.get("completion_tokens", 0)),
             "total_tokens": int(usage_raw.get("total_tokens", 0)),
         }
+        # Truncation (finish_reason == "length") is the usual cause of broken
+        # JSON from a small model hitting max_tokens — surface it so operators
+        # see the real cause of a downstream "invalid response" instead of
+        # guessing. Not an error: the parser/fixer still gets a chance.
+        if choices[0].get("finish_reason") == "length":
+            logger.warning(
+                "wrb_response_truncated",
+                extra={
+                    "event": "wrb_response_truncated",
+                    "completion_tokens": usage["completion_tokens"],
+                    "max_tokens": max_tokens,
+                },
+            )
         return content.strip(), usage
 
     async def health_check(self) -> dict[str, Any]:

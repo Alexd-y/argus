@@ -12,13 +12,32 @@ import logging
 import time
 from typing import Any
 
-from celery.signals import beat_init, task_failure, task_postrun, task_prerun
+from celery.signals import beat_init, setup_logging, task_failure, task_postrun, task_prerun
 
 from celery import Celery
 from src.core.config import settings
 from src.core.observability import record_celery_task
 
 _logger = logging.getLogger(__name__)
+
+
+@setup_logging.connect
+def _configure_argus_worker_logging(**_kwargs: Any) -> None:
+    """Install ARGUS's structured logging on Celery worker / beat processes.
+
+    Celery otherwise hijacks the root logger with its own formatter, which drops
+    every structured ``extra={...}`` field — so ``evidence_arbiter_verdict``
+    (model_tier→arbiter_tier→applied_tier), tool-skip reasons, and every other
+    structured event were invisible and unqueryable in worker logs, even though
+    the API process logs them fully. Connecting ``setup_logging`` tells Celery
+    NOT to configure logging itself; we then install the SAME handler the API
+    uses (NDJSON by default, or console-with-extra when ARGUS_LOG_FORMAT=console),
+    so worker logs are one consistent, machine-parseable stream.
+    """
+    from src.core.logging_config import configure_logging
+
+    configure_logging()
+
 
 app = Celery(
     "argus",
@@ -59,6 +78,30 @@ app.conf.update(
     task_track_started=True,
     task_time_limit=86400,
     worker_prefetch_multiplier=1,
+    # Broker/result-backend resilience: a brief redis blip otherwise dumped a
+    # ConnectionRefusedError traceback on every reconnect. Retry on startup and
+    # keep the socket alive + a backoff retry policy so transient blips are
+    # absorbed quietly instead of surfacing as noisy tracebacks.
+    broker_connection_retry_on_startup=True,
+    broker_transport_options={
+        "socket_keepalive": True,
+        "retry_policy": {
+            "max_retries": 5,
+            "interval_start": 0.5,
+            "interval_step": 0.5,
+            "interval_max": 3.0,
+        },
+    },
+    result_backend_transport_options={
+        "retry_policy": {
+            "max_retries": 5,
+            "interval_start": 0.5,
+            "interval_step": 0.5,
+            "interval_max": 3.0,
+        },
+    },
+    redis_socket_keepalive=True,
+    redis_backend_health_check_interval=30,
     task_routes={
         "argus.scan_phase": {"queue": "argus.scans"},
         "argus.generate_report": {"queue": "argus.reports"},
