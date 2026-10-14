@@ -78,6 +78,12 @@ app.conf.update(
     task_track_started=True,
     task_time_limit=86400,
     worker_prefetch_multiplier=1,
+    # Never let Celery hijack the root logger with its own formatter (which
+    # drops structured ``extra={...}``). The ``setup_logging`` signal already
+    # installs ARGUS's handler; these make it belt-and-suspenders so ``extra``
+    # is preserved even if the signal path ever changes.
+    worker_hijack_root_logger=False,
+    worker_redirect_stdouts=False,
     # Broker/result-backend resilience: a brief redis blip otherwise dumped a
     # ConnectionRefusedError traceback on every reconnect. Retry on startup and
     # keep the socket alive + a backoff retry policy so transient blips are

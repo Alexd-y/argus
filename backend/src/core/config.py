@@ -182,6 +182,18 @@ class Settings(BaseSettings):
             "whiterabbitneo_max_context_tokens",
         ),
     )
+    # Completion-token budget for WRB phase calls. The local 7B truncates its
+    # JSON (finish_reason=="length") when this is too small for a rich
+    # vuln_analysis, impoverishing the findings. Raised from the old hardcoded
+    # 4096 so the analysis is not cut off; the adapter still clamps it to fit the
+    # real context window (needs a matching WHITERABBITNEO_MAX_CONTEXT_TOKENS and
+    # the backing server's --ctx-size). Env: WHITERABBITNEO_MAX_TOKENS.
+    whiterabbitneo_max_tokens: int = Field(
+        default=8192,
+        ge=512,
+        le=32768,
+        validation_alias=AliasChoices("WHITERABBITNEO_MAX_TOKENS", "whiterabbitneo_max_tokens"),
+    )
     # External LLM Gateway URL (optional — uses in-process routing when unset)
     llm_gateway_url: str = Field(
         default="",

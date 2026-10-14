@@ -20,7 +20,27 @@ logger = logging.getLogger(__name__)
 WRB_DEFAULT_MODEL = (
     os.environ.get("WHITERABBITNEO_MODEL", "").strip() or "taico-ai/WhiteRabbitNeo-v3-7B"
 )
-WRB_DEFAULT_MAX_TOKENS = 4096
+
+
+def _resolve_wrb_default_max_tokens() -> int:
+    """Completion-token budget for WRB calls, from settings (fail-safe to 8192).
+
+    A too-small budget truncates the model's JSON mid-findings
+    (finish_reason=="length"); 8192 gives a rich vuln_analysis room to finish.
+    The adapter still clamps this to the real context window per call.
+    """
+    try:
+        from src.core.config import settings
+
+        configured = int(getattr(settings, "whiterabbitneo_max_tokens", 0) or 0)
+        if configured > 0:
+            return configured
+    except (ImportError, AttributeError, TypeError, ValueError):
+        pass
+    return 8192
+
+
+WRB_DEFAULT_MAX_TOKENS = _resolve_wrb_default_max_tokens()
 WRB_DEFAULT_TEMPERATURE = 0.3
 WRB_DEFAULT_TIMEOUT = 3600.0
 # WhiteRabbitNeo v3 7B context window (tokens). Source of truth: the unified
