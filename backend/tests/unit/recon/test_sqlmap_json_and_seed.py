@@ -12,9 +12,23 @@ from __future__ import annotations
 from src.recon.vulnerability_analysis.active_scan.input_surface_inventory import (
     input_surface_items_from_seed,
 )
-from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import build_sqlmap_va_argv
+from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import (
+    build_sqlmap_va_argv,
+    normalize_sqlmap_findings,
+    parse_sqlmap_stdout,
+)
 
 _LOGIN = "http://juice-shop:3000/rest/user/login"
+
+# Real sqlmap confirmation output for the juice-shop JSON login SQLi.
+_SQLMAP_CONFIRMED = """sqlmap identified the following injection point(s) with a total of 442 HTTP(s) requests:
+---
+Parameter: JSON email ((custom) POST)
+    Type: boolean-based blind
+    Title: SQLite boolean-based blind - WHERE clause
+    Payload: {"email":"argus_probe' AND CASE WHEN 7881=7881 THEN 7881 ELSE 1 END-- Wnam"}
+---
+back-end DBMS: SQLite"""
 
 
 def test_json_body_is_passed_with_content_type() -> None:
@@ -23,6 +37,33 @@ def test_json_body_is_passed_with_content_type() -> None:
     assert argv[argv.index("--data") + 1] == '{"email":"argus_probe"}'
     assert "-H" in argv
     assert argv[argv.index("-H") + 1] == "Content-Type: application/json"
+
+
+def test_ignore_code_is_added() -> None:
+    # Without --ignore-code sqlmap aborts on the login's 401 and never confirms.
+    argv = build_sqlmap_va_argv(_LOGIN, '{"email":"p"}')
+    assert "--ignore-code" in argv
+    assert argv[argv.index("--ignore-code") + 1] == "401,403"
+
+
+def test_parser_handles_json_multiword_param() -> None:
+    # The real confirmation names the param "JSON email ((custom) POST)".
+    rows = parse_sqlmap_stdout(_SQLMAP_CONFIRMED)
+    assert len(rows) == 1
+    assert rows[0]["param"] == "JSON email"
+    assert rows[0]["dbms"] == "SQLite"
+    assert "boolean-based blind" in rows[0]["injection_type"]
+
+
+def test_confirmed_output_becomes_cwe89_high_finding() -> None:
+    rows = parse_sqlmap_stdout(_SQLMAP_CONFIRMED)
+    findings = normalize_sqlmap_findings(
+        rows, target_url=_LOGIN, argv=build_sqlmap_va_argv(_LOGIN, '{"email":"p"}')
+    )
+    assert len(findings) == 1
+    d = findings[0]["data"]
+    assert d["cwe"] == "CWE-89"
+    assert d["severity"] == "high"
 
 
 def test_form_body_passed_without_json_header() -> None:

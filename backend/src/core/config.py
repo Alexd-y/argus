@@ -1272,6 +1272,14 @@ class Settings(BaseSettings):
     sqlmap_va_risk: int = Field(
         default=1, ge=1, le=3, validation_alias=AliasChoices("SQLMAP_VA_RISK", "sqlmap_va_risk")
     )
+    # HTTP codes sqlmap must NOT abort on (``--ignore-code``). A login answers a
+    # failed attempt with 401/403; without ignoring them sqlmap bails before
+    # testing the injection that flips the code to 200 — so auth-bypass SQLi goes
+    # undetected. Empty disables. Env: SQLMAP_VA_IGNORE_CODES.
+    sqlmap_va_ignore_codes: str = Field(
+        default="401,403",
+        validation_alias=AliasChoices("SQLMAP_VA_IGNORE_CODES", "sqlmap_va_ignore_codes"),
+    )
     # Block 1.2/1.3 — gate evidence-less placeholder findings ("unknown finding",
     # fingerprint-only hits) and collapse duplicates before reporting. Env:
     # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
