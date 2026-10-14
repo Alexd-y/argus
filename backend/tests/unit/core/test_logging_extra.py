@@ -99,3 +99,12 @@ def test_celery_setup_logging_signal_installs_argus_logging(monkeypatch) -> None
     )
     celery_app._configure_argus_worker_logging()
     assert called["n"] == 1
+
+
+def test_celery_never_hijacks_root_logger() -> None:
+    # Belt-and-suspenders so `extra` is NEVER dropped even if the signal path
+    # changes: Celery must not replace ARGUS's handler with its own formatter.
+    import src.celery_app as celery_app
+
+    assert celery_app.app.conf.worker_hijack_root_logger is False
+    assert celery_app.app.conf.worker_redirect_stdouts is False
