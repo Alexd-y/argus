@@ -1341,6 +1341,22 @@ class Settings(BaseSettings):
     va_exploit_aggressive_enabled: bool = False
     # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)
     va_ai_plan_enabled: bool = False
+    # Char caps for VA-pipeline LLM prompts (src/recon/vulnerability_analysis/
+    # pipeline.py): ``va_prompt_truncate_chars`` trims the per-task bundle JSON,
+    # ``va_prompt_max_chars`` the larger full-model JSON. Previously referenced
+    # but NOT declared here → AttributeError whenever that staged-prompt path ran
+    # (a latent crash). Declared fail-safe; the WRB adapter still trims the final
+    # prompt to the real context window. Env: VA_PROMPT_TRUNCATE_CHARS / VA_PROMPT_MAX_CHARS.
+    va_prompt_truncate_chars: int = Field(
+        default=24000,
+        ge=1000,
+        validation_alias=AliasChoices("VA_PROMPT_TRUNCATE_CHARS", "va_prompt_truncate_chars"),
+    )
+    va_prompt_max_chars: int = Field(
+        default=48000,
+        ge=1000,
+        validation_alias=AliasChoices("VA_PROMPT_MAX_CHARS", "va_prompt_max_chars"),
+    )
     va_active_scan_tool_timeout_sec: float = 120.0
     # Slow-CPU headroom: a single global multiplier applied to every active-scan
     # tool timeout (and the MCP runner's default injection timeout). On CPU-only
