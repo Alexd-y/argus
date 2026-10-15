@@ -192,6 +192,43 @@ def has_reference(paragraph: str) -> bool:
     return bool(_REFERENCE_RE.search(paragraph or ""))
 
 
+#: An individual reference label inside a ``[…]`` marker (``CL-0001``, ``E-0007``).
+_REFERENCE_LABEL_RE = re.compile(r"(?:CL|E)-[0-9A-Za-z._\-]+", re.IGNORECASE)
+
+
+def extract_reference_labels(text: str) -> list[str]:
+    """Return every ``CL-``/``E-`` label named inside a ``[…]`` reference marker.
+
+    A single marker may carry several labels (``[CL-0001 / E-0002]``) — each is returned
+    separately, in order, so resolvability can be checked per label.
+    """
+    labels: list[str] = []
+    for m in _REFERENCE_RE.finditer(text or ""):
+        inner = m.group(0)[1:-1]  # strip the surrounding [ ]
+        labels.extend(tok.strip() for tok in _REFERENCE_LABEL_RE.findall(inner))
+    return labels
+
+
+def unresolvable_references(text: str, known_labels: set[str] | frozenset[str]) -> list[str]:
+    """Return reference labels present in ``text`` that resolve to nothing (R-6.2.2/3).
+
+    A ``[CL-…]`` / ``[E-…]`` marker is a promise that the reader can trace the claim to a
+    specific finding/evidence row. A label that names no minted reference is a dangling
+    pointer — a completeness defect, not cosmetic. Empty ``known_labels`` means "cannot
+    resolve anything" → every referenced label is reported (the caller decides to enforce).
+    """
+    known_up = {lab.upper() for lab in known_labels}
+    seen: set[str] = set()
+    out: list[str] = []
+    for lab in extract_reference_labels(text):
+        up = lab.upper()
+        if up in known_up or up in seen:
+            continue
+        seen.add(up)
+        out.append(lab)
+    return out
+
+
 def _split_paragraphs(text: str) -> list[str]:
     return [p.strip() for p in re.split(r"\n\s*\n", text or "") if p.strip()]
 
@@ -275,19 +312,33 @@ def check_output_consistency(
     known_finding_ids: set[str] | None = None,
     has_proven_chains: bool = False,
     wstg_coverage_pct: float | None = None,
+    known_reference_labels: set[str] | frozenset[str] | None = None,
     section: str = "",
 ) -> list[ProseViolation]:
-    """Cross-check a model's text against report facts (§29.3, R-06…R-12).
+    """Cross-check a model's text against report facts (§29.3, R-06…R-12 / R-6.2.2-3).
 
     * chain claims require a proven chain (R-07);
     * finding ids must be full-length (R-08);
     * a verification command must not disable the checked property (R-06);
     * severity counters must sum to the stated total (R-10);
-    * a stated WSTG coverage must equal the canonical value (R-12).
+    * a stated WSTG coverage must equal the canonical value (R-12);
+    * every ``[CL-…]`` / ``[E-…]`` reference must resolve to a minted label when the set
+      of known labels is supplied (R-6.2.2/3) — a dangling reference is a BLOCK.
     """
     known_finding_ids = known_finding_ids or set()
     out: list[ProseViolation] = []
     loc = section or "section"
+
+    if known_reference_labels is not None:
+        for label in unresolvable_references(text, known_reference_labels):
+            out.append(
+                ProseViolation(
+                    "unresolvable_reference",
+                    ProseSeverity.BLOCK,
+                    f"reference '[{label}]' in '{loc}' resolves to no finding/evidence "
+                    f"(R-6.2.2/3)",
+                )
+            )
 
     if _CHAIN_CLAIM_RE.search(text or "") and not has_proven_chains:
         out.append(
@@ -431,10 +482,12 @@ __all__ = [
     "blocking_violations",
     "check_output_consistency",
     "evaluate_prose",
+    "extract_reference_labels",
     "find_prompt_artifacts",
     "find_stop_phrases",
     "has_reference",
     "insecure_verification_flags",
     "is_raw_json_prose",
     "truncated_finding_ids",
+    "unresolvable_references",
 ]

@@ -374,12 +374,23 @@ def _compute_valhalla_release_blockers(
         if report_text is not None:
 
             def _output_consistency() -> list[str]:
+                from src.reports.evidence_references import build_evidence_reference_index
+
                 known_ids = {f.finding_id for f in snapshot.findings if f.finding_id}
                 has_proven = any(c.kind == "proven" for c in snapshot.exploit_chains)
                 wstg_pct = None
                 if isinstance(snapshot.wstg, dict):
                     raw_pct = snapshot.wstg.get("coverage_pct")
                     wstg_pct = float(raw_pct) if isinstance(raw_pct, (int, float)) else None
+                # R-6.2.2/3 — reference resolvability: a [CL-…]/[E-…] marker in prose must
+                # name a label minted from this report's findings/evidence; a dangling
+                # reference is a release blocker.
+                ref_index = build_evidence_reference_index(
+                    [
+                        {"finding_id": f.finding_id, "evidence_ids": list(f.evidence_ids)}
+                        for f in snapshot.findings
+                    ]
+                )
                 return [
                     f"OUTPUT: {cv.rule}: {cv.detail}"
                     for cv in blocking_prose_violations(
@@ -388,6 +399,7 @@ def _compute_valhalla_release_blockers(
                             known_finding_ids=known_ids,
                             has_proven_chains=has_proven,
                             wstg_coverage_pct=wstg_pct,
+                            known_reference_labels=ref_index.known_labels(),
                         )
                     )
                 ]

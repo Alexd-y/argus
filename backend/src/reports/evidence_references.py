@@ -40,6 +40,28 @@ class EvidenceReferenceIndex:
     claim_ref: dict[str, str]
     evidence_ref: dict[str, str]
 
+    def known_labels(self) -> frozenset[str]:
+        """Every minted reference label (``CL-…`` / ``E-…``) a prose marker may resolve to.
+
+        The authority for reference *resolvability* (Wave 4 / Stage 3, R-6.2.2/3): a
+        ``[CL-…]`` / ``[E-…]`` marker in prose must name one of these, else it is dangling.
+        """
+        return frozenset(self.claim_ref.values()) | frozenset(self.evidence_ref.values())
+
+    def resolve_label(self, label: str) -> str | None:
+        """Reverse lookup: the source id (finding / evidence) a minted label points to.
+
+        ``None`` when the label was never minted — i.e. the reference does not resolve.
+        """
+        want = (label or "").strip().upper()
+        for fid, lab in self.claim_ref.items():
+            if lab.upper() == want:
+                return fid
+        for eid, lab in self.evidence_ref.items():
+            if lab.upper() == want:
+                return eid
+        return None
+
     def reference_for(self, finding: Any) -> str:
         """Return the ``[CL-… / E-…]`` marker for ``finding`` (matches prose_gate).
 
