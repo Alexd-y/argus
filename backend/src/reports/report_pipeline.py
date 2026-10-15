@@ -267,6 +267,7 @@ def _compute_valhalla_release_blockers(
     llm_merge_failed: bool = False,
     ai_section_failed: bool = False,
     pdf_missing: bool = False,
+    ledger_blockers: list[str] | None = None,
 ) -> list[str]:
     """Evaluate the Valhalla release blockers fail-closed (Phase G, RC-01…RC-04).
 
@@ -436,7 +437,57 @@ def _compute_valhalla_release_blockers(
     if pdf_missing:
         blockers.append("GATE-ERROR: no PDF in the Valhalla bundle; deliverable is incomplete")
 
+    # --- Wave 4 / R-6.1.2 — a stored artifact the report neither presented nor explicitly
+    #     excluded (the ledger's ``unprocessed`` state) is a completeness blocker. Computed
+    #     in the async pipeline scope (DB-backed) and threaded in here.
+    if ledger_blockers:
+        blockers.extend(ledger_blockers)
+
     return blockers
+
+
+async def _build_artifact_ledger_blockers(
+    session: AsyncSession,
+    *,
+    built: Any,
+    report_data: Any,
+    report_id: str,
+    scan_id: str,
+    tenant_id: str,
+) -> list[str]:
+    """Build + persist the per-artifact accounting ledger and return its blockers.
+
+    Fail-closed (Wave 4 / R-6.1.2): any error building the ledger is itself a blocker,
+    never a silent clean pass. The ledger is always persisted + logged; the caller
+    decides whether the blockers are *enforced* (``artifact_ledger_enforced``).
+    """
+    try:
+        from src.reports.artifact_ledger import ledger_release_blockers
+        from src.reports.artifact_ledger_builder import build_and_persist_ledger
+
+        snapshot = build_snapshot_from_report_data(
+            report_data,
+            scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+            scan_report_data=getattr(built, "scan_report_data", None),
+        )
+        entries = await build_and_persist_ledger(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            report_id=report_id,
+            doc=snapshot,
+        )
+        return ledger_release_blockers(entries)
+    except Exception as exc:  # noqa: BLE001 — fail-closed: an errored ledger blocks release
+        logger.warning(
+            "artifact_ledger_errored",
+            extra={
+                "event": "artifact_ledger_errored",
+                "report_id": report_id,
+                "error_type": type(exc).__name__,
+            },
+        )
+        return [f"GATE-ERROR: artifact_ledger failed: {type(exc).__name__}"]
 
 
 async def resolve_scan_id_for_report(
@@ -1262,6 +1313,19 @@ async def run_generate_report_pipeline(
             # RC-17 — the client Valhalla bundle must carry a PDF (canonical or legacy);
             # its absence is an honest-draft blocker, not a silent omission.
             pdf_missing = not any(k in generated for k in ("pdf", "canonical_pdf"))
+            # Wave 4 / R-6.1.2 — per-artifact accounting ledger. Reconcile every stored
+            # artifact against the canonical snapshot's references, persist the ledger, and
+            # surface any ``unprocessed`` artifact as a release blocker. Always built +
+            # persisted + logged; only *enforced* (folded into the honest-draft gate) when
+            # ``artifact_ledger_enforced`` is set. Fail-closed on its own errors.
+            ledger_blockers = await _build_artifact_ledger_blockers(
+                session,
+                built=built,
+                report_data=report_data,
+                report_id=report_id,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+            )
             blockers = _compute_valhalla_release_blockers(
                 report_data=report_data,
                 template_context=built.template_context,
@@ -1271,6 +1335,9 @@ async def run_generate_report_pipeline(
                 llm_merge_failed=llm_merge_failed,
                 ai_section_failed=ai_section_failed,
                 pdf_missing=pdf_missing,
+                ledger_blockers=(
+                    ledger_blockers if settings.artifact_ledger_enforced else None
+                ),
             )
             if blockers:
                 logger.warning(

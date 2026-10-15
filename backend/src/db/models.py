@@ -922,6 +922,52 @@ class ReportObject(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ArtifactLedger(Base):
+    """Per-artifact accounting ledger (Wave 4 / R-6.1.1 / R-6.1.2).
+
+    One row per artifact a scan produced, recording whether it was ``presented`` in
+    the report, ``excluded`` (with a closed-enum reason), or ``unprocessed`` (which
+    blocks the release). Built at report-generation time by reconciling the stored
+    artifacts (Evidence rows, tool-run outputs) against the canonical snapshot's
+    references. ``object_key`` is retained for audit / de-dup only — it is never
+    rendered into a client report (it is an internal storage path).
+    """
+
+    __tablename__ = "artifact_ledger"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+    )
+    #: Nullable: the accounting is scan-scoped and survives report regeneration.
+    report_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=True
+    )
+    #: Opaque evidence id (no FK — tool-run outputs have no Evidence row).
+    evidence_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Origin table: ``evidence`` | ``tool_run``.
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    tool_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: unprocessed | presented | excluded.
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Closed-enum reason when excluded (duplicate|size_limit|tenant_policy|
+    #: service_output|empty_artifact); NULL otherwise.
+    exclusion_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    section_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_artifact_ledger_scan_id", "scan_id"),
+        Index("ix_artifact_ledger_report_id", "report_id"),
+    )
+
+
 class ReportShareLink(Base):
     """Time-limited share link for public report access."""
 

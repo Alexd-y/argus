@@ -337,6 +337,32 @@ class Settings(BaseSettings):
             "valhalla_release_blockers_enabled",
         ),
     )
+    # artifact_ledger_enforced — Wave 4 / R-6.1.2 per-artifact accounting ledger. When
+    # on, the report pipeline reconciles every stored artifact (Evidence rows, tool-run
+    # outputs) against what the report references and records a ledger row per artifact
+    # (presented | excluded | unprocessed). Any ``unprocessed`` artifact — one the scan
+    # collected but the report silently dropped — becomes a release blocker folded into
+    # the Valhalla honest-draft gate. The ledger is always built + persisted + logged;
+    # this flag only controls whether ``unprocessed`` blocks the release. Staged like the
+    # other completeness gates; default True (fail-closed on silent artifact loss).
+    artifact_ledger_enforced: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_ARTIFACT_LEDGER_ENFORCED",
+            "artifact_ledger_enforced",
+        ),
+    )
+    # artifact_ledger_size_limit_bytes — artifacts larger than this are accounted as an
+    # explicit ``size_limit`` exclusion rather than silently dropped (R-6.1.1). 0 disables
+    # the size rule. Default 0 (off) — size capping is a tenant/profile decision.
+    artifact_ledger_size_limit_bytes: int = Field(
+        default=0,
+        ge=0,
+        validation_alias=AliasChoices(
+            "ARGUS_ARTIFACT_LEDGER_SIZE_LIMIT",
+            "artifact_ledger_size_limit_bytes",
+        ),
+    )
     # valhalla_legacy_pdf — Phase 1 (formats prompt). The canonical snapshot bundle
     # (ReportDocumentV1 → renderers → ``canonical_pdf``) is the single source of truth
     # for every Valhalla format including PDF. The legacy ``generators.generate_pdf`` /
