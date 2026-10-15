@@ -33,13 +33,14 @@ from __future__ import annotations
 import os
 
 # ---------------------------------------------------------------------------
-# Override the parent unit-test default *before* any src.* import lands.
-# ``setdefault`` would lose to the parent ``unit/conftest.py`` which already
-# set DATABASE_URL=sqlite+aiosqlite:///:memory:, so we use a hard assignment.
+# Keep a deterministic sqlite DSN for this suite (identical to the parent
+# unit/conftest default). A previous fake *postgres* override was stale
+# (src.db.session constructs fine on sqlite) and harmful: as a module-level
+# os.environ assignment it leaked a postgres URL into later suites, making any
+# PG-connecting test (e.g. migration round-trips) hang/error and corrupt shared
+# async/logging state — the root of the full-suite isolation cascade.
 # ---------------------------------------------------------------------------
-os.environ["DATABASE_URL"] = (
-    "postgresql+asyncpg://mcp-unit-test:no-password@localhost:5432/mcp_test"
-)
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 
 from collections.abc import Iterator
 from uuid import UUID, uuid4
