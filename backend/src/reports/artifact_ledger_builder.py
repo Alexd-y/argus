@@ -157,22 +157,29 @@ async def persist_artifact_ledger(
     *,
     tenant_id: str,
     scan_id: str,
-    report_id: str,
+    report_id: str | None,
     entries: list[LedgerEntry],
 ) -> None:
-    """Replace this report's ledger rows with ``entries`` (idempotent on regen)."""
-    await session.execute(
-        delete(ArtifactLedgerRow).where(
-            cast(ArtifactLedgerRow.report_id, String) == str(report_id),
+    """Replace this report's ledger rows with ``entries`` (idempotent on regen).
+
+    ``report_id`` is normally a real report; it is nullable (the accounting is
+    scan-scoped and survives regeneration), so ``None`` is preserved as SQL NULL rather
+    than coerced to the string ``"None"`` (which would break the FK).
+    """
+    report_key = str(report_id) if report_id is not None else None
+    if report_key is not None:
+        await session.execute(
+            delete(ArtifactLedgerRow).where(
+                cast(ArtifactLedgerRow.report_id, String) == report_key,
+            )
         )
-    )
     for e in entries:
         art = e.artifact
         session.add(
             ArtifactLedgerRow(
                 tenant_id=str(tenant_id),
                 scan_id=str(scan_id),
-                report_id=str(report_id),
+                report_id=report_key,
                 evidence_id=art.evidence_id,
                 object_key=art.object_key,
                 kind=art.kind,
