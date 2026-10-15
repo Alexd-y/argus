@@ -49,6 +49,9 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
     parts.append(f"<li>severity: <code>{escape(f.severity)}</code></li>")
     parts.append(f"<li>verification_status: <code>{escape(f.verification_status)}</code></li>")
     parts.append(f"<li>confidence: <code>{f.confidence:.4f}</code></li>")
+    # Cross-cutting observation identity + first-contact provenance (R-6.2.1).
+    _li(parts, "observation_id", f.observation_id)
+    _li(parts, "provenance", f.provenance)
     parts.append(f"<li>cwe: <code>{_na(f.cwe)}</code></li>")
     _li(parts, "category", f.category)
     _li(parts, "owasp_category", f.owasp_category)

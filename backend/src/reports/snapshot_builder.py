@@ -274,8 +274,11 @@ def _map_finding(
         return None
 
     port_val = _fget("port")
+    observation_id, provenance = _observation_identity(finding)
     return ReportFinding(
         finding_id=finding_id,
+        observation_id=observation_id,
+        provenance=provenance,
         title=title,
         severity=_severity(getattr(finding, "severity", "info")),
         category=getattr(finding, "category", None),
@@ -316,6 +319,50 @@ def _map_finding(
 
 def _str_or_none(value: Any) -> str | None:
     return str(value) if value not in (None, "") else None
+
+
+#: Provenance keys, in priority order, that name an observation's first contact.
+_FIRST_CONTACT_KEYS: tuple[str, ...] = (
+    "first_contact",
+    "first_seen_by",
+    "source",
+    "origin",
+    "detector",
+    "method",
+)
+
+
+def _observation_identity(finding: Any) -> tuple[str | None, str | None]:
+    """Resolve the cross-cutting observation id + first-contact provenance (R-6.2.1).
+
+    ``observation_id`` is the finding's content fingerprint (``fingerprint_key`` /
+    ``observation_id``) — stable across re-runs, unlike the per-report ``finding_id``.
+    ``provenance`` is a short string naming where the observation was first seen; it is
+    read from the finding's ``provenance`` (a dict's first-contact key, or a plain
+    string). When an observation id exists but no first contact is recorded, provenance
+    is set to the ``first_contact_undefined`` flag so the report states the chain is
+    partial rather than implying a full first-contact→report trace.
+    """
+    fp = None
+    for name in ("fingerprint_key", "observation_id"):
+        val = getattr(finding, name, None) if not isinstance(finding, dict) else finding.get(name)
+        if val not in (None, ""):
+            fp = str(val)
+            break
+
+    raw_prov = getattr(finding, "provenance", None) if not isinstance(finding, dict) else finding.get("provenance")
+    provenance: str | None = None
+    if isinstance(raw_prov, dict):
+        for key in _FIRST_CONTACT_KEYS:
+            if raw_prov.get(key) not in (None, ""):
+                provenance = str(raw_prov[key])
+                break
+    elif isinstance(raw_prov, str) and raw_prov.strip():
+        provenance = raw_prov.strip()
+
+    if fp and not provenance:
+        provenance = "first_contact_undefined"
+    return fp, provenance
 
 
 def _map_tool_runs(scan_report_data: Any) -> list[ReportToolRun]:

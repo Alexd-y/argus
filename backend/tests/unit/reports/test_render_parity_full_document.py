@@ -44,6 +44,8 @@ def _full_finding() -> ReportFinding:
     # production) so the value is present via the PoC rendering.
     return ReportFinding(
         finding_id="F-1",
+        observation_id="zzObservationId",
+        provenance="zzProvenanceFirstContact",
         title="zzFindTitle",
         severity="high",
         category="zzCategory",

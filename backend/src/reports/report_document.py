@@ -258,6 +258,15 @@ class ReportFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     finding_id: str
+    #: Cross-cutting observation identity (Wave 4 / Stage 4, R-6.2.1): a stable id that
+    #: ties the same observed thing across phases (recon → analysis → exploitation →
+    #: report). Sourced from the finding's content fingerprint; unlike ``finding_id``
+    #: (per-report) it survives re-runs, so a reader can follow one observation end to end.
+    observation_id: str | None = None
+    #: First-contact provenance of the observation (e.g. ``recon:httpx``, ``tool_output``).
+    #: ``first_contact_undefined`` when an observation id exists but its first contact was
+    #: not recorded — the prompt-sanctioned flag for partial chain coverage (R-6.2.1).
+    provenance: str | None = None
     title: str
     # ``unknown`` is a first-class band (finding whose severity could not be
     # determined) — it is NEVER folded into ``info`` or ``low``. ``info`` is a

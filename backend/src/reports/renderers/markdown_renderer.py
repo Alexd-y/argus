@@ -98,6 +98,11 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         f"### {index:02d} · {f.severity.upper()} · {f.verification_status} — {_esc_md(f.title)}"
     )
     lines.append(f"`{f.finding_id}`")
+    # Cross-cutting observation identity + first-contact provenance (R-6.2.1).
+    if f.observation_id:
+        lines.append(f"- Observation: `{_esc_md(f.observation_id)}`")
+    if f.provenance:
+        lines.append(f"- Provenance: `{_esc_md(f.provenance)}`")
     lines.append("")
     # Metrics table — only rows that carry a value.
     lines.append("| | |")

@@ -101,6 +101,9 @@ def render_xml(doc: ReportDocumentV1) -> str:
         fe.set("severity", f.severity)
         fe.set("verification_status", f.verification_status)
         fe.set("confidence", f"{f.confidence:.4f}")
+        # Cross-cutting observation identity + first-contact provenance (R-6.2.1).
+        _text(fe, "observation_id", f.observation_id)
+        _text(fe, "provenance", f.provenance)
         _text(fe, "title", f.title)
         _text(fe, "category", f.category)
         _text(fe, "cwe", f.cwe)
