@@ -170,8 +170,37 @@ def _map_poc(finding: Any) -> ReportPoC | None:
     return ReportPoC(**{k: v for k, v in fields.items() if v})
 
 
+def _sanitize_payload(value: Any, target: str) -> str | None:
+    """Sanitise a stored payload (list[str] / str) for publication (R-6.4).
+
+    Payloads reach the report only through ``sanitize_replay_command`` so secrets,
+    destructive flags and the real target are redacted. Returns a single display string
+    (space-joined argv), or ``None`` when there is nothing to show.
+    """
+    if value in (None, "", [], {}):
+        return None
+    from src.reports.replay_command_sanitizer import SanitizeContext, sanitize_replay_command
+
+    argv = [str(x) for x in value] if isinstance(value, (list, tuple)) else [str(value)]
+    try:
+        cleaned = sanitize_replay_command(argv, SanitizeContext(target=target or ""))
+    except (TypeError, ValueError):
+        return None
+    joined = " ".join(c for c in cleaned if c).strip()
+    return joined or None
+
+
+def _taint_path(finding: Any) -> list[str]:
+    raw = getattr(finding, "taint_path", None) if not isinstance(finding, dict) else finding.get(
+        "taint_path"
+    )
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [str(step) for step in raw if str(step).strip()]
+
+
 def _map_finding(
-    finding: Any, index: int, *, evidence_keys: list[str] | None = None
+    finding: Any, index: int, *, evidence_keys: list[str] | None = None, target: str = ""
 ) -> ReportFinding:
     finding_id = str(getattr(finding, "finding_id", None) or f"F-{index + 1}")
     evidence_refs = list(getattr(finding, "evidence_refs", None) or [])
@@ -275,10 +304,17 @@ def _map_finding(
 
     port_val = _fget("port")
     observation_id, provenance = _observation_identity(finding)
+    fingerprint_key = _str_or_none(_fget("fingerprint_key"))
+    payload_attempted = _sanitize_payload(_fget("payload_attempted"), target)
+    payload_successful = _sanitize_payload(_fget("payload_successful"), target)
     return ReportFinding(
         finding_id=finding_id,
         observation_id=observation_id,
         provenance=provenance,
+        fingerprint_key=fingerprint_key,
+        taint_path=_taint_path(finding),
+        payload_attempted=payload_attempted,
+        payload_successful=payload_successful,
         title=title,
         severity=_severity(getattr(finding, "severity", "info")),
         category=getattr(finding, "category", None),
@@ -640,6 +676,7 @@ def build_snapshot_from_report_data(
         return None
 
     evidence_by_finding = _evidence_keys_by_finding(report_data)
+    _finding_target = str(getattr(report_data, "target", "") or "")
     findings = [
         _map_finding(
             f,
@@ -647,6 +684,7 @@ def build_snapshot_from_report_data(
             evidence_keys=evidence_by_finding.get(
                 str(getattr(f, "finding_id", None) or f"F-{i + 1}")
             ),
+            target=_finding_target,
         )
         for i, f in enumerate(getattr(report_data, "findings", None) or [])
     ]

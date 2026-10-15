@@ -111,6 +111,11 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(fe, "tool_run_id", f.tool_run_id)
         _text(fe, "validator_id", f.validator_id)
         _text(fe, "raw_artifact_ref", f.raw_artifact_ref)
+        # Forensic data (R-6.4): fingerprint, taint path, sanitised payloads.
+        _text(fe, "fingerprint_key", f.fingerprint_key)
+        _list_el(fe, "taint_path", f.taint_path, "step")
+        _text(fe, "payload_attempted", f.payload_attempted)
+        _text(fe, "payload_successful", f.payload_successful)
         _text(fe, "owasp_category", f.owasp_category)
         _text(fe, "cvss_version", f.cvss_version)
         _text(fe, "cvss_vector", f.cvss_vector)

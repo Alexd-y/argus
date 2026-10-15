@@ -142,6 +142,12 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         )
     _mrow(lines, "Валидатор", f.validator_id)
     _mrow(lines, "Сырой артефакт", f.raw_artifact_ref)
+    # Forensic data (R-6.4): fingerprint, taint path, sanitised payloads.
+    _mrow(lines, "Fingerprint", f.fingerprint_key)
+    if f.taint_path:
+        lines.append("| Taint path | " + _esc_md(" → ".join(f.taint_path)) + " |")
+    _mrow(lines, "Payload (попытка)", f.payload_attempted)
+    _mrow(lines, "Payload (успех)", f.payload_successful)
     if f.wstg_test_ids:
         lines.append("| WSTG | " + ", ".join(f"`{w}`" for w in f.wstg_test_ids) + " |")
     if f.evidence_ids:

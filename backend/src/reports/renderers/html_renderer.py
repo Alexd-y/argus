@@ -84,6 +84,12 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
     parts.append(f"<li>tool_run_id: <code>{_na(f.tool_run_id)}</code></li>")
     parts.append(f"<li>validator_id: <code>{_na(f.validator_id)}</code></li>")
     parts.append(f"<li>raw_artifact_ref: <code>{_na(f.raw_artifact_ref)}</code></li>")
+    # Forensic data (R-6.4): fingerprint, taint path, sanitised payloads.
+    _li(parts, "fingerprint_key", f.fingerprint_key)
+    if f.taint_path:
+        parts.append(f"<li>taint_path: {escape(' → '.join(f.taint_path))}</li>")
+    _li(parts, "payload_attempted", f.payload_attempted)
+    _li(parts, "payload_successful", f.payload_successful)
     ev = ", ".join(f"<code>{escape(e)}</code>" for e in f.evidence_ids) or "<em>none</em>"
     parts.append(f"<li>evidence_ids: {ev}</li>")
     parts.append("</ul>")

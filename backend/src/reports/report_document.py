@@ -315,6 +315,17 @@ class ReportFinding(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     retest_plan: list[str] = Field(default_factory=list)
     priority_rationale: str | None = None
+    # ---- Wave 4 / Stage 7 (R-6.4): forensic data that used to stop at the DB ----
+    #: Content fingerprint (dedup identity) carried through from the finding; the
+    #: observation_id is derived from it (Stage 4) but the raw key is surfaced too so a
+    #: reader can correlate duplicate observations directly.
+    fingerprint_key: str | None = None
+    #: Ordered source→sink taint steps for a data-flow (SAST) finding.
+    taint_path: list[str] = Field(default_factory=list)
+    #: Payload that was attempted / that succeeded, sanitised for publication
+    #: (secrets, destructive flags and the real target are redacted).
+    payload_attempted: str | None = None
+    payload_successful: str | None = None
 
 
 class ReportToolRun(BaseModel):

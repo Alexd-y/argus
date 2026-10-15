@@ -83,6 +83,10 @@ def _full_finding() -> ReportFinding:
         acceptance_criteria=["zzAccCrit"],
         retest_plan=["zzRetestStep"],
         priority_rationale="zzPrioRationaleFinding",
+        fingerprint_key="zzFingerprintKey",
+        taint_path=["zzTaintSource", "zzTaintSink"],
+        payload_attempted="zzPayloadAttempted",
+        payload_successful="zzPayloadSuccessful",
         poc=ReportPoC(
             tool="zzPocTool",
             payload="zzPayload",
