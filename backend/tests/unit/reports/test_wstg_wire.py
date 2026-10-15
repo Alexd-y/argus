@@ -104,7 +104,10 @@ def test_markdown_omits_wstg_section_when_absent(_flag_off):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
     )
     md = render_markdown(doc)
-    assert "WSTG v4.2 Coverage" not in md
+    # The rich WSTG analysis section is omitted; the Section Coverage appendix still
+    # lists WSTG as a row (status=disabled) — assert on the section header, not the bare
+    # title (Wave 4 / Stage 2).
+    assert "## WSTG v4.2 Coverage" not in md
 
 
 def test_xml_contains_wstg_element_when_present(_flag_on):
@@ -149,4 +152,6 @@ def test_html_omits_wstg_section_when_absent(_flag_off):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
     )
     html = render_html(doc)
-    assert "WSTG v4.2 Coverage" not in html
+    # The rich WSTG section is omitted; the Section Coverage appendix still lists WSTG as
+    # a row (status=disabled) — assert on the section header (Wave 4 / Stage 2).
+    assert "<h2>WSTG v4.2 Coverage</h2>" not in html

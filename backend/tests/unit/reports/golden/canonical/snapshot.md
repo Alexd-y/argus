@@ -108,3 +108,36 @@ _none_
 ## Validation errors
 
 - `insufficient_evidence` F-2: Finding 'F-2' claimed 'confirmed' without a verifiable evidence chain (evidence→run/session); downgraded.
+
+## Section Coverage
+
+| Section | Status |
+|---|---|
+| Report Passport | `present` |
+| Executive Summary | `llm_not_generated` |
+| Engagement Parameters | `not_recorded` |
+| Methodology | `not_recorded` |
+| Attack Surface Inventory | `present` |
+| Priority Findings | `present` |
+| Findings by Asset | `present` |
+| Findings | `present` |
+| Unconfirmed Observations | `none` |
+| Executed Checks Without Findings | `not_recorded` |
+| Attack Narrative | `present` |
+| Impact Chains | `none_proven` |
+| Business Risk | `llm_not_generated` |
+| Prioritised Remediation Plan | `llm_not_generated` |
+| Retest & Closure | `not_retested` |
+| Evidence Inventory | `present` |
+| Coverage | `present` |
+| WSTG v4.2 Coverage | `present` |
+| Execution Log | `present` |
+| Impact on Client Environment | `nothing_created` |
+| Limitations | `none` |
+| Claims Ledger | `none` |
+| Appendix A — All Findings | `present` |
+| Appendix B — Assets & Subdomains | `present` |
+| Appendix C — Tool Runs & Artifacts | `present` |
+| Appendix D — Independent Verification Kit | `not_generated` |
+| Validation Notes | `present` |
+| Methodology, Limits of Conclusions & Disclaimer | `present` |

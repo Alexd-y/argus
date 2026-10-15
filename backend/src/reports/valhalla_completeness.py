@@ -88,6 +88,35 @@ VALHALLA_REQUIRED_SOURCES: tuple[RequiredSource, ...] = (
     ),
 )
 
+#: Maps each ``RequiredSource.section`` to the section-registry id(s) whose presence
+#: satisfies it (Wave 4 / Stage 2, R-6.3 vocabulary unification). VP-04 asks "source is
+#: non-empty but its section is empty?"; the required-source section names predate the
+#: ordered-section registry and differ from its ids, so this is the single declarative
+#: bridge — replacing the inline transition map that used to live in
+#: ``report_pipeline._vp04_inputs``. A source is represented when *any* mapped registry
+#: section is present. ``()`` means the source has no findings/registry counterpart
+#: (passport-only / limits / optional graph) and is not subject to the VP-04 section rule.
+REQUIRED_SOURCE_TO_REGISTRY_SECTIONS: dict[str, tuple[str, ...]] = {
+    "findings_registry": ("findings",),
+    "finding_cards": ("findings",),
+    "execution_log": ("tool_runs",),
+    "appendix_grouped": ("appendix_tool_runs", "appendix_all_findings"),
+    "surface_inventory": ("surface_inventory",),
+    "methodology_completeness": ("wstg", "methodology"),
+    "confirmed_chains": ("exploit_chains",),
+    "passport": ("passport",),
+    "completeness_limits": (),
+    "passport_limits": (),
+    "search_graph": (),
+    "next_steps": (),
+}
+
+
+def required_source_sections() -> set[str]:
+    """The distinct ``RequiredSource.section`` names declared in the registry."""
+    return {src.section for src in VALHALLA_REQUIRED_SOURCES}
+
+
 #: Placeholder / stop-list phrases that must never appear in a Valhalla report (VP-02).
 STOP_LIST_PHRASES: tuple[str, ...] = (
     "poc details are available in asgard",

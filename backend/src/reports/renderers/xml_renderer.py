@@ -5,6 +5,7 @@ from __future__ import annotations
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from src.reports.report_document import ReportDocumentV1
+from src.reports.section_registry import iter_sections
 
 #: Canonical Valhalla report XML namespace (registered alongside urn:argus:valhalla-llm:v1).
 VALHALLA_REPORT_XML_NS = "urn:argus:valhalla-report:v2"
@@ -307,6 +308,16 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(vee, "message", ve.message)
 
     _render_v2_sections_xml(root, doc)
+
+    # Section Coverage (Wave 4 / Stage 2) — the canonical registry walked; every section
+    # carries an explicit present/status, so an empty section is reported, never omitted.
+    sc = SubElement(root, "section_coverage")
+    for st in iter_sections(doc):
+        se = SubElement(sc, "section")
+        se.set("id", st.section_id)
+        se.set("present", "true" if st.present else "false")
+        se.set("status", st.status)
+        _text(se, "title", st.title)
 
     xml_bytes = tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")

@@ -8,6 +8,7 @@ JSON/XML (parity test asserts this).
 from __future__ import annotations
 
 from src.reports.report_document import ReportDocumentV1
+from src.reports.section_registry import iter_sections
 
 
 def _na(value: object) -> str:
@@ -681,7 +682,26 @@ def render_markdown(doc: ReportDocumentV1) -> str:
             lines.append(f"- `{ve.code}` {ve.finding_id or ''}: {ve.message}")
         lines.append("")
 
+    _render_section_coverage_md(lines, doc)
+
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_section_coverage_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    """Section Coverage (Wave 4 / Stage 2) — the canonical section registry, walked.
+
+    Every registry section is listed with an explicit status: ``present`` when it holds
+    data, else its declared ``empty_status`` (``no_findings`` / ``llm_not_generated`` …).
+    A section with no data is *reported*, never silently omitted — the machine-checkable
+    four-format completeness guarantee the registry exists to provide.
+    """
+    lines.append("## Section Coverage")
+    lines.append("")
+    lines.append("| Section | Status |")
+    lines.append("|---|---|")
+    for st in iter_sections(doc):
+        lines.append(f"| {_esc_md(st.title)} | `{'present' if st.present else st.status}` |")
+    lines.append("")
 
 
 __all__ = ["render_markdown"]

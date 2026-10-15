@@ -12,6 +12,7 @@ from html import escape
 
 from src.reports.renderers.markdown_renderer import severity_distribution
 from src.reports.report_document import ReportDocumentV1
+from src.reports.section_registry import iter_sections
 
 
 def _na(value: object) -> str:
@@ -691,6 +692,15 @@ def render_html(doc: ReportDocumentV1) -> str:
                 f"{escape(ve.message)}</li>"
             )
         parts.append("</ul>")
+
+    # Section Coverage (Wave 4 / Stage 2) — the canonical registry walked; every section
+    # carries an explicit status, so an empty section is reported, never omitted.
+    parts.append("<h2>Section Coverage</h2>")
+    parts.append("<table><tr><th>Section</th><th>Status</th></tr>")
+    for st in iter_sections(doc):
+        status = "present" if st.present else st.status
+        parts.append(f"<tr><td>{escape(st.title)}</td><td><code>{escape(status)}</code></td></tr>")
+    parts.append("</table>")
 
     parts.append("</main>")
     parts.append("</body></html>")

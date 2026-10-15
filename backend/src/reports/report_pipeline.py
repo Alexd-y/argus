@@ -44,7 +44,11 @@ from src.reports.section_registry import iter_sections
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.snapshot_completeness_gate import snapshot_release_blockers
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
-from src.reports.valhalla_completeness import valhalla_release_blockers
+from src.reports.valhalla_completeness import (
+    REQUIRED_SOURCE_TO_REGISTRY_SECTIONS,
+    VALHALLA_REQUIRED_SOURCES,
+    valhalla_release_blockers,
+)
 from src.reports.valhalla_llm_merge import merge_llm_into_document
 from src.reports.valhalla_severity_review_gate import severity_review_blockers
 from src.reports.verification_kit import build_verification_kit
@@ -206,10 +210,10 @@ def _vp04_inputs(doc: ReportDocumentV1) -> tuple[dict[str, Any], dict[str, Any]]
 
     ``validate_valhalla_completeness`` pairs ``snapshot[src.key]`` with
     ``sections[src.section]`` over ``VALHALLA_REQUIRED_SOURCES`` — whose key/section
-    names differ from the section-registry ids. Passing ``iter_sections`` verbatim would
-    false-positive on every report that has findings; this builds both maps in the
-    table's own vocabulary: the snap-map from the collected data, the sections-map from
-    the registry's per-section presence.
+    names differ from the section-registry ids. The snap-map is built from the collected
+    data; the sections-map is derived from the registry's per-section presence through the
+    declarative ``REQUIRED_SOURCE_TO_REGISTRY_SECTIONS`` bridge (Wave 4 / Stage 2) — no
+    inline transition map, so the mapping is single-sourced and drift-tested.
     """
     present = {st.section_id: st.present for st in iter_sections(doc)}
     snap: dict[str, Any] = {
@@ -223,16 +227,14 @@ def _vp04_inputs(doc: ReportDocumentV1) -> tuple[dict[str, Any], dict[str, Any]]
         "wstg_coverage": doc.wstg or {},
         "exploitation": list(doc.exploit_chains),
     }
-    sections: dict[str, Any] = {
-        "findings_registry": present.get("findings"),
-        "finding_cards": present.get("findings"),
-        "execution_log": present.get("tool_runs"),
-        "appendix_grouped": present.get("appendix_tool_runs")
-        or present.get("appendix_all_findings"),
-        "surface_inventory": present.get("surface_inventory"),
-        "methodology_completeness": present.get("wstg") or present.get("methodology"),
-        "confirmed_chains": present.get("exploit_chains"),
-    }
+    sections: dict[str, Any] = {}
+    for src in VALHALLA_REQUIRED_SOURCES:
+        reg_ids = REQUIRED_SOURCE_TO_REGISTRY_SECTIONS.get(src.section)
+        if not reg_ids:
+            # Unmapped (passport-only / limits / optional graph) or deliberately empty:
+            # not subject to the VP-04 section rule → leave the section slot absent.
+            continue
+        sections[src.section] = any(present.get(r) for r in reg_ids)
     return snap, sections
 
 

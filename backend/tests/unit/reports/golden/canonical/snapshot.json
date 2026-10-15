@@ -213,6 +213,176 @@
   "scan_profile": "light",
   "schema_version": "v2",
   "scope_summary": {},
+  "section_coverage": [
+    {
+      "present": true,
+      "section_id": "passport",
+      "status": "present",
+      "title": "Report Passport"
+    },
+    {
+      "present": false,
+      "section_id": "executive_summary",
+      "status": "llm_not_generated",
+      "title": "Executive Summary"
+    },
+    {
+      "present": false,
+      "section_id": "engagement",
+      "status": "not_recorded",
+      "title": "Engagement Parameters"
+    },
+    {
+      "present": false,
+      "section_id": "methodology",
+      "status": "not_recorded",
+      "title": "Methodology"
+    },
+    {
+      "present": true,
+      "section_id": "surface_inventory",
+      "status": "present",
+      "title": "Attack Surface Inventory"
+    },
+    {
+      "present": true,
+      "section_id": "priority_findings",
+      "status": "present",
+      "title": "Priority Findings"
+    },
+    {
+      "present": true,
+      "section_id": "findings_by_asset",
+      "status": "present",
+      "title": "Findings by Asset"
+    },
+    {
+      "present": true,
+      "section_id": "findings",
+      "status": "present",
+      "title": "Findings"
+    },
+    {
+      "present": false,
+      "section_id": "unconfirmed_observations",
+      "status": "none",
+      "title": "Unconfirmed Observations"
+    },
+    {
+      "present": false,
+      "section_id": "test_executions",
+      "status": "not_recorded",
+      "title": "Executed Checks Without Findings"
+    },
+    {
+      "present": true,
+      "section_id": "attack_narrative",
+      "status": "present",
+      "title": "Attack Narrative"
+    },
+    {
+      "present": false,
+      "section_id": "exploit_chains",
+      "status": "none_proven",
+      "title": "Impact Chains"
+    },
+    {
+      "present": false,
+      "section_id": "business_risk",
+      "status": "llm_not_generated",
+      "title": "Business Risk"
+    },
+    {
+      "present": false,
+      "section_id": "priority_plan",
+      "status": "llm_not_generated",
+      "title": "Prioritised Remediation Plan"
+    },
+    {
+      "present": false,
+      "section_id": "retest_closure",
+      "status": "not_retested",
+      "title": "Retest & Closure"
+    },
+    {
+      "present": true,
+      "section_id": "evidence_inventory",
+      "status": "present",
+      "title": "Evidence Inventory"
+    },
+    {
+      "present": true,
+      "section_id": "coverage",
+      "status": "present",
+      "title": "Coverage"
+    },
+    {
+      "present": true,
+      "section_id": "wstg",
+      "status": "present",
+      "title": "WSTG v4.2 Coverage"
+    },
+    {
+      "present": true,
+      "section_id": "tool_runs",
+      "status": "present",
+      "title": "Execution Log"
+    },
+    {
+      "present": false,
+      "section_id": "client_impact",
+      "status": "nothing_created",
+      "title": "Impact on Client Environment"
+    },
+    {
+      "present": false,
+      "section_id": "limitations",
+      "status": "none",
+      "title": "Limitations"
+    },
+    {
+      "present": false,
+      "section_id": "claims",
+      "status": "none",
+      "title": "Claims Ledger"
+    },
+    {
+      "present": true,
+      "section_id": "appendix_all_findings",
+      "status": "present",
+      "title": "Appendix A — All Findings"
+    },
+    {
+      "present": true,
+      "section_id": "appendix_assets",
+      "status": "present",
+      "title": "Appendix B — Assets & Subdomains"
+    },
+    {
+      "present": true,
+      "section_id": "appendix_tool_runs",
+      "status": "present",
+      "title": "Appendix C — Tool Runs & Artifacts"
+    },
+    {
+      "present": false,
+      "section_id": "appendix_verification_kit",
+      "status": "not_generated",
+      "title": "Appendix D — Independent Verification Kit"
+    },
+    {
+      "present": true,
+      "section_id": "validation_errors",
+      "status": "present",
+      "title": "Validation Notes"
+    },
+    {
+      "present": true,
+      "section_id": "disclaimer",
+      "status": "present",
+      "title": "Methodology, Limits of Conclusions & Disclaimer"
+    }
+  ],
   "skipped_reasons": [],
   "snapshot_hash": "8b31b3d4fbcc12b0a138815e2e26ef13a95350f571be04819c9f6afba6da9cc5",
   "started_at": null,
