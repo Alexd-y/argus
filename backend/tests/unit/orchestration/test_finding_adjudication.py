@@ -173,3 +173,32 @@ def test_bool_evidence_tier_is_rejected() -> None:
     finding = {"title": "Fuzz: crash", "evidence_tier": True}
     adj = adjudicate_finding_tier(finding, verify_artifact=_verify)
     assert adj.model_tier is None
+
+
+def test_sqli_with_har_and_class_confirmation_reaches_confirmed() -> None:
+    # A sqlmap SQLi re-proven with a stored HAR raw-exchange + boolean class
+    # confirmation (the enrichment) reaches CONFIRMED (tier 3), not SUSPECTED.
+    finding = {
+        "title": "Sqli Candidate — http://x/rest/user/login",
+        "cwe": "CWE-89",
+        "proof_of_concept": {
+            "har_evidence_key": _GENUINE_HAR,
+            "boolean_true_response": "HTTP 200 (900 bytes) for tautology injection",
+            "boolean_false_response": "HTTP 401 (60 bytes) for benign value",
+            "payload": "' OR 1=1-- -",
+        },
+    }
+    adj = adjudicate_finding_tier(finding, verify_artifact=_verify)
+    assert adj.tier == int(EvidenceTier.CONFIRMED)
+
+
+def test_sqli_with_har_but_no_boolean_stays_suspected() -> None:
+    # HAR alone (no class confirmation) is capped at SUSPECTED by the SQLI bar.
+    finding = {
+        "title": "Sqli Candidate — http://x/rest/user/login",
+        "cwe": "CWE-89",
+        "proof_of_concept": {"har_evidence_key": _GENUINE_HAR, "payload": "x"},
+    }
+    adj = adjudicate_finding_tier(finding, verify_artifact=_verify)
+    assert adj.tier == int(EvidenceTier.SUSPECTED)
+    assert "class_bar_not_met" in adj.reasons

@@ -118,3 +118,18 @@ def test_seed_ignores_non_dict_and_empty() -> None:
     assert input_surface_items_from_seed([]) == []
     assert input_surface_items_from_seed(["x", 1, None]) == []
     assert input_surface_items_from_seed("nope") == []
+
+
+def test_argv_json_param_extraction() -> None:
+    from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
+        _sqlmap_argv_json_param,
+    )
+
+    body, param = _sqlmap_argv_json_param(
+        ["sqlmap", "-u", _LOGIN, "--data", '{"email":"argus_probe"}']
+    )
+    assert body == {"email": "argus_probe"}
+    assert param == "email"
+    # Form body / no --data → None (nothing to re-prove as JSON).
+    assert _sqlmap_argv_json_param(["sqlmap", "-u", _LOGIN, "--data", "email=x"]) is None
+    assert _sqlmap_argv_json_param(["sqlmap", "-u", _LOGIN]) is None
