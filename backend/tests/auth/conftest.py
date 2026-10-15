@@ -107,6 +107,11 @@ _REVISION_031: str = "031"
 #: and ``mfa_passed_at`` to ``admin_sessions``. Rebased to ``Revises: 031``
 #: in C7-T07; the chain is now 028 → 030 → 031 → 032.
 _REVISION_032: str = "032"
+#: Alembic 071 adds ``admin_users.mfa_enrolled_at`` (C7-T03 follow-up). The ORM
+#: ``AdminUser`` model declares it, so without applying 071 every admin_users SELECT
+#: blows up with ``OperationalError: no such column: admin_users.mfa_enrolled_at``.
+#: Standalone, idempotent ``add_column`` — applied directly after 032, same as the others.
+_REVISION_071: str = "071"
 
 
 def _load_revision_module(revision: str = _REVISION) -> Any:
@@ -121,7 +126,7 @@ def _load_revision_module(revision: str = _REVISION) -> Any:
 
 
 def _apply_admin_sessions_schema_sync(conn: Any) -> None:
-    """Apply 028 → 030 → 031 → 032 ``upgrade()`` — yields the post-032 schema.
+    """Apply 028 → 030 → 031 → 032 → 071 ``upgrade()`` — yields the post-071 schema.
 
     Skipping 029 is intentional: it only touches ``tenants.pdf_archival_format``
     and the auth tests never touch that table, so a partial chain keeps the
@@ -142,6 +147,7 @@ def _apply_admin_sessions_schema_sync(conn: Any) -> None:
         _load_revision_module(_REVISION_030).upgrade()
         _load_revision_module(_REVISION_031).upgrade()
         _load_revision_module(_REVISION_032).upgrade()
+        _load_revision_module(_REVISION_071).upgrade()
 
 
 @pytest.fixture

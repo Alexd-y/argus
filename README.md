@@ -74,7 +74,7 @@ parser and normaliser layers in lock-step.
 | `worker-intruder` | `argus.intruder.highvol` | 2 |
 
 Queues `argus.intel` and `argus.notifications` are consumed by the beat process for
-scheduled housekeeping. The complete routing table defines 9 queues total.
+scheduled housekeeping. The complete routing table defines 11 queues total.
 The Celery app is `backend/src/celery_app.py`. Scheduled tasks (daily EPSS/KEV
 refresh, DLQ sweep) use celery-redbeat, hydrated from DB on beat startup.
 

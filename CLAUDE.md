@@ -97,7 +97,7 @@ Tasks are routed to dedicated Celery queues; workers are split by concern in `do
 | `worker-reports` | `argus.reports` | 1 |
 | `worker-intruder` | `argus.intruder.highvol` | 2 |
 
-Queues `argus.intel` and `argus.notifications` are consumed by the beat process for scheduled housekeeping (EPSS/KEV refresh, DLQ replay, metrics). The complete routing table is defined in `backend/src/celery_app.py` `task_routes` (9 queues total).
+Queues `argus.intel` and `argus.notifications` are consumed by the beat process for scheduled housekeeping (EPSS/KEV refresh, DLQ replay, metrics). The complete routing table is defined in `backend/src/celery_app.py` `task_routes` (11 queues total).
 
 The Celery app is defined in `backend/src/celery_app.py`. Scheduled tasks (daily EPSS/KEV refresh, DLQ sweep) use celery-redbeat with schedule hydrated from DB on beat startup.
 

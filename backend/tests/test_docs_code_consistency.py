@@ -123,13 +123,22 @@ def test_phase_tables_are_internally_consistent() -> None:
 
 
 def test_cloud_fallback_set_is_exactly_report_and_osint() -> None:
-    """Only report-supplement + OSINT tasks may fall back to a cloud provider."""
+    """Only report-supplement + OSINT tasks may fall back to a cloud provider.
+
+    Report-supplement = the mandatory Valhalla report LLM outputs: executive summary,
+    report sections, cost summary, and the remediation-plan / closure-assessment
+    conclusions (operator requirement — richer prose than the local 7B). None of these
+    is a pentest-analysis task, so ``test_core_analysis_tasks_never_route_to_cloud``
+    still guarantees sensitive analysis never leaves WhiteRabbitNeo.
+    """
     assert (
         frozenset(
             {
                 LLMTask.REPORT_SECTION,
                 LLMTask.EXECUTIVE_SUMMARY,
                 LLMTask.COST_SUMMARY,
+                LLMTask.CLOSURE_ASSESSMENT,
+                LLMTask.REMEDIATION_PLAN,
                 LLMTask.PERPLEXITY_OSINT,
             }
         )

@@ -25,7 +25,7 @@ class TestRpt006FormatNormalization:
 
     def test_explicit_empty_uses_default(self) -> None:
         out = normalize_generation_formats([], None)
-        assert set(out) == {"html", "json", "csv", "pdf", "md"}
+        assert set(out) == {"html", "json", "csv", "pdf", "md", "xml"}
 
     def test_requested_list(self) -> None:
         assert normalize_generation_formats(None, ["json"]) == ["json"]
@@ -104,12 +104,45 @@ class TestFH06GenerateReportTaskArgContract:
         assert bound.arguments["formats"] is None
 
 
+class _EmptyScalars:
+    """Minimal ``Result.scalars()`` stand-in: an empty result set."""
+
+    def all(self) -> list:
+        return []
+
+    def first(self) -> None:
+        return None
+
+
 class ExecScalar:
     def __init__(self, scalar: object) -> None:
         self._scalar = scalar
 
     def scalar_one_or_none(self) -> object:
         return self._scalar
+
+    def scalars(self) -> _EmptyScalars:
+        # Wave 4: the artifact-ledger collect queries use ``.scalars().all()``; return
+        # an empty set so the ledger sees no stored artifacts (empty, non-blocking).
+        return _EmptyScalars()
+
+
+def _report_then_empty(report: object):
+    """``session.execute`` side_effect: the Report on the first call, empty after.
+
+    Robust to the variable number of DB calls the pipeline makes — canonical-snapshot
+    ReportObject upserts, the Wave-4 artifact-ledger collect/persist, and status updates
+    (upsert selects treat None as "insert"; updates ignore the result). Replaces the
+    brittle fixed-length ``side_effect`` lists that broke whenever the pipeline grew a
+    new query.
+    """
+    state = {"n": 0}
+
+    def _exec(*_a: object, **_k: object) -> ExecScalar:
+        state["n"] += 1
+        return ExecScalar(report) if state["n"] == 1 else ExecScalar(None)
+
+    return _exec
 
 
 @pytest.mark.asyncio
@@ -146,16 +179,12 @@ async def test_run_generate_report_pipeline_success(
         upload_keys.append("ok")
         return "ten-a/scan-a/reports/midgard/rep-a.html"
 
-    exec_results = [
-        ExecScalar(report),
-        MagicMock(),  # processing → generation_status
-        ExecScalar(None),  # tenant pdf_archival_format lookup
-        ExecScalar(None),  # ReportObject upsert select
-        MagicMock(),  # ready → generation_status
-    ]
+    # This test pins the base format/upload mechanics; the orthogonal canonical-snapshot
+    # bundle (its own tests) would otherwise add canonical_* formats to the result.
+    monkeypatch.setattr(rp.settings, "canonical_report_snapshot_enabled", False)
 
     session = MagicMock()
-    session.execute = AsyncMock(side_effect=exec_results)
+    session.execute = AsyncMock(side_effect=_report_then_empty(report))
     session.commit = AsyncMock()
 
     out = await run_generate_report_pipeline(
@@ -247,6 +276,12 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
     def _exec(*_a: object, **_k: object) -> ExecScalar:
         call_count["n"] += 1
         return ExecScalar(report) if call_count["n"] == 1 else ExecScalar(None)
+
+    # Pin the Valhalla CSV-companion mechanics; the orthogonal release gate (empty mock
+    # scan → honest draft), canonical bundle and LLM remediation have their own tests.
+    monkeypatch.setattr(rp.settings, "canonical_report_snapshot_enabled", False)
+    monkeypatch.setattr(rp.settings, "valhalla_release_blockers_enabled", False)
+    monkeypatch.setattr(rp.settings, "valhalla_llm_remediation_enabled", False)
 
     session = MagicMock()
     session.execute = AsyncMock(side_effect=_exec)
@@ -368,16 +403,12 @@ async def test_run_generate_report_pipeline_success_emits_structured_completion_
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
     monkeypatch.setattr(rp, "generate_html", lambda *args, **kwargs: b"<html/>")
 
+    # Pin the completion-log mechanics; the orthogonal canonical-snapshot bundle would
+    # otherwise inflate formats_n beyond the single requested format.
+    monkeypatch.setattr(rp.settings, "canonical_report_snapshot_enabled", False)
+
     session = MagicMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            ExecScalar(report),
-            MagicMock(),
-            ExecScalar(None),
-            ExecScalar(None),
-            MagicMock(),
-        ]
-    )
+    session.execute = AsyncMock(side_effect=_report_then_empty(report))
     session.commit = AsyncMock()
 
     with caplog.at_level(logging.INFO, logger="src.reports.report_pipeline"):
@@ -447,16 +478,14 @@ async def test_run_generate_report_pipeline_valhalla_completion_log_includes_ful
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
     monkeypatch.setattr(rp, "generate_html", lambda *args, **kwargs: b"<html/>")
 
+    # Pin the Valhalla completion-log mechanics; the orthogonal release gate (empty mock
+    # scan → honest draft), canonical bundle and LLM remediation have their own tests.
+    monkeypatch.setattr(rp.settings, "canonical_report_snapshot_enabled", False)
+    monkeypatch.setattr(rp.settings, "valhalla_release_blockers_enabled", False)
+    monkeypatch.setattr(rp.settings, "valhalla_llm_remediation_enabled", False)
+
     session = MagicMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            ExecScalar(report),
-            MagicMock(),
-            ExecScalar(None),
-            ExecScalar(None),
-            MagicMock(),
-        ]
-    )
+    session.execute = AsyncMock(side_effect=_report_then_empty(report))
     session.commit = AsyncMock()
 
     with caplog.at_level(logging.INFO, logger="src.reports.report_pipeline"):
