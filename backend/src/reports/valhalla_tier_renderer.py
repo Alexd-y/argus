@@ -57,6 +57,9 @@ from src.reports.replay_command_sanitizer import (
     SanitizeContext,
     sanitize_replay_command,
 )
+from src.reports.section_catalog import (  # re-export (Wave 4 / Stage 2)
+    VALHALLA_EXECUTIVE_SECTION_ORDER,
+)
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -71,21 +74,9 @@ type PresignFn = Callable[[str], str | None]
 # ---------------------------------------------------------------------------
 
 
-# Fixed section ordering — the API contract for the Valhalla executive
-# report. Adding a section requires a CHANGELOG entry and a snapshot
-# regeneration.
-VALHALLA_EXECUTIVE_SECTION_ORDER: Final[tuple[str, ...]] = (
-    "title_meta",
-    "executive_summary",
-    "executive_summary_counts",
-    "risk_quantification_per_asset",
-    "owasp_rollup_matrix",
-    "top_findings_by_business_impact",
-    "kev_listed_findings",
-    "remediation_roadmap",
-    "evidence_refs",
-    "timeline_entries",
-)
+# Fixed section ordering — the API contract for the Valhalla executive report.
+# VALHALLA_EXECUTIVE_SECTION_ORDER is declared once in src.reports.section_catalog
+# (Wave 4 / Stage 2), imported at module top, and re-exported via __all__ for back-compat.
 
 
 # Top-N cap for business-impact findings list. Caps the table footprint

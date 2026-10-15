@@ -59,6 +59,9 @@ from src.reports.report_quality_gate import (
     score_evidence_quality,
     validation_status_for_quality,
 )
+from src.reports.section_catalog import (
+    LEGACY_VALHALLA_SECTION_ORDER as _VALHALLA_REPORT_SECTION_ORDER,
+)
 from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 logger = logging.getLogger(__name__)
@@ -126,37 +129,8 @@ _VHL_AI_ZERO_DAY = "zero_day_potential"
 _VHL_AI_ROADMAP = "prioritization_roadmap"
 _VHL_AI_HARDENING = "hardening_recommendations"
 
-# Valhalla-tier report section rendering order.
-# Sections are emitted in this sequence by the HTML/PDF generator.
-# Reordering affects the final report layout; adding a new section here
-# also requires a corresponding template partial and context builder entry.
-_VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
-    "title_meta",
-    "executive_summary_counts",
-    "owasp_compliance",
-    "robots_sitemap",
-    "tech_stack",
-    "outdated_components",
-    "emails",
-    "ssl_tls",
-    "ssl_tls_table_rows",
-    "headers",
-    "security_headers_table_rows",
-    "dependencies",
-    "risk_matrix",
-    "critical_vulns",
-    "full_valhalla",
-    "evidence_inventory",
-    "tool_health_summary",
-    "threat_modeling_ref",
-    "findings",
-    "exploit_chains_text",
-    "remediation_stages_text",
-    "zero_day_text",
-    "conclusion_text",
-    "hibp_pwned_password_summary",
-    "appendices",
-)
+# Valhalla-tier report section rendering order (_VALHALLA_REPORT_SECTION_ORDER) is declared
+# once in src.reports.section_catalog (Wave 4 / Stage 2) and imported at module top.
 
 
 # Human-readable titles for AI section keys when rendered as prose (MD/HTML).

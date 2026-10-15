@@ -46,6 +46,7 @@ from src.reports.replay_command_sanitizer import (
     SanitizeContext,
     sanitize_replay_command,
 )
+from src.reports.section_catalog import ASGARD_SECTION_ORDER  # re-export (Wave 4 / Stage 2)
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -64,19 +65,9 @@ type PresignFn = Callable[[str], str | None]
 # ---------------------------------------------------------------------------
 
 
-# Fixed section ordering — the API contract for the Asgard report. Adding a
-# section requires a CHANGELOG entry and a snapshot regeneration.
-ASGARD_SECTION_ORDER: Final[tuple[str, ...]] = (
-    "title_meta",
-    "executive_summary_counts",
-    "owasp_compliance",
-    "findings",
-    "remediation",
-    "reproducer",
-    "timeline",
-    "evidence",
-    "screenshots",
-)
+# Fixed section ordering — the API contract for the Asgard report. ASGARD_SECTION_ORDER is
+# declared once in src.reports.section_catalog (Wave 4 / Stage 2) and imported at module top;
+# re-exported via __all__ for back-compat.
 
 
 # Severity rank — duplicated locally so this module does not pull in any
