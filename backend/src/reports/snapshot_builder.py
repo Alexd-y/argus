@@ -190,13 +190,27 @@ def _sanitize_payload(value: Any, target: str) -> str | None:
     return joined or None
 
 
+#: Caps on the taint path surfaced to a client report (defence-in-depth, R-6.4): taint
+#: steps are code locations, but a bound keeps an over-long / accidentally value-bearing
+#: step from dumping raw data into the published report.
+_MAX_TAINT_STEPS = 64
+_MAX_TAINT_STEP_LEN = 512
+
+
 def _taint_path(finding: Any) -> list[str]:
     raw = getattr(finding, "taint_path", None) if not isinstance(finding, dict) else finding.get(
         "taint_path"
     )
     if not isinstance(raw, (list, tuple)):
         return []
-    return [str(step) for step in raw if str(step).strip()]
+    out: list[str] = []
+    for step in raw:
+        s = str(step).strip()
+        if s:
+            out.append(s[:_MAX_TAINT_STEP_LEN])
+        if len(out) >= _MAX_TAINT_STEPS:
+            break
+    return out
 
 
 def _map_finding(
