@@ -21,8 +21,10 @@ MODULE_LINE_THRESHOLD = 2000
 #: debt, tracked explicitly: each may only shrink. Lower the cap as code moves out; when
 #: one drops below MODULE_LINE_THRESHOLD, delete its entry (the assertion enforces this).
 OVERSIZED_ALLOWLIST: dict[str, int] = {
-    "valhalla_report_context.py": 7920,
-    "generators.py": 3640,
+    # Ratcheted down as sections move out (Wave 4 / Stage 6): structured_rows + branding
+    # extracted to valhalla_sections/.
+    "valhalla_report_context.py": 7860,
+    "generators.py": 3610,
     "report_quality_gate.py": 3120,
 }
 

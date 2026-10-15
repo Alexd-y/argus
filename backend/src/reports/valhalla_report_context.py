@@ -5,17 +5,13 @@ Safe defaults: empty lists / false / None. No secrets in logs; raw excerpts are 
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import dataclasses
-import hashlib
 import json
 import logging
-import os
 import re
 from datetime import UTC, datetime
 from itertools import islice
-from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -39,6 +35,13 @@ from src.reports.report_quality_gate import (
     is_header_only_advisory_finding,
 )
 from src.reports.valhalla_sections._common import _finding_id_for_risk, _truncate
+from src.reports.valhalla_sections.branding import (  # noqa: F401 — re-export
+    BRAND_NAME,
+    LOGO_FILENAME,
+    LOGO_MIME,
+    BrandModel,
+    get_brand,
+)
 from src.reports.valhalla_sections.structured_rows import (
     ValhallaCmdiStructuredRowModel,
     ValhallaCsrfStructuredRowModel,
@@ -51,66 +54,8 @@ from src.reports.valhalla_sections.structured_rows import (
 )
 from src.storage.s3 import download_by_key
 
-BRAND_NAME = "Svalbard Security Inc."
-LOGO_FILENAME = "logo.svg"
-LOGO_MIME = "image/svg+xml"
-_LOGO_PATH_ENV = "ARGUS_LOGO_PATH"
-
-
-def _resolve_logo_path() -> Path:
-    env_path = os.environ.get(_LOGO_PATH_ENV)
-    if env_path:
-        return Path(env_path)
-    candidates = [
-        Path(__file__).parent.parent.parent / "templates" / "reports" / LOGO_FILENAME,
-        Path("/app/templates/reports") / LOGO_FILENAME,
-        Path.cwd() / "templates" / "reports" / LOGO_FILENAME,
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return candidates[0]
-
-
-class BrandModel(BaseModel):
-    """Report branding: logo, name, integrity hashes for all export formats."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = BRAND_NAME
-    logo_file: str = LOGO_FILENAME
-    logo_mime: str = LOGO_MIME
-    logo_sha256: str = ""
-    logo_base64_svg: str = ""
-    logo_base64_png: str = ""
-    alt_text: str = "Svalbard Security Inc. logo"
-
-    def hydrate_logo(self) -> None:
-        logo_path = _resolve_logo_path()
-        if not logo_path.exists():
-            return
-        raw = logo_path.read_bytes()
-        self.logo_sha256 = hashlib.sha256(raw).hexdigest()
-        self.logo_base64_svg = base64.b64encode(raw).decode("ascii")
-        try:
-            import cairosvg
-
-            png_bytes = cairosvg.svg2png(bytestring=raw, output_width=240, output_height=101)
-            self.logo_base64_png = base64.b64encode(png_bytes).decode("ascii")
-        except Exception:
-            self.logo_base64_png = ""
-
-
-_CACHED_BRAND: BrandModel | None = None
-
-
-def get_brand() -> BrandModel:
-    global _CACHED_BRAND
-    if _CACHED_BRAND is None:
-        _CACHED_BRAND = BrandModel()
-        _CACHED_BRAND.hydrate_logo()
-    return _CACHED_BRAND
-
+# Branding (BRAND_NAME / BrandModel / get_brand) extracted to valhalla_sections.branding
+# (Wave 4 / Stage 6); re-exported below for consumers.
 
 ValhallaSectionCoverageStatus = Literal[
     "completed",
