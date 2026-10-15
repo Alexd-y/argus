@@ -415,14 +415,32 @@ def _compute_valhalla_release_blockers(
         def _content_parity() -> list[str]:
             from src.reports.renderers import render_html, render_json, render_markdown, render_xml
             from src.reports.report_content_parity import content_parity_blockers
+            from src.reports.report_parity import (
+                finding_id_set_parity,
+                finding_ids_in_canonical_json,
+            )
 
+            canon_json = render_json(snapshot)
             canon = {
-                "json": render_json(snapshot).encode("utf-8"),
+                "json": canon_json.encode("utf-8"),
                 "md": render_markdown(snapshot).encode("utf-8"),
                 "xml": render_xml(snapshot).encode("utf-8"),
                 "html": render_html(snapshot).encode("utf-8"),
             }
-            return [f"PARITY: {pb}" for pb in content_parity_blockers(canon, doc=snapshot)]
+            out = [f"PARITY: {pb}" for pb in content_parity_blockers(canon, doc=snapshot)]
+            # R-6.2.4 — finding-ID *set* parity (not counts): the rendered registry must
+            # expose exactly the snapshot's finding ids — no phantom, none dropped.
+            json_ids = finding_ids_in_canonical_json(canon_json)
+            if json_ids is not None:
+                snap_ids = {f.finding_id for f in snapshot.findings if f.finding_id}
+                out += [
+                    f"PARITY: {pb}"
+                    for pb in finding_id_set_parity(
+                        {"snapshot": snap_ids, "canonical_json": json_ids},
+                        reference="snapshot",
+                    )
+                ]
+            return out
 
         _guarded("content_parity", _content_parity, blockers)
 
