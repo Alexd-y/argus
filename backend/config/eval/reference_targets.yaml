@@ -1,0 +1,32 @@
+# Wave 5 (R-9.6) — reference target set with KNOWN vulnerability composition.
+#
+# Versioned alongside the code. For each target: what the scan SHOULD find
+# (expected → recall) and what it must NOT claim (forbidden → false-positive
+# guard). Ground truth is deliberately conservative — only well-established
+# findings for the pinned e2e stand (OWASP Juice Shop under requires_docker_e2e)
+# are asserted; extend as the ground truth is verified against real runs.
+#
+# Matching (see src/eval/reference_targets.py): an expected/forbidden entry
+# matches a finding when the vuln_class matches (case-insensitive) AND, when a
+# `location` is given, the finding's location CONTAINS it.
+schema_version: 1
+targets:
+  - id: juice-shop
+    url: "http://juice-shop:3000"
+    description: "OWASP Juice Shop — e2e reference stand (docker-compose.e2e.yml)"
+    expected:
+      - vuln_class: sqli
+        location: "/rest/products/search"
+        note: "Classic SQL injection in the product-search `q` parameter."
+      - vuln_class: sqli
+        location: "/rest/user/login"
+        note: "SQLi auth bypass on the login endpoint."
+      - vuln_class: xss
+        note: "DOM/reflected XSS reachable via the search field."
+    forbidden:
+      # Juice Shop's baseline image does not expose these; a claim here is a
+      # false positive we want the gate to catch.
+      - vuln_class: log4shell
+        note: "No Log4Shell (CVE-2021-44228) in the pinned image."
+      - vuln_class: spring4shell
+        note: "No Spring4Shell — Juice Shop is Node.js, not Spring."
