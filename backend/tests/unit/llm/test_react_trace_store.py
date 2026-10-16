@@ -89,6 +89,31 @@ def test_steps_to_json_redacts_multiline_secret_in_fields():
     assert "REDACTED" in blob
 
 
+def test_steps_to_json_redacts_secret_nested_in_dict_result():
+    """The differential also closes for STRUCTURED tool results: a PEM nested in
+    a dict/list must be redacted at the string leaf, not after json.dumps."""
+    pem = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEpAIBAAKCAQEAnestedSECRETkeyDONOTLEAK9876543210\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+
+    class _Step:
+        step_type = "observation"
+        content = "ok"
+        tool_name = "reader"
+        tool_args = {"paths": ["/etc/key.pem"]}
+        tool_result = {"files": [{"name": "key.pem", "body": pem}]}
+        timestamp = "ts"
+
+    class _R:
+        steps = [_Step()]
+
+    blob = react_trace_store._steps_to_json(_R())
+    assert "MIIEpAIBAAKCAQEAnestedSECRETkeyDONOTLEAK9876543210" not in blob
+    assert "REDACTED" in blob
+
+
 def test_disabled_by_default_is_noop(monkeypatch):
     monkeypatch.setattr(settings, "react_trace_persist", False, raising=False)
     with llm_telemetry_scope(tenant_id="t", scan_id="s", phase="exploitation"):

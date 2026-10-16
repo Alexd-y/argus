@@ -40,14 +40,28 @@ def _steps_to_json(result: Any) -> str:
 
     redactor = Redactor()
 
-    def _red(value: Any) -> Any:
-        if value is None:
-            return None
-        text = value if isinstance(value, str) else json.dumps(value, default=str)
+    def _red_str(text: str) -> str:
         try:
             return redactor.redact(text.encode("utf-8")).content.decode("utf-8", "replace")
         except Exception:
             return "[REDACTION_ERROR]"
+
+    def _red(value: Any) -> Any:
+        # Redact every STRING LEAF as raw text, walking the structure, so a
+        # multi-line secret nested in a dict/list tool result is caught too.
+        # Serializing first (json.dumps) would escape newlines to "\n" and let
+        # patterns like private_key_pem slip past — the parser differential.
+        if value is None or isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return _red_str(value)
+        if isinstance(value, dict):
+            return {str(k): _red(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_red(v) for v in value]
+        if isinstance(value, (int, float)):
+            return value
+        return _red_str(str(value))
 
     steps = getattr(result, "steps", None) or []
     payload = []
