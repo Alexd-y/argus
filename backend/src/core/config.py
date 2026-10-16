@@ -1340,6 +1340,11 @@ class Settings(BaseSettings):
     # stored only when text capture is also authorized for the tenant (reuses the
     # redact-then-store path above). Env: REACT_TRACE_PERSIST.
     react_trace_persist: bool = False
+    # Wave 5 (R-9.5) — at scan finalisation, compute the full-pipeline eval metric
+    # snapshot (arbiter confirmed/rejected rates + structured-parse rates) and emit
+    # it as a structured log line so the product metrics are observable beyond the
+    # Quick comparison report. Off by default. Env: EVAL_METRICS_SNAPSHOT.
+    eval_metrics_snapshot: bool = False
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True

@@ -2568,6 +2568,25 @@ async def _finalize_scan(
     with suppress(Exception):
         await _materialise_scan_evidence(session, tenant_id, scan_id)
 
+    # Wave 5 (R-9.5): emit the full-pipeline eval metric snapshot for this scan
+    # (arbiter confirmed/rejected + structured-parse rates) so the product metrics
+    # are observable beyond the Quick comparison report. Off by default; read-only;
+    # never fails scan completion.
+    if settings.eval_metrics_snapshot:
+        with suppress(Exception):
+            from src.eval.pipeline_metrics import build_scan_metrics
+
+            _eval_metrics = await build_scan_metrics(session, tenant_id, scan_id)
+            if _eval_metrics:
+                logger.info(
+                    "eval_metrics_snapshot",
+                    extra={
+                        "event": "eval_metrics_snapshot",
+                        "scan_id": scan_id,
+                        "metrics": _eval_metrics,
+                    },
+                )
+
     # Wave 2 (R-5.6.2): form the evidence-base manifest once all evidence for the
     # scan is materialised — a reproducible root hash over the evidence
     # checksums, linked to a tamper-evident audit event. Best-effort: never fail

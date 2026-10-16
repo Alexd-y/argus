@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "comment": "Product eval gates for Quick comparison-report. Not used by scan runtime.",
+  "comment": "Product eval gates for the Quick comparison-report (offline). Wave 5 (R-9.5): the full scan pipeline now ALSO emits a model-quality snapshot at finalisation via src/eval/pipeline_metrics.build_scan_metrics (arbiter confirmed/rejected + structured-parse rates), gated by settings.eval_metrics_snapshot — so product metrics are no longer Quick-only.",
   "targets": {
     "deadline_completion_rate": {"op": "gte", "value": 0.95},
     "coverage_accounting_rate": {"op": "eq", "value": 1.0},
