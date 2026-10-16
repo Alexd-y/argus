@@ -24,6 +24,7 @@ from typing import Final
 
 import httpx
 import pytest
+from src.core.logging_config import SensitiveHeaderRedactor
 from src.mcp.services.notifications import (
     AdapterResult,
     JiraAdapter,
@@ -230,7 +231,16 @@ def test_dispatch_audit_log_does_not_carry_secret(
         asyncio.run(disp.dispatch(ev))
     asyncio.run(disp.aclose())
 
+    # Apply the production redaction filter to the captured records explicitly. In a real
+    # stream the ``SensitiveHeaderRedactor`` installed by ``configure_logging`` mutates the
+    # record on its way to the handler; caplog's own handler carries no filter, so whether
+    # the redaction ran depended on the global root-handler state left by earlier tests —
+    # a test-isolation flake. Running the exact production filter here makes the check
+    # deterministic while still asserting the real guarantee (dispatcher record + redactor
+    # never leak the secret).
+    redactor = SensitiveHeaderRedactor()
     for record in caplog.records:
+        redactor.filter(record)
         rendered = record.getMessage()
         for value in record.__dict__.values():
             rendered += " " + repr(value)
