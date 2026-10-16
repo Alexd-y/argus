@@ -768,14 +768,21 @@ async def _call_via_whiterabbitneo(
     task: LLMTask | None = None,
     scan_id: str | None = None,
     phase: str = "unknown",
+    response_schema: dict | None = None,
 ) -> str:
-    """Call WhiteRabbitNeo adapter, record cost, return text."""
+    """Call WhiteRabbitNeo adapter, record cost, return text.
+
+    ``response_schema`` (R-9.9) is passed through to the adapter; it enforces
+    schema-valid JSON only when a structured-output dialect is configured
+    (``settings.llm_structured_output_mode``), else it is a harmless no-op.
+    """
     wrb = _get_wrb_adapter()
     _t0 = time.perf_counter()
     async with provider_guard("wrb") as run:
         text, usage = await wrb.call_with_usage(
             user_prompt,
             system_prompt=system_prompt,
+            response_schema=response_schema,
         )
         run.record_usage(
             AgentUsage(
