@@ -1474,6 +1474,49 @@ class GatewayInvocation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class LlmInvocationOutcome(Base):
+    """Wave 5 (R-9.2) — objective label linking an LLM proposal to the arbiter verdict.
+
+    One row per (finding produced by an LLM proposal) so the dataset can measure
+    the rate at which model proposals were confirmed vs rejected by the wave-1
+    evidence arbiter — the only objective "was the model right" signal. A single
+    LLM call may produce several findings, hence a separate table rather than a
+    denormalised column on gateway_invocations. ``finding_id`` / ``invocation_id``
+    / ``scan_id`` are soft references (no FK) so this analytics write is fully
+    decoupled from the findings-persistence transaction and can never break it.
+    """
+
+    __tablename__ = "llm_invocation_outcomes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str | None] = mapped_column(String(36))
+    phase: Mapped[str | None] = mapped_column(String(32))
+    task: Mapped[str | None] = mapped_column(String(32))
+    invocation_id: Mapped[str | None] = mapped_column(String(36))
+    finding_id: Mapped[str | None] = mapped_column(String(36))
+    vuln_class: Mapped[str | None] = mapped_column(String(64))
+    model_tier: Mapped[int | None] = mapped_column(Integer)
+    arbiter_tier: Mapped[int | None] = mapped_column(Integer)
+    applicable: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    # confirmed | rejected | suspected | not_applicable | unknown
+    # (whether the model over-claimed is computable as arbiter_tier < model_tier)
+    outcome: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_llm_invocation_outcomes_scan_id", "scan_id"),
+        Index("ix_llm_invocation_outcomes_finding_id", "finding_id"),
+        Index("ix_llm_invocation_outcomes_tenant_id", "tenant_id"),
+    )
+
+
 class BenchmarkRun(Base):
     __tablename__ = "benchmark_runs"
 

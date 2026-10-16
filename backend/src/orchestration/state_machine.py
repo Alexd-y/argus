@@ -36,6 +36,7 @@ from src.db.models import (
     ScanTimeline,
 )
 from src.findings.cvss_auto_score import CVSSAutoScorer
+from src.llm.invocation_outcome import OutcomeRecord, persist_invocation_outcomes
 from src.llm.telemetry import llm_telemetry_scope
 from src.mcp.services.notifications import (
     DiscordNotifier,
@@ -891,6 +892,7 @@ async def _persist_report_and_findings(
             orig_to_pk.setdefault(fid_raw, finding_pk)
 
     # Pass 2 — persist findings using the precomputed keys and rewritten refs.
+    _outcome_rows: list[OutcomeRecord] = []
     for row_index, f in enumerate(findings_raw):
         finding_pk = resolved_pks[row_index]
         poc_blob = f.get("proof_of_concept")
@@ -918,6 +920,7 @@ async def _persist_report_and_findings(
         # (heuristic findings with no artifacts/class keep their tier). In
         # shadow mode (``evidence_arbiter_enforced`` off) the verdict is still
         # computed and logged, but the model tier is persisted unchanged.
+        _adj = None
         try:
             _adj = adjudicate_finding_tier(f, verify_artifact=object_key_exists)
             _et = _adj.tier if settings.evidence_arbiter_enforced else _adj.model_tier
@@ -952,6 +955,23 @@ async def _persist_report_and_findings(
                 and not isinstance(_et_raw, bool)
                 and 1 <= int(_et_raw) <= 4
                 else None
+            )
+        # R-9.2 (wave 5): buffer the LLM-proposal → arbiter-verdict link for this
+        # finding; persisted in an isolated session after the loop so it can
+        # never break finding persistence.
+        if _adj is not None:
+            _outcome_rows.append(
+                OutcomeRecord(
+                    finding_id=finding_pk,
+                    vuln_class=str(
+                        f.get("category") or f.get("vuln_class") or f.get("owasp_category") or ""
+                    )[:64],
+                    phase=str(f.get("phase") or "")[:32],
+                    task=str(f.get("source_task") or f.get("task") or "")[:32],
+                    model_tier=_adj.model_tier,
+                    arbiter_tier=_adj.arbiter_tier,
+                    applicable=_adj.applicable,
+                )
             )
         # R-5.1.4: the ``validation`` (evidence-strength) axis is a pure
         # derivation of the canonical tier (the arbiter's verdict), never an
@@ -1021,6 +1041,13 @@ async def _persist_report_and_findings(
                 "cwe": finding.cwe,
                 "cvss": finding.cvss,
             },
+        )
+
+    # Wave 5 (R-9.2): link each finding's LLM proposal to the arbiter verdict in
+    # an isolated session — best-effort analytics that never breaks persistence.
+    if _outcome_rows:
+        await persist_invocation_outcomes(
+            tenant_id=tenant_id, scan_id=scan_id, records=_outcome_rows
         )
 
 
