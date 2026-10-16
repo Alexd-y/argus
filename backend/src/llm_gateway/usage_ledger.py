@@ -28,6 +28,8 @@ def record_usage(
     latency_ms: int = 0,
     prompt_hash: str = "",
     response_hash: str = "",
+    prompt_object_key: str = "",
+    response_object_key: str = "",
 ) -> None:
     entry = {
         "tenant_id": tenant_id,
@@ -75,6 +77,8 @@ def record_usage(
                 latency_ms=latency_ms,
                 prompt_hash=prompt_hash,
                 response_hash=response_hash,
+                prompt_object_key=prompt_object_key,
+                response_object_key=response_object_key,
             )
         )
 
@@ -106,6 +110,8 @@ async def _persist_to_db(
     latency_ms: int,
     prompt_hash: str,
     response_hash: str,
+    prompt_object_key: str = "",
+    response_object_key: str = "",
 ) -> None:
     """Persist invocation record to gateway_invocations table (fire-and-forget)."""
     try:
@@ -131,6 +137,8 @@ async def _persist_to_db(
                 error_code=error_code,
                 prompt_hash=prompt_hash,
                 response_hash=response_hash,
+                prompt_object_key=prompt_object_key or None,
+                response_object_key=response_object_key or None,
             )
             session.add(invocation)
             await session.commit()

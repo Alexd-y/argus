@@ -1317,6 +1317,14 @@ class Settings(BaseSettings):
     # model-assigned tier is persisted unchanged — use shadow to measure the
     # before/after distribution before enforcing. Env: EVIDENCE_ARBITER_ENFORCED.
     evidence_arbiter_enforced: bool = True
+    # Wave 5 (R-9.1/R-9.3) — capture the full prompt/response TEXT of each LLM
+    # invocation (not just hashes) into object storage for the training dataset.
+    # Off by default: text capture is governed by tenant policy + retention and
+    # widens the data-leak surface, so it is strictly opt-in. When on, text is
+    # redacted (src/evidence/redaction.py) BEFORE it ever reaches storage, hashed
+    # over the redacted bytes, and only the object key is kept on the telemetry
+    # row — target data never leaves the perimeter. Env: LLM_TELEMETRY_STORE_TEXT.
+    llm_telemetry_store_text: bool = False
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True

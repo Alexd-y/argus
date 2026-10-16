@@ -1458,6 +1458,10 @@ class GatewayInvocation(Base):
     model: Mapped[str | None] = mapped_column(String(128))
     prompt_hash: Mapped[str | None] = mapped_column(String(64))
     response_hash: Mapped[str | None] = mapped_column(String(64))
+    # Wave 5 (R-9.1/R-9.3) — object-storage keys for the REDACTED prompt/response
+    # text (text itself never lives in a DB column); NULL when text capture is off.
+    prompt_object_key: Mapped[str | None] = mapped_column(String(1024))
+    response_object_key: Mapped[str | None] = mapped_column(String(1024))
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     estimated_cost_usd: Mapped[float] = mapped_column(

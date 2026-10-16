@@ -108,6 +108,21 @@ def record_llm_invocation(
         resolved_phase = phase if phase is not None else scope["phase"]
         task_label = getattr(task, "value", task) or ""
 
+        from src.llm.telemetry_text_store import store_redacted_text
+
+        prompt_object_key = store_redacted_text(
+            tenant_id=resolved_tenant or "",
+            scan_id=resolved_scan or "",
+            kind="prompt",
+            text=prompt_text,
+        )
+        response_object_key = store_redacted_text(
+            tenant_id=resolved_tenant or "",
+            scan_id=resolved_scan or "",
+            kind="response",
+            text=response_text,
+        )
+
         from src.llm_gateway.usage_ledger import record_usage
 
         record_usage(
@@ -126,6 +141,8 @@ def record_llm_invocation(
             latency_ms=int(latency_ms or 0),
             prompt_hash=_sha256_hex(prompt_text),
             response_hash=_sha256_hex(response_text),
+            prompt_object_key=prompt_object_key,
+            response_object_key=response_object_key,
         )
     except Exception:  # pragma: no cover - defensive; telemetry never breaks calls
         logger.debug("record_llm_invocation: suppressed best-effort error", exc_info=True)
