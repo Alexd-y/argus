@@ -346,11 +346,20 @@ def load_json_fixtures(directory: str) -> list[dict[str, Any]]:
 
 
 def _parse_manifest(raw: dict[str, Any]) -> LabScopeManifest:
+    now = datetime.now(tz=UTC)
     expires_raw = raw.get("expires_at")
     if isinstance(expires_raw, str):
         expires_at = datetime.fromisoformat(expires_raw)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        # Time-bomb guard: a fixture's baked-in ``expires_at`` eventually falls into the
+        # past, which fails every lease issuance with ``lab_scope_manifest_expired``. The
+        # eval only needs a *valid* (non-expired) lease — not a specific date — so a
+        # past/near expiry is clamped forward instead of silently rotting the suite.
+        if expires_at <= now + timedelta(minutes=5):
+            expires_at = now + timedelta(hours=4)
     else:
-        expires_at = datetime.now(tz=UTC) + timedelta(hours=4)
+        expires_at = now + timedelta(hours=4)
     return LabScopeManifest(
         tenant_id=str(raw["tenant_id"]),
         engagement_id=str(raw["engagement_id"]),

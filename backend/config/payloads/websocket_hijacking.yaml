@@ -31,7 +31,11 @@ payloads:
     template: '40/admin,'
     confidence: suspected
     notes: socket.io CONNECT packet targeting a privileged namespace; a success ack as a low-priv user is the bug.
-mutations: []
+mutations:
+  - name: case_flip
+    description: Flip case of Origin/handshake header values to defeat case-sensitive cross-origin allowlist checks.
+  - name: whitespace_alt
+    description: Alternate whitespace around handshake values to slip past naive origin validation.
 encodings:
   - name: identity
     stages: []

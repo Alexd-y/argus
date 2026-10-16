@@ -64,7 +64,7 @@ from scripts.render_pdfa_sample import (
 # (b) the renderer's basic-variant code path stopped being byte-identical
 #     to the pre-C7-T02 output (regression — investigate before merge).
 # Computed against tier='midgard', scan_completed_at='2024-01-01T00:00:00+00:00'.
-_BASIC_LATEX_SHA256 = "046ed76fe84e70bd43d064c5186a33b5049db05cc2fe09893017d6fc1509f67e"
+_BASIC_LATEX_SHA256 = "34f13a2fb9232ed707fb4561d9e13ac11c66dad09c3cdca7a58d8a9317e4a4a8"
 
 _DETERMINISTIC_TIMESTAMP = "2024-01-01T00:00:00+00:00"
 

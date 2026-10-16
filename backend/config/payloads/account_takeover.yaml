@@ -41,7 +41,11 @@ payloads:
     template: 'Cookie: session={canary}'
     confidence: suspected
     notes: Attacker-forced pre-auth session ID; unchanged post-login value confirms no regeneration.
-mutations: []
+mutations:
+  - name: case_flip
+    description: Flip case of parameter/token values to defeat case-sensitive denylist checks on reset/identity flows.
+  - name: whitespace_alt
+    description: Alternate whitespace around injected identifiers to slip past naive input filters.
 encodings:
   - name: identity
     stages: []

@@ -31,7 +31,11 @@ payloads:
     template: 'auth-token-bin: {canary}'
     confidence: suspected
     notes: Binary (-bin suffix) metadata smuggling; some auth middleware inspects only text metadata keys.
-mutations: []
+mutations:
+  - name: whitespace_alt
+    description: Alternate whitespace in gRPC metadata/method strings to bypass exact-match allowlists.
+  - name: case_flip
+    description: Flip case of method/service identifiers to defeat case-sensitive routing denylists.
 encodings:
   - name: identity
     stages: []

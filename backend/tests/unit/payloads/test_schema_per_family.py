@@ -102,6 +102,13 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "api_bfla",
         "resource_consumption_safe",
         "unsafe_api_consumption",
+        # New attack families (signed catalog, commit 137d8f1) — now carry mutation rules.
+        "account_takeover",
+        "clickjacking",
+        "grpc_misconfig",
+        "host_header_injection",
+        "llm_prompt_injection",
+        "websocket_hijacking",
     }
 )
 

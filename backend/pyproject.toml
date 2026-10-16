@@ -96,19 +96,18 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "PyYAML>=6.0",
-    "ruff>=0.4.0",
+    # Pinned exactly: ruff's lint ruleset AND ``ruff format`` style change between
+    # releases, so an unpinned floor makes the lint gate non-reproducible (the
+    # resolved version drifts with every ruff release). Bump deliberately.
+    "ruff==0.16.0",
     "black>=24.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
     "jsonschema>=4.21.0",
-    # ARG-036 — Phase-2 LaTeX templating substrate. Phase-1 (Cycle 4) ships
-    # a minimal LaTeX stub in ``pdf_backend.LatexBackend``; the dependency
-    # is registered now so designers can scaffold ``_latex/<tier>/main.tex.j2``
-    # against a stable runtime, and CI's ``requires_latex`` job has a
-    # known-good install target. ``jinja2-latex`` is a pure-Python
-    # adapter — no native dependencies — and is dev-only because the
-    # runtime LaTeX backend invokes ``latexmk`` directly without it.
-    "jinja2-latex>=0.11",
+    # NB: ``jinja2-latex`` was previously pinned here for a planned Phase-2 LaTeX
+    # templating substrate, but it is never imported (the LaTeX backend shells out to
+    # ``latexmk`` directly) and has no installable distribution — it broke
+    # ``pip install -r requirements-dev.txt``. Removed to keep the dev env reproducible.
     # ARG-036 — PDF metadata + structural assertions in
     # ``tests/integration/reports/test_pdf_branded.py`` and the extended
     # ``tests/security/test_report_no_secret_leak.py`` PDF text-extraction

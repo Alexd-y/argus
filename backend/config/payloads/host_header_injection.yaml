@@ -35,7 +35,11 @@ payloads:
     template: "Host: {target_host}\r\nHost: {oast_host}"
     confidence: suspected
     notes: Dual-Host header smuggling; some stacks parse the second Host value for routing/link generation.
-mutations: []
+mutations:
+  - name: case_flip
+    description: HTTP header names are case-insensitive; flipping case defeats substring filters on Host/X-Forwarded-Host.
+  - name: whitespace_alt
+    description: Alternate whitespace around the header value to slip past naive Host-header validation.
 encodings:
   - name: identity
     stages: []

