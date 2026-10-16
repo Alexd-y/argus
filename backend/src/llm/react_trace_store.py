@@ -26,6 +26,29 @@ logger = logging.getLogger(__name__)
 
 
 def _steps_to_json(result: Any) -> str:
+    """Serialize the ordered steps, redacting each string field as RAW text FIRST.
+
+    Redaction MUST run on each field in the representation the redactor's
+    patterns expect (raw newlines, raw delimiters). Redacting the already-
+    JSON-serialized blob would be a parser differential: json.dumps escapes
+    newlines to ``\\n``, so a multi-line secret (e.g. a PEM private key in a
+    tool result) would no longer match the ``private_key_pem`` pattern and would
+    survive — a redaction bypass. So we redact field-by-field on the raw value,
+    then assemble. ``store_redacted_text`` runs a second pass as defense in depth.
+    """
+    from src.evidence.redaction import Redactor
+
+    redactor = Redactor()
+
+    def _red(value: Any) -> Any:
+        if value is None:
+            return None
+        text = value if isinstance(value, str) else json.dumps(value, default=str)
+        try:
+            return redactor.redact(text.encode("utf-8")).content.decode("utf-8", "replace")
+        except Exception:
+            return "[REDACTION_ERROR]"
+
     steps = getattr(result, "steps", None) or []
     payload = []
     for s in steps:
@@ -33,10 +56,12 @@ def _steps_to_json(result: Any) -> str:
         payload.append(
             {
                 "step_type": getattr(step_type, "value", step_type),
-                "content": getattr(s, "content", ""),
+                # tool_name is a short identifier, not free text; content /
+                # tool_args / tool_result can carry raw target data → redact.
+                "content": _red(getattr(s, "content", "")),
                 "tool_name": getattr(s, "tool_name", None),
-                "tool_args": getattr(s, "tool_args", None),
-                "tool_result": getattr(s, "tool_result", None),
+                "tool_args": _red(getattr(s, "tool_args", None)),
+                "tool_result": _red(getattr(s, "tool_result", None)),
                 "timestamp": getattr(s, "timestamp", None),
             }
         )

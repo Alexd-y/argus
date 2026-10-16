@@ -64,6 +64,31 @@ def test_steps_to_json_roundtrips_fields():
     assert payload[0]["content"] == "t1"
 
 
+def test_steps_to_json_redacts_multiline_secret_in_fields():
+    """Regression: redaction runs on RAW fields, not the JSON blob, so a
+    multi-line PEM in a tool result is caught (no parser-differential bypass)."""
+    pem = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEpAIBAAKCAQEAsecretkeymaterialDONOTLEAK1234567890\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+
+    class _Step:
+        step_type = "observation"
+        content = "tool output follows"
+        tool_name = "curl"
+        tool_args = None
+        tool_result = pem
+        timestamp = "ts"
+
+    class _R:
+        steps = [_Step()]
+
+    blob = react_trace_store._steps_to_json(_R())
+    assert "MIIEpAIBAAKCAQEAsecretkeymaterialDONOTLEAK1234567890" not in blob
+    assert "REDACTED" in blob
+
+
 def test_disabled_by_default_is_noop(monkeypatch):
     monkeypatch.setattr(settings, "react_trace_persist", False, raising=False)
     with llm_telemetry_scope(tenant_id="t", scan_id="s", phase="exploitation"):
