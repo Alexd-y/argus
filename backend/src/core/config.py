@@ -1362,6 +1362,13 @@ class Settings(BaseSettings):
     # without downtime. A variant is only eligible once it passed the reference set
     # (R-9.17; see src/llm/model_variants.ReferenceGate). Env: LLM_ACTIVE_MODEL_VARIANT.
     llm_active_model_variant: str = ""
+    # Wave 5 (R-9.13) — apply self-consistency (multi-sample majority vote) to the
+    # exploitability verdict, which feeds a finding's provability. Off by default:
+    # it multiplies the LLM cost of that decision. When on, the verdict is drawn
+    # self_consistency_samples times at rising temperatures and decided by consensus.
+    # Env: SELF_CONSISTENCY_TIER_DECISIONS / SELF_CONSISTENCY_SAMPLES.
+    self_consistency_tier_decisions: bool = False
+    self_consistency_samples: int = 3
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True

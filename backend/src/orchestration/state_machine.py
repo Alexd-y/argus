@@ -800,6 +800,28 @@ async def _materialise_scan_evidence(
     return len(findings)
 
 
+# Wave 5 (R-9.11) — finding sources whose proposals are LLM-origin and thus
+# attributed to the primary WRB model (WRB-001/WRB-002: pentest analysis and
+# Cairn both run on WhiteRabbitNeo). Tool/recon/heuristic sources are not
+# model-proposed and carry no producing model.
+_WRB_MODEL = "taico-ai/WhiteRabbitNeo-v3-7B"
+_LLM_ORIGIN_SOURCES = frozenset({"llm_deep_review", "cairn", "adaptive_loop"})
+
+
+def _resolve_finding_model(finding: dict) -> str:
+    """Best-effort producing-model attribution for a finding (R-9.11).
+
+    Prefers an explicit ``source_model`` a producer stamped; otherwise attributes
+    LLM-origin sources to WRB; tool-derived findings get no model.
+    """
+    explicit = str(finding.get("source_model") or "").strip()
+    if explicit:
+        return explicit
+    if str(finding.get("source") or "").strip() in _LLM_ORIGIN_SOURCES:
+        return _WRB_MODEL
+    return ""
+
+
 async def _persist_report_and_findings(
     session: AsyncSession,
     tenant_id: str,
@@ -968,7 +990,7 @@ async def _persist_report_and_findings(
                     )[:64],
                     phase=str(f.get("phase") or "")[:32],
                     task=str(f.get("source_task") or f.get("task") or "")[:32],
-                    model=str(f.get("source_model") or "")[:128],
+                    model=_resolve_finding_model(f)[:128],
                     model_tier=_adj.model_tier,
                     arbiter_tier=_adj.arbiter_tier,
                     applicable=_adj.applicable,

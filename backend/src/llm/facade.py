@@ -769,21 +769,26 @@ async def _call_via_whiterabbitneo(
     scan_id: str | None = None,
     phase: str = "unknown",
     response_schema: dict | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Call WhiteRabbitNeo adapter, record cost, return text.
 
     ``response_schema`` (R-9.9) is passed through to the adapter; it enforces
     schema-valid JSON only when a structured-output dialect is configured
     (``settings.llm_structured_output_mode``), else it is a harmless no-op.
+
+    ``temperature`` (R-9.13) overrides the adapter's default so self-consistency
+    can draw diverse samples; ``None`` keeps the deterministic default. NOTE: the
+    temperature override reaches this primary WRB dispatch only — the opt-in
+    phase-route and quick paths keep their own defaults.
     """
     wrb = _get_wrb_adapter()
     _t0 = time.perf_counter()
     async with provider_guard("wrb") as run:
-        text, usage = await wrb.call_with_usage(
-            user_prompt,
-            system_prompt=system_prompt,
-            response_schema=response_schema,
-        )
+        _call_kwargs: dict = {"system_prompt": system_prompt, "response_schema": response_schema}
+        if temperature is not None:
+            _call_kwargs["temperature"] = temperature
+        text, usage = await wrb.call_with_usage(user_prompt, **_call_kwargs)
         run.record_usage(
             AgentUsage(
                 input_tokens=int(usage["prompt_tokens"]),
@@ -1112,6 +1117,7 @@ async def call_llm_unified(
     content_class: ContentClass | str | None = None,
     scan_options: dict | None = None,
     prompt_id: str | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Public entry point — binds the §8.1/§8.3 call scope, then dispatches.
 
@@ -1145,6 +1151,7 @@ async def call_llm_unified(
             content_class=content_class,
             scan_options=scan_options,
             prompt_id=prompt_id,
+            temperature=temperature,
         )
     finally:
         reset_call_scope(token)
@@ -1167,6 +1174,7 @@ async def _call_llm_unified_impl(
     content_class: ContentClass | str | None = None,
     scan_options: dict | None = None,
     prompt_id: str | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Primary async entry point for every LLM call in ARGUS.
 
@@ -1339,6 +1347,7 @@ async def _call_llm_unified_impl(
                     task=task,
                     scan_id=scan_id,
                     phase=phase,
+                    temperature=temperature,
                 )
                 _safety_check_response(result, task.value)
                 return result
