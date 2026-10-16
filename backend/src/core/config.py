@@ -1356,6 +1356,12 @@ class Settings(BaseSettings):
     # Keep "off" until the deployment confirms its server accepts the chosen
     # dialect (a wrong field can 400 the request). Env: LLM_STRUCTURED_OUTPUT_MODE.
     llm_structured_output_mode: str = "off"
+    # Wave 5 (R-9.16/R-9.18) — the active fine-tuned model variant selected by
+    # routing. Empty = use the base model. Switching this value is the rollback /
+    # promotion mechanism: it is CONFIG, not code, so a variant can be rolled back
+    # without downtime. A variant is only eligible once it passed the reference set
+    # (R-9.17; see src/llm/model_variants.ReferenceGate). Env: LLM_ACTIVE_MODEL_VARIANT.
+    llm_active_model_variant: str = ""
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True
