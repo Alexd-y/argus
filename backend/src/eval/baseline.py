@@ -59,9 +59,7 @@ def check_regression(
             continue
         b = float(baseline[name])
         c = float(current[name])
-        regressed = (
-            c > b + gate.tolerance if gate.direction == "lower" else c < b - gate.tolerance
-        )
+        regressed = c > b + gate.tolerance if gate.direction == "lower" else c < b - gate.tolerance
         if regressed:
             out.append(
                 Regression(
