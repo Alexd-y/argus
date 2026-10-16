@@ -158,6 +158,33 @@ class ReActAgent:
         require_tools: bool = False,
         max_malformed_repairs: int = DEFAULT_MAX_MALFORMED_REPAIRS,
     ) -> ReActResult:
+        """Run the ReAct loop, then best-effort persist the full trace (R-9.4)."""
+        result = await self._run_impl(
+            system_prompt,
+            llm_caller,
+            tool_executor,
+            scan_id,
+            require_tools=require_tools,
+            max_malformed_repairs=max_malformed_repairs,
+        )
+        try:
+            from src.llm.react_trace_store import persist_react_trace
+
+            await persist_react_trace(result=result, scan_id=scan_id)
+        except Exception:
+            logger.debug("react_trace persist wrapper suppressed error", exc_info=True)
+        return result
+
+    async def _run_impl(
+        self,
+        system_prompt: str = "",
+        llm_caller: Any = None,
+        tool_executor: Any = None,
+        scan_id: str | None = None,
+        *,
+        require_tools: bool = False,
+        max_malformed_repairs: int = DEFAULT_MAX_MALFORMED_REPAIRS,
+    ) -> ReActResult:
         """Execute the ReAct loop with bounded, auditable stopping conditions.
 
         ``require_tools=True`` marks tool-execution mode: a missing

@@ -1517,6 +1517,47 @@ class LlmInvocationOutcome(Base):
     )
 
 
+class ReactTrace(Base):
+    """Wave 5 (R-9.4) — one persisted multi-step ReAct reasoning trace.
+
+    Scalar metadata is kept inline; the full ordered steps (Thought/Action/
+    Observation, including tool results) are redacted and written to object
+    storage, referenced by ``steps_object_key`` — the intermediate steps are the
+    most valuable part for analysis and training. Tenant-scoped with FORCE RLS.
+    """
+
+    __tablename__ = "react_traces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str | None] = mapped_column(String(36))
+    phase: Mapped[str | None] = mapped_column(String(32))
+    task: Mapped[str | None] = mapped_column(String(32))
+    answer_hash: Mapped[str | None] = mapped_column(String(64))
+    iterations: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    steps_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    total_duration_seconds: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0")
+    )
+    stop_reason: Mapped[str | None] = mapped_column(String(32))
+    evidence_backed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    error: Mapped[str | None] = mapped_column(String(256))
+    steps_object_key: Mapped[str | None] = mapped_column(String(1024))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_react_traces_scan_id", "scan_id"),
+        Index("ix_react_traces_tenant_id", "tenant_id"),
+    )
+
+
 class BenchmarkRun(Base):
     __tablename__ = "benchmark_runs"
 

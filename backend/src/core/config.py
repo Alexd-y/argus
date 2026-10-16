@@ -1333,6 +1333,13 @@ class Settings(BaseSettings):
     # flipping the global flag alone never starts storing any tenant's text.
     # Env: LLM_TELEMETRY_TEXT_TENANT_ALLOWLIST.
     llm_telemetry_text_tenant_allowlist: str = ""
+    # Wave 5 (R-9.4) — persist the FULL multi-step ReAct reasoning trace (not just
+    # the summary scalars) so the most valuable part — the intermediate steps — is
+    # available for analysis and possible training. Off by default: it adds a DB
+    # write per ReAct run. The scalar metadata row is cheap; the step CONTENT is
+    # stored only when text capture is also authorized for the tenant (reuses the
+    # redact-then-store path above). Env: REACT_TRACE_PERSIST.
+    react_trace_persist: bool = False
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True
