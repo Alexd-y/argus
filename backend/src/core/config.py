@@ -1345,6 +1345,17 @@ class Settings(BaseSettings):
     # it as a structured log line so the product metrics are observable beyond the
     # Quick comparison report. Off by default. Env: EVAL_METRICS_SNAPSHOT.
     eval_metrics_snapshot: bool = False
+    # Wave 5 (R-9.9) — enforce structured output (a JSON schema) on the primary
+    # WRB/local path instead of relying on post-hoc regex parsing. The exact
+    # request field is server-dependent, so the dialect is explicit:
+    #   "off"         — send no structured-output field (default; safe everywhere);
+    #   "json_object" — response_format={"type":"json_object"} (generic JSON mode);
+    #   "guided_json" — vLLM guided decoding (adds guided_json=<schema>);
+    #   "llama_schema"— llama.cpp server (response_format={"type":"json_object",
+    #                   "schema":<schema>}).
+    # Keep "off" until the deployment confirms its server accepts the chosen
+    # dialect (a wrong field can 400 the request). Env: LLM_STRUCTURED_OUTPUT_MODE.
+    llm_structured_output_mode: str = "off"
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True

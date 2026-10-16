@@ -59,6 +59,33 @@ _MIN_PROMPT_TOKENS = 1024
 WRB_MAX_PROMPT_BYTES = (WRB_DEFAULT_MAX_CONTEXT_TOKENS - WRB_DEFAULT_MAX_TOKENS) * _CHARS_PER_TOKEN
 
 
+def _apply_structured_output(
+    payload: dict[str, Any], response_schema: dict[str, Any] | None
+) -> None:
+    """Add the server-appropriate structured-output field to ``payload`` (R-9.9).
+
+    No-op when no schema is given or the configured dialect is ``"off"`` (the
+    default), so pentest analysis never 400s on a server that does not support
+    the chosen field until the deployment explicitly opts in.
+    """
+    if not response_schema:
+        return
+    try:
+        from src.core.config import settings
+
+        mode = getattr(settings, "llm_structured_output_mode", "off")
+    except Exception:
+        mode = "off"
+    if mode == "json_object":
+        payload["response_format"] = {"type": "json_object"}
+    elif mode == "guided_json":  # vLLM guided decoding
+        payload["response_format"] = {"type": "json_object"}
+        payload["guided_json"] = response_schema
+    elif mode == "llama_schema":  # llama.cpp server
+        payload["response_format"] = {"type": "json_object", "schema": response_schema}
+    # "off" / unknown → leave payload unchanged (safe default)
+
+
 class WhiteRabbitNeoAdapter(LLMAdapter):
     """Primary pentest AI — all scan phases run through this adapter first.
     Falls back to cloud providers only when explicitly configured for
@@ -132,9 +159,15 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         model: str | None,
         max_tokens: int,
         temperature: float | None,
+        response_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Assemble the chat-completions payload, applying deterministic
         temperature/seed defaults so pentest analysis is reproducible.
+
+        When ``response_schema`` is given AND a structured-output dialect is
+        configured (``settings.llm_structured_output_mode``), add the
+        server-appropriate structured-output field so the model is forced to emit
+        schema-valid JSON (R-9.9) instead of relying on post-hoc regex parsing.
         """
         payload: dict[str, Any] = {
             "model": model or WRB_DEFAULT_MODEL,
@@ -146,6 +179,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         }
         if self._seed is not None:
             payload["seed"] = self._seed
+        _apply_structured_output(payload, response_schema)
         return payload
 
     async def call(
@@ -156,6 +190,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         model: str | None = None,
         max_tokens: int = WRB_DEFAULT_MAX_TOKENS,
         temperature: float | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
@@ -176,7 +211,11 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         messages.append({"role": "user", "content": prompt})
 
         payload = self._build_payload(
-            messages, model=model, max_tokens=max_tokens, temperature=temperature
+            messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_schema=response_schema,
         )
 
         url = f"{self._base_url}/chat/completions"
@@ -217,6 +256,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         model: str | None = None,
         max_tokens: int = WRB_DEFAULT_MAX_TOKENS,
         temperature: float | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, dict[str, int]]:
         """Call and return (text, usage_dict) with token counts."""
         if not self._base_url:
@@ -240,7 +280,11 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         messages.append({"role": "user", "content": prompt})
 
         payload = self._build_payload(
-            messages, model=model, max_tokens=max_tokens, temperature=temperature
+            messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_schema=response_schema,
         )
 
         url = f"{self._base_url}/chat/completions"
