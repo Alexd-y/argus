@@ -123,6 +123,10 @@ dev = [
     # Runtime stays on asyncpg; psycopg2-binary is dev-only (binary wheel — no
     # native build chain required).
     "psycopg2-binary>=2.9",
+    # psycopg v3 — SQLAlchemy 2.x resolves a sync ``postgresql://`` URL to the psycopg
+    # (v3) dialect by default, which the requires_postgres RLS tests
+    # (``tests/db/test_webhook_dlq_migration.py``) use. Dev-only binary wheel.
+    "psycopg[binary]>=3.1",
 ]
 messaging = [
     "nats-py>=0.9.0",

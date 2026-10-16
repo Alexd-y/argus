@@ -264,10 +264,14 @@ def _insert_dlq_row_via_sql(
             " target_url_hash, payload_json, last_error_code, attempt_count, "
             " created_at, updated_at) "
             "VALUES (:id, :tid, :adapter, 'finding.created', :eid, "
-            f" 'h-' || :id, {payload_json_literal}, 'http_5xx', 0, "
+            f" 'h-' || :id_for_hash, {payload_json_literal}, 'http_5xx', 0, "
             " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
         ),
-        {"id": rid, "tid": tenant_id, "adapter": adapter_name, "eid": eid},
+        # ``:id`` and the hash seed are distinct bind params: reusing one param in both a
+        # text column and a ``||`` concat makes psycopg3 raise AmbiguousParameter (it
+        # deduces inconsistent types for a single ``$n``). psycopg2 tolerated it; keeping
+        # them separate works on both drivers.
+        {"id": rid, "tid": tenant_id, "adapter": adapter_name, "eid": eid, "id_for_hash": rid},
     )
     return rid
 
