@@ -22,6 +22,15 @@ _plan_steps_completed = 0
 _coverage_transitions_total = 0
 _coverage_transitions_accurate = 0
 
+# Wave 5 (R-9.7) — structured-output parse quality. A NEW eval metric kept
+# separate from the closed §18 mirror above (EvalRates). Measures how often an
+# LLM response parsed cleanly on the first try vs only via json_extract's
+# fallback heuristics vs not at all — the baseline that schema enforcement
+# (stage V / R-9.9) is expected to move.
+_json_parse_direct = 0
+_json_parse_fallback = 0
+_json_parse_failed = 0
+
 
 @dataclass(frozen=True)
 class EvalRates:
@@ -35,6 +44,19 @@ class EvalRates:
     citation_claims_total: int
     plan_steps_total: int
     coverage_transitions_total: int
+
+
+@dataclass(frozen=True)
+class StructuredParseRates:
+    """Wave 5 (R-9.7) structured-output parse quality over LLM responses."""
+
+    # Clean JSON parsed on the first try — what schema enforcement should raise.
+    direct_parse_rate: float
+    # Recovered only via json_extract's fence/balanced fallback heuristics.
+    fallback_parse_rate: float
+    # Unparseable (no JSON object recovered).
+    parse_failure_rate: float
+    total: int
 
 
 def _ratio(numerator: int, denominator: int) -> float:
@@ -60,6 +82,41 @@ def reset_eval_rates() -> None:
         _plan_steps_completed = 0
         _coverage_transitions_total = 0
         _coverage_transitions_accurate = 0
+
+
+def reset_structured_parse_rates() -> None:
+    global _json_parse_direct, _json_parse_fallback, _json_parse_failed
+    with _LOCK:
+        _json_parse_direct = 0
+        _json_parse_fallback = 0
+        _json_parse_failed = 0
+
+
+def record_json_parse(*, tier: str) -> None:
+    """Record one json_extract outcome. ``tier`` ∈ {direct, fence, balanced, failed}.
+
+    ``direct`` = clean first-try parse; ``fence``/``balanced`` = fallback
+    heuristic recovery; ``failed`` = unparseable.
+    """
+    global _json_parse_direct, _json_parse_fallback, _json_parse_failed
+    with _LOCK:
+        if tier == "direct":
+            _json_parse_direct += 1
+        elif tier == "failed":
+            _json_parse_failed += 1
+        else:  # fence | balanced → fallback recovery
+            _json_parse_fallback += 1
+
+
+def snapshot_structured_parse_rates() -> StructuredParseRates:
+    with _LOCK:
+        total = _json_parse_direct + _json_parse_fallback + _json_parse_failed
+        return StructuredParseRates(
+            direct_parse_rate=_ratio(_json_parse_direct, total),
+            fallback_parse_rate=_ratio(_json_parse_fallback, total),
+            parse_failure_rate=_ratio(_json_parse_failed, total),
+            total=total,
+        )
 
 
 def record_unknown_id_check(*, unknown: bool) -> None:

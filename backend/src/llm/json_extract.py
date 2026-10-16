@@ -20,6 +20,16 @@ logger = logging.getLogger(__name__)
 _FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
 
 
+def _record_parse(tier: str) -> None:
+    """Best-effort eval instrumentation (Wave 5, R-9.7). Never breaks extraction."""
+    try:
+        from src.eval.rates import record_json_parse
+
+        record_json_parse(tier=tier)
+    except Exception:  # pragma: no cover - telemetry must never break parsing
+        pass
+
+
 def extract_json_object(text: str) -> dict[str, Any] | None:
     """Extract the first JSON object from an LLM response, or ``None``.
 
@@ -41,6 +51,7 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
     try:
         parsed = json.loads(stripped)
         if isinstance(parsed, dict):
+            _record_parse("direct")
             return parsed
     except json.JSONDecodeError:
         pass
@@ -50,6 +61,7 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
         try:
             parsed = json.loads(fence.group(1).strip())
             if isinstance(parsed, dict):
+                _record_parse("fence")
                 return parsed
         except json.JSONDecodeError:
             pass
@@ -59,9 +71,11 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
         try:
             parsed = json.loads(recovered)
             if isinstance(parsed, dict):
+                _record_parse("balanced")
                 return parsed
         except json.JSONDecodeError:
             pass
+    _record_parse("failed")
     return None
 
 
