@@ -1325,6 +1325,14 @@ class Settings(BaseSettings):
     # over the redacted bytes, and only the object key is kept on the telemetry
     # row — target data never leaves the perimeter. Env: LLM_TELEMETRY_STORE_TEXT.
     llm_telemetry_store_text: bool = False
+    # Wave 5 — per-tenant authorization for text capture (R-9.3: "governed by
+    # tenant policy"). The switch above is only the master kill-switch; capture
+    # additionally requires the tenant to be explicitly allow-listed here.
+    # Comma-separated tenant ids; "*" opts in every tenant (single-tenant / lab
+    # deployments). Empty (default) = capture for NO tenant (fail-closed), so
+    # flipping the global flag alone never starts storing any tenant's text.
+    # Env: LLM_TELEMETRY_TEXT_TENANT_ALLOWLIST.
+    llm_telemetry_text_tenant_allowlist: str = ""
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True
