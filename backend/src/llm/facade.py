@@ -56,6 +56,7 @@ from src.llm.schemas import (
 )
 from src.llm.task_router import _TASK_TO_ROLE, LLMTask, check_tier_escalation
 from src.llm.task_router import call_llm_for_task as _task_router_call
+from src.llm.telemetry import record_llm_invocation
 from src.orchestration.agent_contracts import AgentUsage
 
 logger = logging.getLogger(__name__)
@@ -619,6 +620,7 @@ async def _call_via_local_openai(
     url = f"{base_url}/chat/completions"
     headers = {"Content-Type": "application/json"}
     timeout = httpx.Timeout(connect=10.0, read=timeout_sec, write=30.0, pool=10.0)
+    _t0 = time.perf_counter()
     async with provider_guard("local") as run:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, json=payload, headers=headers)
@@ -651,6 +653,18 @@ async def _call_via_local_openai(
             int(usage.get("prompt_tokens") or 0),
             int(usage.get("completion_tokens") or 0),
         )
+    record_llm_invocation(
+        task=task,
+        provider="local",
+        model=model,
+        prompt_text=f"{system_prompt}\n{user_prompt}" if system_prompt else user_prompt,
+        response_text=text,
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+        latency_ms=int((time.perf_counter() - _t0) * 1000),
+        scan_id=scan_id,
+        phase=phase,
+    )
     return text
 
 
@@ -757,6 +771,7 @@ async def _call_via_whiterabbitneo(
 ) -> str:
     """Call WhiteRabbitNeo adapter, record cost, return text."""
     wrb = _get_wrb_adapter()
+    _t0 = time.perf_counter()
     async with provider_guard("wrb") as run:
         text, usage = await wrb.call_with_usage(
             user_prompt,
@@ -781,6 +796,18 @@ async def _call_via_whiterabbitneo(
             usage["prompt_tokens"],
             usage["completion_tokens"],
         )
+    record_llm_invocation(
+        task=task,
+        provider="whiterabbitneo",
+        model="taico-ai/WhiteRabbitNeo-v3-7B",
+        prompt_text=f"{system_prompt}\n{user_prompt}" if system_prompt else user_prompt,
+        response_text=text,
+        prompt_tokens=int(usage["prompt_tokens"]),
+        completion_tokens=int(usage["completion_tokens"]),
+        latency_ms=int((time.perf_counter() - _t0) * 1000),
+        scan_id=scan_id,
+        phase=phase,
+    )
     return text
 
 
@@ -793,6 +820,7 @@ async def _call_via_task_router(
     phase: str = "unknown",
 ) -> str:
     """Fallback/legacy: call via task_router (cloud providers)."""
+    _t0 = time.perf_counter()
     async with provider_guard("cloud") as run:
         response = await _task_router_call(
             task,
@@ -811,12 +839,12 @@ async def _call_via_task_router(
                 estimated=False,
             )
         )
+    prompt_tok = response.prompt_tokens
+    completion_tok = response.completion_tokens
+    if not prompt_tok and not completion_tok:
+        prompt_tok = _count_tokens_tiktoken((system_prompt or "") + (user_prompt or ""))
+        completion_tok = _count_tokens_tiktoken(response.text or "")
     if scan_id:
-        prompt_tok = response.prompt_tokens
-        completion_tok = response.completion_tokens
-        if not prompt_tok and not completion_tok:
-            prompt_tok = _count_tokens_tiktoken((system_prompt or "") + (user_prompt or ""))
-            completion_tok = _count_tokens_tiktoken(response.text or "")
         _record_llm_cost(
             scan_id,
             phase,
@@ -825,6 +853,18 @@ async def _call_via_task_router(
             prompt_tok,
             completion_tok,
         )
+    record_llm_invocation(
+        task=task,
+        provider="cloud",
+        model=str(response.model or ""),
+        prompt_text=f"{system_prompt}\n{user_prompt}" if system_prompt else user_prompt,
+        response_text=response.text,
+        prompt_tokens=int(prompt_tok or 0),
+        completion_tokens=int(completion_tok or 0),
+        latency_ms=int((time.perf_counter() - _t0) * 1000),
+        scan_id=scan_id,
+        phase=phase,
+    )
     return response.text
 
 

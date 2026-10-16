@@ -36,6 +36,7 @@ from src.db.models import (
     ScanTimeline,
 )
 from src.findings.cvss_auto_score import CVSSAutoScorer
+from src.llm.telemetry import llm_telemetry_scope
 from src.mcp.services.notifications import (
     DiscordNotifier,
     GitHubIssuesNotifier,
@@ -1483,7 +1484,10 @@ async def _execute_phase(
 
     # --- Phase dispatch ---
     try:
-        with trace_phase(scan_id, phase_str):
+        with (
+            trace_phase(scan_id, phase_str),
+            llm_telemetry_scope(tenant_id=tenant_id, scan_id=scan_id, phase=phase_str),
+        ):
             output_data = await _dispatch_phase_handler(
                 phase=phase,
                 ctx=ctx,
