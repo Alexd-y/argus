@@ -500,8 +500,15 @@ def migrated_pg_engine(pg_url: str) -> Iterator[Engine]:
     standard ``inspect`` and ``SET LOCAL`` SQL. Each test resets the DB to
     ``base`` on teardown so cross-test row leakage is impossible.
     """
+    from tests.integration.migrations._rls_helpers import ensure_rls_role
+
     cfg = _alembic_config(pg_url)
     command.upgrade(cfg, "head")
+    # The validation/prod Postgres connects as a superuser, which BYPASSES RLS — the
+    # isolation assertions would spuriously see every tenant's rows. Create the dedicated
+    # NOSUPERUSER role (idempotent) so the RLS-check transactions can drop to it and make
+    # the policies observable (seed/setup stay on the superuser connection).
+    ensure_rls_role(pg_url)
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
     try:
@@ -520,7 +527,13 @@ def _set_session_tenant(conn: sa.Connection, tenant_id: str) -> None:
     rejects bound parameters in PostgreSQL — we rely on the UUID shape of
     the id (no quotes, no semicolons) to make this safe.
     """
+    from tests.integration.migrations._rls_helpers import assume_rls_role_sync
+
     conn.execute(text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'"))
+    # Drop to the NOSUPERUSER role so RLS is actually enforced for the rest of this
+    # transaction (a superuser connection bypasses it). Setup/seed work uses separate
+    # transactions on the superuser connection and is unaffected.
+    assume_rls_role_sync(conn)
 
 
 @pytestmark_pg
