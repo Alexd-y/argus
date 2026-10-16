@@ -1118,6 +1118,7 @@ async def call_llm_unified(
     scan_options: dict | None = None,
     prompt_id: str | None = None,
     temperature: float | None = None,
+    response_schema: dict | None = None,
 ) -> str:
     """Public entry point — binds the §8.1/§8.3 call scope, then dispatches.
 
@@ -1152,6 +1153,7 @@ async def call_llm_unified(
             scan_options=scan_options,
             prompt_id=prompt_id,
             temperature=temperature,
+            response_schema=response_schema,
         )
     finally:
         reset_call_scope(token)
@@ -1175,6 +1177,7 @@ async def _call_llm_unified_impl(
     scan_options: dict | None = None,
     prompt_id: str | None = None,
     temperature: float | None = None,
+    response_schema: dict | None = None,
 ) -> str:
     """Primary async entry point for every LLM call in ARGUS.
 
@@ -1348,6 +1351,7 @@ async def _call_llm_unified_impl(
                     scan_id=scan_id,
                     phase=phase,
                     temperature=temperature,
+                    response_schema=response_schema,
                 )
                 _safety_check_response(result, task.value)
                 return result
