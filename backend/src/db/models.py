@@ -1497,6 +1497,8 @@ class LlmInvocationOutcome(Base):
     task: Mapped[str | None] = mapped_column(String(32))
     invocation_id: Mapped[str | None] = mapped_column(String(36))
     finding_id: Mapped[str | None] = mapped_column(String(36))
+    # Wave 5 (R-9.11) — producing model, for per-(task, model) quality metrics.
+    model: Mapped[str | None] = mapped_column(String(128))
     vuln_class: Mapped[str | None] = mapped_column(String(64))
     model_tier: Mapped[int | None] = mapped_column(Integer)
     arbiter_tier: Mapped[int | None] = mapped_column(Integer)

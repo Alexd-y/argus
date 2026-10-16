@@ -39,9 +39,9 @@ def test_assembles_outcome_and_parse_metrics():
     rates.record_json_parse(tier="direct")
     rates.record_json_parse(tier="failed")
     rows = [
-        ("VULN_ANALYSIS", "confirmed", True),
-        ("VULN_ANALYSIS", "rejected", True),
-        ("RECON", "not_applicable", False),
+        ("VULN_ANALYSIS", "confirmed", True, "wrb"),
+        ("VULN_ANALYSIS", "rejected", True, "wrb"),
+        ("RECON", "not_applicable", False, ""),
     ]
     m = asyncio.run(build_scan_metrics(_FakeSession(rows), "tenant", "scan"))
     assert m["arbiter_confirmed_rate"] == 0.5  # 1 confirmed / 2 applicable

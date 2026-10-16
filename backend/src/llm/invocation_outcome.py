@@ -60,6 +60,7 @@ class OutcomeRecord:
     phase: str = ""
     task: str = ""
     invocation_id: str | None = None
+    model: str = ""
     model_tier: int | None = None
     arbiter_tier: int | None = None
     applicable: bool = False
@@ -93,6 +94,7 @@ async def persist_invocation_outcomes(
                         task=rec.task or None,
                         invocation_id=rec.invocation_id,
                         finding_id=rec.finding_id or None,
+                        model=rec.model or None,
                         vuln_class=rec.vuln_class or None,
                         model_tier=rec.model_tier,
                         arbiter_tier=rec.arbiter_tier,

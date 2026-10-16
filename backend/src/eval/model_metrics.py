@@ -87,7 +87,8 @@ def compute_outcome_metrics(
     """
     by_task: dict[str, list[tuple[str, bool]]] = {}
     all_rows: list[tuple[str, bool]] = []
-    for task, outcome, applicable in rows:
+    for row in rows:  # tolerate (task, outcome, applicable[, model]) — model ignored here
+        task, outcome, applicable = row[0], row[1], row[2]
         key = task or "unknown"
         by_task.setdefault(key, []).append((outcome, applicable))
         all_rows.append((outcome, applicable))
@@ -97,13 +98,35 @@ def compute_outcome_metrics(
     return result
 
 
+def compute_task_model_metrics(
+    rows: Iterable[tuple[str, str, bool, str]],
+) -> dict[str, TaskOutcomeMetrics]:
+    """Aggregate ``(task, outcome, applicable, model)`` rows per ``task::model`` (R-9.11).
+
+    The key is ``f"{task}::{model}"`` (model ``""`` when unknown). This is the
+    task→model quality pairing the measurement stage compares: the same task may
+    be routed to different models, and a small model with a hard schema often
+    matches a large one on classification at a fraction of the cost — a decision
+    to be made on these numbers, not by default.
+    """
+    by_key: dict[str, list[tuple[str, bool]]] = {}
+    for row in rows:
+        task = row[0] or "unknown"
+        outcome = row[1]
+        applicable = row[2]
+        model = (row[3] if len(row) > 3 else "") or ""
+        key = f"{task}::{model}"
+        by_key.setdefault(key, []).append((outcome, applicable))
+    return {key: _metrics_for(key, rws) for key, rws in by_key.items()}
+
+
 async def load_outcome_rows(
     session,
     tenant_id: str,
     *,
     scan_id: str | None = None,
-) -> list[tuple[str, str, bool]]:
-    """Load ``(task, outcome, applicable)`` rows for a tenant (optionally one scan)."""
+) -> list[tuple[str, str, bool, str]]:
+    """Load ``(task, outcome, applicable, model)`` rows for a tenant (optionally one scan)."""
     from sqlalchemy import select
 
     from src.db.models import LlmInvocationOutcome
@@ -112,15 +135,17 @@ async def load_outcome_rows(
         LlmInvocationOutcome.task,
         LlmInvocationOutcome.outcome,
         LlmInvocationOutcome.applicable,
+        LlmInvocationOutcome.model,
     ).where(LlmInvocationOutcome.tenant_id == tenant_id)
     if scan_id:
         stmt = stmt.where(LlmInvocationOutcome.scan_id == scan_id)
     res = await session.execute(stmt)
-    return [(t or "unknown", o or _UNKNOWN, bool(a)) for t, o, a in res.all()]
+    return [(t or "unknown", o or _UNKNOWN, bool(a), m or "") for t, o, a, m in res.all()]
 
 
 __all__ = [
     "TaskOutcomeMetrics",
     "compute_outcome_metrics",
+    "compute_task_model_metrics",
     "load_outcome_rows",
 ]

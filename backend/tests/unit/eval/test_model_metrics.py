@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from src.eval.model_metrics import TaskOutcomeMetrics, compute_outcome_metrics
+from src.eval.model_metrics import (
+    TaskOutcomeMetrics,
+    compute_outcome_metrics,
+    compute_task_model_metrics,
+)
 
 
 def test_empty_rows_yield_only_overall_zero():
@@ -64,3 +68,27 @@ def test_missing_task_label_bucketed_as_unknown():
     m = compute_outcome_metrics([("", "confirmed", True)])
     assert "unknown" in m
     assert m["unknown"].confirmed == 1
+
+
+def test_compute_outcome_metrics_tolerates_4_tuples_with_model():
+    # the model element is ignored by the task-only view
+    m = compute_outcome_metrics([("VA", "confirmed", True, "wrb")])
+    assert m["VA"].confirmed == 1
+
+
+def test_task_model_pairing():
+    rows = [
+        ("DEDUP_ANALYSIS", "confirmed", True, "qwen-small"),
+        ("DEDUP_ANALYSIS", "confirmed", True, "qwen-small"),
+        ("DEDUP_ANALYSIS", "rejected", True, "wrb-large"),
+        ("VULN_ANALYSIS", "confirmed", True, "wrb-large"),
+    ]
+    m = compute_task_model_metrics(rows)
+    assert m["DEDUP_ANALYSIS::qwen-small"].confirmed_rate == 1.0
+    assert m["DEDUP_ANALYSIS::wrb-large"].rejected_rate == 1.0
+    assert m["VULN_ANALYSIS::wrb-large"].confirmed == 1
+
+
+def test_task_model_unknown_model_bucketed_empty():
+    m = compute_task_model_metrics([("T", "confirmed", True, "")])
+    assert "T::" in m and m["T::"].confirmed == 1

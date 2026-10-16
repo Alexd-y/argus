@@ -968,6 +968,7 @@ async def _persist_report_and_findings(
                     )[:64],
                     phase=str(f.get("phase") or "")[:32],
                     task=str(f.get("source_task") or f.get("task") or "")[:32],
+                    model=str(f.get("source_model") or "")[:128],
                     model_tier=_adj.model_tier,
                     arbiter_tier=_adj.arbiter_tier,
                     applicable=_adj.applicable,
