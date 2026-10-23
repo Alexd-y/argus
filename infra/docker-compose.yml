@@ -195,6 +195,10 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
       MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Report PDF backend: Chromium (Playwright) reproduces the dark report
+      # theme 1:1 across pages. Image ships playwright + headless Chromium; if
+      # unavailable at runtime the backend self-falls-back to WeasyPrint.
+      REPORT_PDF_BACKEND: ${REPORT_PDF_BACKEND:-chromium}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       # SEC-001: secure default for .env files predating REQUIRE_TENANT_AUTH.
@@ -478,6 +482,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
       MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
+      # Report PDF backend: Chromium (Playwright). The report pipeline renders
+      # PDFs on this worker (argus.reports queue); same image + browser as backend.
+      REPORT_PDF_BACKEND: ${REPORT_PDF_BACKEND:-chromium}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"

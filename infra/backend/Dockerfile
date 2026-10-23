@@ -34,14 +34,24 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Runtime deps: recon tools + WeasyPrint (RPT-009 PDF)
-# Optional XSS-005 / POC-003: Playwright verification runs in-process here and in the Celery worker
-# (same image). Base image does not install playwright by default; to enable browser verification,
-# add `playwright` to backend requirements, then e.g. `RUN pip install playwright && playwright install chromium`
-# plus OS deps (`playwright install-deps chromium` or Playwright Docker docs for Debian slim).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap dnsutils whois curl net-tools \
     libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
     libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# Chromium PDF backend (REPORT_PDF_BACKEND=chromium) + optional Playwright
+# browser evidence (XSS-005 / POC-003), both in-process here and in the Celery
+# report worker (same image). Browsers live at a fixed, world-readable path so
+# BOTH the backend's appuser AND the report worker's UID (compose runs it as
+# ${ARGUS_WORKER_USER:-1000:...}) can launch them. The install was validated
+# in-container before baking: playwright 1.64.1 → headless Chromium renders all
+# three report tiers (midgard/asgard/valhalla) as multi-page PDFs under appuser.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pip install --no-cache-dir playwright==1.64.1 \
+    && playwright install-deps chromium \
+    && playwright install chromium \
+    && chmod -R a+rx /ms-playwright \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI only — VA active scan runs `docker exec` into argus-sandbox (host socket mounted).
@@ -55,6 +65,14 @@ COPY config/ ./config/
 COPY data/ ./data/
 COPY alembic.ini .
 COPY alembic/ ./alembic/
+
+# Writable caches for ANY runtime UID (backend appuser AND the report worker's
+# UID 1000) so fontconfig (WeasyPrint + Chromium) and Chromium's ephemeral
+# profile never fail with "No writable cache directories". /tmp is sticky-world-
+# writable; XDG_CACHE_HOME under it is pre-created 1777 for the same reason.
+ENV HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache
+RUN mkdir -p /tmp/.cache && chmod 1777 /tmp/.cache
 
 # Non-root user
 RUN adduser --system --group --no-create-home appuser \
