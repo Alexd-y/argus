@@ -171,15 +171,24 @@ def _project_asgard(
     return replace(
         data,
         findings=sanitised_findings,
-        timeline=list(data.timeline),
-        phase_outputs=list(data.phase_outputs),
-        evidence=list(data.evidence),
-        screenshots=list(data.screenshots),
+        # Asgard reads as a customer-facing brief: the pipeline timeline / phase
+        # outputs are phase-artefact noise and stay Valhalla-only (prompt §2 /
+        # A-asgard-paid §7.2). Drop them by default.
+        timeline=[],
+        phase_outputs=[],
+        # Evidence/screenshot OBJECT-KEY registers are the raw dump the Asgard
+        # customer must not see; per-finding written evidence is rebuilt from the
+        # Finding fields by ``asgard_paid.build_asgard_payload``.
+        evidence=[],
+        screenshots=[],
         ai_insights=data.ai_insights if isinstance(data.ai_insights, list) else [data.ai_insights],
         executive_summary=data.executive_summary,
         remediation=data.remediation if isinstance(data.remediation, list) else [data.remediation],
         raw_artifacts=[],
-        hibp_pwned_password_summary=None,
+        # Asgard now sells leaked-credential (dark-web) monitoring, so the tier
+        # keeps the HIBP *summary* (counts + status only; the renderer never
+        # writes plaintext secrets — see ``asgard_paid.build_dark_web_summary``).
+        hibp_pwned_password_summary=data.hibp_pwned_password_summary,
     )
 
 

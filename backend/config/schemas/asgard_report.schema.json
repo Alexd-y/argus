@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://svalbard.security/schemas/asgard_report.schema.json",
+  "title": "ARGUS Asgard paid-tier report",
+  "description": "Single Asgard projection (src/reports/asgard_paid.build_asgard_payload) shared by PDF/HTML/JSON/XML/CSV.",
+  "type": "object",
+  "required": ["meta", "severity_counts", "findings", "tls_analysis", "header_analysis", "dark_web", "owasp_alignment", "ai_conclusions"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["tier", "target", "scan_id", "report_id", "plan_price", "rescan_cadence"],
+      "properties": {
+        "brand_name": {"type": "string"},
+        "tier": {"const": "asgard"},
+        "tier_label": {"type": "string"},
+        "tier_focus": {"type": "string"},
+        "plan_price": {"type": "string"},
+        "plan_blurb": {"type": "string"},
+        "rescan_cadence": {"type": "string"},
+        "target": {"type": "string"},
+        "scan_id": {"type": "string"},
+        "report_id": {"type": "string"},
+        "tenant_id": {"type": "string"},
+        "scope": {"type": "string"},
+        "generated_at": {"type": "string"},
+        "completed_at": {"type": "string"},
+        "engagement_window": {"type": "string"}
+      }
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low", "info"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "severity", "cwe", "owasp", "asset", "status", "confidence", "what", "why", "evidence", "remediation", "validation"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "severity": {"enum": ["critical", "high", "medium", "low", "info"]},
+          "cwe": {"type": "string"},
+          "owasp": {"type": "string"},
+          "cvss": {"type": ["number", "null"]},
+          "cvss_vector": {"type": ["string", "null"]},
+          "asset": {"type": "string"},
+          "status": {"type": "string"},
+          "confidence": {"type": "string"},
+          "what": {"type": "string"},
+          "why": {"type": "string"},
+          "evidence": {"type": "string"},
+          "negative_control": {"type": ["string", "null"]},
+          "remediation": {"type": "array", "items": {"type": "string"}},
+          "validation": {"type": "string"}
+        }
+      }
+    },
+    "tls_analysis": {
+      "type": "object",
+      "required": ["summary", "rows"],
+      "properties": {
+        "summary": {"type": "string"},
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["check", "result", "status"],
+            "properties": {
+              "check": {"type": "string"},
+              "result": {"type": "string"},
+              "status": {"type": "string"},
+              "detail": {"type": "string"}
+            }
+          }
+        },
+        "remediation": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "header_analysis": {
+      "type": "object",
+      "required": ["summary", "rows"],
+      "properties": {
+        "summary": {"type": "string"},
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["header", "present", "recommended"],
+            "properties": {
+              "header": {"type": "string"},
+              "present": {"type": "boolean"},
+              "recommended": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "dark_web": {
+      "type": "object",
+      "required": ["summary", "monitored_domain", "new_exposures", "total_tracked"],
+      "properties": {
+        "summary": {"type": "string"},
+        "monitored_domain": {"type": "string"},
+        "sources_checked": {"type": "string"},
+        "new_exposures": {"type": "integer", "minimum": 0},
+        "total_tracked": {"type": "integer", "minimum": 0},
+        "last_checked": {"type": "string"},
+        "rows": {"type": "array"}
+      }
+    },
+    "owasp_alignment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "count"],
+        "properties": {
+          "category": {"type": "string"},
+          "count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "ai_conclusions": {
+      "type": "object",
+      "required": ["vulnerability_description", "business_risk", "prioritized_roadmap"],
+      "properties": {
+        "vulnerability_description": {"type": "string", "minLength": 1},
+        "business_risk": {"type": "string", "minLength": 1},
+        "prioritized_roadmap": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ARGUS Asgard paid-tier report — XSD for generators._generate_asgard_paid_xml.
+     Fixes the memory defect where <finding> carried no location: every finding
+     nests <location><asset>. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <xs:element name="argus_report">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="meta" type="metaType"/>
+        <xs:element name="severity_counts" type="severityCountsType"/>
+        <xs:element name="findings" type="findingsType"/>
+        <xs:element name="tls_analysis" type="tlsType"/>
+        <xs:element name="header_analysis" type="headerType"/>
+        <xs:element name="dark_web" type="darkWebType"/>
+        <xs:element name="owasp_alignment" type="owaspType"/>
+        <xs:element name="ai_conclusions" type="aiType"/>
+      </xs:sequence>
+      <xs:attribute name="tier" type="xs:string" use="required"/>
+      <xs:attribute name="schema" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="metaType">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="severityCountsType">
+    <xs:sequence>
+      <xs:element name="count" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="xs:integer">
+              <xs:attribute name="severity" type="xs:string" use="required"/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="findingsType">
+    <xs:sequence>
+      <xs:element name="finding" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="title" type="xs:string"/>
+            <xs:element name="cwe" type="xs:string"/>
+            <xs:element name="owasp" type="xs:string"/>
+            <xs:element name="cvss" type="xs:string" minOccurs="0"/>
+            <xs:element name="cvss_vector" type="xs:string" minOccurs="0"/>
+            <xs:element name="location">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="asset" type="xs:string"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="status" type="xs:string"/>
+            <xs:element name="confidence" type="xs:string"/>
+            <xs:element name="what" type="xs:string"/>
+            <xs:element name="why" type="xs:string"/>
+            <xs:element name="evidence" type="xs:string"/>
+            <xs:element name="negative_control" type="xs:string" minOccurs="0"/>
+            <xs:element name="remediation">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="step" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="validation" type="xs:string"/>
+          </xs:sequence>
+          <xs:attribute name="id" type="xs:string" use="required"/>
+          <xs:attribute name="severity" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="count" type="xs:integer"/>
+  </xs:complexType>
+
+  <xs:complexType name="tlsType">
+    <xs:sequence>
+      <xs:element name="summary" type="xs:string"/>
+      <xs:element name="row" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="xs:string">
+              <xs:attribute name="check" type="xs:string"/>
+              <xs:attribute name="status" type="xs:string"/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="headerType">
+    <xs:sequence>
+      <xs:element name="summary" type="xs:string"/>
+      <xs:element name="header" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="xs:string">
+              <xs:attribute name="name" type="xs:string"/>
+              <xs:attribute name="present" type="xs:string"/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="darkWebType">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="owaspType">
+    <xs:sequence>
+      <xs:element name="category" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="xs:string">
+              <xs:attribute name="count" type="xs:integer"/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="aiType">
+    <xs:sequence>
+      <xs:element name="vulnerability_description" type="xs:string"/>
+      <xs:element name="business_risk" type="xs:string"/>
+      <xs:element name="prioritized_roadmap">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="step" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>

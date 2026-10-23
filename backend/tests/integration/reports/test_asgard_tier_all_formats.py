@@ -38,11 +38,7 @@ from src.reports.generators import (
     TimelineEntry,
 )
 from src.reports.replay_command_sanitizer import (
-    PLACEHOLDER_ASSET,
-    PLACEHOLDER_ENDPOINT,
     REDACTED_BEARER,
-    REDACTED_PASSWORD,
-    REDACTED_REVERSE_SHELL,
     SanitizeContext,
 )
 from src.reports.report_bundle import ReportFormat, ReportTier
@@ -390,19 +386,16 @@ def test_asgard_no_secret_leak_in_any_format(
     "fmt",
     [ReportFormat.JSON, ReportFormat.HTML],
 )
-def test_asgard_sanitised_reproducer_visible_in_output(
+def test_asgard_ships_no_reproducer_command(
     service: ReportService,
     asgard_report_data: ReportData,
     sanitize_context: SanitizeContext,
     fmt: ReportFormat,
 ) -> None:
-    """A redacted placeholder MUST surface in machine + HTML output so the
-    reader knows the sanitiser actually fired (silent stripping is an
-    auditing antipattern).
-
-    SARIF deliberately omits the raw PoC body (see ``sarif_generator``
-    docstring: "never embed raw PoC bodies"), so SARIF is not part of
-    this contract."""
+    """New Asgard contract (PROMPT-asgard-paid §2): the paid tier is NARROWER
+    than Valhalla — it ships no reproducer command at all (no curl/sqlmap PoC
+    strings, no reproducer placeholder register). Per-finding written evidence +
+    remediation replace it; the raw reproducer stays Valhalla-only."""
     bundle = service.render_bundle(
         asgard_report_data,
         tier=ReportTier.ASGARD,
@@ -410,24 +403,16 @@ def test_asgard_sanitised_reproducer_visible_in_output(
         sanitize_context=sanitize_context,
     )
     text = bundle.content.decode("utf-8", errors="replace")
-    placeholders = (
-        REDACTED_BEARER,
-        REDACTED_REVERSE_SHELL,
-        REDACTED_PASSWORD,
-        PLACEHOLDER_ASSET,
-        PLACEHOLDER_ENDPOINT,
-    )
-    assert any(ph in text for ph in placeholders), (
-        f"no sanitiser placeholder visible in {fmt.value} output"
-    )
+    assert "sqlmap" not in text.lower()
+    assert not re.search(r"curl\s+-{1,2}\w", text)
 
 
 # ---------------------------------------------------------------------------
-# Sanitiser proof — reproducer command actually present in JSON
+# New Asgard JSON is the single paid-tier payload (PROMPT-asgard-paid §4)
 # ---------------------------------------------------------------------------
 
 
-def test_asgard_json_includes_reproducer_section(
+def test_asgard_json_is_paid_payload(
     service: ReportService,
     asgard_report_data: ReportData,
     sanitize_context: SanitizeContext,
@@ -442,14 +427,18 @@ def test_asgard_json_includes_reproducer_section(
     )
     payload = json.loads(bundle.content)
     assert isinstance(payload, dict)
-    # JSON generator emits the asgard_report blob through Jinja minimal context.
-    asgard_report = payload.get("asgard_report")
-    assert isinstance(asgard_report, dict), "asgard_report missing from JSON"
-    assert asgard_report.get("reproducer"), "reproducer rows missing"
-    cmds = [" ".join(r["command"]) for r in asgard_report["reproducer"]]
-    assert any(REDACTED_BEARER in c for c in cmds)
-    assert any(REDACTED_REVERSE_SHELL in c for c in cmds)
-    assert any(REDACTED_PASSWORD in c for c in cmds)
+    assert set(payload) == {
+        "meta", "severity_counts", "findings", "tls_analysis",
+        "header_analysis", "dark_web", "owasp_alignment", "ai_conclusions",
+    }
+    assert payload["meta"]["tier"] == "asgard"
+    # Every finding carries remediation; none carries a reproducer/PoC blob.
+    assert payload["findings"]
+    for f in payload["findings"]:
+        assert f["remediation"]
+        assert "reproducer" not in f and "proof_of_concept" not in f
+    # The legacy asgard_report/reproducer surface is gone.
+    assert "asgard_report" not in payload
 
 
 def test_asgard_assembly_round_trip(

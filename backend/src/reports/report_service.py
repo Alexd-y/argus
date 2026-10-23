@@ -385,15 +385,15 @@ class ReportService:
                 valhalla_assembly=valhalla_assembly,
             )
             if fmt is ReportFormat.JSON:
-                return generate_json(data, jinja_context=jinja_context)
+                return generate_json(data, jinja_context=jinja_context, tier=tier.value)
             if fmt is ReportFormat.CSV:
-                return generate_csv(data, jinja_context=jinja_context)
+                return generate_csv(data, jinja_context=jinja_context, tier=tier.value)
             if fmt is ReportFormat.MARKDOWN:
                 return generate_markdown(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.HTML:
                 return generate_html(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.XML:
-                return generate_xml(data, jinja_context=jinja_context)
+                return generate_xml(data, jinja_context=jinja_context, tier=tier.value)
             if fmt is ReportFormat.PDF:
                 return generate_pdf(
                     data,

@@ -140,17 +140,25 @@ DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf", "md", "
 # changing Valhalla's canonical set (``canonical_bundle.REQUIRED_CANONICAL_FORMATS``).
 MIDGARD_FREE_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "xml", "csv")
 
+# Paid Asgard target format set (prompt §4): the paid report is offered as all
+# five of these, each built from the SAME Asgard projection.
+ASGARD_PAID_FORMATS: tuple[str, ...] = ("pdf", "json", "xml", "html", "csv")
+
 
 def required_formats_for_tier(tier: str) -> tuple[str, ...]:
     """Minimum format set a tier's bundle must contain.
 
-    Midgard → the five free-tier formats; other tiers keep the existing default
-    generation set. Pure helper, safe to call from the pipeline and from tests.
+    Midgard → the five free-tier formats; Asgard → the five paid-tier formats;
+    other tiers keep the existing default generation set. Pure helper, safe to
+    call from the pipeline and from tests.
     """
     from src.services.reporting import normalize_report_tier
 
-    if normalize_report_tier(tier) == "midgard":
+    t = normalize_report_tier(tier)
+    if t == "midgard":
         return MIDGARD_FREE_FORMATS
+    if t == "asgard":
+        return ASGARD_PAID_FORMATS
     return DEFAULT_REPORT_FORMATS
 
 
@@ -981,7 +989,8 @@ async def _rgp_generate_formats(
     template_context = built.template_context
     from src.services.reporting import normalize_report_tier
 
-    if normalize_report_tier(tier_str) == "midgard":
+    _tier_norm = normalize_report_tier(tier_str)
+    if _tier_norm == "midgard":
         from src.services.reporting import _apply_midgard_free_projection
 
         report_data, template_context = _apply_midgard_free_projection(
@@ -990,6 +999,12 @@ async def _rgp_generate_formats(
         # Guarantee the five free-tier formats are emitted (prompt §5.5), union-in
         # the required set while preserving the caller's requested order.
         fmt_list = list(fmt_list) + [f for f in MIDGARD_FREE_FORMATS if f not in fmt_list]
+    elif _tier_norm == "asgard":
+        from src.services.reporting import _apply_asgard_paid_projection
+
+        report_data, template_context = _apply_asgard_paid_projection(report_data, template_context)
+        # Guarantee the five paid-tier formats are emitted (prompt §4).
+        fmt_list = list(fmt_list) + [f for f in ASGARD_PAID_FORMATS if f not in fmt_list]
     for fmt in fmt_list:
         if fmt == "html":
             content = generate_html(

@@ -1909,12 +1909,45 @@ async def build_report_export_payload(
     # free-tier content (target intelligence, one teaser, deterministic exec
     # summary, upsell) and strip the raw template sections so the PDF/HTML
     # templates cannot render Phase Artifacts / raw tool output / curl PoC.
-    if normalize_report_tier(tier or "midgard") == "midgard":
+    tier_norm = normalize_report_tier(tier or "midgard")
+    if tier_norm == "midgard":
         report_data, template_context = _apply_midgard_free_projection(
             report_data, template_context
         )
+    elif tier_norm == "asgard":
+        report_data, template_context = _apply_asgard_paid_projection(report_data, template_context)
 
     return report_data, template_context
+
+
+def _apply_asgard_paid_projection(
+    report_data: ReportData,
+    template_context: dict[str, Any],
+) -> tuple[ReportData, dict[str, Any]]:
+    """Project ``report_data``/``template_context`` to the paid Asgard tier.
+
+    Single source of truth for the Asgard report. Applies
+    ``classify_for_tier(..., ASGARD)`` (keeps full findings + remediation + the
+    dark-web summary, strips raw_artifacts/phase_outputs/raw timeline), builds
+    the one Asgard payload, and neutralises the raw template sections (Phase
+    Artifacts, recon dump, raw Active Web Scan) so neither the PDF nor the HTML
+    path resurfaces Valhalla-only material (prompt §2).
+    """
+    from src.reports.asgard_paid import build_asgard_payload
+    from src.reports.report_bundle import ReportTier
+    from src.reports.tier_classifier import classify_for_tier
+
+    projected = classify_for_tier(report_data, ReportTier.ASGARD)
+
+    ctx = dict(template_context or {})
+    payload = build_asgard_payload(projected, ctx)
+    ctx["asgard_payload"] = payload
+    ctx["severity_counts"] = payload["severity_counts"]
+    # Strip the raw sections the legacy base template would otherwise render.
+    ctx["scan_artifacts"] = {"status": "skipped", "phase_blocks": []}
+    ctx["active_web_scan"] = {"status": "skipped", "tools": [], "show": False}
+    ctx["raw_artifacts"] = []
+    return projected, ctx
 
 
 def _apply_midgard_free_projection(
