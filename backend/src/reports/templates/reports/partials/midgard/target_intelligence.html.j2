@@ -1,0 +1,75 @@
+{# Free-tier Target Intelligence — open, non-intrusive recon only.
+   Reads ONLY ``midgard_intel`` (built by src/reports/midgard_free.py). Never
+   touches raw_artifacts / phase_outputs / evidence. Absent sources render as
+   "Not collected" / "Not assessed" — values are never invented. #}
+{% set intel = midgard_intel or {} %}
+<div class="intel-grid">
+
+  <div class="card">
+    <h3>Domain Registration (WHOIS / RDAP)</h3>
+    {% set w = intel.get('whois', {}) %}
+    <div class="kv">
+      <div class="k">Registrar</div><div class="v">{{ w.get('registrar', 'Not collected') }}</div>
+      <div class="k">Registrant</div><div class="v">{{ w.get('registrant_org', 'Not collected') }}</div>
+      <div class="k">Registered</div><div class="v">{{ w.get('created', 'Not collected') }}</div>
+      <div class="k">Expires</div><div class="v">{{ w.get('expires', 'Not collected') }}</div>
+      <div class="k">Name servers</div><div class="v">{% for ns in w.get('name_servers', []) %}{{ ns }}{% if not loop.last %}<br>{% endif %}{% else %}Not collected{% endfor %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>DNS &amp; Email Authentication</h3>
+    {% set d = intel.get('dns', {}) %}{% set ea = intel.get('email_auth', {}) %}
+    <div class="kv">
+      <div class="k">MX</div><div class="v">{% for mx in d.get('mx', []) %}{{ mx }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+      <div class="k">NS</div><div class="v">{% for ns in d.get('ns', []) %}{{ ns }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+      <div class="k">DNSSEC</div><div class="v">{{ ea.get('dnssec', 'Not assessed') }}</div>
+      <div class="k">SPF</div><div class="v">{{ ea.get('spf', 'Not assessed') }}</div>
+      <div class="k">DMARC</div><div class="v">{{ ea.get('dmarc', 'Not assessed') }}</div>
+      <div class="k">DKIM</div><div class="v">{{ ea.get('dkim', 'Not assessed') }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>TLS / SSL Certificate</h3>
+    {% set t = intel.get('tls', {}) %}
+    <div class="kv">
+      <div class="k">Issuer</div><div class="v">{{ t.get('issuer', 'Not collected') }}</div>
+      <div class="k">Subject</div><div class="v">{{ t.get('subject', 'Not collected') }}</div>
+      <div class="k">SANs</div><div class="v">{% for s in t.get('sans', []) %}{{ s }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+      <div class="k">Valid</div><div class="v">{{ t.get('not_before', 'Not collected') }} → {{ t.get('not_after', 'Not collected') }}</div>
+      <div class="k">Protocols</div><div class="v">{% for p in t.get('protocols', []) %}<span class="pill">{{ p }}</span>{% else %}Not collected{% endfor %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Open Ports &amp; Services</h3>
+    {% set ports = intel.get('ports', []) %}
+    <div class="kv">
+      {% for p in ports %}
+        <div class="k">{{ p.get('port', '') }} / {{ p.get('proto', 'tcp') }}</div><div class="v">{{ p.get('service', '') or '—' }}</div>
+      {% else %}
+        <div class="k">Ports</div><div class="v">Not collected</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Technology Fingerprint</h3>
+    <div class="pill-wrap">
+      {% for tech in intel.get('technologies', []) %}<span class="pill">{{ tech }}</span>{% else %}<span class="muted">Not collected</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Subdomains Discovered <span class="muted">({{ intel.get('subdomains', []) | length }})</span></h3>
+    {% if intel.get('subdomains') %}
+      <ul class="sublist">
+        {% for sd in intel.get('subdomains', []) %}<li>{{ sd }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Not collected</p>
+    {% endif %}
+  </div>
+
+</div>

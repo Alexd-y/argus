@@ -455,14 +455,14 @@ async def download_report(
             elif fmt == "html":
                 content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
             elif fmt == "json":
-                content = generate_json(report_data, jinja_context=jctx)
+                content = generate_json(report_data, jinja_context=jctx, tier=tier_str)
             elif fmt == "md":
                 content = generate_markdown(report_data, jinja_context=jctx, tier=tier_str)
             elif fmt == "xml":
                 # D5 fix: XML must be real XML, not CSV under an application/xml MIME.
-                content = generate_xml(report_data, jinja_context=jctx)
+                content = generate_xml(report_data, jinja_context=jctx, tier=tier_str)
             elif fmt == "csv":
-                content = generate_csv(report_data, jinja_context=jctx)
+                content = generate_csv(report_data, jinja_context=jctx, tier=tier_str)
             else:
                 # No silent CSV substitution for unknown/unsupported formats.
                 raise HTTPException(

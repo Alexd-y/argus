@@ -134,6 +134,26 @@ class ReportGenerationError(Exception):
 REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv", "md", "xml"})
 DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf", "md", "xml")
 
+# Free-tier Midgard target format set (prompt §5.5): the free report is offered
+# as all five of these, each built from the SAME free-tier projection. Introduced
+# as a per-tier required set so the Midgard bundle guarantees all five without
+# changing Valhalla's canonical set (``canonical_bundle.REQUIRED_CANONICAL_FORMATS``).
+MIDGARD_FREE_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "xml", "csv")
+
+
+def required_formats_for_tier(tier: str) -> tuple[str, ...]:
+    """Minimum format set a tier's bundle must contain.
+
+    Midgard → the five free-tier formats; other tiers keep the existing default
+    generation set. Pure helper, safe to call from the pipeline and from tests.
+    """
+    from src.services.reporting import normalize_report_tier
+
+    if normalize_report_tier(tier) == "midgard":
+        return MIDGARD_FREE_FORMATS
+    return DEFAULT_REPORT_FORMATS
+
+
 CONTENT_TYPES: dict[str, str] = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
@@ -246,9 +266,7 @@ def _degrade_doc_for_llm_merge_failure(doc: ReportDocumentV1, reason: str) -> Re
     """
     failures = [
         *doc.failures,
-        ReportFailure(
-            where="llm_merge", reason_code="llm_merge_failed", message=str(reason)[:480]
-        ),
+        ReportFailure(where="llm_merge", reason_code="llm_merge_failed", message=str(reason)[:480]),
     ]
     return doc.model_copy(
         update={
@@ -957,11 +975,26 @@ async def _rgp_generate_formats(
     upload,
 ):
     vfmt = None
+    # Free-tier (Midgard) single projection point for the pipeline path too:
+    # project the ReportData + context ONCE so every format (incl. json/csv/xml)
+    # is built from the trimmed, leak-safe free-tier data (prompt §5.2/§5.3).
+    template_context = built.template_context
+    from src.services.reporting import normalize_report_tier
+
+    if normalize_report_tier(tier_str) == "midgard":
+        from src.services.reporting import _apply_midgard_free_projection
+
+        report_data, template_context = _apply_midgard_free_projection(
+            report_data, template_context
+        )
+        # Guarantee the five free-tier formats are emitted (prompt §5.5), union-in
+        # the required set while preserving the caller's requested order.
+        fmt_list = list(fmt_list) + [f for f in MIDGARD_FREE_FORMATS if f not in fmt_list]
     for fmt in fmt_list:
         if fmt == "html":
             content = generate_html(
                 report_data,
-                jinja_context=built.template_context,
+                jinja_context=template_context,
                 tier=tier_str,
             )
         elif fmt == "pdf":
@@ -978,20 +1011,18 @@ async def _rgp_generate_formats(
                 continue
             content = generate_pdf(
                 report_data,
-                jinja_context=built.template_context,
+                jinja_context=template_context,
                 tier=tier_str,
                 pdf_archival_format=tenant_pdf_format,
             )
         elif fmt == "json":
-            content = generate_json(report_data, jinja_context=built.template_context)
+            content = generate_json(report_data, jinja_context=template_context, tier=tier_str)
         elif fmt == "csv":
-            content = generate_csv(report_data, jinja_context=built.template_context)
+            content = generate_csv(report_data, jinja_context=template_context, tier=tier_str)
         elif fmt == "md":
-            content = generate_markdown(
-                report_data, jinja_context=built.template_context, tier=tier_str
-            )
+            content = generate_markdown(report_data, jinja_context=template_context, tier=tier_str)
         elif fmt == "xml":
-            content = generate_xml(report_data, jinja_context=built.template_context)
+            content = generate_xml(report_data, jinja_context=template_context, tier=tier_str)
         else:
             continue
         key = upload(
@@ -1279,7 +1310,7 @@ async def run_generate_report_pipeline(
         # per-finding remediation plan + closure conclusion projected into
         # MD/XML/HTML/JSON + a release manifest, all from one document tree.
         # Opt-in + fail-soft: never breaks the standard Valhalla outputs.
-        (valhalla_llm_status, llm_merge_failed) = await _rgp_valhalla_llm_remediation(
+        valhalla_llm_status, llm_merge_failed = await _rgp_valhalla_llm_remediation(
             artifact,
             built,
             canon_fmt,
@@ -1367,9 +1398,7 @@ async def run_generate_report_pipeline(
                 llm_merge_failed=llm_merge_failed,
                 ai_section_failed=ai_section_failed,
                 pdf_missing=pdf_missing,
-                ledger_blockers=(
-                    ledger_blockers if settings.artifact_ledger_enforced else None
-                ),
+                ledger_blockers=(ledger_blockers if settings.artifact_ledger_enforced else None),
             )
             if blockers:
                 logger.warning(

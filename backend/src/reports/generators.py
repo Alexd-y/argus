@@ -1047,9 +1047,11 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
                 f = _copy_finding(f)
                 f.severity = new_sev
                 logger.warning(
-                    "severity_downgraded_no_validated"
-                    if sev == "high"
-                    else "severity_downgraded_critical_no_validated",
+                    (
+                        "severity_downgraded_no_validated"
+                        if sev == "high"
+                        else "severity_downgraded_critical_no_validated"
+                    ),
                     extra={"finding_id": getattr(f, "id", "?"), "from": sev, "to": new_sev},
                 )
             except Exception:
@@ -1875,14 +1877,44 @@ def _value_to_xml(tag: str, value: Any) -> str:
     return f"<{safe}>{_xml_escape(str(value))}</{safe}>"
 
 
-def generate_xml(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
-    """Generate a structured XML report — same content as JSON, XML projection (VP-10).
+def _is_midgard_tier(tier: str | None) -> bool:
+    """True when ``tier`` resolves to the free Midgard tier."""
+    from src.services.reporting import normalize_report_tier
 
-    Reuses ``generate_json`` so the two formats are content-parallel (one snapshot →
-    multiple projections). Built by string assembly with XML-escaping — no XML parser
-    is involved, so there is no external-entity/XXE surface.
+    return tier is not None and normalize_report_tier(tier) == "midgard"
+
+
+def _generate_midgard_free_json(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Free-tier JSON — the single ``build_free_payload`` projection, serialised.
+
+    No timeline / phase_outputs / evidence / screenshots / remediation / PoC is
+    read: the payload is built only from inventory-level fields plus the
+    ``midgard_intel`` reconnaissance block.
     """
-    payload = json.loads(generate_json(data, jinja_context=jinja_context))
+    from src.reports.midgard_free import build_free_payload
+
+    payload = build_free_payload(data, jinja_context)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+
+
+def generate_xml(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
+) -> bytes:
+    """Generate a structured XML report — same content tree as JSON (VP-10).
+
+    Reuses ``generate_json`` so the two formats are content-parallel (one
+    snapshot → multiple projections), which means the free **Midgard** tier is
+    carried through automatically: the XML tree mirrors the trimmed free-tier
+    JSON and never surfaces the paid layer. Built by string assembly with
+    XML-escaping — no XML parser is involved, so there is no external-entity/XXE
+    surface.
+    """
+    payload = json.loads(generate_json(data, jinja_context=jinja_context, tier=tier))
     body = "".join(_value_to_xml(str(k), v) for k, v in payload.items())
     doc = (
         f'<?xml version="1.0" encoding="UTF-8"?>\n<report xmlns="{_REPORT_XML_NS}">{body}</report>'
@@ -1890,8 +1922,26 @@ def generate_xml(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
     return doc.encode("utf-8")
 
 
-def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
-    """Generate JSON / JSOC report — full schema with brand, metadata, export_integrity, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation."""
+def generate_json(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
+) -> bytes:
+    """Generate JSON / JSOC report.
+
+    For the paid tiers this is the full JSOC schema (brand, metadata,
+    export_integrity, timeline, phase outputs, findings, evidence, screenshots,
+    AI conclusions, remediation). For the free **Midgard** tier it is instead
+    the trimmed free-tier structure from :func:`midgard_free.build_free_payload`
+    — severity counts, target intelligence, finding inventory, one teaser and
+    the upsell — and it NEVER contains timeline / phase outputs / evidence /
+    screenshots / remediation / PoC (prompt §5.2). The branch keys off ``tier``
+    so JSON/XML/CSV cannot leak the paid layer the way serialising the full
+    ``ReportData`` would.
+    """
+    if _is_midgard_tier(tier):
+        return _generate_midgard_free_json(data, jinja_context=jinja_context)
     tech_sorted = sorted(str(t) for t in (data.technologies or []))
     findings_ordered = _findings_sorted(data.findings)
     timeline_rows = sorted(
@@ -2336,8 +2386,73 @@ def _resolve_csv_section(
     return "NOT_ASSESSED", not_assessed
 
 
-def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
-    """Generate multi-file CSV bundle: findings.csv, evidence.csv, sections.csv, remediation.csv."""
+def _generate_midgard_free_csv(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Free-tier CSV — the flat finding inventory only.
+
+    CSV is inherently flat, so the free-tier CSV is the finding inventory with a
+    stable header ``id,severity,title,cwe,cvss`` (one row per finding) plus a
+    short ``target_intelligence`` section emitted as ``section,key,value`` rows.
+    No raw artefacts, PoC, evidence bodies or remediation — same free-tier
+    projection as JSON/XML.
+    """
+    from src.reports.midgard_free import build_free_payload
+
+    payload = build_free_payload(data, jinja_context)
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["# report_id", payload["meta"]["report_id"]])
+    writer.writerow(["# target", payload["meta"]["target"]])
+    writer.writerow(["# tier", "midgard"])
+    writer.writerow([])
+    # Stable inventory header (covered by a test).
+    writer.writerow(["id", "severity", "title", "cwe", "cvss"])
+    for row in payload["findings"]:
+        cvss = row.get("cvss")
+        writer.writerow(
+            [
+                row.get("id", ""),
+                row.get("severity", ""),
+                row.get("title", ""),
+                row.get("cwe", ""),
+                "" if cvss is None else f"{float(cvss):.1f}",
+            ]
+        )
+    writer.writerow([])
+    # Target-intelligence companion section (section,key,value) — safe recon only.
+    writer.writerow(["section", "key", "value"])
+    sev = payload["severity_counts"]
+    for k in ("critical", "high", "medium", "low", "info"):
+        writer.writerow(["severity_counts", k, sev.get(k, 0)])
+    intel = payload["target_intelligence"]
+    for key in ("registrar", "created", "expires"):
+        writer.writerow(["whois", key, intel["whois"].get(key, "")])
+    writer.writerow(["dns", "ns", "; ".join(intel["dns"].get("ns", []))])
+    writer.writerow(["dns", "mx", "; ".join(intel["dns"].get("mx", []))])
+    for key in ("dnssec", "spf", "dmarc", "dkim"):
+        writer.writerow(["email_auth", key, intel["email_auth"].get(key, "")])
+    writer.writerow(["tls", "issuer", intel["tls"].get("issuer", "")])
+    writer.writerow(["technologies", "list", "; ".join(intel.get("technologies", []))])
+    writer.writerow(["subdomains", "list", "; ".join(intel.get("subdomains", []))])
+    return buf.getvalue().encode("utf-8")
+
+
+def generate_csv(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
+) -> bytes:
+    """Generate the CSV export.
+
+    For paid tiers this is the multi-file CSV bundle (findings.csv, evidence.csv,
+    sections.csv, remediation.csv). For the free **Midgard** tier it is the flat
+    finding inventory + a safe target-intelligence section, with none of the raw
+    artefact / PoC / remediation columns (prompt §5.4).
+    """
+    if _is_midgard_tier(tier):
+        return _generate_midgard_free_csv(data, jinja_context=jinja_context)
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     from src.reports.valhalla_report_context import get_brand
@@ -2947,6 +3062,10 @@ def generate_html(
     eff_tier = str(ctx.get("tier") or tier or "midgard")
     ctx = {**ctx, "tier": eff_tier}
 
+    # Free-tier (Midgard) enrichment — same payload the branded PDF uses so the
+    # HTML preview and the PDF render identical free-tier content.
+    _enrich_midgard_free_context(data, ctx, tier=eff_tier)
+
     # Build remediation_matrix for HTML template (same logic as JSON generate_json)
     if "remediation_matrix" not in ctx:
         from src.reports.valhalla_report_context import build_remediation_matrix_rows
@@ -3057,6 +3176,42 @@ def _build_branded_pdf_context(
     )
     ctx["brand_logo_sha256"] = brand.logo_sha256
     ctx["brand_alt_text"] = brand.alt_text
+
+    # Free-tier (Midgard) enrichment — make the branded PDF/HTML self-sufficient
+    # even on the offline/minimal path (tests, direct ``generate_pdf`` calls)
+    # where the export pipeline has not already injected the free-tier payload.
+    _enrich_midgard_free_context(data, ctx, tier=tier)
+    return ctx
+
+
+def _enrich_midgard_free_context(
+    data: ReportData, ctx: dict[str, Any], *, tier: str | None
+) -> dict[str, Any]:
+    """Populate the free-tier keys a Midgard template needs, in place.
+
+    Idempotent and leak-safe: ``build_free_payload`` reuses a ``midgard_intel``
+    already present in ``ctx`` and never reads raw/PoC/evidence fields. Also
+    neutralises the raw template sections (Phase Artifacts / raw Active Web
+    Scan) so the Midgard template cannot resurface the paid layer even if it
+    inherits the legacy base blocks.
+    """
+    from src.services.reporting import normalize_report_tier
+
+    if normalize_report_tier(tier) != "midgard":
+        return ctx
+    from src.reports.midgard_free import UPSELL_TEXT, build_free_payload
+
+    free_payload = build_free_payload(data, ctx)
+    ctx["midgard_intel"] = free_payload["target_intelligence"]
+    ctx["midgard_findings"] = free_payload["findings"]
+    ctx["sample_finding"] = free_payload["sample_finding"]
+    ctx["severity_counts"] = free_payload["severity_counts"]
+    ctx["midgard_executive_summary"] = free_payload["executive_summary"]
+    ctx["midgard_upsell"] = ctx.get("midgard_upsell") or UPSELL_TEXT
+    ctx["midgard_free_payload"] = free_payload
+    ctx["scan_artifacts"] = {"status": "skipped", "phase_blocks": []}
+    ctx["active_web_scan"] = {"status": "skipped", "tools": [], "show": False}
+    ctx["raw_artifacts"] = []
     return ctx
 
 

@@ -1547,8 +1547,7 @@ class ReportGenerator:
                     "where": f"ai_section:{key}",
                     "reason_code": reason_code,
                     "message": (
-                        f"AI section '{key}' not generated "
-                        f"(status={status}, error={error})"
+                        f"AI section '{key}' not generated " f"(status={status}, error={error})"
                     ),
                 }
             )
@@ -1901,4 +1900,60 @@ async def build_report_export_payload(
         texts,
         report_id=report_id,
     )
-    return report_data, built.template_context
+    template_context = built.template_context
+
+    # Free-tier (Midgard) single projection point (prompt §5.3): project the
+    # ReportData ONCE here so every downstream ``generate_*`` receives the
+    # trimmed data (no timeline / phase_outputs / evidence / screenshots /
+    # remediation / raw_artifacts) regardless of format, then derive the
+    # free-tier content (target intelligence, one teaser, deterministic exec
+    # summary, upsell) and strip the raw template sections so the PDF/HTML
+    # templates cannot render Phase Artifacts / raw tool output / curl PoC.
+    if normalize_report_tier(tier or "midgard") == "midgard":
+        report_data, template_context = _apply_midgard_free_projection(
+            report_data, template_context
+        )
+
+    return report_data, template_context
+
+
+def _apply_midgard_free_projection(
+    report_data: ReportData,
+    template_context: dict[str, Any],
+) -> tuple[ReportData, dict[str, Any]]:
+    """Project ``report_data``/``template_context`` to the free Midgard tier.
+
+    Single source of truth for what the free report may contain. Applies
+    ``classify_for_tier(..., MIDGARD)`` (strips raw/evidence/PoC), derives the
+    free-tier payload (intel, inventory, one teaser, exec summary, upsell) and
+    neutralises the raw template sections (Phase Artifacts, raw Active Web Scan)
+    so neither the PDF nor the HTML path can resurface the paid layer.
+    """
+    from src.reports.midgard_free import (
+        UPSELL_TEXT,
+        build_free_payload,
+        build_midgard_intel,
+    )
+    from src.reports.report_bundle import ReportTier
+    from src.reports.tier_classifier import classify_for_tier
+
+    projected = classify_for_tier(report_data, ReportTier.MIDGARD)
+
+    ctx = dict(template_context or {})
+    free_payload = build_free_payload(projected, ctx)
+    ctx["midgard_intel"] = free_payload["target_intelligence"]
+    ctx["midgard_free_payload"] = free_payload
+    ctx["sample_finding"] = free_payload["sample_finding"]
+    ctx["severity_counts"] = free_payload["severity_counts"]
+    ctx["midgard_executive_summary"] = free_payload["executive_summary"]
+    ctx["midgard_upsell"] = UPSELL_TEXT
+    # Belt-and-suspenders in case a caller rebuilds intel off the context.
+    ctx.setdefault(
+        "midgard_intel",
+        build_midgard_intel(ctx, projected),
+    )
+    # Strip the raw sections the legacy base template would otherwise render.
+    ctx["scan_artifacts"] = {"status": "skipped", "phase_blocks": []}
+    ctx["active_web_scan"] = {"status": "skipped", "tools": [], "show": False}
+    ctx["raw_artifacts"] = []
+    return projected, ctx

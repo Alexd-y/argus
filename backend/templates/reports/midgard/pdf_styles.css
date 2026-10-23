@@ -1,385 +1,126 @@
-/*
- * ARG-036 — Midgard tier PDF stylesheet (CISO-facing, blue brand).
- *
- * WeasyPrint resolves @font-face url(...) relative to the HTML's
- * base_url (set by pdf_backend to the template directory). Fonts
- * live one level up under ../_fonts/ — the bundled placeholders are
- * intentionally tiny so the repo stays lightweight; operators are
- * expected to drop in the real Inter / DejaVu Sans WOFF2 files
- * (SIL OFL) before production rollout (see worker report).
- *
- * Print-specific @page rules deliberately do NOT inherit from the
- * shared base.html.j2 stylesheet — that template targets screens.
- */
+/* Midgard — FREE scan report, dark "security-console" theme.
+   Tokens copied byte-for-byte from
+   src/reports/templates/reports/valhalla_secreport_base.html.j2 so the free
+   Midgard report is visually indistinguishable from Valhalla.
 
-/* ----------------------------- Fonts ----------------------------- */
-@font-face {
-  font-family: "Inter";
-  src: url("../_fonts/Inter-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../_fonts/Inter-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../_fonts/Inter-Italic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: block;
-}
-@font-face {
-  font-family: "DejaVu Sans";
-  src: url("../_fonts/DejaVuSans.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
+   Print-safe for WeasyPrint 70.x (which does NOT fragment flex/grid across
+   pages): the main document flow is block; grids are used only for short rows
+   that fit on a page, and every card carries ``break-inside: avoid``. */
+
+:root{
+  --bg:#0a0c10; --surface:#111318; --surface2:#1a1d24; --surface3:#0f1116;
+  --border:#252830; --border2:#333743;
+  --accent:#00ff9d; --accent2:#ff3e6c; --accent3:#ffd700;
+  --text:#e8eaf0; --text-muted:#8d94a3; --text-dim:#666c7a;
+  --crit:#ff3e6c; --high:#ff6b2b; --med:#ffd700; --low:#00c8ff; --info:#a0a8b8;
+  --font-head:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-mono:"Consolas","Courier New",monospace;
 }
 
-/* --------------------------- @page rules ------------------------- */
-@page {
-  size: A4;
-  margin: 2cm;
-  /* Header text repeated on every page (overridden on cover below). */
-  @top-left {
-    content: "Svalbard Security Inc. · Midgard tier";
-    font-family: "Inter", "DejaVu Sans", sans-serif;
-    font-size: 8pt;
-    color: #5a6478;
-  }
-  @top-right {
-    content: "Confidential";
-    font-family: "Inter", "DejaVu Sans", sans-serif;
-    font-size: 8pt;
-    color: #5a6478;
-  }
-  @bottom-center {
-    content: "Svalbard Security Inc. Confidential — page " counter(page) " of " counter(pages);
-    font-family: "Inter", "DejaVu Sans", sans-serif;
-    font-size: 8pt;
-    color: #5a6478;
-  }
+@page{ size:A4; margin:18mm 14mm; background:var(--bg); }
+
+*{ box-sizing:border-box; }
+html,body{ background:var(--bg); }
+body{
+  margin:0; color:var(--text); background:var(--bg);
+  font-family:var(--font-mono); font-size:13px; line-height:1.6;
 }
+.page{ padding:0 4px 24px; }
+a{ color:var(--accent); text-decoration:none; }
+code{ background:#06070a; border:1px solid var(--border); border-radius:4px; color:var(--accent); padding:.06rem .3rem; }
 
-/* Cover page swaps the running header for blank slugs. */
-@page :first {
-  @top-left { content: ""; }
-  @top-right { content: ""; }
+h2{
+  font-family:var(--font-head); font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:var(--text);
+  margin:2.1rem 0 .9rem; padding-bottom:.5rem; border-bottom:1px solid var(--border2);
+  break-after:avoid;
 }
+h2 .idx{ color:var(--accent); margin-right:.6rem; }
+h3{ font-family:var(--font-head); font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:1.2rem 0 .5rem; }
+h3.flush{ margin-top:0; }
+.flush-p{ margin:.2rem 0 0; }
+.muted{ color:var(--text-muted); }
+.lead{ margin-top:-.3rem; }
 
-/* --------------------------- Base typography --------------------- */
-:root {
-  --argus-primary: #1a3a8c;       /* Midgard royal blue */
-  --argus-primary-dark: #0f2247;
-  --argus-accent: #2f6fd6;
-  --argus-text: #1a1d29;
-  --argus-text-muted: #5a6478;
-  --argus-surface: #f6f8fc;
-  --argus-surface-alt: #eef1f8;
-  --argus-rule: #c7d0e3;
+/* header bar */
+.app-header{ display:flex; align-items:center; gap:16px; background:var(--surface); border-bottom:1px solid var(--border); padding:14px 16px; margin-bottom:0; }
+.app-header h1{ font-family:var(--font-head); font-size:19px; font-weight:800; letter-spacing:.04em; margin:0; color:var(--accent); }
+.app-header h1 span{ color:var(--text-muted); font-weight:600; }
+.app-header .hmeta{ margin-left:auto; text-align:right; color:var(--text-dim); font-size:11px; line-height:1.5; }
 
-  --sev-critical: #b00020;
-  --sev-high: #d35400;
-  --sev-medium: #c39200;
-  --sev-low: #2f6fd6;
-  --sev-info: #6b7280;
-  /* Pentest-report accent (inspired by high-contrast tool palettes; print-safe) */
-  --section-accent: #0d9488;
-}
+/* cover */
+.cover{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:26px 26px 22px; margin-top:22px; break-inside:avoid; }
+.cover .kicker{ color:var(--accent); letter-spacing:.22em; text-transform:uppercase; font-size:11px; }
+.cover .title{ font-family:var(--font-head); font-size:28px; font-weight:800; margin:.35rem 0 .1rem; color:var(--text); letter-spacing:.01em; }
+.cover .target{ font-size:15px; color:var(--text-muted); }
+.cover .target b{ color:var(--low); }
+.badges{ margin:16px 0 14px; }
+.badge{ display:inline-block; padding:.28rem .7rem; border-radius:5px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--border2); margin-right:10px; }
+.badge.tier{ background:rgba(0,255,157,.08); border-color:rgba(0,255,157,.4); color:var(--accent); }
+.badge.free{ background:rgba(0,200,255,.08); border-color:rgba(0,200,255,.4); color:var(--low); }
+.tagline{ background:var(--surface2); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:6px; padding:12px 14px; color:var(--text-muted); font-size:12.5px; margin-top:4px; }
+.tagline b{ color:var(--text); }
+.scanmeta{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-top:18px; }
+.scanmeta div{ background:var(--surface); padding:10px 14px; }
+.scanmeta .l{ color:var(--text-dim); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+.scanmeta .v{ color:var(--text); font-size:13px; margin-top:2px; }
 
-html, body {
-  font-family: "Inter", "DejaVu Sans", "Segoe UI", sans-serif;
-  font-size: 10pt;
-  line-height: 1.45;
-  color: var(--argus-text);
-  margin: 0;
-  padding: 0;
-}
+/* severity rollup */
+.sev-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-top:6px; break-inside:avoid; }
+.sev-tile{ background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--border2); border-radius:8px; padding:14px 10px; text-align:center; break-inside:avoid; }
+.sev-tile .n{ font-family:var(--font-head); font-size:28px; font-weight:800; line-height:1; }
+.sev-tile .lbl{ margin-top:6px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); }
+.sev-tile.crit{ border-top-color:var(--crit); } .sev-tile.crit .n{ color:var(--crit); }
+.sev-tile.high{ border-top-color:var(--high); } .sev-tile.high .n{ color:var(--high); }
+.sev-tile.med{ border-top-color:var(--med); } .sev-tile.med .n{ color:var(--med); }
+.sev-tile.low{ border-top-color:var(--low); } .sev-tile.low .n{ color:var(--low); }
+.sev-tile.info{ border-top-color:var(--info); } .sev-tile.info .n{ color:var(--info); }
 
-h1, h2, h3, h4 {
-  font-weight: 700;
-  color: var(--argus-primary-dark);
-  margin: 0 0 0.6em 0;
-}
+/* intel cards */
+.intel-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.card{ background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px 16px; break-inside:avoid; }
+.card h3{ margin-top:0; }
+.kv{ display:grid; grid-template-columns:120px 1fr; gap:4px 10px; font-size:12px; }
+.kv .k{ color:var(--text-dim); }
+.kv .v{ color:var(--text); word-break:break-word; }
+.pill{ display:inline-block; padding:.1rem .5rem; border-radius:20px; font-size:10.5px; letter-spacing:.04em; border:1px solid var(--border2); margin:2px 4px 2px 0; color:var(--text-muted); }
+.pill-wrap{ margin-top:.2rem; }
+.sublist{ margin:.2rem 0 0; padding-left:1.1rem; color:var(--text); columns:2; font-size:11.5px; }
+.sublist li{ margin:.1rem 0; }
 
-p { margin: 0 0 0.6em 0; }
-code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
+/* findings table */
+table{ width:100%; border-collapse:collapse; margin-top:.4rem; font-size:12px; }
+th,td{ border:1px solid var(--border); padding:.5rem .6rem; text-align:left; vertical-align:top; }
+th{ background:var(--surface2); color:var(--text-muted); font-family:var(--font-head); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700; }
+td{ background:var(--surface3); }
+tr{ break-inside:avoid; }
+.w-sev{ width:92px; } .w-cwe{ width:96px; } .w-cvss{ width:66px; }
+.sev-dot{ display:inline-block; padding:.12rem .55rem; border-radius:4px; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.d-crit{ background:rgba(255,62,108,.14); color:var(--crit); }
+.d-high{ background:rgba(255,107,43,.14); color:var(--high); }
+.d-med{ background:rgba(255,215,0,.14); color:var(--med); }
+.d-low{ background:rgba(0,200,255,.14); color:var(--low); }
+.d-info{ background:rgba(160,168,184,.14); color:var(--info); }
 
-/* ----------------------------- Cover ----------------------------- */
-.cover-page {
-  page-break-after: always;
-  display: flex;
-  flex-direction: column;
-  height: 25cm;
-  padding: 1cm 0;
-}
+/* sample writeup */
+.writeup{ background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--low); border-radius:8px; padding:18px 20px; margin-top:10px; break-inside:avoid; }
+.writeup .wh{ display:flex; align-items:center; gap:10px; }
+.writeup .wt{ font-family:var(--font-head); font-size:16px; font-weight:700; color:var(--text); margin:0; letter-spacing:0; text-transform:none; }
+.writeup .sample-tag{ margin-left:auto; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); border:1px solid rgba(0,255,157,.4); border-radius:5px; padding:.2rem .5rem; }
+.writeup .metaline{ color:var(--text-dim); font-size:11px; margin:8px 0 14px; }
+.writeup .metaline span{ margin-right:18px; }
+.writeup .metaline b{ color:var(--text-muted); font-weight:600; }
+.blk{ margin:12px 0; }
+.blk .lbl{ font-family:var(--font-head); font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
+.evidence{ background:#06070a; border:1px solid var(--border); border-radius:6px; padding:10px 12px; color:#cfd3dd; font-size:11.5px; white-space:pre-wrap; word-break:break-word; }
 
-.cover-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.6cm;
-  margin-bottom: 1.2cm;
-}
+/* panels + upsell */
+.panel{ background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px 18px; break-inside:avoid; }
+.upsell{ background:var(--surface2); border:1px dashed var(--border2); border-radius:8px; padding:16px 18px; margin-top:12px; break-inside:avoid; }
+.upsell .lbl{ color:var(--accent); font-family:var(--font-head); letter-spacing:.1em; text-transform:uppercase; font-size:11px; }
+.upsell ul{ margin:.5rem 0 0; padding-left:1.2rem; color:var(--text-muted); }
+.upsell li{ margin:.2rem 0; }
+.upsell li b{ color:var(--text); }
 
-.brand-mark { line-height: 0; }
-
-.brand-name {
-  font-size: 22pt;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--argus-primary-dark);
-}
-
-.brand-sub {
-  font-size: 9pt;
-  color: var(--argus-text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.cover-tier-badge {
-  display: inline-block;
-  padding: 0.18cm 0.5cm;
-  border-radius: 0.12cm;
-  font-size: 9pt;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.5cm;
-}
-
-.tier-badge-midgard {
-  background: var(--argus-primary);
-  color: #fff;
-}
-
-.cover-title {
-  font-size: 28pt;
-  margin: 0.1cm 0 0.4cm 0;
-  color: var(--argus-primary-dark);
-}
-
-.cover-target {
-  font-size: 14pt;
-  color: var(--argus-text);
-  margin: 0;
-  word-break: break-word;
-}
-
-.cover-meta {
-  margin-top: 1.5cm;
-  background: var(--argus-surface);
-  border-left: 3pt solid var(--argus-primary);
-  padding: 0.6cm 0.8cm;
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: 4cm 1fr;
-  row-gap: 0.18cm;
-  column-gap: 0.4cm;
-  margin: 0;
-}
-
-.meta-grid dt {
-  font-weight: 700;
-  color: var(--argus-text-muted);
-  text-transform: uppercase;
-  font-size: 8pt;
-  letter-spacing: 0.05em;
-}
-
-.meta-grid dd {
-  margin: 0;
-  color: var(--argus-text);
-  word-break: break-word;
-}
-
-.watermark {
-  font-family: "DejaVu Sans Mono", "Consolas", monospace;
-  font-size: 9pt;
-  color: var(--argus-primary);
-}
-
-.cover-confidential {
-  margin-top: auto;
-  text-align: center;
-  font-size: 8pt;
-  color: var(--argus-text-muted);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* ---------------------- Section headings ------------------------- */
-.section-heading {
-  font-size: 16pt;
-  border-bottom: 1pt solid var(--argus-rule);
-  border-left: 4pt solid var(--section-accent);
-  padding: 0.12cm 0 0.12cm 0.35cm;
-  margin: 0.6cm 0 0.4cm 0;
-  color: var(--argus-primary-dark);
-  background: rgba(13, 148, 136, 0.06);
-}
-
-.exec-summary,
-.top-findings,
-.owasp-compliance {
-  page-break-inside: avoid;
-  margin-bottom: 0.6cm;
-}
-
-/* Sub-sections may need their own break boundaries. */
-.top-findings { page-break-inside: auto; }
-
-/* --------------------------- Severity pills ---------------------- */
-.severity-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25cm;
-  margin: 0 0 0.5cm 0;
-}
-
-.pill {
-  display: inline-block;
-  padding: 0.1cm 0.35cm;
-  border-radius: 0.5cm;
-  font-size: 9pt;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.04em;
-}
-
-.pill-critical { background: var(--sev-critical); }
-.pill-high     { background: var(--sev-high); }
-.pill-medium   { background: var(--sev-medium); color: #1a1d29; }
-.pill-low      { background: var(--sev-low); }
-.pill-info     { background: var(--sev-info); }
-
-/* ----------------------------- Prose ----------------------------- */
-.prose {
-  color: var(--argus-text);
-  font-size: 10pt;
-}
-
-.prose strong { color: var(--argus-primary-dark); }
-.prose em { color: var(--argus-text); }
-
-.empty-state {
-  color: var(--argus-text-muted);
-  font-style: italic;
-}
-
-/* ------------------------- Findings table ------------------------ */
-.findings-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 9pt;
-}
-
-.findings-table th,
-.findings-table td {
-  border: 0.5pt solid var(--argus-rule);
-  padding: 0.18cm 0.25cm;
-  text-align: left;
-  vertical-align: top;
-}
-
-.findings-table thead {
-  background: var(--argus-surface-alt);
-}
-
-.findings-table thead th {
-  color: var(--argus-primary-dark);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 8pt;
-}
-
-.findings-table tbody tr:nth-child(even) td {
-  background: rgba(238, 241, 248, 0.75);
-}
-
-.col-sev   { width: 2.4cm; }
-.col-cwe   { width: 1.8cm; }
-.col-cvss  { width: 1.4cm; text-align: right; }
-.col-owasp { width: 1.6cm; }
-
-.sev-tag {
-  display: inline-block;
-  padding: 0.05cm 0.2cm;
-  border-radius: 0.1cm;
-  font-size: 8pt;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.04em;
-}
-
-.sev-critical { background: var(--sev-critical); }
-.sev-high     { background: var(--sev-high); }
-.sev-medium   { background: var(--sev-medium); color: #1a1d29; }
-.sev-low      { background: var(--sev-low); }
-.sev-info     { background: var(--sev-info); }
-
-/* -------------------------- OWASP table -------------------------- */
-.owasp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 9pt;
-}
-
-.owasp-table th,
-.owasp-table td {
-  border: 0.5pt solid var(--argus-rule);
-  padding: 0.16cm 0.25cm;
-  text-align: left;
-}
-
-.owasp-table thead {
-  background: var(--argus-surface-alt);
-}
-
-.owasp-table thead th {
-  color: var(--argus-primary-dark);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 8pt;
-}
-
-.owasp-table tbody tr:nth-child(even) td {
-  background: rgba(238, 241, 248, 0.65);
-}
-
-.col-owasp-id    { width: 1.4cm; }
-.col-owasp-count { width: 1.6cm; text-align: right; }
-
-.owasp-compliance-0    { background: rgba(46, 160, 67, 0.08); }
-.owasp-compliance-warn { background: rgba(195, 146, 0, 0.10); }
-.owasp-compliance-high { background: rgba(176, 0, 32, 0.08); }
-
-/* ----------------------------- Footer ---------------------------- */
-.report-footer {
-  page-break-before: always;
-  margin-top: 1cm;
-  font-size: 8pt;
-  color: var(--argus-text-muted);
-  border-top: 0.5pt solid var(--argus-rule);
-  padding-top: 0.3cm;
-}
-
-.report-footer code {
-  color: var(--argus-primary);
-}
-
-/* RC-16 — collapse variable-length flex/grid containers to block in print so WeasyPrint
-   paginates them instead of clipping content past the first page. */
-@media print {
-  .meta-grid { display: block; }
-}
+footer{ margin-top:36px; padding-top:16px; border-top:1px solid var(--border); color:var(--text-dim); font-size:10.5px; line-height:1.7; break-inside:avoid; }
+.wm{ color:var(--text-dim); font-size:10px; letter-spacing:.06em; }
+.foot-note{ margin-top:6px; }

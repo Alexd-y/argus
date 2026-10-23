@@ -1,1 +1,220 @@
-{% extends "base.html.j2" %}
+{# Midgard tier — FREE scan HTML preview. Standalone dark "security-console"
+   theme (tokens from valhalla_secreport_base.html.j2) so it is visually
+   indistinguishable from Valhalla and identical in content to the branded
+   Midgard PDF. Does NOT extend base.html.j2 — the legacy light shell would drag
+   in Phase Artifacts / raw tool output / curl PoC / failed AI slots, none of
+   which belong in the free tier. Reads only the free-tier context keys
+   (midgard_intel, midgard_findings, sample_finding, severity_counts,
+   midgard_executive_summary, midgard_upsell). #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ brand_name or "Svalbard Security Inc." }} — Midgard (Free Scan) — {{ target }}</title>
+<style>
+  :root{
+    --bg:#0a0c10; --surface:#111318; --surface2:#1a1d24; --surface3:#0f1116;
+    --border:#252830; --border2:#333743;
+    --accent:#00ff9d; --accent2:#ff3e6c; --accent3:#ffd700;
+    --text:#e8eaf0; --text-muted:#8d94a3; --text-dim:#666c7a;
+    --crit:#ff3e6c; --high:#ff6b2b; --med:#ffd700; --low:#00c8ff; --info:#a0a8b8;
+    --font-head:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-mono:"Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-mono);font-size:13px;line-height:1.6;}
+  .page{max-width:900px;margin:0 auto;padding:0 28px 64px;}
+  a{color:var(--accent);text-decoration:none;}
+  code{background:#06070a;border:1px solid var(--border);border-radius:4px;color:var(--accent);padding:.06rem .3rem;}
+  h2{font-family:var(--font-head);font-size:16px;letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin:2.4rem 0 .9rem;padding-bottom:.5rem;border-bottom:1px solid var(--border2);}
+  h2 .idx{color:var(--accent);margin-right:.6rem;}
+  h3{font-family:var(--font-head);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);margin:1.4rem 0 .5rem;}
+  .app-header{display:flex;align-items:center;gap:16px;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;}
+  .app-header h1{font-family:var(--font-head);font-size:20px;font-weight:800;letter-spacing:.04em;margin:0;color:var(--accent);}
+  .app-header h1 span{color:var(--text-muted);font-weight:600;}
+  .app-header .hmeta{margin-left:auto;text-align:right;color:var(--text-dim);font-size:11px;line-height:1.5;}
+  .cover{background:linear-gradient(180deg,var(--surface) 0%,var(--surface3) 100%);border:1px solid var(--border);border-radius:10px;padding:30px 30px 26px;margin-top:26px;}
+  .cover .kicker{color:var(--accent);letter-spacing:.22em;text-transform:uppercase;font-size:11px;}
+  .cover .title{font-family:var(--font-head);font-size:30px;font-weight:800;margin:.35rem 0 .1rem;color:var(--text);}
+  .cover .target{font-size:15px;color:var(--text-muted);}
+  .cover .target b{color:var(--low);}
+  .badges{margin:16px 0 14px;display:flex;gap:10px;flex-wrap:wrap;}
+  .badge{display:inline-block;padding:.28rem .7rem;border-radius:5px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--border2);}
+  .badge.tier{background:rgba(0,255,157,.08);border-color:rgba(0,255,157,.4);color:var(--accent);}
+  .badge.free{background:rgba(0,200,255,.08);border-color:rgba(0,200,255,.4);color:var(--low);}
+  .tagline{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:12px 14px;color:var(--text-muted);font-size:12.5px;margin-top:4px;}
+  .tagline b{color:var(--text);}
+  .scanmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-top:18px;}
+  .scanmeta div{background:var(--surface);padding:10px 14px;}
+  .scanmeta .l{color:var(--text-dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase;}
+  .scanmeta .v{color:var(--text);font-size:13px;margin-top:2px;}
+  .sev-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:6px;}
+  .sev-tile{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--border2);border-radius:8px;padding:14px 12px;text-align:center;}
+  .sev-tile .n{font-family:var(--font-head);font-size:30px;font-weight:800;line-height:1;}
+  .sev-tile .lbl{margin-top:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);}
+  .sev-tile.crit{border-top-color:var(--crit);} .sev-tile.crit .n{color:var(--crit);}
+  .sev-tile.high{border-top-color:var(--high);} .sev-tile.high .n{color:var(--high);}
+  .sev-tile.med{border-top-color:var(--med);} .sev-tile.med .n{color:var(--med);}
+  .sev-tile.low{border-top-color:var(--low);} .sev-tile.low .n{color:var(--low);}
+  .sev-tile.info{border-top-color:var(--info);} .sev-tile.info .n{color:var(--info);}
+  .intel-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+  .card h3{margin-top:0;}
+  .kv{display:grid;grid-template-columns:130px 1fr;gap:4px 10px;font-size:12px;}
+  .kv .k{color:var(--text-dim);}
+  .kv .v{color:var(--text);word-break:break-word;}
+  .pill{display:inline-block;padding:.1rem .5rem;border-radius:20px;font-size:10.5px;letter-spacing:.04em;border:1px solid var(--border2);margin:2px 4px 2px 0;color:var(--text-muted);}
+  .pill-wrap{margin-top:.2rem;}
+  .muted{color:var(--text-muted);}
+  .lead{margin-top:-.3rem;}
+  .sublist{margin:.2rem 0 0;padding-left:1.1rem;color:var(--text);columns:2;font-size:11.5px;}
+  .sublist li{margin:.1rem 0;}
+  table{width:100%;border-collapse:collapse;margin-top:.4rem;font-size:12px;}
+  th,td{border:1px solid var(--border);padding:.5rem .6rem;text-align:left;vertical-align:top;}
+  th{background:var(--surface2);color:var(--text-muted);font-family:var(--font-head);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;}
+  td{background:var(--surface3);}
+  .sev-dot{display:inline-block;padding:.12rem .55rem;border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+  .d-crit{background:rgba(255,62,108,.14);color:var(--crit);}
+  .d-high{background:rgba(255,107,43,.14);color:var(--high);}
+  .d-med{background:rgba(255,215,0,.14);color:var(--med);}
+  .d-low{background:rgba(0,200,255,.14);color:var(--low);}
+  .d-info{background:rgba(160,168,184,.14);color:var(--info);}
+  .writeup{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--low);border-radius:8px;padding:18px 20px;margin-top:10px;}
+  .writeup .wh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .writeup .wt{font-family:var(--font-head);font-size:16px;font-weight:700;color:var(--text);margin:0;}
+  .writeup .sample-tag{margin-left:auto;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(0,255,157,.4);border-radius:5px;padding:.2rem .5rem;}
+  .writeup .metaline{display:flex;gap:18px;flex-wrap:wrap;color:var(--text-dim);font-size:11px;margin:8px 0 14px;}
+  .writeup .metaline b{color:var(--text-muted);font-weight:600;}
+  .blk{margin:12px 0;}
+  .blk .lbl{font-family:var(--font-head);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin-bottom:4px;}
+  .evidence{background:#06070a;border:1px solid var(--border);border-radius:6px;padding:10px 12px;color:#cfd3dd;font-size:11.5px;white-space:pre-wrap;word-break:break-word;}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;}
+  .panel h3{margin-top:0;}
+  .upsell{background:linear-gradient(135deg,rgba(0,255,157,.06),rgba(0,200,255,.05));border:1px dashed var(--border2);border-radius:8px;padding:16px 18px;margin-top:12px;}
+  .upsell .lbl{color:var(--accent);font-family:var(--font-head);letter-spacing:.1em;text-transform:uppercase;font-size:11px;}
+  .upsell ul{margin:.5rem 0 0;padding-left:1.2rem;color:var(--text-muted);}
+  .upsell li{margin:.2rem 0;}
+  .upsell li b{color:var(--text);}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-dim);font-size:10.5px;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>{{ (brand_name or "SVALBARD SECURITY") | upper }}<span> // Free scan</span></h1>
+  <div class="hmeta">
+    scan {{ scan_id or "—" }}<br>
+    {{ tier | capitalize }} · Free scan
+  </div>
+</div>
+
+<div class="page">
+
+  {% set sev = severity_counts or {} %}
+  <section class="cover">
+    <div class="kicker">External Security Scan</div>
+    <div class="title">Attack-Surface Overview</div>
+    <div class="target">Target: <b>{{ target or "Unspecified target" }}</b></div>
+    <div class="badges">
+      <span class="badge tier">Midgard</span>
+      <span class="badge free">Free scan</span>
+    </div>
+    <div class="tagline">
+      A <b>free scan of the domain you own</b>: severity counts, every finding title, and one
+      complete writeup with evidence and a fix. Full proof-of-concept, remediation and the
+      prioritized roadmap are unlocked in the Asgard and Valhalla reports.
+    </div>
+    <div class="scanmeta">
+      <div><div class="l">Status</div><div class="v">Completed</div></div>
+      <div><div class="l">Scope</div><div class="v">{{ target or "—" }} (external)</div></div>
+      <div><div class="l">Findings</div><div class="v">{{ (midgard_findings or []) | length }} total</div></div>
+    </div>
+  </section>
+
+  <h2><span class="idx">01</span>Severity Summary</h2>
+  <div class="sev-grid">
+    <div class="sev-tile crit"><div class="n">{{ sev.get('critical', 0) }}</div><div class="lbl">Critical</div></div>
+    <div class="sev-tile high"><div class="n">{{ sev.get('high', 0) }}</div><div class="lbl">High</div></div>
+    <div class="sev-tile med"><div class="n">{{ sev.get('medium', 0) }}</div><div class="lbl">Medium</div></div>
+    <div class="sev-tile low"><div class="n">{{ sev.get('low', 0) }}</div><div class="lbl">Low</div></div>
+    <div class="sev-tile info"><div class="n">{{ sev.get('info', 0) }}</div><div class="lbl">Info</div></div>
+  </div>
+
+  <h2><span class="idx">02</span>Target Intelligence</h2>
+  <p class="muted lead">Open, non-intrusive reconnaissance collected about the domain — the
+  same depth other platforms expose on their entry tier.</p>
+  {% include "partials/midgard/target_intelligence.html.j2" %}
+
+  <h2><span class="idx">03</span>Findings Inventory</h2>
+  <p class="muted lead">Every finding title with severity, weakness class and CVSS. One finding
+  is fully written up below; the rest are detailed in the paid reports.</p>
+  {% set inv = midgard_findings or [] %}
+  {% if inv %}
+    <table>
+      <thead>
+        <tr><th style="width:92px">Severity</th><th>Title</th><th style="width:96px">CWE</th><th style="width:66px">CVSS</th></tr>
+      </thead>
+      <tbody>
+        {% for row in inv %}
+          <tr>
+            <td><span class="sev-dot d-{{ (row.severity or 'info') | lower }}">{{ (row.severity or 'info') | capitalize }}</span></td>
+            <td>{{ row.title or '—' }}</td>
+            <td>{{ row.cwe or '—' }}</td>
+            <td>{{ '%.1f' | format(row.cvss) if row.cvss is not none else '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No findings were emitted for this scan.</p>
+  {% endif %}
+
+  {% set s = sample_finding %}
+  {% if s %}
+    <h2><span class="idx">04</span>Sample Finding — Full Writeup</h2>
+    <div class="writeup">
+      <div class="wh">
+        <h3 class="wt" style="letter-spacing:0;text-transform:none">{{ s.title }}</h3>
+        <span class="sample-tag">Free sample</span>
+      </div>
+      <div class="metaline">
+        <span><b>Severity:</b> {{ (s.severity or 'info') | capitalize }}</span>
+        <span><b>CWE:</b> {{ s.cwe or '—' }}</span>
+        <span><b>CVSS:</b> {{ '%.1f' | format(s.cvss) if s.cvss is not none else '—' }}</span>
+        {% if s.asset %}<span><b>Asset:</b> {{ s.asset }}</span>{% endif %}
+      </div>
+      <div class="blk"><div class="lbl">What we found</div><div>{{ s.what }}</div></div>
+      {% if s.evidence %}<div class="blk"><div class="lbl">Evidence</div><div class="evidence">{{ s.evidence }}</div></div>{% endif %}
+      <div class="blk"><div class="lbl">Why it matters</div><div>{{ s.why }}</div></div>
+      {% if s.fix %}<div class="blk"><div class="lbl">Recommended fix</div><div>{{ s.fix }}</div></div>{% endif %}
+    </div>
+  {% endif %}
+
+  <h2><span class="idx">05</span>Summary</h2>
+  <div class="panel">
+    <h3>Executive Summary</h3>
+    <p style="margin:.2rem 0 0">{{ midgard_executive_summary }}</p>
+  </div>
+
+  <div class="upsell">
+    <div class="lbl">Unlock the full assessment</div>
+    <p class="muted" style="margin:.4rem 0 0">This free Midgard scan lists what was found. Detailed
+    explanations, reproducible proof-of-concept, step-by-step remediation and the prioritized roadmap are
+    delivered in the paid reports:</p>
+    <ul>
+      <li><b>Asgard</b> — full findings, remediation guidance and sanitized reproducer recipes.</li>
+      <li><b>Valhalla</b> — provable findings with raw evidence, exploit chains, hardening roadmap and the executive business-impact lens.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <div>{{ brand_name or "Svalbard Security Inc." }} · Midgard (free) · scan {{ scan_id or "—" }}</div>
+    <div style="margin-top:6px">This free report is limited to open, non-intrusive reconnaissance and a finding
+    inventory. Testing was scoped to assets the requester is authorized to assess. No confidential
+    proof-of-concept or exploitation detail is included at this tier.</div>
+  </footer>
+
+</div>
+</body>
+</html>

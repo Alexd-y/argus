@@ -1,139 +1,229 @@
-{# ARG-036 — Midgard tier PDF layout (CISO-facing, blue brand).
-   Self-contained: NOT extending HTML base.html.j2 to keep print
-   layout free of screen-oriented CSS. WeasyPrint resolves the
-   relative ``pdf_styles.css`` and ``../_fonts/`` URLs through the
-   ``base_url`` argument of ``HTML(...)`` set in pdf_backend.py. #}
+{# Midgard tier — FREE scan report. Visual identity mirrors Valhalla's
+   dark "security-console" theme (tokens copied from
+   src/reports/templates/reports/valhalla_secreport_base.html.j2).
+
+   Content contract (free tier): severity counts, every finding title, and ONE
+   complete writeup with evidence and a fix. NEVER Phase Artifacts, raw tool
+   output, curl/PoC, per-finding remediation or failed AI slots.
+
+   Self-contained (does NOT extend base.html.j2). WeasyPrint resolves the
+   relative ``pdf_styles.css`` through the ``base_url`` set in pdf_backend.py.
+   Print-safe: block flow with short grids + ``break-inside: avoid`` cards so
+   WeasyPrint does not collapse the document into a single page. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Svalbard Security Inc. Midgard Report — {{ target | e }}</title>
+  <title>{{ brand_name | e or "Svalbard Security Inc." }} — Midgard (Free Scan) — {{ target | e }}</title>
   <link rel="stylesheet" href="pdf_styles.css" />
 </head>
-<body class="tier-midgard">
+<body>
 
-  {# ----------------------- COVER PAGE ----------------------- #}
-  <section class="cover-page">
-    <div class="cover-brand">
-      <div class="brand-mark" aria-label="Svalbard Security Inc. logo">
-        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Svalbard Security Inc. shield">
-          <circle cx="32" cy="32" r="30" fill="#1a3a8c" stroke="#0f2247" stroke-width="2" />
-          <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#fff" opacity="0.9" />
-          <circle cx="32" cy="30" r="6" fill="#1a3a8c" />
-        </svg>
+  <div class="app-header">
+    <h1>{{ (brand_name | e or "SVALBARD SECURITY") | upper }}<span> // Free scan</span></h1>
+    <div class="hmeta">
+      scan {{ scan_id | e or "—" }}<br>
+      generated {{ scan_completed_at | e or "—" }} · {{ report_id | e or "" }}
+    </div>
+  </div>
+
+  <div class="page">
+
+    {# ----------------------------- COVER ----------------------------- #}
+    <section class="cover">
+      <div class="kicker">External Security Scan</div>
+      <div class="title">Attack-Surface Overview</div>
+      <div class="target">Target: <b>{{ target | e or "Unspecified target" }}</b></div>
+      <div class="badges">
+        <span class="badge tier">Midgard</span>
+        <span class="badge free">Free scan</span>
       </div>
-      <div class="brand-text">
-        <div class="brand-name">Svalbard Security Inc.</div>
-        <div class="brand-sub">Security Pentest Platform</div>
+      <div class="tagline">
+        A <b>free scan of the domain you own</b>: severity counts, every finding title, and one
+        complete writeup with evidence and a fix. Full proof-of-concept, remediation and the
+        prioritized roadmap are unlocked in the Asgard and Valhalla reports.
       </div>
-    </div>
-
-    <div class="cover-title-block">
-      <div class="cover-tier-badge tier-badge-midgard">MIDGARD · CISO Brief</div>
-      <h1 class="cover-title">Security Posture Report</h1>
-      <p class="cover-target">{{ target | e or "Unspecified target" }}</p>
-    </div>
-
-    <div class="cover-meta">
-      <dl class="meta-grid">
-        <dt>Tenant</dt><dd>{{ tenant_id | e or "—" }}</dd>
-        <dt>Scan ID</dt><dd>{{ scan_id | e or "—" }}</dd>
-        <dt>Issued</dt><dd>{{ scan_completed_at | e or "—" }}</dd>
-        <dt>Tier</dt><dd>Midgard (Tier&nbsp;1)</dd>
-        <dt>Watermark</dt><dd class="watermark">{{ pdf_watermark | e }}</dd>
-      </dl>
-    </div>
-
-    <div class="cover-confidential">
-      Svalbard Security Inc. Confidential · Internal use only
-    </div>
-  </section>
-
-  {# ------------------- EXECUTIVE SUMMARY -------------------- #}
-  <section class="exec-summary">
-    <h2 class="section-heading">Executive Summary</h2>
-    {% set sev = severity_counts or {} %}
-    <div class="severity-pills">
-      <span class="pill pill-critical">Critical · {{ sev.get('critical', 0) }}</span>
-      <span class="pill pill-high">High · {{ sev.get('high', 0) }}</span>
-      <span class="pill pill-medium">Medium · {{ sev.get('medium', 0) }}</span>
-      <span class="pill pill-low">Low · {{ sev.get('low', 0) }}</span>
-      <span class="pill pill-info">Info · {{ sev.get('info', 0) }}</span>
-    </div>
-
-    {% set exec_text = (ai_sections or {}).get('executive_summary') or (ai_sections or {}).get('report.ai.section.executive_summary') %}
-    {% if exec_text %}
-      <div class="prose">{{ exec_text | md }}</div>
-    {% else %}
-      <p class="prose">
-        Svalbard Security Inc. analysed {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
-        across the in-scope assets for <strong>{{ target | e or 'the engagement' }}</strong>.
-        This Midgard brief surfaces the highest-impact issues only — the full
-        evidence chain is preserved in the Asgard / Valhalla tiers.
-      </p>
-    {% endif %}
-  </section>
-
-  {# ------------------- TOP FINDINGS ------------------------- #}
-  <section class="top-findings">
-    <h2 class="section-heading">Top Findings</h2>
-    {% if findings %}
-      <table class="findings-table">
-        <thead>
-          <tr>
-            <th class="col-sev">Severity</th>
-            <th class="col-title">Finding</th>
-            <th class="col-cwe">CWE</th>
-            <th class="col-cvss">CVSS</th>
-            <th class="col-owasp">OWASP</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for f in findings[:10] %}
-            <tr class="row-severity-{{ (f.severity or 'info') | lower }}">
-              <td class="col-sev"><span class="sev-tag sev-{{ (f.severity or 'info') | lower }}">{{ (f.severity or 'info') | upper }}</span></td>
-              <td class="col-title">{{ f.title | e or '—' }}</td>
-              <td class="col-cwe">{{ f.cwe | e or '—' }}</td>
-              <td class="col-cvss">{{ '%.1f' | format(f.cvss) if f.cvss is not none else '—' }}</td>
-              <td class="col-owasp">{{ f.owasp_category | e or '—' }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p class="prose empty-state">No findings were emitted for this scan.</p>
-    {% endif %}
-  </section>
-
-  {# ------------------- OWASP COMPLIANCE --------------------- #}
-  {% if owasp_compliance_rows %}
-    <section class="owasp-compliance">
-      <h2 class="section-heading">OWASP Top-10 (2025) Coverage</h2>
-      <table class="owasp-table">
-        <thead>
-          <tr>
-            <th class="col-owasp-id">Category</th>
-            <th class="col-owasp-title">Title</th>
-            <th class="col-owasp-count">Findings</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in owasp_compliance_rows %}
-            <tr class="{{ row.row_class | e }}">
-              <td class="col-owasp-id">{{ row.category_id | e }}</td>
-              <td class="col-owasp-title">{{ row.title | e }}</td>
-              <td class="col-owasp-count">{{ row.count }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {% set sev = severity_counts or {} %}
+      <div class="scanmeta">
+        <div><div class="l">Status</div><div class="v">Completed</div></div>
+        <div><div class="l">Scope</div><div class="v">{{ target | e or "—" }} (external)</div></div>
+        <div><div class="l">Findings</div><div class="v">{{ (midgard_findings or findings or []) | length }} total</div></div>
+      </div>
     </section>
-  {% endif %}
 
-  {# ----------------------- FOOTER --------------------------- #}
-  <footer class="report-footer">
-    <p>Svalbard Security Inc. Confidential · Midgard Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
-  </footer>
+    {# ------------------------ SEVERITY SUMMARY ----------------------- #}
+    <h2><span class="idx">01</span>Severity Summary</h2>
+    <div class="sev-grid">
+      <div class="sev-tile crit"><div class="n">{{ sev.get('critical', 0) }}</div><div class="lbl">Critical</div></div>
+      <div class="sev-tile high"><div class="n">{{ sev.get('high', 0) }}</div><div class="lbl">High</div></div>
+      <div class="sev-tile med"><div class="n">{{ sev.get('medium', 0) }}</div><div class="lbl">Medium</div></div>
+      <div class="sev-tile low"><div class="n">{{ sev.get('low', 0) }}</div><div class="lbl">Low</div></div>
+      <div class="sev-tile info"><div class="n">{{ sev.get('info', 0) }}</div><div class="lbl">Info</div></div>
+    </div>
 
+    {# ----------------------- TARGET INTELLIGENCE --------------------- #}
+    {% set intel = midgard_intel or {} %}
+    <h2><span class="idx">02</span>Target Intelligence</h2>
+    <p class="muted lead">Open, non-intrusive reconnaissance collected about the domain — the
+    same depth other platforms expose on their entry tier.</p>
+
+    <div class="intel-grid">
+      <div class="card">
+        <h3>Domain Registration (WHOIS / RDAP)</h3>
+        {% set w = intel.get('whois', {}) %}
+        <div class="kv">
+          <div class="k">Registrar</div><div class="v">{{ w.get('registrar', 'Not collected') | e }}</div>
+          <div class="k">Registrant</div><div class="v">{{ w.get('registrant_org', 'Not collected') | e }}</div>
+          <div class="k">Registered</div><div class="v">{{ w.get('created', 'Not collected') | e }}</div>
+          <div class="k">Expires</div><div class="v">{{ w.get('expires', 'Not collected') | e }}</div>
+          <div class="k">Name servers</div><div class="v">{% for ns in w.get('name_servers', []) %}{{ ns | e }}{% if not loop.last %}<br>{% endif %}{% else %}Not collected{% endfor %}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>DNS &amp; Email Authentication</h3>
+        {% set d = intel.get('dns', {} ) %}{% set ea = intel.get('email_auth', {}) %}
+        <div class="kv">
+          <div class="k">MX</div><div class="v">{% for mx in d.get('mx', []) %}{{ mx | e }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+          <div class="k">NS</div><div class="v">{% for ns in d.get('ns', []) %}{{ ns | e }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+          <div class="k">DNSSEC</div><div class="v">{{ ea.get('dnssec', 'Not assessed') | e }}</div>
+          <div class="k">SPF</div><div class="v">{{ ea.get('spf', 'Not assessed') | e }}</div>
+          <div class="k">DMARC</div><div class="v">{{ ea.get('dmarc', 'Not assessed') | e }}</div>
+          <div class="k">DKIM</div><div class="v">{{ ea.get('dkim', 'Not assessed') | e }}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>TLS / SSL Certificate</h3>
+        {% set t = intel.get('tls', {}) %}
+        <div class="kv">
+          <div class="k">Issuer</div><div class="v">{{ t.get('issuer', 'Not collected') | e }}</div>
+          <div class="k">Subject</div><div class="v">{{ t.get('subject', 'Not collected') | e }}</div>
+          <div class="k">SANs</div><div class="v">{% for s in t.get('sans', []) %}{{ s | e }}{% if not loop.last %}, {% endif %}{% else %}Not collected{% endfor %}</div>
+          <div class="k">Valid</div><div class="v">{{ t.get('not_before', 'Not collected') | e }} → {{ t.get('not_after', 'Not collected') | e }}</div>
+          <div class="k">Protocols</div><div class="v">{% for p in t.get('protocols', []) %}<span class="pill">{{ p | e }}</span>{% else %}Not collected{% endfor %}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Open Ports &amp; Services</h3>
+        {% set ports = intel.get('ports', []) %}
+        <div class="kv">
+          {% for p in ports %}
+            <div class="k">{{ p.get('port', '') | e }} / {{ p.get('proto', 'tcp') | e }}</div><div class="v">{{ p.get('service', '') | e or '—' }}</div>
+          {% else %}
+            <div class="k">Ports</div><div class="v">Not collected</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Technology Fingerprint</h3>
+        <div class="pill-wrap">
+          {% for tech in intel.get('technologies', []) %}<span class="pill">{{ tech | e }}</span>{% else %}<span class="muted">Not collected</span>{% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Subdomains Discovered <span class="muted">({{ intel.get('subdomains', []) | length }})</span></h3>
+        {% if intel.get('subdomains') %}
+          <ul class="sublist">
+            {% for sd in intel.get('subdomains', []) %}<li>{{ sd | e }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">Not collected</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ----------------------- FINDINGS INVENTORY ---------------------- #}
+    <h2><span class="idx">03</span>Findings Inventory</h2>
+    <p class="muted lead">Every finding title with severity, weakness class and CVSS. One finding
+    is fully written up below; the rest are detailed in the paid reports.</p>
+    {% set inv = midgard_findings or [] %}
+    {% if inv %}
+      <table>
+        <thead>
+          <tr><th class="w-sev">Severity</th><th>Title</th><th class="w-cwe">CWE</th><th class="w-cvss">CVSS</th></tr>
+        </thead>
+        <tbody>
+          {% for row in inv %}
+            <tr>
+              <td><span class="sev-dot d-{{ (row.severity or 'info') | lower }}">{{ (row.severity or 'info') | capitalize }}</span></td>
+              <td>{{ row.title | e or '—' }}</td>
+              <td>{{ row.cwe | e or '—' }}</td>
+              <td>{{ '%.1f' | format(row.cvss) if row.cvss is not none else '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No findings were emitted for this scan.</p>
+    {% endif %}
+
+    {# ---------------------- SAMPLE FINDING WRITEUP ------------------- #}
+    {% set s = sample_finding %}
+    {% if s %}
+      <h2><span class="idx">04</span>Sample Finding — Full Writeup</h2>
+      <div class="writeup">
+        <div class="wh">
+          <h3 class="wt">{{ s.title | e }}</h3>
+          <span class="sample-tag">Free sample</span>
+        </div>
+        <div class="metaline">
+          <span><b>Severity:</b> {{ (s.severity or 'info') | capitalize }}</span>
+          <span><b>CWE:</b> {{ s.cwe | e or '—' }}</span>
+          <span><b>CVSS:</b> {{ '%.1f' | format(s.cvss) if s.cvss is not none else '—' }}</span>
+          {% if s.asset %}<span><b>Asset:</b> {{ s.asset | e }}</span>{% endif %}
+        </div>
+        <div class="blk">
+          <div class="lbl">What we found</div>
+          <div>{{ s.what | e }}</div>
+        </div>
+        {% if s.evidence %}
+          <div class="blk">
+            <div class="lbl">Evidence</div>
+            <div class="evidence">{{ s.evidence | e }}</div>
+          </div>
+        {% endif %}
+        <div class="blk">
+          <div class="lbl">Why it matters</div>
+          <div>{{ s.why | e }}</div>
+        </div>
+        {% if s.fix %}
+          <div class="blk">
+            <div class="lbl">Recommended fix</div>
+            <div>{{ s.fix | e }}</div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {# --------------------------- SUMMARY ----------------------------- #}
+    <h2><span class="idx">05</span>Summary</h2>
+    <div class="panel">
+      <h3 class="flush">Executive Summary</h3>
+      <p class="flush-p">{{ midgard_executive_summary | e }}</p>
+    </div>
+
+    <div class="upsell">
+      <div class="lbl">Unlock the full assessment</div>
+      <p class="muted">This free Midgard scan lists what was found. Detailed explanations,
+      reproducible proof-of-concept, step-by-step remediation and the prioritized roadmap are
+      delivered in the paid reports:</p>
+      <ul>
+        <li><b>Asgard</b> — full findings, remediation guidance and sanitized reproducer recipes.</li>
+        <li><b>Valhalla</b> — provable findings with raw evidence, exploit chains, hardening roadmap and the executive business-impact lens.</li>
+      </ul>
+    </div>
+
+    <footer>
+      <div class="wm">{{ brand_name | e or "Svalbard Security Inc." }} · Midgard (free) · watermark {{ pdf_watermark | e }} · scan {{ scan_completed_at | e or "—" }}</div>
+      <div class="foot-note">This free report is limited to open, non-intrusive reconnaissance and a finding inventory.
+      Testing was scoped to assets the requester is authorized to assess. No confidential proof-of-concept or
+      exploitation detail is included at this tier.</div>
+    </footer>
+
+  </div>
 </body>
 </html>
