@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import logging
 import os
 import re
@@ -707,6 +708,77 @@ class LatexBackend:
         )
 
 
+# Scheme allow-list for the Chromium request router: inline/self-contained only.
+# Everything else (http/https/file/ftp/ws…) is aborted, so report rendering can
+# never reach the network — the core of the SSRF/IMDS/exfil hardening.
+_CHROMIUM_ALLOWED_SCHEMES: Final[tuple[str, ...]] = ("data:", "about:", "blob:")
+
+_STYLESHEET_LINK_RE: Final[re.Pattern[str]] = re.compile(
+    r"<link\b[^>]*\brel=[\"']stylesheet[\"'][^>]*>", re.IGNORECASE
+)
+_HREF_RE: Final[re.Pattern[str]] = re.compile(r"href=[\"']([^\"']+)[\"']", re.IGNORECASE)
+
+
+def _abort_remote_request(route: Any) -> None:
+    """Chromium route handler: allow only inline schemes, abort all else.
+
+    Defence-in-depth for the ChromiumBackend. The request never leaves the
+    browser, so a report that (despite autoescaping) contained an attacker-
+    controlled ``src``/``url()`` cannot be used to probe internal services or
+    cloud metadata. Any routing error fails closed (abort).
+    """
+    try:
+        url = route.request.url
+        if url.startswith(_CHROMIUM_ALLOWED_SCHEMES):
+            route.continue_()
+        else:
+            route.abort()
+    except Exception:  # noqa: BLE001 — fail closed: never let a route error open the network
+        with contextlib.suppress(Exception):
+            route.abort()
+
+
+def _inline_local_stylesheets(html_content: str, base_url: str | None) -> str:
+    """Inline a branded template's **same-directory** ``<link>`` stylesheet(s).
+
+    The branded PDF layouts reference ``pdf_styles.css`` relatively and rely on
+    WeasyPrint's ``base_url`` to resolve it. Chromium renders via ``set_content``
+    with the network blocked, so the stylesheet must be inlined in-process first.
+
+    Security: only a scheme-less, non-absolute, non-traversing href whose
+    resolved path is a **direct child** of ``base_url`` is read. Anything else
+    (remote, absolute, ``..``) is dropped — never fetched — so this cannot be
+    turned into a file-read primitive.
+    """
+    if not base_url:
+        return html_content
+    try:
+        base = Path(base_url).resolve()
+    except OSError:
+        return html_content
+    if not base.is_dir():
+        return html_content
+
+    def _repl(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        href_match = _HREF_RE.search(tag)
+        if not href_match:
+            return ""
+        href = href_match.group(1).strip()
+        if not href or "://" in href or href.startswith(("/", "#", "data:")) or ".." in href:
+            return ""
+        candidate = (base / href).resolve()
+        if candidate.parent != base or not candidate.is_file():
+            return ""
+        try:
+            css = candidate.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        return f"<style>{css}</style>"
+
+    return _STYLESHEET_LINK_RE.sub(_repl, html_content)
+
+
 class ChromiumBackend:
     """Opt-in Chromium/Playwright backend (``REPORT_PDF_BACKEND=chromium``).
 
@@ -741,7 +813,14 @@ class ChromiumBackend:
         pdfa_mode: bool = False,
         xmpdata_content: str | None = None,
     ) -> bool:
-        del base_url, latex_template_content, pdfa_mode, xmpdata_content, scan_completed_at
+        del latex_template_content, pdfa_mode, xmpdata_content, scan_completed_at
+
+        # Report HTML can embed data derived from UNTRUSTED scan targets (finding
+        # titles, evidence snippets). Make the document fully self-contained
+        # BEFORE handing it to the browser: inline the branded template's local
+        # stylesheet so Chromium needs no network, and so the render below can
+        # block the network outright without losing styling.
+        safe_html = _inline_local_stylesheets(html_content, base_url)
 
         def _run() -> bool:
             from playwright.sync_api import sync_playwright
@@ -749,8 +828,15 @@ class ChromiumBackend:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(args=["--no-sandbox"])
                 try:
-                    page = browser.new_page()
-                    page.set_content(html_content, wait_until="networkidle")
+                    # Hardening (SSRF / exfil): JavaScript OFF and EVERY non-inline
+                    # request blocked, so a malicious finding field can never drive
+                    # the browser to reach internal services / cloud IMDS
+                    # (169.254.169.254) or exfiltrate report data. Reports are
+                    # static, fully-inlined HTML, so neither is ever needed.
+                    context = browser.new_context(java_script_enabled=False)
+                    page = context.new_page()
+                    page.route("**/*", _abort_remote_request)
+                    page.set_content(safe_html, wait_until="load")
                     page.pdf(
                         path=str(output_path),
                         print_background=True,
