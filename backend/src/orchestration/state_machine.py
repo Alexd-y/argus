@@ -832,6 +832,37 @@ async def _persist_report_and_findings(
     recon_out: ReconOutput | None,
 ) -> None:
     """Persist Report and Findings to DB after reporting phase."""
+    # Idempotent re-finalize guard (resume / stuck-scan recovery path). When a
+    # scan is resumed with the reporting phase already marked complete,
+    # _finalize_scan runs again but the reporting handler does NOT re-run, so
+    # ctx.report_out is None. Without this guard two failures result:
+    #   (1) dereferencing ``report_out.report`` below raises AttributeError and
+    #       crashes the whole scan (observed: stuck scan re-driven by
+    #       recover_stuck fails at finalize);
+    #   (2) when report_out *is* present on a resume, a brand-new Report row
+    #       (random uuid PK) is persisted every time, so a scan that resumes N
+    #       times accumulates N duplicate reports.
+    # If a Report already exists for this scan, finalize has nothing to do.
+    existing_report_id = (
+        await session.execute(
+            select(Report.id).where(Report.scan_id == scan_id).limit(1)
+        )
+    ).scalars().first()
+    if existing_report_id is not None:
+        logger.info(
+            "persist_report_skipped_already_finalized",
+            extra={
+                "event": "persist_report_skipped_already_finalized",
+                "scan_id": scan_id,
+            },
+        )
+        return
+    if report_out is None:
+        # Reporting marked complete but its output was neither repopulated on
+        # resume nor previously persisted — reconstruct a minimal reporting
+        # output; the summary is rebuilt from the persisted findings below.
+        report_out = ReportingOutput(report={})
+
     report_id = str(uuid.uuid4())
     findings_raw = list(vuln_out.findings) if vuln_out and vuln_out.findings else []
     findings_raw = _unique_finding_dicts(findings_raw)
