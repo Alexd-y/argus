@@ -170,3 +170,53 @@ def test_deep_plan_covers_sqli_xss_ssrf_ssti_xxe_idor_for_confirmed_surfaces() -
     assert any(
         s.family == "idor" and s.param == "userId" for s in steps if not s.not_assessed_reason
     )
+
+
+def test_rest_prefix_spa_login_and_search_are_discovered() -> None:
+    """Regression (detection gap): Angular/REST SPAs (e.g. OWASP Juice Shop) expose
+    their injectable API as ``/rest/*`` path literals inside the JS bundle — no
+    ``fetch``/``axios`` wrapper. The extractor previously ignored the ``/rest/``
+    prefix and defaulted literals to GET with no params, so the login SQLi
+    (``POST /rest/user/login`` email) and search SQLi (``GET /rest/products/search?q=``)
+    were never surfaced and the injection planner had no SQLi target. This locks in
+    ``/rest/`` recognition + method/param inference end to end into the planner.
+    """
+    base = "http://shop.example/"
+    html = '<html><script src="/main.js"></script></html>'
+    js = """
+    this.http.post(environment.restUrl + '/rest/user/login', {email: e, password: p});
+    this.http.get('/rest/products/search');
+    """
+    surfaces = extract_spa_api_surfaces(base, html_text=html, script_bodies={base + "main.js": js})
+    eps = surfaces.endpoint_inventory
+    login = next((r for r in eps if r["url"].endswith("/rest/user/login")), None)
+    assert login is not None, "/rest/user/login not extracted from JS bundle"
+    assert login["method"] == "POST"
+    assert "email" in login["json_fields"]
+    search = next((r for r in eps if r["url"].endswith("/rest/products/search")), None)
+    assert search is not None, "/rest/products/search not extracted from JS bundle"
+    assert "q" in search["query_params"]
+
+    inv = build_input_surface_inventory({"endpoint_inventory": eps})
+    assert any(
+        it.location == "json"
+        and it.param_name == "email"
+        and it.method == "POST"
+        and it.url.endswith("/rest/user/login")
+        for it in inv.items
+    ), "email JSON injection surface for /rest/user/login missing"
+
+    steps = build_injection_plan(
+        inv,
+        mode="deep",
+        flags=ActiveInjectionPlannerFlags(
+            lab_destructive_execution_allowed=True,
+            oast_enabled=True,
+            destructive_tool_ids=frozenset({"sqlmap"}),
+        ),
+    )
+    assert any(
+        s.family == "sqli" and "rest/user/login" in (s.target_url or "")
+        for s in steps
+        if not s.not_assessed_reason
+    ), "no SQLi injection step planned against the REST login endpoint"
