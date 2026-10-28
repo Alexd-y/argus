@@ -127,14 +127,12 @@ def _project_midgard(
     ctx = sanitize_context or SanitizeContext(target=data.target or "")
     top = _top_n_findings(list(data.findings), MIDGARD_TOP_FINDINGS)
     sanitised = [_sanitise_finding(f, sanitize_ctx=ctx) for f in top]
-    # Exploitation outcome (exploit_demonstrated/exploit_summary) is PAID-tier
-    # content, like the PoC — strip it from the free Midgard projection so neither
-    # the tier renderers nor the canonical snapshot can surface proven-exploit
-    # detail for a free report.
-    sanitised = [
-        f.model_copy(update={"exploit_demonstrated": False, "exploit_summary": None})
-        for f in sanitised
-    ]
+    # NB: exploit_demonstrated/exploit_summary are deliberately LEFT INTACT here.
+    # The free-payload teaser gate (_is_safe_teaser_candidate in midgard_free)
+    # reads exploit_demonstrated to exclude proven-exploit findings from the free
+    # sample — clearing it here would blind that gate (fail-open). The paid-tier
+    # exploit detail is instead stripped where the full finding set is actually
+    # rendered for free: the canonical snapshot (report_pipeline._rgp_canonical_snapshot).
     return replace(
         data,
         findings=sanitised,

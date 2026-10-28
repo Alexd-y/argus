@@ -916,10 +916,27 @@ async def _rgp_canonical_snapshot(
             from src.services.reporting import normalize_report_tier
 
             if normalize_report_tier(tier_str) == "midgard":
+                from dataclasses import replace as _dc_replace
+
                 from src.reports.report_bundle import ReportTier
                 from src.reports.tier_classifier import classify_for_tier
 
                 report_data = classify_for_tier(report_data, ReportTier.MIDGARD)
+                # Strip paid-tier exploit outcome from the findings the canonical
+                # bundle renders in full for a FREE report. Done here — not in
+                # _project_midgard — so the upstream free-payload teaser gate
+                # (_is_safe_teaser_candidate) can still read exploit_demonstrated to
+                # exclude proven-exploit findings from the free sample (clearing it
+                # earlier would blind that gate: fail-open).
+                report_data = _dc_replace(
+                    report_data,
+                    findings=[
+                        f.model_copy(
+                            update={"exploit_demonstrated": False, "exploit_summary": None}
+                        )
+                        for f in report_data.findings
+                    ],
+                )
             snapshot = build_snapshot_from_report_data(
                 report_data,
                 scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),

@@ -203,6 +203,51 @@ def test_teaser_without_safe_fix_falls_back_to_top_finding():
     assert writeup["fix"] == ""  # no safe config fix → omitted
 
 
+def test_exploit_demonstrated_config_finding_never_teaser_after_projection():
+    """Regression: the Midgard projection must NOT blind the teaser gate.
+
+    A finding shaped like a safe configuration teaser candidate but carrying
+    exploit_demonstrated=True must never be chosen as the free sample, even after
+    classify_for_tier(MIDGARD). The exploit flag must survive projection so
+    _is_safe_teaser_candidate can still exclude it — clearing it before teaser
+    selection would be a fail-open tier-gate bypass.
+    """
+    exploited_cfg = _finding(
+        severity="high",
+        title="DMARC has no aggregate reporting (rua)",
+        description="DMARC published but defines no rua= address.",
+        cwe="CWE-16",
+        cvss=7.5,
+        observed_impact='_dmarc.svalbard.ca TXT "v=DMARC1; p=none;"',
+        exploit_demonstrated=True,
+        exploit_summary="proved exploitable via chained misconfig",
+    )
+    safe_cfg = _finding(
+        severity="low",
+        title="DNSSEC not enabled",
+        description="The zone is unsigned.",
+        cwe="CWE-350",
+        cvss=3.9,
+        observed_impact="No RRSIG/DS records present for svalbard.ca.",
+    )
+    data = ReportData(
+        report_id="r",
+        target="svalbard.ca",
+        summary=ReportSummary(critical=0, high=1, medium=0, low=1, info=0),
+        findings=[exploited_cfg, safe_cfg],
+        technologies=[],
+    )
+    projected = classify_for_tier(data, ReportTier.MIDGARD)
+    # The exploit flag survives projection (so the gate upstream can see it).
+    proj_dmarc = next(f for f in projected.findings if f.title.startswith("DMARC"))
+    assert proj_dmarc.exploit_demonstrated is True
+    # The exploited config finding is never the free teaser.
+    teaser = mf.select_teaser_finding(projected.findings)
+    assert teaser is not None
+    assert not teaser.exploit_demonstrated
+    assert teaser.title == "DNSSEC not enabled"
+
+
 # ---------------------------------------------------------------------------
 # Machine formats — no leak + parity
 # ---------------------------------------------------------------------------
