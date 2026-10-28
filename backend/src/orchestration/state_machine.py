@@ -3312,8 +3312,12 @@ async def run_scan_state_machine(
                                 poc_hash=evidence_chain._hash_content(poc),
                             )
                 elif phase == ScanPhase.REPORTING and ctx.report_out:
+                    # Scan-level "report generated" anchor in the evidence chain.
+                    # add_remediation_link takes (finding_id, recommendation) — the
+                    # previous scan_id=/description= kwargs raised TypeError every
+                    # reporting phase (caught below, so the chain silently lost this link).
                     evidence_chain.add_remediation_link(
-                        scan_id=scan_id, description="Report generated"
+                        finding_id=scan_id, recommendation="Report generated"
                     )
             except Exception as _ec_link_exc:
                 logger.warning(
