@@ -1,0 +1,78 @@
+# ARGUS WhiteRabbitNeo — CPU LoRA fine-tuning config (v2 run, 2026-10-25)
+# ============================================================================
+# Derived from sft_lora_cpu_full.yaml. Only the dataset paths and output dirs
+# differ, so the v2 regenerated dataset (73 payload families, 3719 train rows)
+# trains into a SEPARATE adapter without touching the deployed model's artifacts.
+# Launch overrides (see run_full_train2.sh): --task-filter '' --num-epochs 1
+# --no-merge  (merge is run separately AFTER swap is added, to avoid the fp32
+# 7B merge OOM that killed the in-process merge on the 2026-10-12 run).
+# ============================================================================
+
+cpu_lora_config:
+  base_model: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  tokenizer_config: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  model_type: "AutoModelForCausalLM"
+  trust_remote_code: false
+
+  device: "cpu"
+  load_in_4bit: false
+  load_in_8bit: false
+  torch_dtype: "float32"
+  attn_implementation: "eager"
+  flash_attention: false
+  sdp_attention: false
+  low_cpu_mem_usage: true
+
+  adapter: "lora"
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+  datasets:
+    - path: "training_data/final_v2/train.jsonl"
+      type: "chatml"
+      split: "train"
+  val_datasets:
+    - path: "training_data/final_v2/valid.jsonl"
+      type: "chatml"
+      split: "valid"
+  chat_template: "chatml"
+  train_on_inputs: false
+
+  task_filter: "phase_,shell_command_generation"
+
+  sequence_len: 2048
+  pad_to_sequence_len: false
+
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+  num_epochs: 3
+  learning_rate: 2.0e-4
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  optimizer: "adamw_torch"
+  gradient_checkpointing: true
+  gradient_checkpointing_kwargs:
+    use_reentrant: false
+  dataloader_num_workers: 2
+
+  logging_steps: 10
+  eval_steps: 50
+  save_steps: 50
+  save_total_limit: 2
+  output_dir: "training_data/output/wrb7b_full2"
+
+  merge_adapter: true
+  merged_output_dir: "training_data/output/wrb7b_full2_merged"
+  gguf_quantization: "Q4_K_M"
