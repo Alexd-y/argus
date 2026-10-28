@@ -127,6 +127,14 @@ def _project_midgard(
     ctx = sanitize_context or SanitizeContext(target=data.target or "")
     top = _top_n_findings(list(data.findings), MIDGARD_TOP_FINDINGS)
     sanitised = [_sanitise_finding(f, sanitize_ctx=ctx) for f in top]
+    # Exploitation outcome (exploit_demonstrated/exploit_summary) is PAID-tier
+    # content, like the PoC — strip it from the free Midgard projection so neither
+    # the tier renderers nor the canonical snapshot can surface proven-exploit
+    # detail for a free report.
+    sanitised = [
+        f.model_copy(update={"exploit_demonstrated": False, "exploit_summary": None})
+        for f in sanitised
+    ]
     return replace(
         data,
         findings=sanitised,

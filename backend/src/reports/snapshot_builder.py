@@ -325,8 +325,11 @@ def _map_finding(
     payload_attempted = _sanitize_payload(_fget("payload_attempted"), target)
     payload_successful = _sanitize_payload(_fget("payload_successful"), target)
     # C2 — exploitation outcome carried from the EXPLOITATION phase onto the finding.
+    # exploit_summary is WRB-generated from sandbox stdout/stderr, so it may echo the
+    # real target or a payload — redact it through the same sanitiser as the payload
+    # fields (strips secrets, destructive flags and the real target).
     exploit_demonstrated = bool(_fget("exploit_demonstrated") or False)
-    exploit_summary = _str_or_none(_fget("exploit_summary"))
+    exploit_summary = _sanitize_payload(_fget("exploit_summary"), target)
     return ReportFinding(
         finding_id=finding_id,
         observation_id=observation_id,
