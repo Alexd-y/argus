@@ -25,6 +25,10 @@ payloads:
     template: "ARGUS_RESOURCE_CONSUMPTION_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker; no volumetric intent.
+  - id: modest_offset
+    template: "argus_rc_safe_offset=5"
+    confidence: suspected
+    notes: "Small, bounded pagination offset; read-only negative-control probe verifying offset handling and that no unbounded deep-skip is accepted — non-destructive, no volumetric or exhaustion intent."
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

@@ -25,6 +25,18 @@ payloads:
     template: "argus-upload-safe-probe.txt"
     confidence: suspected
     notes: Neutral filename baseline for differential comparison.
+  - id: svg_inline_marker
+    template: "<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"><!-- ARGUS_UPLOAD_POLYGLOT_SAFE --></svg>"
+    confidence: suspected
+    notes: "Inert SVG (comment marker only, no script/onload) probing the stored-render surface; confirmed when the upload is served inline as Content-Type image/svg+xml with no Content-Disposition: attachment, the precondition for SVG stored-XSS."
+  - id: zip_slip_filename
+    template: "../../../argus-upload-safe-probe.txt"
+    confidence: suspected
+    notes: "Zip-slip / path-traversal filename marker (../ sequences, inert .txt body) for archive-extraction and filename sinks; confirmed when the stored file lands outside the intended upload directory at the traversed path."
+  - id: alt_exec_extension
+    template: "argus-upload-safe.phtml"
+    confidence: suspected
+    notes: "Alternative interpreter extension (.phtml/.pht/.php5) to bypass a blocklist that drops only .php; inert marker body, confirmed when the fetched file executes (response differs from raw source) instead of being served as text/plain."
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

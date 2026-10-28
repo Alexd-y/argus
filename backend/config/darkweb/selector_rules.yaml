@@ -1,0 +1,44 @@
+# ARGUS Dark Web Monitoring — selector rules (how findings/domains map to monitoring terms).
+# Signed (Ed25519). Declarative: finding -> selectors (requirement §8b) and domain keywords.
+schema_version: 1
+version: "1.0"
+
+# Domain-level keyword templates. {domain}, {brand}, {host} are substituted at runtime.
+domain_keywords:
+  - "{domain}"
+  - "{brand}"
+  - "{domain} breach"
+  - "{domain} leak"
+  - "{domain} combolist"
+  - "{domain} access"
+  - "@{domain}"
+
+# finding -> selectors: by OWASP/CWE-ish category, which selector kinds + keyword templates
+# to derive. {host}, {product}, {version}, {cve}, {cwe} substituted from the Finding.
+finding_to_selectors:
+  default:
+    kinds: [finding, keyword]
+    keywords: ["{host}", "{product} {version}"]
+  sql_injection:
+    kinds: [finding, keyword]
+    keywords: ["{host} database dump", "{host} sql dump", "{product} {version} exploit"]
+  broken_authentication:
+    kinds: [finding, email, keyword]
+    keywords: ["{host} credentials", "{host} combolist", "{host} login"]
+  sensitive_data_exposure:
+    kinds: [finding, keyword]
+    keywords: ["{host} leak", "{host} data dump"]
+  known_cve:
+    kinds: [finding, infra]
+    keywords: ["{cve}", "{product} {version} {cve}"]
+    feeds: [cisa_kev, ransomware_live, abuse_ch]
+  vulnerable_component:
+    kinds: [finding, infra]
+    keywords: ["{product} {version} exploit", "{cve}"]
+    feeds: [cisa_kev, abuse_ch]
+
+# Caps to keep sweeps bounded and paced.
+limits:
+  max_selectors_per_scan: 256
+  max_emails_per_domain: 128
+  max_keywords_per_finding: 6

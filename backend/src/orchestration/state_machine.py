@@ -1763,6 +1763,20 @@ async def _dispatch_phase_recon(
         source_analysis=ctx.source_out,
     )
     ctx.recon_out = recon_out
+    # T1 — Dark Web Monitoring sweep over the domain + its emails (async, gated,
+    # best-effort; never blocks or breaks the RECON phase).
+    try:
+        from src.intel.dark_web.triggers import trigger_recon_sweep
+
+        trigger_recon_sweep(
+            scan_id=scan_id,
+            tenant_id=tenant_id,
+            target=target,
+            options=options,
+            recon_out=recon_out,
+        )
+    except Exception:  # noqa: BLE001 - defence in depth; trigger is already fail-safe
+        logger.debug("darkweb_t1_dispatch_noop", extra={"scan_id": scan_id})
     output_data = recon_out.model_dump()
     return output_data
 
@@ -1841,6 +1855,21 @@ async def _dispatch_phase_vuln_analysis(
         attack_surface=ctx.recon_out.attack_surface if ctx.recon_out else None,
     )
     ctx.vuln_out = vuln_out
+    # T2 — per-finding Dark Web Monitoring correlation (async, gated, best-effort).
+    # It only links observations into Finding.provenance; it never changes a
+    # finding's evidence_tier / confidence / verdict.
+    try:
+        from src.intel.dark_web.triggers import trigger_finding_correlation
+
+        trigger_finding_correlation(
+            scan_id=scan_id,
+            tenant_id=tenant_id,
+            target=target,
+            options=options,
+            vuln_out=vuln_out,
+        )
+    except Exception:  # noqa: BLE001 - defence in depth; trigger is already fail-safe
+        logger.debug("darkweb_t2_dispatch_noop", extra={"scan_id": scan_id})
     output_data = vuln_out.model_dump()
     return output_data
 
@@ -2177,6 +2206,64 @@ async def _dispatch_phase_exploitation(
         message=f"Completed {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
         data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
     )
+    # Block 1.6 — carry exploitation results back onto the vuln-analysis findings
+    # so the PoC / argv / tool-output and the exploit_demonstrated flag persist on
+    # the Finding row (state_machine persist reads ctx.vuln_out.findings) and reach
+    # every report tier. We set only FACTUAL fields here — that an exploit tool ran
+    # and reported success, plus its reproducible evidence. We deliberately do NOT
+    # raise evidence_tier from a "verified" status: the tier is the arbiter's
+    # artifact-driven verdict (see persist :1000-1002), and promoting it on the
+    # model/tool's self-report is exactly the over-claim wave 1 removed.
+    try:
+        _vuln_findings = (getattr(ctx.vuln_out, "findings", None) or []) if ctx.vuln_out else []
+        _find_by_id: dict[str, dict[str, Any]] = {}
+        for _vf in _vuln_findings:
+            if not isinstance(_vf, dict):
+                continue
+            _vfid = str(_vf.get("finding_id") or _vf.get("id") or "")
+            if _vfid:
+                _find_by_id[_vfid] = _vf
+        _merged_n = 0
+        for _exp in exploit_out.exploits or []:
+            if not isinstance(_exp, dict):
+                continue
+            _f = _find_by_id.get(str(_exp.get("finding_id") or ""))
+            if _f is None:
+                continue
+            _f["exploit_demonstrated"] = True
+            if not _f.get("exploit_summary"):
+                _f["exploit_summary"] = str(_exp.get("title") or _exp.get("description") or "")[
+                    :2000
+                ]
+            _poc = _f.get("proof_of_concept")
+            if not isinstance(_poc, dict):
+                _poc = {}
+            if not _poc.get("tool"):
+                _poc["tool"] = _exp.get("tool") or _exp.get("technique")
+            if _exp.get("payload_used") and not _poc.get("payload"):
+                _poc["payload"] = _exp.get("payload_used")
+            _replay = _exp.get("poc_curl") or _exp.get("exploit_payload")
+            if _replay and not _poc.get("replay_command"):
+                _poc["replay_command"] = _replay if isinstance(_replay, list) else [str(_replay)]
+            if _exp.get("stdout_preview") and not _poc.get("stdout"):
+                _poc["stdout"] = str(_exp.get("stdout_preview"))[:2000]
+            _f["proof_of_concept"] = _poc
+            if _exp.get("payload_attempted") and not _f.get("payload_attempted"):
+                _f["payload_attempted"] = _exp.get("payload_attempted")
+            if _exp.get("payload_successful") and not _f.get("payload_successful"):
+                _f["payload_successful"] = _exp.get("payload_successful")
+            _merged_n += 1
+        if _merged_n:
+            logger.info(
+                "exploit_results_merged_onto_findings",
+                extra={"scan_id": scan_id, "merged": _merged_n},
+            )
+    except Exception as _join_exc:  # never fail the phase on a best-effort merge
+        logger.warning(
+            "exploit_merge_onto_findings_failed",
+            extra={"scan_id": scan_id, "error": str(_join_exc)},
+        )
+
     ctx.exploit_out = exploit_out
     output_data = exploit_out.model_dump()
     return output_data

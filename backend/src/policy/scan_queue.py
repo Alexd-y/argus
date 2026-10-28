@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import String, cast, func, select, update
@@ -40,6 +41,11 @@ _RUNNING_STATUSES: frozenset[str] = frozenset({"running", "awaiting_approval"})
 _QUEUED_STATUS: str = "queued"
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
 _DEFAULT_MAX_CONCURRENT: int = 3
+#: Re-drive a ``running`` scan whose heartbeat is older than this (seconds).
+#: Generous (6x the 30s heartbeat) to tolerate a live-but-busy worker that
+#: briefly misses a heartbeat write, so recovery never races a healthy scan.
+_STUCK_HEARTBEAT_SECONDS: int = 180
+_STUCK_RECOVER_BATCH: int = 20
 
 
 def _max_concurrent() -> int:
@@ -164,6 +170,83 @@ async def poll_queued_scans() -> list[str]:
             )
 
     return dispatched
+
+
+async def recover_stuck_scans() -> list[str]:
+    """Beat task: re-drive scans stuck in ``running`` with a stale heartbeat.
+
+    After a hard worker crash (SIGKILL) the scan's Celery task is gone and no
+    terminal notification fires, so the scan row sits ``running`` but frozen
+    (``last_heartbeat`` stops advancing). This sweeper finds such scans and
+    re-dispatches the scan-phase task; on re-entry the state machine's resume
+    detector skips already-completed phases idempotently (``phase_resume``), so
+    no duplicate ``phase_outputs`` are written.
+
+    Safety:
+    * ``awaiting_approval`` is intentionally paused (no heartbeat) and is
+      EXCLUDED — only ``status='running'`` is swept.
+    * A CAS claim (``UPDATE … SET last_heartbeat=now() WHERE status='running'
+      AND last_heartbeat < threshold``) guards against two beat ticks — or a
+      live-but-busy worker — double-dispatching; only a winning claim
+      (rowcount>0) is re-dispatched, and it resets the staleness window.
+    """
+    recovered: list[str] = []
+    threshold = datetime.now(UTC) - timedelta(seconds=_STUCK_HEARTBEAT_SECONDS)
+
+    engine, session_factory = create_task_engine_and_session()
+    try:
+        async with session_factory() as session:
+            stmt = (
+                select(Scan.id, Scan.tenant_id, Scan.target_url, Scan.options)
+                .where(
+                    Scan.status == "running",
+                    Scan.last_heartbeat.is_not(None),
+                    Scan.last_heartbeat < threshold,
+                )
+                .order_by(Scan.last_heartbeat.asc())
+                .limit(_STUCK_RECOVER_BATCH)
+            )
+            rows = (await session.execute(stmt)).all()
+            for sid, tid, target_url, options in rows:
+                sid_s, tid_s = str(sid), str(tid)
+                claim = await session.execute(
+                    update(Scan)
+                    .where(
+                        cast(Scan.id, String) == sid_s,
+                        Scan.status == "running",
+                        Scan.last_heartbeat < threshold,
+                    )
+                    .values(last_heartbeat=func.now())
+                )
+                await session.commit()
+                if not (claim.rowcount and claim.rowcount > 0):
+                    continue
+                try:
+                    _dispatch_scan_phase(
+                        scan_id=sid_s,
+                        tenant_id=tid_s,
+                        target_url=str(target_url or ""),
+                        options=dict(options or {}),
+                    )
+                    recovered.append(sid_s)
+                    logger.warning(
+                        "scan_queue.recovered_stuck_scan",
+                        extra={
+                            "event": "argus.scan_queue.recovered_stuck_scan",
+                            "scan_id": sid_s,
+                            "tenant_id_hash": _safe_hash(tid_s),
+                        },
+                    )
+                except Exception:
+                    logger.warning(
+                        "scan_queue.recover_dispatch_failed",
+                        extra={"scan_id": sid_s},
+                        exc_info=True,
+                    )
+    finally:
+        await engine.dispose()
+
+    return recovered
 
 
 # ---------------------------------------------------------------------------

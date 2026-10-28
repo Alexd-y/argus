@@ -59,10 +59,38 @@ CATEGORY_SKILL_MAP: dict[str, list[str]] = {
     "info_disclosure": ["information_disclosure"],
     "subdomain_takeover": ["subdomain_takeover"],
     "mass_assignment": ["mass_assignment"],
+    # BugHunter wave — new vulnerability classes. Each key is kept consistent
+    # with its payload family_id, skill-file name, and _VULN_TOOL_MAP key
+    # (exploitation_executor) so the class flows recon -> analysis -> exploit.
+    "account_takeover": ["account_takeover"],
+    "clickjacking": ["clickjacking"],
+    "host_header_injection": ["host_header_injection"],
+    "llm_prompt_injection": ["llm_prompt_injection"],
+    "grpc_misconfig": ["grpc_misconfig"],
+    "websocket_hijacking": ["websocket_hijacking"],
+    "http_smuggling": ["http_smuggling"],
+    "cache_poisoning": ["cache_poisoning"],
+    "web_cache_deception": ["web_cache_deception"],
+    "cors": ["cors"],
+    "prototype_pollution": ["prototype_pollution"],
+    "graphql": ["graphql"],
 }
 
 _QUICK_CATEGORIES = {"sqli", "xss", "auth", "idor"}
-_STANDARD_CATEGORIES = _QUICK_CATEGORIES | {"ssrf", "rce", "race", "csrf"}
+# High-frequency, low-cost web classes join STANDARD; niche/expensive classes
+# (grpc_misconfig, llm_prompt_injection, websocket_hijacking, http_smuggling,
+# cache_poisoning, web_cache_deception, prototype_pollution, account_takeover,
+# clickjacking, graphql) are intentionally omitted here -> they run only in a
+# full (deep) scan. A category absent from both sets = full-scan only.
+_STANDARD_CATEGORIES = _QUICK_CATEGORIES | {
+    "ssrf",
+    "rce",
+    "race",
+    "csrf",
+    "host_header_injection",
+    "cors",
+    "open_redirect",
+}
 
 # OWASP Top 10:2025 id → ARGUS VA category keys (for KB tool hints).
 OWASP_TO_ARGUS_CATEGORIES: dict[str, list[str]] = {

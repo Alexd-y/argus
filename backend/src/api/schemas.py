@@ -66,6 +66,24 @@ class ScanOptionsKal(BaseModel):
     va_network_capture_opt_in: bool = False
 
 
+class ScanOptionsDarkWeb(BaseModel):
+    """Dark Web Monitoring opt-in (per-scan gate — the frontend checkbox).
+
+    DWM output flows into the Asgard and Valhalla report tiers (never the free
+    Midgard tier). Requires BOTH the global ``dark_web_monitoring_enabled`` flag
+    AND a per-tenant entitlement in addition to ``enabled`` here.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    include_domain_emails: bool = True
+    include_findings: bool = True
+    networks: list[str] = Field(
+        default_factory=lambda: ["breach_db", "clearnet_index", "paste", "feed", "repo"]
+    )
+
+
 class ScanOptions(BaseModel):
     """Full scan options per api-contracts."""
 
@@ -81,6 +99,7 @@ class ScanOptions(BaseModel):
     scope: ScanOptionsScope = Field(default_factory=ScanOptionsScope)
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
     kal: ScanOptionsKal = Field(default_factory=ScanOptionsKal)
+    dark_web: ScanOptionsDarkWeb = Field(default_factory=ScanOptionsDarkWeb)
     active_injection_mode: str | None = None
     intentional_vulnerable_lab: bool = False
     lab_profile: str | None = None
@@ -1687,6 +1706,18 @@ class IntelligenceShodanSummary(BaseModel):
     open_ports: list[int] = Field(default_factory=list)
     vulns: list[str] = Field(default_factory=list)
     services: list[IntelligenceShodanServiceItem] = Field(default_factory=list)
+
+
+class DarkWebPreviewRequest(BaseModel):
+    """Preview whether a Dark Web Monitoring sweep would run for given scan options.
+
+    Returns only the gate decision (allowed + status) — no observation data — so it
+    is safe to expose without leaking collected intel.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    options: ScanOptions = Field(default_factory=ScanOptions)
 
 
 # --- Webhook DLQ admin (T39, ARG-053) ---

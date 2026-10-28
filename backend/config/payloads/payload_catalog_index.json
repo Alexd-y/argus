@@ -1,6 +1,7 @@
 {
   "version": 2,
   "families": [
+    "account_takeover",
     "api_bfla",
     "api_bola",
     "api_bopla",
@@ -8,6 +9,7 @@
     "buffer_overflow",
     "business_logic_transition",
     "cache_poisoning",
+    "clickjacking",
     "client_side_path_traversal",
     "command_injection_safe",
     "cors_misconfig",
@@ -21,6 +23,8 @@
     "format_string",
     "graphql",
     "graphql_safe",
+    "grpc_misconfig",
+    "host_header_injection",
     "http_parameter_pollution",
     "http_smuggling",
     "idor",
@@ -32,6 +36,7 @@
     "ldapi",
     "ldapi_safe",
     "lfi_rfi",
+    "llm_prompt_injection",
     "mass_assignment",
     "mass_assignment_safe",
     "nosqli",
@@ -59,6 +64,7 @@
     "type_juggling",
     "unsafe_api_consumption",
     "web_cache_deception",
+    "websocket_hijacking",
     "xpath_injection",
     "xpathi_safe",
     "xs_leak",
@@ -69,12 +75,11 @@
     "xxe",
     "xxe_oast_safe"
   ],
-  "total": 67,
+  "total": 73,
   "by_risk": {
-    "critical": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0
+    "high": 13,
+    "low": 33,
+    "medium": 27
   },
   "note": "Full manifest — Phase 2 aligned with YAML tool descriptors."
 }

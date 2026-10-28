@@ -1,0 +1,63 @@
+# ARGUS Dark Web Monitoring — classifier rules (exposure_type + severity + evidence_tier).
+# Signed (Ed25519). evidence_tier is HARD-CAPPED at 2 (SUSPECTED) — DWM is OSINT,
+# never proof of exploitation. Any rule emitting tier > 2 is clamped by classifier.py.
+schema_version: 1
+version: "1.0"
+
+defaults:
+  exposure_type: mention
+  severity: info
+  evidence_tier: 1
+  confidence: advisory
+
+# First matching rule wins. `match` is a list of case-insensitive substrings; a rule
+# matches when ANY substring appears in the record (source hint + title + excerpt).
+rules:
+  - id: stealer_log
+    match: ["stealer", "redline", "raccoon", "lumma", "vidar", "cookies.txt", "passwords.txt"]
+    exposure_type: stealer_log
+    severity: critical
+    evidence_tier: 2
+    confidence: likely
+  - id: credential_pair
+    match: ["user:pass", "username:password", "combolist", "combo list", "email:pass", "cracked"]
+    exposure_type: credential
+    severity: high
+    evidence_tier: 2
+    confidence: likely
+  - id: access_sale
+    match: ["selling access", "rdp access", "vpn access", "initial access", "shell access", "for sale"]
+    exposure_type: access_sale
+    severity: critical
+    evidence_tier: 2
+    confidence: possible
+  - id: secret_key
+    match: ["api_key", "aws_secret", "private key", "-----begin", "bearer ", "token="]
+    exposure_type: secret_key
+    severity: high
+    evidence_tier: 2
+    confidence: likely
+  - id: document_leak
+    match: ["confidential", "internal only", "leaked document", "data dump", "database dump"]
+    exposure_type: document
+    severity: high
+    evidence_tier: 2
+    confidence: possible
+  - id: pii
+    match: ["ssn", "passport", "credit card", "cvv", "date of birth", "pii"]
+    exposure_type: pii
+    severity: high
+    evidence_tier: 2
+    confidence: possible
+  - id: ransomware_victim
+    match: ["ransomware", "ransom", "lockbit", "alphv", "blackcat", "clop", "victim"]
+    exposure_type: access_sale
+    severity: critical
+    evidence_tier: 2
+    confidence: possible
+  - id: brand_mention
+    match: ["mention", "reference", "discussed"]
+    exposure_type: mention
+    severity: low
+    evidence_tier: 1
+    confidence: advisory

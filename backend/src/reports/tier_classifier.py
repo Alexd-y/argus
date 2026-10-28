@@ -139,6 +139,8 @@ def _project_midgard(
         remediation=[],
         raw_artifacts=[],
         hibp_pwned_password_summary=None,
+        # Dark Web Monitoring is a PAID capability — stripped from the free tier.
+        dark_web_monitoring=None,
     )
 
 
@@ -189,6 +191,7 @@ def _project_asgard(
         # keeps the HIBP *summary* (counts + status only; the renderer never
         # writes plaintext secrets — see ``asgard_paid.build_dark_web_summary``).
         hibp_pwned_password_summary=data.hibp_pwned_password_summary,
+        dark_web_monitoring=data.dark_web_monitoring,
     )
 
 
@@ -261,6 +264,7 @@ def _project_valhalla(
         remediation=data.remediation if isinstance(data.remediation, list) else [data.remediation],
         raw_artifacts=list(data.raw_artifacts),
         hibp_pwned_password_summary=data.hibp_pwned_password_summary,
+        dark_web_monitoring=data.dark_web_monitoring,
     )
 
 

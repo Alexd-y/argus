@@ -35,6 +35,18 @@ payloads:
     template: '{"variables":{"__proto__":{"argusCanary":"{canary}"}}}'
     confidence: suspected
     notes: GraphQL-variables sink; tests Apollo Server's deep-merge logic.
+  - id: constructor_bracket_qs
+    template: "constructor[prototype][argusCanary]={canary}"
+    confidence: likely
+    notes: "Query/body bracket parser reaches constructor.prototype, bypassing filters that only blocklist the literal __proto__ key, confirmed by reading argusCanary back from a benign endpoint after the merge."
+  - id: nested_constructor_proto
+    template: "{\"profile\":{\"constructor\":{\"prototype\":{\"argusCanary\":\"{canary}\"}}}}"
+    confidence: suspected
+    notes: "Deep-nested constructor.prototype chain for recursive deep-merge sinks that only descend into nested objects, confirmed when the canary appears on an unrelated object read back from the app."
+  - id: constructor_dot_qs
+    template: "constructor.prototype.argusCanary={canary}"
+    confidence: suspected
+    notes: "Dot-notation constructor.prototype in query/body parsers (express-validator/qs quirk) as an alternative to the bracket form, confirmed by reading argusCanary back from a benign endpoint."
 mutations:
   - name: case_flip
     description: Property names are case-sensitive in JS; flips produce known errors.

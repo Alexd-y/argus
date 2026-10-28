@@ -21,6 +21,18 @@ payloads:
     template: "ARGUS_DNS_REBIND_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without host semantics.
+  - id: multi_a_record
+    template: "argus-rebind-multi-a.invalid"
+    confidence: suspected
+    notes: "Inert marker host denoting a multi-answer A-record set (routable + loopback) for rebind drills; confirmed in a drill when origin validation pins one A record while the fetcher later connects to the other."
+  - id: zero_ip_marker
+    template: "0.0.0.0"
+    confidence: suspected
+    notes: "0.0.0.0 all-interfaces landing IP, a classic rebind second-leg target; confirmed when an origin-validation drill treats it as external yet the fetcher binds it to a local service."
+  - id: toctou_rebind_marker
+    template: "argus-rebind-toctou.invalid"
+    confidence: suspected
+    notes: "Inert marker host representing a 0-TTL record that flips between the validation and the fetch lookups (TOCTOU); confirmed in a drill when the fetch re-resolves DNS instead of pinning the validated IP."
 mutations:
   - name: case_flip
     description: Case-flip the host label to exercise case-insensitive rules.

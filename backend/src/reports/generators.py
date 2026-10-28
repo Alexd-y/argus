@@ -210,6 +210,9 @@ class ReportData:
     remediation: str | list[str] = field(default_factory=list)
     raw_artifacts: list[dict[str, Any]] = field(default_factory=list)
     hibp_pwned_password_summary: dict[str, Any] | None = None
+    #: Dark Web Monitoring summary (DarkWebReport.to_summary_dict()). None in the
+    #: free Midgard tier; kept in Asgard (exec-level counts) and Valhalla (full).
+    dark_web_monitoring: dict[str, Any] | None = None
 
 
 def summary_dict_to_report_summary(summary: dict[str, Any] | None) -> ReportSummary:
@@ -474,6 +477,7 @@ def build_report_data_from_scan_report(
         remediation=rem,
         raw_artifacts=raw_artifacts_dicts,
         hibp_pwned_password_summary=data.hibp_pwned_password_summary,
+        dark_web_monitoring=getattr(data, "dark_web_monitoring", None),
     )
 
 
@@ -2174,7 +2178,7 @@ def generate_json(
             )
 
     output = {
-        "format": "jsoc",
+        "format": "json",
         "format_version": "1.0",
         "brand": {
             "name": brand.name,

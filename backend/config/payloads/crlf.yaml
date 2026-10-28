@@ -34,6 +34,18 @@ payloads:
     template: "%c0%8aX-Argus-Canary:%20{canary}"
     confidence: suspected
     notes: Overlong-UTF8 CRLF; legacy parser bypass research.
+  - id: response_split_body
+    template: "%0d%0a%0d%0aARGUS-SPLIT-MARKER-{canary}"
+    confidence: likely
+    notes: "Response splitting: a double CRLF closes the header block and injects a marker into the response body, confirmed when the canary marker renders below the blank line as body rather than as a header."
+  - id: early_hints_preload
+    template: "%0d%0aLink:%20<https://{oast_host}/{canary}>;rel=preload;as=script"
+    confidence: likely
+    notes: "Early-Hints injection: a crafted Link rel=preload header is injected via CRLF, confirmed when a browser or preload-fetcher issues an OAST request for the canary resource."
+  - id: obs_fold_inject
+    template: "%0d%0a%09X-Argus-Canary:%20{canary}"
+    confidence: suspected
+    notes: "Obs-fold injection: a CRLF followed by a HTAB is read as a folded continuation by lenient parsers but as a new header by strict ones, confirmed when the canary surfaces as its own response header."
 mutations:
   - name: case_flip
     description: HTTP headers are case-insensitive; flips defeat substring filters.

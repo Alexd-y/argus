@@ -20,6 +20,10 @@ payloads:
     template: "https://argus-oast-safe.invalid/ssrf-curriculum-b"
     confidence: suspected
     notes: Second synthetic non-routable URL (invalid TLD); lab OAST only.
+  - id: synthetic_metadata_marker
+    template: "http://metadata.argus-oast-safe.invalid/latest/meta-data/"
+    confidence: suspected
+    notes: "Read-only inert IMDS-path probe on a non-routable .invalid host; exercises metadata-path detection rules without any live callback, egress, or data access."
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

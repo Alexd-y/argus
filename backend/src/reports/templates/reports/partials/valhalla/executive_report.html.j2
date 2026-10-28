@@ -346,6 +346,36 @@
     <p class="empty">No findings ranked by business impact.</p>
     {% endif %}
 
+    {# Dark Web Monitoring — leaked-credential / mention exposure (paid tier only). #}
+    <h3>Dark Web Exposure</h3>
+    {% set dwm = _ver.dark_web_monitoring or {} %}
+    {% set dw_rows = _ver.dark_web_exposure or [] %}
+    {% if dw_rows %}
+    <p>
+        {{ dwm.get('observation_count', dw_rows|length) }} observation(s) across
+        {{ dwm.get('selectors_count', 0) }} selector(s).
+    </p>
+    <table>
+        <thead><tr><th>Exposure</th><th>Severity</th><th>Source</th><th>Reference</th>
+            <th>Confidence</th><th>Tier</th><th>Summary</th></tr></thead>
+        <tbody>
+        {% for row in dw_rows %}
+            <tr>
+                <td>{{ row.exposure_type }}</td>
+                <td>{{ row.severity }}</td>
+                <td>{{ row.source_network }}</td>
+                <td><code>{{ row.source_ref or "—" }}</code></td>
+                <td>{{ row.confidence or "—" }}</td>
+                <td>{{ row.evidence_tier }}</td>
+                <td>{{ row.summary or "—" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No dark-web exposure collected ({{ dwm.get('status', 'not_collected') }}).</p>
+    {% endif %}
+
     {# ARG-044 — KEV-listed findings (CISA Known Exploited Vulnerabilities). #}
     <h3>KEV-Listed Findings (Actively Exploited)</h3>
     {% set kev_rows = _ver.kev_listed_findings or [] %}

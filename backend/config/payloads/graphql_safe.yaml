@@ -20,6 +20,10 @@ payloads:
     template: "argusGraphqlSafeNestedCurriculum"
     confidence: suspected
     notes: Third GraphQL name token for parser-depth drills.
+  - id: alias_name_marker
+    template: "argusGraphqlSafeAliasName"
+    confidence: suspected
+    notes: "Inert GraphQL alias-name token (non-empty after strip); read-only negative control that parses as a plain name and invokes no resolver."
 mutations:
   - name: case_flip
     description: Case-flip the GraphQL name token for case-insensitive parser drills.

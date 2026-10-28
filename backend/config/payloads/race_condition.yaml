@@ -32,6 +32,18 @@ payloads:
     template: '?code={canary}&state={canary}'
     confidence: suspected
     notes: OAuth code replay; tests authorization-server one-time enforcement.
+  - id: coupon_limit_overrun
+    template: "{\"couponCode\":\"{canary}\"}"
+    confidence: likely
+    notes: "Same coupon/promo code applied across N concurrent sends to exceed a redemption limit (Stripe/nopCommerce TOCTOU class); confirmed when more than one request succeeds and the ledger shows the discount credited more than once."
+  - id: vote_inflation
+    template: "{\"resourceId\":\"{canary}\",\"vote\":\"up\"}"
+    confidence: likely
+    notes: "N concurrent upvote/like requests for one resource to defeat one-vote-per-user enforcement (Worldcoin class); confirmed when the vote/reputation counter increments more than once from a single account."
+  - id: blank_confirm_race
+    template: "?confirmToken=&argusCanary={canary}"
+    confidence: suspected
+    notes: "Empty confirmation token raced against account/email creation (partial-construction TOCTOU; GitLab Devise CVE-2022-4037 class); confirmed when the blank-token confirm succeeds in the window before the real token is persisted."
 mutations:
   - name: case_flip
     description: Header/key names case flips test parser robustness.

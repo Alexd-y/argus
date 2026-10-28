@@ -25,6 +25,18 @@ payloads:
     template: "ARGUS_CSPT_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without path semantics.
+  - id: encoded_dotdot_segment
+    template: "%2e%2e%2fargus-cspt-canary"
+    confidence: likely
+    notes: "URL-encoded single ../ escapes one segment of a client-assembled fetch path to a benign marker, confirmed when the outbound request in the browser network log resolves to the marker path instead of the intended API route."
+  - id: double_encoded_traversal
+    template: "%252e%252e%252fargus-cspt-canary"
+    confidence: suspected
+    notes: "Double-URL-encoded ../ targets client path builders that decode twice before fetch, confirmed when the twice-decoded request lands on the marker segment rather than the original endpoint."
+  - id: multi_segment_climb
+    template: "..%2f..%2fargus-cspt-canary"
+    confidence: suspected
+    notes: "Segment-count variant climbing two levels with mixed literal and encoded slashes to measure how many fixed prefix segments the client holds, confirmed by the resolved fetch path reaching the marker after the prefix is consumed."
 mutations:
   - name: case_flip
     description: Case-flip the segment to exercise case-insensitive detection rules.

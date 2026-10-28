@@ -22,6 +22,11 @@ Security contract (mirrors ``docs/develop/PROMPT-midgard-free-report.md`` §6):
   fields (severity, title, CWE, CVSS, a safe observation and a deterministic
   config fix). ``proof_of_concept``, ``raw_request``, ``raw_response``,
   ``tool_command`` and ``verification_command`` are never read.
+* Leaked-credential / dark-web monitoring is a PAID (Asgard/Valhalla) capability.
+  ``hibp_pwned_password_summary`` and ``dark_web_monitoring`` are NEVER read in
+  this module — the free tier carries no breach/leak/dark-web data. (Defence in
+  depth: ``tier_classifier._project_midgard`` also forces both fields to ``None``
+  before this module runs.)
 * ``on_absent``: when a reconnaissance source did not run we surface the
   :data:`INTEL_NOT_COLLECTED` sentinel — we never invent a value.
 

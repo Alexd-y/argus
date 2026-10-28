@@ -44,6 +44,7 @@ ASGARD_SECTION_ORDER: tuple[str, ...] = (
     "title_meta",
     "executive_summary_counts",
     "owasp_compliance",
+    "dark_web_monitoring",
     "findings",
     "remediation",
     "reproducer",
@@ -60,6 +61,7 @@ VALHALLA_EXECUTIVE_SECTION_ORDER: tuple[str, ...] = (
     "risk_quantification_per_asset",
     "owasp_rollup_matrix",
     "top_findings_by_business_impact",
+    "dark_web_monitoring",
     "kev_listed_findings",
     "remediation_roadmap",
     "evidence_refs",
@@ -91,6 +93,7 @@ LEGACY_VALHALLA_SECTION_ORDER: tuple[str, ...] = (
     "remediation_stages_text",
     "zero_day_text",
     "conclusion_text",
+    "dark_web_monitoring",
     "hibp_pwned_password_summary",
     "appendices",
 )

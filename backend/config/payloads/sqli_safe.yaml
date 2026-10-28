@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_SQLI_SAFE_CANARY_C"
     confidence: suspected
     notes: Third sentinel for reflection triangulation.
+  - id: orderby_count_probe
+    template: "{param}' ORDER BY 1-- -"
+    confidence: suspected
+    notes: Read-only column-count enumeration probe; no boolean/time payload, confirms the injection point without altering data.
 mutations:
   - name: case_flip
     description: Case-flip the sentinel to exercise case-insensitive detection rules.

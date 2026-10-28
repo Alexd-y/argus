@@ -20,6 +20,10 @@ payloads:
     template: "/argus-open-redirect-safe/next?to=/local-only"
     confidence: suspected
     notes: Same-origin relative path with a local-only query parameter.
+  - id: relative_dot_segment
+    template: "./argus-open-redirect-safe/same-origin-marker"
+    confidence: suspected
+    notes: "Dot-segment relative reference that resolves against the current path and stays same-origin with no scheme or protocol-relative prefix; a correct detector is confirmed benign by producing no off-site redirect."
 mutations:
   - name: case_flip
     description: Case-flip the path marker to exercise case-insensitive detection rules.

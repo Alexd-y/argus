@@ -484,6 +484,25 @@ class Settings(BaseSettings):
     greynoise_api_key: str | None = None
     otx_api_key: str | None = None
 
+    # Dark Web Monitoring (DWM) provider keys — all optional, off-by-default.
+    # A source whose key is unset is skipped (gated via DataSourceClient.is_available).
+    ahmia_base_url: str | None = None
+    dehashed_username: str | None = None
+    dehashed_api_key: str | None = None
+    leakcheck_api_key: str | None = None
+    psbdmp_api_key: str | None = None
+    telegram_api_id: str | None = None
+    telegram_api_hash: str | None = None
+    # Hidden-network crawling (W-8) runs ONLY in the isolated argus-darkweb-collector
+    # sandbox (egress via Tor SOCKS / I2P SAM). Off unless the proxies are configured.
+    darkweb_tor_socks: str | None = None
+    darkweb_i2p_sam: str | None = None
+    # Entitlement allowlist (comma-separated tenant ids, or "*" for all). Operators use
+    # this to grant DWM in dev / to tenants without a paid-plan Subscription row. The
+    # entitlement gate is otherwise resolved server-side from the paid Subscription /
+    # ScanQuota tier and FAILS CLOSED (deny) when a tenant's entitlement is unknown.
+    dark_web_entitled_tenants: str | None = None
+
     # MinIO/S3 (Phase 7 — reports, screenshots). Env: MINIO_ENDPOINT, MINIO_ACCESS_KEY, etc.
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "argus"
@@ -491,6 +510,8 @@ class Settings(BaseSettings):
     minio_bucket: str = "argus"
     # Dedicated bucket for generated report files (presigned/download); stage artifacts stay in minio_bucket / stage buckets.
     minio_reports_bucket: str = "argus-reports"
+    # Dedicated bucket for Dark Web Monitoring raw records (encrypted; PII-minimised, pre-signed TTL access).
+    minio_darkweb_bucket: str = "argus-darkweb"
     minio_secure: bool = False
     # External URL for presigned links in reports (replaces internal Docker hostname).
     # When unset, presigned URLs are returned as-is (dev mode).
@@ -1550,6 +1571,14 @@ class Settings(BaseSettings):
     shodan_enrichment_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices("SHODAN_ENRICHMENT_ENABLED", "shodan_enrichment_enabled"),
+    )
+    # Dark Web Monitoring global kill-switch. OFF by default — one of three gates
+    # (also: per-scan opt-in + per-tenant entitlement). No DWM egress without all three.
+    dark_web_monitoring_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_DARK_WEB_MONITORING_ENABLED", "dark_web_monitoring_enabled"
+        ),
     )
     perplexity_intel_enabled: bool = Field(
         default=True,

@@ -34,6 +34,18 @@ payloads:
     template: "data:text/html,<script>alert({canary})</script>"
     confidence: suspected
     notes: 'data URI scheme redirect; rare but high-impact when accepted.'
+  - id: triple_slash
+    template: "///{oast_host}/{canary}"
+    confidence: likely
+    notes: "Triple-slash authority that browsers normalize to a protocol-relative //host, bypassing filters that only block http:// or a single //; confirmed by an out-of-band request reaching {oast_host}/{canary} after the redirect is followed."
+  - id: backslash_userinfo
+    template: "https://allowed.example.com\\@{oast_host}/{canary}"
+    confidence: suspected
+    notes: "Host-confusion where a backslash before @ makes WHATWG URL parsers treat allowed.example.com as path and {oast_host} as the real authority, defeating prefix allowlists; confirmed by an OAST hit on {oast_host} once the browser follows the redirect."
+  - id: fragment_suffix
+    template: "https://{oast_host}/{canary}#.allowed.example.com"
+    confidence: suspected
+    notes: "Fragment appended so a naive endsWith/contains allowlist on '.allowed.example.com' passes while the browser navigates to {oast_host}; confirmed by an OAST interaction on {oast_host} since the fragment is stripped from the outbound request."
 mutations:
   - name: case_flip
     description: Scheme case (HTTPS vs https) defeats substring filters.

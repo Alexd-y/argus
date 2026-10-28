@@ -43,3 +43,34 @@ def scan_queue_poll_task(_self) -> dict:
     except Exception:
         logger.exception("scan_queue.poll.failed")
         return {"dispatched": [], "count": 0, "error": True}
+
+
+@app.task(bind=True, name="argus.scan_queue.recover_stuck")
+def scan_queue_recover_stuck_task(_self) -> dict:
+    """Beat-driven recovery: re-drive scans stuck ``running`` with a stale heartbeat.
+
+    Fast path for a hard worker crash (SIGKILL) that leaves a scan ``running``
+    but frozen. Re-entry resumes from the interrupted phase (phase_resume skips
+    completed phases idempotently).
+    """
+
+    async def _run() -> list[str]:
+        from src.policy.scan_queue import recover_stuck_scans
+
+        return await recover_stuck_scans()
+
+    try:
+        recovered = asyncio.run(_run())
+        if recovered:
+            logger.warning(
+                "scan_queue.recover_stuck.recovered",
+                extra={
+                    "event": "argus.scan_queue.recover_stuck.recovered",
+                    "count": len(recovered),
+                    "scan_ids": recovered,
+                },
+            )
+        return {"recovered": recovered, "count": len(recovered)}
+    except Exception:
+        logger.exception("scan_queue.recover_stuck.failed")
+        return {"recovered": [], "count": 0, "error": True}

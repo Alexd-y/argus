@@ -66,6 +66,9 @@ app = Celery(
         # cairn_enabled=False by default). Scheduler tasks on argus.cairn, worker
         # tasks on argus.cairn.workers so long agent runs cannot starve the tick.
         "src.cairn.tasks",
+        # Dark Web Monitoring sweeps (flag-gated, dark_web_monitoring_enabled=False
+        # by default). Scan-level sweep (T1) + per-finding correlation (T2).
+        "src.celery.tasks.darkweb_tasks",
     ],
 )
 
@@ -91,6 +94,14 @@ app.conf.update(
     broker_connection_retry_on_startup=True,
     broker_transport_options={
         "socket_keepalive": True,
+        # visibility_timeout MUST exceed task_time_limit (86400s). On the Redis
+        # broker, acks_late means an un-acked message is redelivered after this
+        # timeout; with the old 3600s default a scan running >1h had its message
+        # redelivered to a SECOND worker (latent double-execution). Raising it
+        # above the max runtime removes that, and makes acks_late a reliable (if
+        # slow) crash backstop — the fast recovery path is the
+        # argus.scan_queue.recover_stuck beat sweeper.
+        "visibility_timeout": 90000,
         "retry_policy": {
             "max_retries": 5,
             "interval_start": 0.5,
@@ -99,6 +110,7 @@ app.conf.update(
         },
     },
     result_backend_transport_options={
+        "visibility_timeout": 90000,
         "retry_policy": {
             "max_retries": 5,
             "interval_start": 0.5,
@@ -144,6 +156,9 @@ app.conf.update(
         "argus.scheduling.run_scheduled_scan": {"queue": "argus.scans"},
         # Scan queue poller — safety-net for queued scans.
         "argus.scan_queue.poll": {"queue": "argus.scans"},
+        # Stuck-scan recovery — re-drives running scans with a stale heartbeat
+        # (fast recovery after a hard worker crash). Resume skips done phases.
+        "argus.scan_queue.recover_stuck": {"queue": "argus.scans"},
         # WB-P4b — Intruder high-volume attack runner on an isolated queue so a
         # large attack cannot starve scan / report / tool queues.
         "argus.wb.intruder.run": {"queue": "argus.intruder.highvol"},
@@ -154,6 +169,9 @@ app.conf.update(
         "argus.cairn.bootstrap": {"queue": "argus.cairn.workers"},
         "argus.cairn.reason": {"queue": "argus.cairn.workers"},
         "argus.cairn.explore": {"queue": "argus.cairn.workers"},
+        # Dark Web Monitoring sweeps on a dedicated egress-limited queue.
+        "argus.darkweb.sweep": {"queue": "argus.darkweb"},
+        "argus.darkweb.correlate": {"queue": "argus.darkweb"},
     },
     task_default_queue="argus.default",
 )

@@ -118,6 +118,7 @@ services:
         mc mb --ignore-existing argus/stage3-artifacts;
         mc mb --ignore-existing argus/stage4-artifacts;
         mc mb --ignore-existing argus/argus-recon;
+        mc mb --ignore-existing argus/$${MINIO_DARKWEB_BUCKET:-argus-darkweb};
         echo 'MinIO buckets ready';
       "
     networks:
@@ -343,7 +344,7 @@ services:
   worker-general:
     image: argus-backend
     restart: unless-stopped
-    command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
+    command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.darkweb,argus.default --concurrency 2
     user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
@@ -506,6 +507,70 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       # `-` (not `:-`): unset → default WRB; explicit empty WHITERABBITNEO_URL= disables
       # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # Dark Web Monitoring hidden-network collector (W-8) — OPT-IN (profile: darkweb).
+  #
+  # Network-isolated by design: the ONLY egress is Tor SOCKS / I2P SAM (operators
+  # point DARKWEB_TOR_SOCKS / DARKWEB_I2P_SAM at a Tor/I2P sidecar and attach this
+  # service to an egress-restricted network). The docker socket is intentionally
+  # NOT mounted here (see docs/docker-socket-hardening.md): this worker never runs
+  # sandbox tools, only passive hidden-network reads. It drains argus.darkweb.
+  #
+  # Start with: docker compose --profile darkweb up -d argus-darkweb-collector
+  # (when enabled, route argus.darkweb exclusively here and drop it from
+  # worker-general's -Q list so sweeps egress only through the isolated path).
+  argus-darkweb-collector:
+    image: argus-backend
+    container_name: argus-darkweb-collector
+    restart: unless-stopped
+    profiles: ["darkweb"]
+    command: celery -A src.celery_app worker -l INFO -Q argus.darkweb --concurrency 2
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_DARKWEB_BUCKET: ${MINIO_DARKWEB_BUCKET:-argus-darkweb}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      # DWM gating + providers (all off unless set). Analysis of collected data
+      # uses the LOCAL model only; no cloud keys are injected into this service.
+      ARGUS_DARK_WEB_MONITORING_ENABLED: "${ARGUS_DARK_WEB_MONITORING_ENABLED:-false}"
+      AHMIA_BASE_URL: ${AHMIA_BASE_URL:-}
+      DEHASHED_USERNAME: ${DEHASHED_USERNAME:-}
+      DEHASHED_API_KEY: ${DEHASHED_API_KEY:-}
+      LEAKCHECK_API_KEY: ${LEAKCHECK_API_KEY:-}
+      PSBDMP_API_KEY: ${PSBDMP_API_KEY:-}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      DARKWEB_TOR_SOCKS: ${DARKWEB_TOR_SOCKS:-}
+      DARKWEB_I2P_SAM: ${DARKWEB_I2P_SAM:-}
+      # No local analysis model fallback to cloud for pentest analysis (WRB-001).
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     networks:

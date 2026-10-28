@@ -26,6 +26,18 @@ payloads:
     template: "https://{target_domain}.{oast_host}"
     confidence: suspected
     notes: Suffix-matching Origin; bypasses ACAO-Credentials restrictions via suffix injection.
+  - id: origin_sibling_nodot
+    template: "https://evil-{target_domain}"
+    confidence: suspected
+    notes: "Attacker-registrable sibling domain lacking a dot separator (evil-target.com) that slips past a regex allowlist such as .*target\\.com$; confirmed when the response echoes this origin in Access-Control-Allow-Origin with Access-Control-Allow-Credentials:true and a browser credentialed read of authed data succeeds."
+  - id: origin_suffix_noanchor
+    template: "https://{canary}.{target_domain}.{oast_host}"
+    confidence: suspected
+    notes: "Attacker-hosted suffix origin that keeps a real .target.com label to satisfy a \\.target\\.com check missing its end anchor; confirmed when ACAO reflects the full attacker origin with ACAC:true and a cross-origin credentialed fetch returns a readable body."
+  - id: origin_scheme_downgrade
+    template: "http://{canary}.{target_domain}"
+    confidence: suspected
+    notes: "Cleartext http:// origin of an in-scope host; if ACAO reflects it with ACAC:true a network MITM on the plaintext host serves a page that reads the authed cross-origin body, confirmed by the reflected header plus a browser PoC fetched over http."
 mutations:
   - name: case_flip
     description: Flip case of the Origin scheme/host to probe case-sensitive allowlist matching.

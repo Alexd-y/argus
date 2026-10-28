@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_PROTO_POLLUTION_SAFE_KEY_C"
     confidence: suspected
     notes: Third benign object key for merge-surface drills.
+  - id: key_d
+    template: "ARGUS_PROTO_POLLUTION_SAFE_KEY_D"
+    confidence: suspected
+    notes: "Fourth benign object key for merge-surface drills, a read-only marker with no prototype chain, confirmed only by its literal echo in a response."
 mutations:
   - name: case_flip
     description: Case-flip the key name to exercise case-insensitive detection rules.

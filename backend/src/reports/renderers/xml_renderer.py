@@ -384,6 +384,20 @@ def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:
         _text(se, "version", s.version)
         _text(se, "technology", s.technology)
 
+    darkweb = SubElement(root, "dark_web_monitoring")
+    darkweb.set("count", str(len(doc.dark_web_monitoring)))
+    for r in doc.dark_web_monitoring:
+        de = SubElement(darkweb, "exposure")
+        de.set("exposure_type", r.exposure_type)
+        de.set("severity", r.severity)
+        de.set("source_network", r.source_network)
+        de.set("evidence_tier", str(r.evidence_tier))
+        if r.source_ref:
+            de.set("source_ref", r.source_ref)
+        if r.confidence:
+            de.set("confidence", r.confidence)
+        _text(de, "summary", r.summary)
+
     unconf = SubElement(root, "unconfirmed_observations")
     unconf.set("count", str(len(doc.unconfirmed_observations)))
     for f in doc.unconfirmed_observations:

@@ -265,7 +265,7 @@ services:
       - -l
       - INFO
       - -Q
-      - argus.scans,argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default,argus.cairn,argus.cairn.workers,argus.intruder.highvol
+      - argus.scans,argus.reports,argus.tools,argus.recon,argus.exploitation,argus.darkweb,argus.default,argus.cairn,argus.cairn.workers,argus.intruder.highvol
       - --concurrency
       - "4"
     networks:

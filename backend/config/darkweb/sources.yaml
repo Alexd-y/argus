@@ -1,0 +1,87 @@
+# ARGUS Dark Web Monitoring — source catalog
+# Signed (Ed25519). After editing, re-run:
+#   python backend/scripts/darkweb_sign.py sign \
+#     --key backend/config/payloads/_keys/dev_signing.ed25519.priv \
+#     --payloads-dir backend/config/darkweb --out backend/config/darkweb/SIGNATURES
+#
+# Every source is OFF unless its env key is configured (gated via DataSourceClient).
+# Passive, authorized-use only. Blocklists (e.g. Ahmia) are respected.
+schema_version: 1
+version: "1.0"
+
+defaults:
+  # Response-size ceiling per fetch (bytes) and pacing between requests (seconds).
+  max_response_bytes: 2097152      # 2 MiB
+  pacing_seconds: 2.0
+  rate_limit_rps: 0.5
+  request_timeout_seconds: 30
+  respect_blocklist: true
+  retries: 2
+
+sources:
+  # --- Breach / leak databases (email -> breaches/pastes) -------------------
+  - id: hibp
+    network: breach_db
+    enabled: true
+    requires_key: HIBP_API_KEY
+    client: HIBPClient
+    notes: "Have I Been Pwned v3 — breaches + pastes for an authorized email."
+  - id: dehashed
+    network: breach_db
+    enabled: true
+    requires_key: DEHASHED_API_KEY
+    client: DehashedClient
+    notes: "Commercial; skipped if unlicensed. Returns presence flags, never plaintext passwords."
+  - id: leakcheck
+    network: breach_db
+    enabled: true
+    requires_key: LEAKCHECK_API_KEY
+    client: LeakCheckClient
+    notes: "Commercial; skipped if unlicensed."
+
+  # --- Paste dumps ----------------------------------------------------------
+  - id: psbdmp
+    network: paste
+    enabled: true
+    requires_key: PSBDMP_API_KEY
+    client: PsbdmpClient
+    base_url: "https://psbdmp.ws/api/v3"
+    notes: "Paste-dump index. Largely keyless; gated on an opt-in key for rate limits."
+
+  # --- Clearnet indexers of .onion ------------------------------------------
+  - id: ahmia
+    network: clearnet_index
+    enabled: true
+    requires_key: AHMIA_BASE_URL
+    client: AhmiaClient
+    base_url: "https://ahmia.fi"
+    respect_blocklist: true
+    notes: "Clearnet index of .onion. Honour the Ahmia blocklist. No direct Tor fetch here."
+
+  # --- Public-repo leak search ---------------------------------------------
+  - id: github
+    network: repo
+    enabled: true
+    requires_key: GITHUB_TOKEN
+    client: GitHubClient
+    notes: "Search public repos for leaked secrets/mentions of the target."
+
+  # --- Threat-intel feeds (mention / access-sale / correlation) -------------
+  - id: ransomware_live
+    network: feed
+    enabled: true
+    requires_key: ""         # public feed; no key
+    base_url: "https://api.ransomware.live"
+    notes: "Ransomware-group victim listings — direct mention / access-sale signal."
+  - id: abuse_ch
+    network: feed
+    enabled: true
+    requires_key: ""         # public feed; no key
+    base_url: "https://threatfox-api.abuse.ch/api/v1"
+    notes: "ThreatFox / URLhaus IOC feeds."
+  - id: cisa_kev
+    network: feed
+    enabled: true
+    requires_key: ""         # public feed; no key
+    base_url: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    notes: "CISA KEV — correlate findings' CVEs with known-exploited catalogue."

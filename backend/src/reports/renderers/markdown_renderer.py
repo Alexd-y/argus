@@ -305,6 +305,21 @@ def _render_unconfirmed_md(lines: list[str], doc: ReportDocumentV1) -> None:
     lines.append("")
 
 
+def _render_dark_web_md(lines: list[str], doc: ReportDocumentV1) -> None:
+    if not doc.dark_web_monitoring:
+        return
+    lines.append(f"## Dark Web Exposure ({len(doc.dark_web_monitoring)})")
+    lines.append("")
+    for r in doc.dark_web_monitoring:
+        extra = [x for x in (r.source_ref, r.confidence, r.summary) if x]
+        suffix = (" — " + " · ".join(extra)) if extra else ""
+        lines.append(
+            f"- **{r.exposure_type}** `{r.severity}` / `{r.source_network}` "
+            f"(tier {r.evidence_tier}){suffix}"
+        )
+    lines.append("")
+
+
 def _render_test_executions_md(lines: list[str], doc: ReportDocumentV1) -> None:
     if not doc.test_executions:
         return
@@ -556,6 +571,7 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     for i, f in enumerate(doc.findings, 1):
         _render_finding_md(lines, f, i)
 
+    _render_dark_web_md(lines, doc)
     _render_unconfirmed_md(lines, doc)
     _render_test_executions_md(lines, doc)
     _render_attack_narrative_md(lines, doc)
@@ -573,7 +589,9 @@ def render_markdown(doc: ReportDocumentV1) -> str:
     lines.append("## Coverage")
     lines.append("")
     if doc.tested_capabilities:
-        lines.append("- tested_capabilities: " + ", ".join(f"`{c}`" for c in doc.tested_capabilities))
+        lines.append(
+            "- tested_capabilities: " + ", ".join(f"`{c}`" for c in doc.tested_capabilities)
+        )
     if doc.not_assessed_capabilities:
         lines.append(
             "- not_assessed_capabilities: "
@@ -583,9 +601,7 @@ def render_markdown(doc: ReportDocumentV1) -> str:
         lines.append("_not_assessed_")
     for c in doc.coverage:
         reason = f" (reason: `{c.reason_code}`)" if c.reason_code else ""
-        ev = (
-            " · evidence: " + ", ".join(f"`{e}`" for e in c.evidence_ids) if c.evidence_ids else ""
-        )
+        ev = " · evidence: " + ", ".join(f"`{e}`" for e in c.evidence_ids) if c.evidence_ids else ""
         lines.append(f"- `{c.capability_id}`: `{c.status}`{reason}{ev}")
     lines.append("")
 

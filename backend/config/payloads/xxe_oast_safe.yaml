@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_XXE_OAST_SAFE_DOCTYPE_MARKER"
     confidence: suspected
     notes: Inert DOCTYPE-position marker; no entity declaration.
+  - id: inert_entity_marker
+    template: "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY hello \"ARGUS_XXE_SAFE\">]><r>&hello;</r>"
+    confidence: suspected
+    notes: "Read-only internal general-entity probe expanding only to a literal marker (no SYSTEM, file, or network reference); confirms whether the parser expands entities at all before any external test."
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

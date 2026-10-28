@@ -101,6 +101,7 @@ def _cap_evidence_refs(raw: Any, row: Any) -> list[str]:
         )
     return kept
 
+
 _MAX_TEXT_BYTES = 512 * 1024
 _MAX_JSON_PARSE_PREVIEW = 2048
 
@@ -398,6 +399,10 @@ def finding_rows_from_models(rows: list[Any]) -> list[FindingRow]:
             cwe=row.cwe,
             cvss=row.cvss,
             owasp_category=getattr(row, "owasp_category", None),
+            cvss_score=getattr(row, "cvss", None),
+            cvss_vector=getattr(row, "cvss_vector", None),
+            exploit_demonstrated=bool(getattr(row, "exploit_demonstrated", False)),
+            exploit_summary=getattr(row, "exploit_summary", None),
             proof_of_concept=(
                 row.proof_of_concept
                 if isinstance(getattr(row, "proof_of_concept", None), dict)
@@ -477,6 +482,8 @@ class ScanReportData(BaseModel):
     evidence: list[EvidenceRowData] = Field(default_factory=list)
     #: HIBP Pwned Passwords aggregate (opt-in); same dict as AI payload and Valhalla appendix.
     hibp_pwned_password_summary: dict[str, Any] | None = None
+    #: Dark Web Monitoring summary (DarkWebReport.to_summary_dict()); None/absent unless DWM ran.
+    dark_web_monitoring: dict[str, Any] | None = None
     #: CONT-009 — honest coverage statuses + occurrence key references for export/AI.
     coverage_occurrence: dict[str, Any] = Field(default_factory=dict)
 
@@ -988,6 +995,10 @@ class ReportDataCollector:
                 max_checks=5,
             )
 
+        dark_web_monitoring = await _collect_dark_web_summary(
+            session, tid, sid, getattr(scan_data, "target", "") or ""
+        )
+
         out = ScanReportData(
             scan_id=sid,
             tenant_id=tid,
@@ -1013,6 +1024,7 @@ class ReportDataCollector:
             tool_runs=tool_runs,
             evidence=evidence_rows,
             hibp_pwned_password_summary=hibp_pwned_password_summary,
+            dark_web_monitoring=dark_web_monitoring,
             coverage_occurrence=valhalla_ctx.coverage_occurrence,
         )
         logger.info(
@@ -1033,3 +1045,77 @@ class ReportDataCollector:
             },
         )
         return out
+
+
+async def _collect_dark_web_summary(
+    session: AsyncSession, tenant_id: str, scan_id: str, target: str
+) -> dict[str, Any] | None:
+    """Assemble the Dark Web Monitoring summary from persisted observations.
+
+    Returns ``None`` when no DWM rows exist (the report section then shows
+    ``not_collected`` — DWM is off by default). Never raises: a failure degrades
+    to ``None`` so report generation is unaffected.
+    """
+
+    try:
+        from src.intel.dark_web.contracts import (
+            DarkWebObservation as _Obs,
+        )
+        from src.intel.dark_web.contracts import (
+            DarkWebReport as _Report,
+        )
+        from src.intel.dark_web.contracts import (
+            DarkWebReportStatus as _Status,
+        )
+        from src.intel.dark_web.models import DarkWebObservation as _Row
+
+        rows = (
+            (
+                await session.execute(
+                    select(_Row)
+                    .where(
+                        cast(_Row.scan_id, String) == scan_id,
+                        cast(_Row.tenant_id, String) == tenant_id,
+                    )
+                    .order_by(_Row.created_at.asc().nullsfirst(), _Row.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not rows:
+            return None
+
+        observations = [
+            _Obs(
+                id=r.id,
+                selector_kind=r.selector_kind,
+                selector_value_hash=r.selector_value_hash or "",
+                finding_id=r.finding_id or "",
+                source_network=r.source_network,
+                source_ref=r.source_ref or "",
+                exposure_type=r.exposure_type,
+                severity=r.severity,
+                confidence=r.confidence,
+                evidence_tier=r.evidence_tier,
+                observed_at=r.observed_at,
+                raw_object_key=r.raw_object_key or "",
+                raw_sha256=r.raw_sha256 or "",
+                chain_hash=r.chain_hash or "",
+                redacted_summary=r.redacted_summary or "",
+                collector=r.collector or "",
+                provenance=r.provenance or {},
+            )
+            for r in rows
+        ]
+        report = _Report(
+            scan_id=scan_id,
+            target=target,
+            selectors_count=len({r.selector_value_hash for r in rows}),
+            observations=observations,
+            status=_Status.PRESENT,
+        )
+        return report.to_summary_dict()
+    except Exception:  # noqa: BLE001 - never break report generation on DWM
+        logger.warning("dark_web_summary_collect_failed", extra={"scan_id": scan_id})
+        return None

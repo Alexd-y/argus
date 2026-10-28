@@ -32,6 +32,20 @@ _CATEGORY_SKILL_MAP: dict[str, list[str]] = {
     "subdomain_takeover": ["subdomain_takeover"],
     "graphql": ["graphql"],
     "jwt": ["jwt", "authentication_jwt"],
+    # BugHunter wave — kept in sync with CATEGORY_SKILL_MAP in
+    # src/agents/va_orchestrator.py (the two maps are a known duplication;
+    # see that module). Public GET /skills inventory must list these too.
+    "account_takeover": ["account_takeover"],
+    "clickjacking": ["clickjacking"],
+    "host_header_injection": ["host_header_injection"],
+    "llm_prompt_injection": ["llm_prompt_injection"],
+    "grpc_misconfig": ["grpc_misconfig"],
+    "websocket_hijacking": ["websocket_hijacking"],
+    "http_smuggling": ["http_smuggling"],
+    "cache_poisoning": ["cache_poisoning"],
+    "web_cache_deception": ["web_cache_deception"],
+    "cors": ["cors"],
+    "prototype_pollution": ["prototype_pollution"],
 }
 
 

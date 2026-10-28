@@ -155,6 +155,24 @@ class AsgardScreenshotSection(BaseModel):
     presigned_url: str | None = None
 
 
+class AsgardDarkWebSection(BaseModel):
+    """Executive-level Dark Web Monitoring exposure row (masked; no raw/plaintext).
+
+    Asgard prints exposure counts + masked selectors + redacted summaries only —
+    never raw records, pre-signed links, or plaintext secrets.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    exposure_type: str
+    severity: str
+    source_network: str
+    source_ref: str | None = None
+    confidence: str | None = None
+    evidence_tier: int = 1
+    summary: str | None = None
+
+
 class AsgardSectionAssembly(BaseModel):
     """Full Asgard tier section assembly — serialisable into any format."""
 
@@ -163,6 +181,8 @@ class AsgardSectionAssembly(BaseModel):
     title_meta: dict[str, Any] = Field(default_factory=dict)
     executive_summary_counts: dict[str, int] = Field(default_factory=dict)
     owasp_compliance: list[dict[str, Any]] = Field(default_factory=list)
+    dark_web_monitoring: dict[str, Any] = Field(default_factory=dict)
+    dark_web_exposure: list[AsgardDarkWebSection] = Field(default_factory=list)
     findings: list[AsgardFindingSection] = Field(default_factory=list)
     remediation: list[AsgardRemediationSection] = Field(default_factory=list)
     reproducer: list[AsgardReproducerSection] = Field(default_factory=list)
@@ -380,6 +400,44 @@ def _executive_counts(findings: list[Finding]) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def _dark_web_exec_summary(dwm: dict[str, Any] | None) -> dict[str, Any]:
+    """Exec-level counts for the Asgard dark-web section (no raw, no plaintext)."""
+
+    if not isinstance(dwm, dict):
+        return {}
+    return {
+        "status": dwm.get("status", "not_collected"),
+        "observation_count": dwm.get("observation_count", 0),
+        "selectors_count": dwm.get("selectors_count", 0),
+        "counts_by_exposure": dwm.get("counts_by_exposure", {}),
+        "counts_by_severity": dwm.get("counts_by_severity", {}),
+        "counts_by_source": dwm.get("counts_by_source", {}),
+    }
+
+
+def _dark_web_to_sections(dwm: dict[str, Any] | None) -> list[AsgardDarkWebSection]:
+    """One masked exec row per observation (redacted summary only)."""
+
+    if not isinstance(dwm, dict):
+        return []
+    rows: list[AsgardDarkWebSection] = []
+    for obs in dwm.get("observations", []) or []:
+        if not isinstance(obs, dict):
+            continue
+        rows.append(
+            AsgardDarkWebSection(
+                exposure_type=str(obs.get("exposure_type", "")),
+                severity=str(obs.get("severity", "")),
+                source_network=str(obs.get("source_network", "")),
+                source_ref=obs.get("source_ref") or None,
+                confidence=obs.get("confidence") or None,
+                evidence_tier=int(obs.get("evidence_tier", 1) or 1),
+                summary=obs.get("redacted_summary") or None,
+            )
+        )
+    return rows
+
+
 def assemble_asgard_sections(
     data: ReportData,
     *,
@@ -417,10 +475,13 @@ def assemble_asgard_sections(
         "tier": "asgard",
         "created_at": data.created_at,
     }
+    dwm = getattr(data, "dark_web_monitoring", None)
     return AsgardSectionAssembly(
         title_meta=title_meta,
         executive_summary_counts=_executive_counts(findings),
         owasp_compliance=_owasp_rows_for_findings(findings),
+        dark_web_monitoring=_dark_web_exec_summary(dwm),
+        dark_web_exposure=_dark_web_to_sections(dwm),
         findings=_findings_to_sections(findings),
         remediation=_remediation_for_findings(findings),
         reproducer=_reproducers_for_findings(findings, context=ctx),
@@ -480,6 +541,7 @@ def _owasp_rows_for_findings(findings: list[Finding]) -> list[dict[str, Any]]:
 
 __all__ = [
     "ASGARD_SECTION_ORDER",
+    "AsgardDarkWebSection",
     "AsgardEvidenceSection",
     "AsgardFindingSection",
     "AsgardRemediationSection",

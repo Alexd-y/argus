@@ -103,6 +103,14 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "schedule": _interval(seconds=30),
         "options": {"queue": "argus.scans"},
     },
+    # Stuck-scan recovery — every 60s, re-drive scans stuck in 'running' with a
+    # stale heartbeat (hard worker crash). Resume skips already-completed phases
+    # idempotently, so recovery never duplicates phase_outputs.
+    "argus.scan_queue.recover_stuck": {
+        "task": "argus.scan_queue.recover_stuck",
+        "schedule": _interval(seconds=60),
+        "options": {"queue": "argus.scans"},
+    },
     # Cairn dispatcher tick (flag-gated by cairn_enabled; the task no-ops when
     # disabled). Default 10s cadence; per-tenant timeouts are validated to exceed it.
     "argus.cairn.tick": {

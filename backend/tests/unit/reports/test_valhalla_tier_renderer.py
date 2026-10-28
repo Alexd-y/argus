@@ -143,6 +143,7 @@ def test_section_order_constant_is_complete_and_immutable() -> None:
         "risk_quantification_per_asset",
         "owasp_rollup_matrix",
         "top_findings_by_business_impact",
+        "dark_web_monitoring",
         "kev_listed_findings",
         "remediation_roadmap",
         "evidence_refs",

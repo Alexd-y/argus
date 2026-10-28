@@ -36,6 +36,7 @@
       "status": "not_assessed"
     }
   ],
+  "dark_web_monitoring": [],
   "engagement": null,
   "evidence_integrity": "unknown",
   "evidence_references": [
@@ -282,6 +283,12 @@
     },
     {
       "present": false,
+      "section_id": "dark_web_monitoring",
+      "status": "not_collected",
+      "title": "Dark Web Exposure"
+    },
+    {
+      "present": false,
       "section_id": "unconfirmed_observations",
       "status": "none",
       "title": "Unconfirmed Observations"
@@ -402,7 +409,7 @@
     }
   ],
   "skipped_reasons": [],
-  "snapshot_hash": "dee338072a11c6f2496b9b48398141dd4a4f0d3b7a5f9c0553ed3a3e183e09b4",
+  "snapshot_hash": "c17e1ec87ebee1b04148dc6c9be2bd47c58cfc83d06ac18676b2a41213d69f4d",
   "started_at": null,
   "surface_inventory": [
     {

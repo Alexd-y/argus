@@ -20,6 +20,10 @@ payloads:
     template: "ARGUS_CRLF_SAFE_CRLF_PAIR_WORD"
     confidence: suspected
     notes: Verbalized CRLF-pair token — no raw control bytes in template.
+  - id: obs_fold_word
+    template: "ARGUS_CRLF_SAFE_OBS_FOLD_WORD"
+    confidence: suspected
+    notes: "Verbalized header-folding (obs-fold) token with no raw CR/LF or whitespace-continuation bytes, confirmed as a read-only curriculum marker by literal string match."
 mutations:
   - name: case_flip
     description: Case-flip the verbalized token for case-insensitive detection drills.

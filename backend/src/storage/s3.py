@@ -53,6 +53,7 @@ OBJECT_TYPE_EVIDENCE = "evidence"
 OBJECT_TYPE_REPORTS = "reports"
 OBJECT_TYPE_ATTACHMENTS = "attachments"
 OBJECT_TYPE_POC = "poc"
+OBJECT_TYPE_DARKWEB = "darkweb"
 # PoC screenshot objects live under .../poc/screenshots/ (not top-level object_type segment)
 POC_SCREENSHOTS_DIR = "screenshots"
 
@@ -140,9 +141,11 @@ def _get_client():
 
 
 def _bucket_for_object_type(object_type: str) -> str:
-    """Resolve bucket for path segment object_type (reports → dedicated bucket)."""
+    """Resolve bucket for path segment object_type (reports / darkweb → dedicated buckets)."""
     if object_type == OBJECT_TYPE_REPORTS:
         return settings.minio_reports_bucket
+    if object_type == OBJECT_TYPE_DARKWEB:
+        return settings.minio_darkweb_bucket
     return settings.minio_bucket
 
 
@@ -151,6 +154,8 @@ def _bucket_for_object_key(object_key: str) -> str:
     parts = object_key.split("/")
     if len(parts) >= 4 and parts[2] == OBJECT_TYPE_REPORTS:
         return settings.minio_reports_bucket
+    if len(parts) >= 4 and parts[2] == OBJECT_TYPE_DARKWEB:
+        return settings.minio_darkweb_bucket
     return settings.minio_bucket
 
 

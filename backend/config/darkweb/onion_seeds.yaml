@@ -1,0 +1,16 @@
+# ARGUS Dark Web Monitoring — curated .onion seeds for Tor crawling (W-8, sandbox-only).
+# Signed (Ed25519). SHIPS EMPTY by design: no real hidden-service addresses are
+# vendored. Operators add curated, authorized, passive-read seeds here per engagement.
+# Tor crawling runs ONLY in the network-isolated argus-darkweb-collector sandbox
+# (egress via Tor SOCKS). Passive read only — never login/post/join/purchase.
+schema_version: 1
+version: "1.0"
+
+# Each seed: { id, url (.onion), network: tor|i2p, enabled, notes }.
+# Example (DISABLED, placeholder — replace with authorized, curated entries):
+#   - id: ahmia_mirror
+#     url: "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion"
+#     network: tor
+#     enabled: false
+#     notes: "Ahmia hidden-service mirror (clearnet index also at ahmia.fi)."
+seeds: []

@@ -60,6 +60,12 @@ SECTION_ORDER: tuple[SectionSpec, ...] = (
     ),
     SectionSpec("findings", "Findings", lambda d: _has(d.findings), "no_findings"),
     SectionSpec(
+        "dark_web_monitoring",
+        "Dark Web Exposure",
+        lambda d: _has(getattr(d, "dark_web_monitoring", None)),
+        "not_collected",
+    ),
+    SectionSpec(
         "unconfirmed_observations",
         "Unconfirmed Observations",
         lambda d: _has(d.unconfirmed_observations),

@@ -20,6 +20,14 @@ payloads:
     template: "argus-xss-safe-attr-context"
     confidence: suspected
     notes: Inert attribute-context marker for encoding-pipeline drills.
+  - id: svg_context_marker
+    template: "<svg data-argus-safe=\"ctx2\"/>"
+    confidence: suspected
+    notes: Inert SVG element for namespace/XML-context parser drills (SVG XSS surface, no script).
+  - id: js_string_context_marker
+    template: "argus-xss-safe-js-string-ctx"
+    confidence: suspected
+    notes: Inert marker for JS string-literal context encoding-pipeline drills.
 mutations:
   - name: case_flip
     description: Case-flip the context marker for case-insensitive parser drills.

@@ -35,6 +35,7 @@ time by :func:`generators.build_valhalla_report_payload`)?
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
@@ -520,6 +521,30 @@ class ValhallaTimelineEntry(BaseModel):
     created_at: str | None = None
 
 
+class DarkWebExposureRow(BaseModel):
+    """One Dark Web Monitoring observation, with full provenance (Valhalla detail).
+
+    No plaintext secrets: ``summary`` is the already-redacted summary; raw records
+    live only behind a pre-signed MinIO link (``raw_object_key``), with sha256 +
+    timestamps for reproducible provenance.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    exposure_type: str
+    severity: str
+    source_network: str
+    source_ref: str | None = None
+    confidence: str | None = None
+    evidence_tier: int = 1
+    finding_id: str | None = None
+    summary: str | None = None
+    raw_object_key: str | None = None
+    raw_sha256: str | None = None
+    observed_at: str | None = None
+    collector: str | None = None
+
+
 class ValhallaSectionAssembly(BaseModel):
     """Full Valhalla executive tier section assembly — serialisable into any format."""
 
@@ -533,6 +558,8 @@ class ValhallaSectionAssembly(BaseModel):
     top_findings_by_business_impact: tuple[BusinessImpactFindingRow, ...] = Field(
         default_factory=tuple
     )
+    dark_web_monitoring: dict[str, Any] = Field(default_factory=dict)
+    dark_web_exposure: tuple[DarkWebExposureRow, ...] = Field(default_factory=tuple)
     kev_listed_findings: tuple[KevListedFindingRow, ...] = Field(default_factory=tuple)
     remediation_roadmap: tuple[RemediationPhaseRow, ...] = Field(default_factory=tuple)
     evidence_refs: tuple[ValhallaEvidenceRef, ...] = Field(default_factory=tuple)
@@ -891,6 +918,60 @@ def _build_evidence_refs(
     return tuple(out)
 
 
+def _dark_web_summary_dict(dwm: dict[str, Any] | None) -> dict[str, Any]:
+    """Full DWM summary (counts + status) for the Valhalla slot."""
+
+    if not isinstance(dwm, dict):
+        return {}
+    return {
+        "status": dwm.get("status", "not_collected"),
+        "observation_count": dwm.get("observation_count", 0),
+        "selectors_count": dwm.get("selectors_count", 0),
+        "counts_by_exposure": dwm.get("counts_by_exposure", {}),
+        "counts_by_severity": dwm.get("counts_by_severity", {}),
+        "counts_by_source": dwm.get("counts_by_source", {}),
+        "generated_at": dwm.get("generated_at"),
+    }
+
+
+def _build_dark_web_exposure(
+    dwm: dict[str, Any] | None,
+    *,
+    presigner: PresignFn | None,
+) -> tuple[DarkWebExposureRow, ...]:
+    """Full-detail DWM rows with provenance. A pre-signed raw link is minted only
+    when a presigner is supplied; plaintext secrets are never emitted."""
+
+    if not isinstance(dwm, dict):
+        return ()
+    out: list[DarkWebExposureRow] = []
+    for obs in dwm.get("observations", []) or []:
+        if not isinstance(obs, dict):
+            continue
+        raw_key = obs.get("raw_object_key") or ""
+        if presigner is not None and raw_key:
+            # presign is access-controlled; we keep the key, not the URL
+            with contextlib.suppress(Exception):
+                presigner(raw_key)
+        out.append(
+            DarkWebExposureRow(
+                exposure_type=str(obs.get("exposure_type", "")),
+                severity=str(obs.get("severity", "")),
+                source_network=str(obs.get("source_network", "")),
+                source_ref=obs.get("source_ref") or None,
+                confidence=obs.get("confidence") or None,
+                evidence_tier=int(obs.get("evidence_tier", 1) or 1),
+                finding_id=obs.get("finding_id") or None,
+                summary=obs.get("redacted_summary") or None,
+                raw_object_key=raw_key or None,
+                raw_sha256=obs.get("raw_sha256") or None,
+                observed_at=str(obs.get("observed_at")) if obs.get("observed_at") else None,
+                collector=obs.get("collector") or None,
+            )
+        )
+    return tuple(out)
+
+
 def _build_timeline_entries(
     timeline: list[TimelineEntry],
     *,
@@ -1026,6 +1107,8 @@ def assemble_valhalla_sections(
     roadmap = _build_remediation_roadmap(findings)
     evidence_rows = _build_evidence_refs(list(data.evidence), presigner=presigner)
     timeline_rows = _build_timeline_entries(list(data.timeline))
+    dwm = getattr(data, "dark_web_monitoring", None)
+    dark_web_rows = _build_dark_web_exposure(dwm, presigner=presigner)
     summary = _build_executive_summary(
         data=data, counts=counts, asset_rows=asset_rows, roadmap=roadmap
     )
@@ -1046,6 +1129,8 @@ def assemble_valhalla_sections(
         risk_quantification_per_asset=asset_rows,
         owasp_rollup_matrix=owasp_rows,
         top_findings_by_business_impact=top_findings,
+        dark_web_monitoring=_dark_web_summary_dict(dwm),
+        dark_web_exposure=dark_web_rows,
         kev_listed_findings=kev_rows,
         remediation_roadmap=roadmap,
         evidence_refs=evidence_rows,
@@ -1083,6 +1168,7 @@ __all__ = [
     "AssetRiskRow",
     "BusinessContext",
     "BusinessImpactFindingRow",
+    "DarkWebExposureRow",
     "KevListedFindingRow",
     "OwaspRollupRow",
     "RemediationPhaseRow",

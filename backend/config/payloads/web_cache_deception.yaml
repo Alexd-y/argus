@@ -25,6 +25,18 @@ payloads:
     template: "ARGUS_WCD_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without path semantics.
+  - id: avif_suffix
+    template: "/account/argus-wcd-safe.avif"
+    confidence: suspected
+    notes: "Appends an exotic .avif image suffix outside the CDN cache-deception-armor allowlist; confirmed when the origin serves the dynamic/authenticated page yet a clean unauthenticated fetch replays it from cache under the .avif key (Cloudflare PBB #1391635)."
+  - id: encoded_dot_suffix
+    template: "/account/argus-wcd-safe%2ecss"
+    confidence: suspected
+    notes: "Uses an encoded extension delimiter (%2e) to exploit a cache-vs-origin path-normalization disagreement; confirmed when the origin resolves the dynamic route while a clean client receives the body cached as a static .css asset (Kettle 2024)."
+  - id: traversal_ext
+    template: "/argus-wcd-safe.css/..%2f..%2faccount"
+    confidence: suspected
+    notes: "Static-looking prefix with encoded traversal back to a dynamic route; confirmed when the origin resolves the traversal to the account page but the cache stores it under the literal .css key and replays it to a clean client."
 mutations:
   - name: case_flip
     description: Case-flip the suffix to exercise case-insensitive cache rules.

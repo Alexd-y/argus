@@ -229,6 +229,19 @@ def _attack_step_html(step) -> str:  # noqa: ANN001 - ReportAttackStep
 
 
 def _render_tail_sections_html(parts: list[str], doc: ReportDocumentV1) -> None:
+    if doc.dark_web_monitoring:
+        parts.append(f"<h2>Dark Web Exposure ({len(doc.dark_web_monitoring)})</h2><ul>")
+        for r in doc.dark_web_monitoring:
+            meta = [x for x in (r.source_ref, r.confidence) if x]
+            meta_s = (" " + " ".join(escape(m) for m in meta)) if meta else ""
+            extra = f" — {escape(r.summary)}" if r.summary else ""
+            parts.append(
+                f"<li><code>{escape(r.exposure_type)}</code> "
+                f"<code>{escape(r.severity)}</code>/<code>{escape(r.source_network)}</code> "
+                f"(tier {r.evidence_tier}){meta_s}{extra}</li>"
+            )
+        parts.append("</ul>")
+
     if doc.unconfirmed_observations:
         parts.append(f"<h2>Unconfirmed Observations ({len(doc.unconfirmed_observations)})</h2><ul>")
         for f in doc.unconfirmed_observations:
@@ -393,7 +406,9 @@ def _render_skipped_failed_html(parts: list[str], doc: ReportDocumentV1) -> None
         if isinstance(sk, dict):
             parts.append(
                 "<li>skipped: "
-                + ", ".join(f"{escape(str(k))}=<code>{escape(str(v))}</code>" for k, v in sk.items())
+                + ", ".join(
+                    f"{escape(str(k))}=<code>{escape(str(v))}</code>" for k, v in sk.items()
+                )
                 + "</li>"
             )
         else:

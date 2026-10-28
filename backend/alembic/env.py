@@ -25,6 +25,7 @@ import src.cairn.directives.models  # noqa: F401 — register Cairn directive mo
 import src.cairn.workers.models  # noqa: F401 — register Cairn worker-config model in Base.metadata
 import src.findings.models  # noqa: F401 — R-7.5: register findings models so autogenerate sees them
 import src.rag.models  # noqa: F401 — R-7.5: register RAG models so autogenerate sees them
+import src.intel.dark_web.models  # noqa: F401 — register dark-web monitoring models so autogenerate sees them
 
 config = context.config
 if config.config_file_name is not None:

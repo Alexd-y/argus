@@ -21,6 +21,18 @@ payloads:
     template: "argus-xsleak-safe-cache-probe"
     confidence: suspected
     notes: Cache-timing discrepancy marker.
+  - id: error_event_marker
+    template: "argus-xsleak-safe-onerror-oracle"
+    confidence: suspected
+    notes: "Onload-versus-onerror event oracle marker for a cross-origin sub-resource, confirmed when the fired event differs by the victim's authenticated state for the marked resource."
+  - id: coop_probe_marker
+    template: "argus-xsleak-safe-coop-probe"
+    confidence: suspected
+    notes: "Cross-Origin-Opener-Policy opener-nullification oracle marker, confirmed when window.opener becomes null only for isolated navigations, revealing the target's COOP posture."
+  - id: redirect_count_marker
+    template: "argus-xsleak-safe-redirect-count"
+    confidence: suspected
+    notes: "Redirect-count oracle marker, confirmed when the redirect depth on the marked navigation (read via history length or a capped fetch) differs by authenticated state."
 mutations:
   - name: case_flip
     description: Case-flip the marker to exercise case-insensitive detection rules.

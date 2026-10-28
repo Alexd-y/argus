@@ -8,7 +8,7 @@
 - nuclei_profile: `vuln_default`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `dee338072a11c6f2496b9b48398141dd4a4f0d3b7a5f9c0553ed3a3e183e09b4`
+- snapshot_hash: `c17e1ec87ebee1b04148dc6c9be2bd47c58cfc83d06ac18676b2a41213d69f4d`
 - generated_at: `2026-01-01T00:00:00+00:00`
 
 ## Report Passport
@@ -121,6 +121,7 @@ _none_
 | Priority Findings | `present` |
 | Findings by Asset | `present` |
 | Findings | `present` |
+| Dark Web Exposure | `not_collected` |
 | Unconfirmed Observations | `none` |
 | Executed Checks Without Findings | `not_recorded` |
 | Attack Narrative | `present` |

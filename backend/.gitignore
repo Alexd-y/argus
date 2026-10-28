@@ -28,6 +28,12 @@ config/payloads/_keys/dev_signing*
 !config/payloads/_keys/.gitkeep
 !config/payloads/_keys/README.md
 
+# Dark Web Monitoring catalog signing keys (same fail-closed guarantee).
+config/darkweb/_keys/*.priv
+config/darkweb/_keys/dev_signing*
+!config/darkweb/_keys/.gitkeep
+!config/darkweb/_keys/README.md
+
 # ---------------------------------------------------------------------------
 # Prompt catalog signing keys. See backend/config/prompts/_keys/README.md
 #

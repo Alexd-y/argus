@@ -1,0 +1,14 @@
+# ARGUS Dark Web Monitoring — Telegram channel whitelist (W-8, sandbox-only).
+# Signed (Ed25519). SHIPS EMPTY by design. Only PUBLIC channels explicitly curated
+# here are read, via Telethon/MTProto through SOCKS in the isolated collector.
+# PASSIVE READ ONLY — never join private channels, never post, never impersonate.
+schema_version: 1
+version: "1.0"
+
+# Each channel: { id, handle (public @name or t.me link), enabled, notes }.
+# Example (DISABLED, placeholder):
+#   - id: example_leaks
+#     handle: "@example_public_leaks"
+#     enabled: false
+#     notes: "Public leak-announcement channel; passive read only."
+channels: []

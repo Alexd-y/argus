@@ -23,6 +23,7 @@ from src.reports.poc_validation import (
 )
 from src.reports.report_document import (
     ReportCoverageItem,
+    ReportDarkWebRow,
     ReportDocumentV1,
     ReportEvidenceRef,
     ReportFailure,
@@ -198,8 +199,10 @@ _MAX_TAINT_STEP_LEN = 512
 
 
 def _taint_path(finding: Any) -> list[str]:
-    raw = getattr(finding, "taint_path", None) if not isinstance(finding, dict) else finding.get(
-        "taint_path"
+    raw = (
+        getattr(finding, "taint_path", None)
+        if not isinstance(finding, dict)
+        else finding.get("taint_path")
     )
     if not isinstance(raw, (list, tuple)):
         return []
@@ -400,7 +403,11 @@ def _observation_identity(finding: Any) -> tuple[str | None, str | None]:
             fp = str(val)
             break
 
-    raw_prov = getattr(finding, "provenance", None) if not isinstance(finding, dict) else finding.get("provenance")
+    raw_prov = (
+        getattr(finding, "provenance", None)
+        if not isinstance(finding, dict)
+        else finding.get("provenance")
+    )
     provenance: str | None = None
     if isinstance(raw_prov, dict):
         for key in _FIRST_CONTACT_KEYS:
@@ -668,6 +675,28 @@ def _map_surface(report_data: Any, target: str) -> list[ReportSurfaceItem]:
     return out
 
 
+def _build_dark_web_rows(dwm: Any) -> list[ReportDarkWebRow]:
+    """Masked dark-web rows for the canonical snapshot — no raw keys / plaintext."""
+    if not isinstance(dwm, dict):
+        return []
+    rows: list[ReportDarkWebRow] = []
+    for o in (dwm.get("observations") or [])[:50]:
+        if not isinstance(o, dict):
+            continue
+        rows.append(
+            ReportDarkWebRow(
+                exposure_type=str(o.get("exposure_type", "")),
+                severity=str(o.get("severity", "")),
+                source_network=str(o.get("source_network", "")),
+                source_ref=o.get("source_ref") or None,
+                confidence=o.get("confidence") or None,
+                evidence_tier=int(o.get("evidence_tier", 1) or 1),
+                summary=o.get("redacted_summary") or o.get("summary") or None,
+            )
+        )
+    return rows
+
+
 def build_snapshot_from_report_data(
     report_data: Any,
     *,
@@ -755,6 +784,7 @@ def build_snapshot_from_report_data(
         registry_versions=registry_versions or meta.get("registry_versions") or {},
         wstg=_build_wstg_block(report_data, scan_report_data, scan_meta=meta),
         surface_inventory=surface,
+        dark_web_monitoring=_build_dark_web_rows(getattr(report_data, "dark_web_monitoring", None)),
         attack_narrative=attack_narrative,
         exploit_chains=exploit_chains,
         engagement=engagement_arg,

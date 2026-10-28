@@ -107,6 +107,7 @@ def test_section_order_constant_is_complete_and_immutable() -> None:
         "title_meta",
         "executive_summary_counts",
         "owasp_compliance",
+        "dark_web_monitoring",
         "findings",
         "remediation",
         "reproducer",

