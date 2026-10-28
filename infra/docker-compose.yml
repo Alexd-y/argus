@@ -520,6 +520,65 @@ services:
       minio:
         condition: service_healthy
 
+  # Celery beat scheduler (RedBeat) + housekeeping worker.
+  #
+  # Exactly ONE beat process may run cluster-wide (RedBeat holds a Redis lock),
+  # so beat is EMBEDDED in this single worker via `-B` — this guarantees the
+  # singleton without a separate scheduler container. `beat_scheduler` is already
+  # pinned to redbeat.RedBeatScheduler in src.celery_app, so `-B` uses RedBeat
+  # (schedule = static BEAT_SCHEDULE merged with the DB-hydrated scan_schedules).
+  #
+  # Without this service NOTHING scheduled fires: stuck-scan recovery
+  # (argus.scan_queue.recover_stuck, every 60s), the scan-queue poller
+  # (argus.scan_queue.poll, every 30s), EPSS/KEV refresh, the queue-depth gauge,
+  # and the webhook DLQ replay all go un-dispatched. The reliability tasks it
+  # emits route to argus.scans (run on worker-scans) and argus.cairn
+  # (worker-cairn); this process itself drains the beat-driven housekeeping
+  # queues argus.intel (EPSS/KEV + metrics) and argus.notifications (DLQ replay).
+  #
+  # No docker socket is mounted: beat/housekeeping tasks are DB/HTTP only and
+  # never `docker exec` sandbox tools. Single concurrency — these tasks are light
+  # and must not contend.
+  worker-beat:
+    image: argus-backend
+    container_name: argus-worker-beat
+    restart: unless-stopped
+    command: celery -A src.celery_app worker -l INFO -Q argus.intel,argus.notifications -B --concurrency 1
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      # `-` (not `:-`): unset → default WRB; explicit empty disables WRB.
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   # Dark Web Monitoring hidden-network collector (W-8) — OPT-IN (profile: darkweb).
   #
   # Network-isolated by design: the ONLY egress is Tor SOCKS / I2P SAM (operators
