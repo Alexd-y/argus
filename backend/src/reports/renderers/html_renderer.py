@@ -70,10 +70,14 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
     _li(parts, "priority_rationale", f.priority_rationale)
     _li_list(parts, "acceptance_criteria", f.acceptance_criteria)
     _li_list(parts, "retest_plan", f.retest_plan)
-    if f.cvss_vector:
+    # Emit the CVSS trio whenever ANY of score/version/vector is present — not only
+    # when a vector exists. Gating the whole block behind cvss_vector silently
+    # dropped a heuristic CVSS score (no vector) from HTML while md/xml kept it, and
+    # the content-parity gate skips numeric leaves so the divergence shipped unseen.
+    if f.cvss_score is not None or f.cvss_vector or f.cvss_version:
         parts.append(
             f"<li>cvss: <code>{_na(f.cvss_score)}</code> "
-            f"<code>{_na(f.cvss_version)}</code> <code>{escape(f.cvss_vector)}</code></li>"
+            f"<code>{_na(f.cvss_version)}</code> <code>{_na(f.cvss_vector)}</code></li>"
         )
     _li(parts, "established_or_hypothesis", f.established_or_hypothesis)
     _li(parts, "confirmation_class", f.confirmation_class)
@@ -90,6 +94,10 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
         parts.append(f"<li>taint_path: {escape(' → '.join(f.taint_path))}</li>")
     _li(parts, "payload_attempted", f.payload_attempted)
     _li(parts, "payload_successful", f.payload_successful)
+    # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
+    if f.exploit_demonstrated:
+        parts.append("<li>exploit_demonstrated: <code>true</code></li>")
+    _li(parts, "exploit_summary", f.exploit_summary)
     ev = ", ".join(f"<code>{escape(e)}</code>" for e in f.evidence_ids) or "<em>none</em>"
     parts.append(f"<li>evidence_ids: {ev}</li>")
     parts.append("</ul>")

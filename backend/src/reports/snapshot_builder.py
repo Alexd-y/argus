@@ -324,6 +324,9 @@ def _map_finding(
     fingerprint_key = _str_or_none(_fget("fingerprint_key"))
     payload_attempted = _sanitize_payload(_fget("payload_attempted"), target)
     payload_successful = _sanitize_payload(_fget("payload_successful"), target)
+    # C2 — exploitation outcome carried from the EXPLOITATION phase onto the finding.
+    exploit_demonstrated = bool(_fget("exploit_demonstrated") or False)
+    exploit_summary = _str_or_none(_fget("exploit_summary"))
     return ReportFinding(
         finding_id=finding_id,
         observation_id=observation_id,
@@ -332,6 +335,8 @@ def _map_finding(
         taint_path=_taint_path(finding),
         payload_attempted=payload_attempted,
         payload_successful=payload_successful,
+        exploit_demonstrated=exploit_demonstrated,
+        exploit_summary=exploit_summary,
         title=title,
         severity=_severity(getattr(finding, "severity", "info")),
         category=getattr(finding, "category", None),

@@ -49,19 +49,22 @@
                         {% endif %}
                     </td>
                     <td>{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</td>
-                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
+                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}{% if row.cvss_vector %}<br><code class="cvss-vector">{{ row.cvss_vector | e }}</code>{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
+                {% if row.proof_of_concept or row.exploit_demonstrated or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
                     {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or row.exploit_demonstrated or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
                             {% if has_detail %}
                             <section class="finding-poc">
                                 <h3 class="finding-poc-title">Evidence (PoC)</h3>
+                                {% if row.exploit_demonstrated %}
+                                    <p class="finding-exploit-confirmed"><strong>Exploitation</strong>: confirmed exploitable during testing{% if row.exploit_summary %} — {{ row.exploit_summary | e }}{% endif %}.</p>
+                                {% endif %}
                                 {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
                                 {% include "partials/valhalla/finding_evidence_block.html.j2" %}
                                 {% if row.poc_screenshot_url and not (row.http_evidence is defined and row.http_evidence) %}
@@ -206,19 +209,22 @@
                         {% endif %}
                     </td>
                     <td>{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</td>
-                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
+                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}{% if row.cvss_vector %}<br><code class="cvss-vector">{{ row.cvss_vector | e }}</code>{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
+                {% if row.proof_of_concept or row.exploit_demonstrated or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
                     {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or row.exploit_demonstrated or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
                             {% if has_detail %}
                             <section class="finding-poc">
                                 <h3 class="finding-poc-title">Evidence (PoC)</h3>
+                                {% if row.exploit_demonstrated %}
+                                    <p class="finding-exploit-confirmed"><strong>Exploitation</strong>: confirmed exploitable during testing{% if row.exploit_summary %} — {{ row.exploit_summary | e }}{% endif %}.</p>
+                                {% endif %}
                                 {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
                                 {% include "partials/valhalla/finding_evidence_block.html.j2" %}
                                 {% if row.poc_screenshot_url and not (row.http_evidence is defined and row.http_evidence) %}

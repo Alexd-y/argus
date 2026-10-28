@@ -149,6 +149,7 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);color
 <span><b>Asset:</b> {{ f.asset or '—' }}</span>
 </div>
 <div class="blk"><div class="lbl">What we found</div><div>{{ f.what }}</div></div>
+{% if f.exploit_demonstrated %}<div class="blk"><div class="lbl">Exploitation</div><div>Confirmed exploitable during testing{% if f.exploit_summary %} — {{ f.exploit_summary }}{% endif %}.</div></div>{% endif %}
 {% if f.evidence %}<div class="blk"><div class="lbl">Evidence</div><div class="evidence">{{ f.evidence }}</div></div>{% endif %}
 {% if f.negative_control %}<div class="blk"><div class="lbl">Negative control</div><div>{{ f.negative_control }}</div></div>{% endif %}
 <div class="blk"><div class="lbl">Why it matters</div><div>{{ f.why }}</div></div>

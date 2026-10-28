@@ -116,6 +116,9 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _list_el(fe, "taint_path", f.taint_path, "step")
         _text(fe, "payload_attempted", f.payload_attempted)
         _text(fe, "payload_successful", f.payload_successful)
+        # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
+        _text(fe, "exploit_demonstrated", "true" if f.exploit_demonstrated else None)
+        _text(fe, "exploit_summary", f.exploit_summary)
         _text(fe, "owasp_category", f.owasp_category)
         _text(fe, "cvss_version", f.cvss_version)
         _text(fe, "cvss_vector", f.cvss_vector)

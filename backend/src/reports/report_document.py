@@ -326,6 +326,15 @@ class ReportFinding(BaseModel):
     #: (secrets, destructive flags and the real target are redacted).
     payload_attempted: str | None = None
     payload_successful: str | None = None
+    #: Exploitation outcome carried from the EXPLOITATION phase (C2). Set when the
+    #: exploitation runtime demonstrated the vulnerability against the sandbox — a
+    #: proven-exploitable marker surfaced in every readable format so the report
+    #: shows what was actually exploited (not merely suspected). Additive/defaulted;
+    #: the evidence_tier verdict stays the arbiter's job (never set from this).
+    exploit_demonstrated: bool = False
+    #: One-line human summary of the exploitation outcome (tool used + observed
+    #: effect), rendered beside the finding when present.
+    exploit_summary: str | None = None
 
 
 class ReportToolRun(BaseModel):

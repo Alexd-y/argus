@@ -8,7 +8,7 @@
 - nuclei_profile: `vuln_default`
 - completed_at: `2026-01-01T00:10:00Z`
 - schema_version: `v2`
-- snapshot_hash: `c17e1ec87ebee1b04148dc6c9be2bd47c58cfc83d06ac18676b2a41213d69f4d`
+- snapshot_hash: `d1aba3f66d511703b3b857e50e2a7e7bb5119832054faae26c3b0df780cd1aa1`
 - generated_at: `2026-01-01T00:00:00+00:00`
 
 ## Report Passport

@@ -79,6 +79,8 @@
       "evidence_ids": [
         "E-1"
       ],
+      "exploit_demonstrated": false,
+      "exploit_summary": null,
       "finding_id": "F-1",
       "fingerprint_key": null,
       "ip": null,
@@ -129,6 +131,8 @@
       "downgrade_reason": null,
       "established_or_hypothesis": null,
       "evidence_ids": [],
+      "exploit_demonstrated": false,
+      "exploit_summary": null,
       "finding_id": "F-2",
       "fingerprint_key": null,
       "ip": null,
@@ -179,6 +183,8 @@
       "downgrade_reason": null,
       "established_or_hypothesis": null,
       "evidence_ids": [],
+      "exploit_demonstrated": false,
+      "exploit_summary": null,
       "finding_id": "F-3",
       "fingerprint_key": null,
       "ip": null,
@@ -409,7 +415,7 @@
     }
   ],
   "skipped_reasons": [],
-  "snapshot_hash": "c17e1ec87ebee1b04148dc6c9be2bd47c58cfc83d06ac18676b2a41213d69f4d",
+  "snapshot_hash": "d1aba3f66d511703b3b857e50e2a7e7bb5119832054faae26c3b0df780cd1aa1",
   "started_at": null,
   "surface_inventory": [
     {

@@ -906,6 +906,20 @@ async def _rgp_canonical_snapshot(
     canon_key = None
     if settings.canonical_report_snapshot_enabled:
         try:
+            # Tier-gate the canonical snapshot (paid-content leak fix). The canonical
+            # bundle is otherwise built from UN-projected report_data, so for a free
+            # Midgard scan where Dark Web Monitoring ran it persisted dark-web (and
+            # raw/PoC) into canonical_* artifacts keyed to the free report — bypassing
+            # both Midgard defences. Project to the free-tier shape first:
+            # classify_for_tier(..., MIDGARD) forces dark_web_monitoring to None and
+            # strips raw/PoC. Paid tiers (asgard/valhalla) keep the full record.
+            from src.services.reporting import normalize_report_tier
+
+            if normalize_report_tier(tier_str) == "midgard":
+                from src.reports.report_bundle import ReportTier
+                from src.reports.tier_classifier import classify_for_tier
+
+                report_data = classify_for_tier(report_data, ReportTier.MIDGARD)
             snapshot = build_snapshot_from_report_data(
                 report_data,
                 scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),

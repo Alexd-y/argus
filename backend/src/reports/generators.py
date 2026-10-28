@@ -1302,6 +1302,8 @@ def _finding_to_dict(
         "manual_validation_result": _safe_attr(f, "manual_validation_result") or "",
         "browser_proof_ref": _safe_attr(f, "browser_proof_url") or "",
         "observed_impact": _safe_attr(f, "observed_impact") or "",
+        "exploit_demonstrated": bool(getattr(f, "exploit_demonstrated", False)),  # C2
+        "exploit_summary": _safe_attr(f, "exploit_summary") or "",
         "cvss_vector": _safe_attr(f, "cvss_vector") or "",
         "cvss_score": f.cvss,
         "cvss": f.cvss,

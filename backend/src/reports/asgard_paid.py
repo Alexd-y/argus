@@ -311,6 +311,10 @@ def _finding_to_row(f: Finding) -> dict[str, Any]:
         "owasp": owasp_label(getattr(f, "owasp_category", None)),
         "cvss": _cvss_of(f),
         "cvss_vector": _nonempty(getattr(f, "cvss_vector", None)),
+        # Exploitation outcome (C2): executive-safe marker + one-line summary (no raw
+        # PoC — Asgard stays the sanitized paid tier; verbatim PoC remains Valhalla).
+        "exploit_demonstrated": bool(getattr(f, "exploit_demonstrated", False)),
+        "exploit_summary": _nonempty(getattr(f, "exploit_summary", None)),
         "asset": (
             _nonempty(getattr(f, "affected_asset", None))
             or _nonempty(getattr(f, "affected_endpoint", None))

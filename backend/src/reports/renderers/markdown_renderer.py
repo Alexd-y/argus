@@ -62,17 +62,23 @@ def _render_severity_distribution_md(lines: list[str], doc: ReportDocumentV1) ->
 
 
 def _cvss_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
-    """CVSS table cell: score + vector, or a heuristic marker; None when absent (C-20/C-27)."""
+    """CVSS table cell: score + vector, or a heuristic marker; None when absent (C-20/C-27).
+
+    Emits the vector even when the numeric score is absent so a vector-only finding
+    does not drop the vector in Markdown while XML/HTML keep it (content-parity).
+    """
     score = f.cvss_score
-    if score is None:
+    if score is None and not f.cvss_vector:
         return None
     if f.cvss_vector:
         ver = f.cvss_version or "CVSS"
-        return (
-            f"{score} ({ver}/{f.cvss_vector})"
+        prefix = f"{score} " if score is not None else ""
+        body = (
+            f"({ver}/{f.cvss_vector})"
             if ":" not in str(f.cvss_vector)
-            else f"{score} ({f.cvss_vector})"
+            else f"({f.cvss_vector})"
         )
+        return f"{prefix}{body}"
     return f"{score} (severity_basis: heuristic — no vector)"
 
 
@@ -148,6 +154,10 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         lines.append("| Taint path | " + _esc_md(" → ".join(f.taint_path)) + " |")
     _mrow(lines, "Payload (попытка)", f.payload_attempted)
     _mrow(lines, "Payload (успех)", f.payload_successful)
+    # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
+    if f.exploit_demonstrated:
+        lines.append("| Эксплуатация | подтверждена |")
+    _mrow(lines, "Итог эксплуатации", f.exploit_summary)
     if f.wstg_test_ids:
         lines.append("| WSTG | " + ", ".join(f"`{w}`" for w in f.wstg_test_ids) + " |")
     if f.evidence_ids:
