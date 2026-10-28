@@ -39,23 +39,24 @@
 @page {
   size: A4;
   margin: 2cm;
+  background: #0a0c10;
   @top-left {
     content: "Svalbard Security Inc. · Valhalla tier";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #8a7838;
+    color: #8d94a3;
   }
   @top-right {
     content: "Confidential";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #8a7838;
+    color: #8d94a3;
   }
   @bottom-center {
     content: "Svalbard Security Inc. Confidential — page " counter(page) " of " counter(pages);
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #8a7838;
+    color: #8d94a3;
   }
 }
 
@@ -66,22 +67,25 @@
 
 /* --------------------------- Base typography --------------------- */
 :root {
-  --argus-primary: #c9a64a;       /* Valhalla gold */
-  --argus-primary-dark: #8a7838;
+  /* Unified dark "security-console" palette (reference: Midgard / valhalla_secreport_base).
+     Only the tier accent (Valhalla gold) differs; base bg/surface/text match. */
+  --argus-bg: #0a0c10;            /* page background */
+  --argus-primary: #c9a64a;       /* Valhalla gold (accent on dark) */
+  --argus-primary-dark: #e3c877;  /* brighter gold for headings/links on dark */
   --argus-accent: #f0d27a;
-  --argus-text: #1f1f24;
-  --argus-text-muted: #5a5a64;
-  --argus-surface: #fbf6e9;
-  --argus-surface-alt: #f3e9c5;
-  --argus-rule: #d4c389;
-  --argus-charcoal: #1f1f24;
+  --argus-text: #e8eaf0;
+  --argus-text-muted: #8d94a3;
+  --argus-surface: #111318;
+  --argus-surface-alt: #1a1d24;
+  --argus-rule: #252830;
+  --argus-charcoal: #1a1d24;      /* dark panel surface */
 
-  --sev-critical: #b00020;
-  --sev-high: #d35400;
-  --sev-medium: #c39200;
-  --sev-low: #2f6fd6;
-  --sev-info: #6b7280;
-  --section-accent: #b45309;
+  --sev-critical: #ff3e6c;
+  --sev-high: #ff6b2b;
+  --sev-medium: #ffd700;
+  --sev-low: #00c8ff;
+  --sev-info: #a0a8b8;
+  --section-accent: #c9a64a;
 }
 
 html, body {
@@ -89,6 +93,7 @@ html, body {
   font-size: 10pt;
   line-height: 1.45;
   color: var(--argus-text);
+  background: var(--argus-bg);
   margin: 0;
   padding: 0;
   /* WeasyPrint: keep chart / badge colours (gold cover, severity pills) */
@@ -98,7 +103,7 @@ html, body {
 
 h1, h2, h3, h4 {
   font-weight: 700;
-  color: var(--argus-charcoal);
+  color: var(--argus-primary-dark);
   margin: 0 0 0.6em 0;
 }
 
@@ -112,7 +117,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
   flex-direction: column;
   height: 25cm;
   padding: 1cm 0;
-  background: linear-gradient(180deg, #fbf6e9 0%, #fff 70%);
+  background: linear-gradient(180deg, #111318 0%, #0a0c10 70%);
 }
 
 .cover-brand {
@@ -316,7 +321,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .kev-table tbody tr:nth-child(even) td,
 .evidence-table tbody tr:nth-child(even) td,
 .timeline-table tbody tr:nth-child(even) td {
-  background: rgba(243, 233, 197, 0.55);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .col-num         { text-align: right; width: 1.6cm; }

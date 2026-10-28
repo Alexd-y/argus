@@ -124,3 +124,12 @@ tr{ break-inside:avoid; }
 footer{ margin-top:36px; padding-top:16px; border-top:1px solid var(--border); color:var(--text-dim); font-size:10.5px; line-height:1.7; break-inside:avoid; }
 .wm{ color:var(--text-dim); font-size:10px; letter-spacing:.06em; }
 .foot-note{ margin-top:6px; }
+
+/* RC-16 — WeasyPrint does not fragment flex/grid containers across page breaks, so a
+   multi-row grid clips everything past the first page. Collapse the content-bearing
+   grids to block in print; single-row header/cover layouts stay as-is. */
+@media print {
+  .scanmeta { display: block; }
+  .sev-grid { display: block; }
+  .intel-grid { display: block; }
+}

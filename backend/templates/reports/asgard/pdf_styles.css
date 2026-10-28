@@ -39,23 +39,24 @@
 @page {
   size: A4;
   margin: 2cm;
+  background: #0a0c10;
   @top-left {
     content: "Svalbard Security Inc. · Asgard tier";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #6b5436;
+    color: #8d94a3;
   }
   @top-right {
     content: "Confidential";
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #6b5436;
+    color: #8d94a3;
   }
   @bottom-center {
     content: "Svalbard Security Inc. Confidential — page " counter(page) " of " counter(pages);
     font-family: "Inter", "DejaVu Sans", sans-serif;
     font-size: 8pt;
-    color: #6b5436;
+    color: #8d94a3;
   }
 }
 
@@ -66,21 +67,24 @@
 
 /* --------------------------- Base typography --------------------- */
 :root {
-  --argus-primary: #c46410;       /* Asgard signal-orange */
-  --argus-primary-dark: #7a3e08;
-  --argus-accent: #e07b1d;
-  --argus-text: #1f1d18;
-  --argus-text-muted: #6b5436;
-  --argus-surface: #fdf6ec;
-  --argus-surface-alt: #f6e6cd;
-  --argus-rule: #e7c79a;
+  /* Unified dark "security-console" palette (reference: Midgard / valhalla_secreport_base).
+     Only the tier accent (Asgard signal-orange) differs; base bg/surface/text match. */
+  --argus-bg: #0a0c10;            /* page background */
+  --argus-primary: #ff7a2f;       /* Asgard signal-orange (accent on dark) */
+  --argus-primary-dark: #ff9d5c;  /* brighter orange for headings/links on dark */
+  --argus-accent: #ffab66;
+  --argus-text: #e8eaf0;
+  --argus-text-muted: #8d94a3;
+  --argus-surface: #111318;
+  --argus-surface-alt: #1a1d24;
+  --argus-rule: #252830;
 
-  --sev-critical: #b00020;
-  --sev-high: #d35400;
-  --sev-medium: #c39200;
-  --sev-low: #2f6fd6;
-  --sev-info: #6b7280;
-  --section-accent: #0f766e;
+  --sev-critical: #ff3e6c;
+  --sev-high: #ff6b2b;
+  --sev-medium: #ffd700;
+  --sev-low: #00c8ff;
+  --sev-info: #a0a8b8;
+  --section-accent: #ff7a2f;
 }
 
 html, body {
@@ -88,8 +92,12 @@ html, body {
   font-size: 10pt;
   line-height: 1.45;
   color: var(--argus-text);
+  background: var(--argus-bg);
   margin: 0;
   padding: 0;
+  /* Keep the dark background + accent colours when printed (WeasyPrint/Chromium). */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 h1, h2, h3, h4 {
@@ -299,7 +307,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 }
 
 .findings-table tbody tr:nth-child(even) td {
-  background: rgba(246, 230, 205, 0.55);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .col-sev   { width: 1.9cm; }
@@ -382,8 +390,8 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 
 .reproducer-code {
   margin: 0;
-  background: #1f1d18;
-  color: #f6e6cd;
+  background: #06070a;
+  color: #cfd3dd;
   padding: 0.3cm 0.4cm;
   border-radius: 0.1cm;
   overflow-wrap: anywhere;
@@ -392,7 +400,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
   line-height: 1.4;
 }
 
-.reproducer-code code { color: #f6e6cd; }
+.reproducer-code code { color: #cfd3dd; }
 
 /* -------------------------- Evidence ----------------------------- */
 .evidence-table,
@@ -428,7 +436,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 
 .evidence-table tbody tr:nth-child(even) td,
 .timeline-table tbody tr:nth-child(even) td {
-  background: rgba(246, 230, 205, 0.45);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .col-tl-order   { width: 1.0cm; text-align: right; }
