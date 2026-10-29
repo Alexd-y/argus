@@ -125,8 +125,12 @@ def _project_midgard(
     The sanitiser is idempotent so the change is purely additive.
     """
     ctx = sanitize_context or SanitizeContext(target=data.target or "")
-    top = _top_n_findings(list(data.findings), MIDGARD_TOP_FINDINGS)
-    sanitised = [_sanitise_finding(f, sanitize_ctx=ctx) for f in top]
+    # B3 (product decision 2026-10-30): the free Midgard report lists EVERY finding
+    # in the inventory (title/severity/CWE/CVSS only — leak-safe), not a top-10
+    # subset, so the severity rollup and executive total reflect the true totals.
+    # The paid tiers remain the upsell for per-finding detail; the teaser is still
+    # a single finding selected downstream in build_free_payload.
+    sanitised = [_sanitise_finding(f, sanitize_ctx=ctx) for f in list(data.findings)]
     # NB: exploit_demonstrated/exploit_summary are deliberately LEFT INTACT here.
     # The free-payload teaser gate (_is_safe_teaser_candidate in midgard_free)
     # reads exploit_demonstrated to exclude proven-exploit findings from the free

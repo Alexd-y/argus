@@ -114,10 +114,13 @@ class TestMidgard:
         out = classify_for_tier(_make_full_data(), ReportTier.MIDGARD)
         assert out.executive_summary == "Top-level summary."
 
-    def test_caps_findings_to_top_n(self) -> None:
+    def test_lists_all_findings_no_top_n_cap(self) -> None:
+        # B3 (2026-10-30 product decision): the free Midgard inventory lists EVERY
+        # finding (titles only, leak-safe), so severity counts and the executive
+        # total reflect true totals — the former top-N truncation is removed.
         data = _make_full_data(num_findings=MIDGARD_TOP_FINDINGS + 5)
         out = classify_for_tier(data, ReportTier.MIDGARD)
-        assert len(out.findings) == MIDGARD_TOP_FINDINGS
+        assert len(out.findings) == MIDGARD_TOP_FINDINGS + 5
 
     def test_does_not_mutate_input(self) -> None:
         data = _make_full_data()

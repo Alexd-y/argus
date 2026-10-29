@@ -73,8 +73,10 @@ def test_midgard_projection_is_a_subset_of_full() -> None:
     full_ids = {f.finding_id for f in findings}
     proj_ids = {f.finding_id for f in projected.findings}
 
-    assert len(proj_ids) == MIDGARD_TOP_FINDINGS
-    assert proj_ids < full_ids  # strict subset — the projection never invents a finding
+    # B3 (2026-10-30): Midgard lists EVERY finding (no top-N cap), so the projected
+    # set equals the full set — and still never invents a finding.
+    assert len(proj_ids) == n
+    assert proj_ids == full_ids
     assert midgard_projection_blockers(full_ids, proj_ids) == []
 
 
