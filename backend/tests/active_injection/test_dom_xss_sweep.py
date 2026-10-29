@@ -51,3 +51,21 @@ def test_bounded_by_max_urls() -> None:
 def test_non_http_scheme_rejected() -> None:
     assert build_dom_xss_candidate_urls("ftp://x/", ["a"], ["b"], _PAYLOAD) == []
     assert build_dom_xss_candidate_urls("", ["a"], ["b"], _PAYLOAD) == []
+
+
+def test_default_sink_survives_many_discovered_hints() -> None:
+    # Regression: a long discovered route/param list (route-major loop) must not
+    # crowd the common search?q DOM sink out of the max_urls budget — the defaults
+    # are prepended so /#/search?q= is always probed (OWASP Juice Shop's sink).
+    routes = [
+        "login", "whoami", "products", "user", "basket",
+        "feedback", "cards", "orders", "profile", "admin",
+    ]
+    params = [
+        "email", "password", "username", "id", "userId",
+        "key", "coupon", "orderId", "token", "name",
+    ]
+    urls = build_dom_xss_candidate_urls("http://shop.example/", routes, params, _PAYLOAD, max_urls=16)
+    assert any(u.startswith("http://shop.example/#/search?q=") for u in urls), (
+        "search?q sink was crowded out by discovered hints"
+    )
