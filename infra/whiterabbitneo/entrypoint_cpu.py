@@ -28,6 +28,25 @@ def main() -> None:
         n_ctx = (os.environ.get("WRB_N_CTX") or "8192").strip()
         argv = [*argv, "--n_ctx", n_ctx]
 
+    # CPU throughput tuning. The scan wall-clock bottleneck was prompt eval on the
+    # large analysis prompts: llama_cpp.server defaults to n_batch=512 and does not
+    # pin batch threads, so a ~13k-token prompt ingested at ~10 tok/s (~22 min) on a
+    # 32-vCPU host. Pin batch threads to all vCPUs and raise the batch so prompt
+    # ingestion parallelises; generation threads default to the physical-core
+    # estimate (HT gives little on the memory-bound decode). Each is env-tunable
+    # (WRB_N_THREADS / WRB_N_THREADS_BATCH / WRB_N_BATCH) without another rebuild,
+    # and only added when the caller did not pass it explicitly.
+    _cpu = os.cpu_count() or 8
+    _cpu_defaults = (
+        ("--n_threads", os.environ.get("WRB_N_THREADS") or str(max(1, _cpu // 2))),
+        ("--n_threads_batch", os.environ.get("WRB_N_THREADS_BATCH") or str(_cpu)),
+        ("--n_batch", os.environ.get("WRB_N_BATCH") or "2048"),
+    )
+    for _flag, _val in _cpu_defaults:
+        _val = (_val or "").strip()
+        if _val and not any(a in (_flag, _flag.replace("_", "-")) for a in argv):
+            argv = [*argv, _flag, _val]
+
     subprocess.run([sys.executable, "/opt/argus/ensure_gguf.py"], check=True)
     os.execvp(sys.executable, [sys.executable, "-m", "llama_cpp.server", *argv])
 
