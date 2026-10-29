@@ -38,12 +38,17 @@ def test_xss_payload_manager_facade_matches_active_scan() -> None:
 def test_xss_verifier_facade_matches_active_scan() -> None:
     assert ver_facade.__all__ == [
         "XSSVerificationResult",
+        "build_dom_xss_candidate_urls",
+        "run_dom_xss_sweep_async",
         "verify_xss_with_browser",
         "verify_xss_with_browser_async",
     ]
     assert ver_facade.XSSVerificationResult is ver_impl.XSSVerificationResult
     assert ver_facade.verify_xss_with_browser is ver_impl.verify_xss_with_browser
     assert ver_facade.verify_xss_with_browser_async is ver_impl.verify_xss_with_browser_async
+    assert ver_facade.build_dom_xss_candidate_urls is ver_impl.build_dom_xss_candidate_urls
+    assert ver_facade.run_dom_xss_sweep_async is ver_impl.run_dom_xss_sweep_async
+    assert inspect.iscoroutinefunction(ver_facade.run_dom_xss_sweep_async)
     assert inspect.iscoroutinefunction(ver_facade.verify_xss_with_browser_async)
     bad = ver_facade.verify_xss_with_browser("not-a-url", "q", "<x>", "scan-1")
     assert bad.verified is False

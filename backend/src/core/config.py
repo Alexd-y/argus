@@ -1418,6 +1418,15 @@ class Settings(BaseSettings):
     xss_max_payloads_per_param: int = 50
     # XSS_VERIFICATION_ENABLED — headless Playwright XSS verification (T3).
     xss_verification_enabled: bool = True
+    # VA_DOM_XSS_SWEEP_ENABLED — proactive headless-browser DOM-XSS sweep over SPA
+    # sinks (hash-route / query) with canary payloads, independent of server
+    # reflection. Catches client-side DOM XSS (e.g. Angular bypassSecurityTrustHtml)
+    # that the reflection-gated verifier cannot. On by default; same Chromium as the
+    # reflected-XSS verifier (no new dependency).
+    va_dom_xss_sweep_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("VA_DOM_XSS_SWEEP_ENABLED", "va_dom_xss_sweep_enabled"),
+    )
     # XSS_PLAYWRIGHT_TIMEOUT or XSS_PLAYWRIGHT_TIMEOUT_MS (milliseconds).
     xss_playwright_timeout_ms: int = Field(
         default=5000,
