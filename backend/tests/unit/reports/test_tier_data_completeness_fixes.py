@@ -94,6 +94,34 @@ def test_midgard_intel_reads_nested_ownership_evidence() -> None:
     assert empty["whois"]["registrar"] == INTEL_NOT_COLLECTED
 
 
+def test_asgard_branded_pdf_html_escapes_injected_markup() -> None:
+    # The Asgard branded PDF template renders dynamic finding text without explicit
+    # ``| e`` because its Jinja environment (_render_branded_pdf_html) runs with
+    # autoescape=True. Guard that invariant: a finding whose evidence/title carry
+    # HTML/script/file:// markup must be escaped in the rendered PDF HTML, never
+    # emitted as live markup (defence-in-depth on top of the chromium backend,
+    # which also disables JS and blocks network/file fetches).
+    from src.reports.generators import (
+        _build_branded_pdf_context,
+        _render_branded_pdf_html,
+        _resolve_branded_pdf_template_path,
+    )
+
+    payload = "<script>alert(1)</script><img src=file:///etc/passwd>"
+    f = _finding(title=payload, description=payload)
+    data = _report_data([f])
+    proj = classify_for_tier(data, ReportTier.ASGARD)
+    tpl = _resolve_branded_pdf_template_path("asgard")
+    assert tpl is not None, "asgard branded PDF template missing"
+    ctx = _build_branded_pdf_context(proj, None, tier="asgard")
+    html = _render_branded_pdf_html(tpl, ctx)
+    # No LIVE markup: the tags must be escaped, not emitted as real elements.
+    assert "<script>alert(1)</script>" not in html
+    assert "<img src=file:///etc/passwd>" not in html
+    assert "&lt;script&gt;" in html  # escaped form is present
+    assert "&lt;img src=file:///etc/passwd&gt;" in html
+
+
 def test_asgard_xml_carries_exploit_outcome() -> None:
     f = _finding(exploit_demonstrated=True, exploit_summary="Proven via boolean-blind SQLi")
     data = _report_data([f])
