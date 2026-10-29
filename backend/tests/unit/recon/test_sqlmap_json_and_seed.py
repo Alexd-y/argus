@@ -46,6 +46,46 @@ def test_ignore_code_is_added() -> None:
     assert argv[argv.index("--ignore-code") + 1] == "401,403"
 
 
+# Real mid-run output: sqlmap PROVES the injection ("parameter 'q' is '...'
+# injectable") within seconds, but at --level 3 the final "Parameter:"/"Payload:"
+# summary only prints ~237s later — past the 300s per-tool timeout, so a loaded
+# run is killed before it. Detection must not depend on reaching the summary.
+_SQLMAP_MIDRUN_NO_SUMMARY = """[09:24:02] [INFO] testing connection to the target URL
+[09:24:03] [WARNING] heuristic (basic) test shows that GET parameter 'q' might not be SQL injectable
+[09:24:04] [INFO] GET parameter 'q' appears to be 'AND boolean-based blind - WHERE or HAVING clause' injectable (with --string="oblonga")
+[09:24:04] [INFO] heuristic (extended) test shows that the back-end DBMS could be 'SQLite'
+[09:24:04] [INFO] GET parameter 'q' is 'SQLite >= 3.9 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (JSON path)' injectable
+"""
+
+
+def test_midrun_injectable_without_summary_is_detected() -> None:
+    rows = parse_sqlmap_stdout(_SQLMAP_MIDRUN_NO_SUMMARY)
+    assert len(rows) == 1
+    assert rows[0]["param"] == "q"
+    # The confirmed verdict ("is '...' injectable") wins over the tentative one.
+    assert "error-based" in (rows[0]["injection_type"] or "")
+
+
+def test_midrun_injectable_becomes_cwe89_finding() -> None:
+    url = "http://juice-shop:3000/rest/products/search?q=1"
+    findings = normalize_sqlmap_findings(
+        parse_sqlmap_stdout(_SQLMAP_MIDRUN_NO_SUMMARY),
+        target_url=url,
+        argv=build_sqlmap_va_argv(url, None),
+    )
+    assert len(findings) == 1
+    assert findings[0]["data"]["cwe"] == "CWE-89"
+
+
+def test_negative_verdict_is_not_a_false_positive() -> None:
+    neg = (
+        "[INFO] testing connection to the target URL\n"
+        "[WARNING] GET parameter 'q' does not seem to be injectable\n"
+        "[CRITICAL] all tested parameters do not appear to be injectable\n"
+    )
+    assert parse_sqlmap_stdout(neg) == []
+
+
 def test_parser_handles_json_multiword_param() -> None:
     # The real confirmation names the param "JSON email ((custom) POST)".
     rows = parse_sqlmap_stdout(_SQLMAP_CONFIRMED)
