@@ -149,7 +149,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "8.0"
+          # WRB prompt eval (CPU llama.cpp) is the scan wall-clock bottleneck and is
+          # compute-bound, so it scales with cores. The old 8-CPU cap + the
+          # entrypoint's host-core thread count oversubscribed (32 threads on 8
+          # cores). Raise the cap (host has 32 vCPUs, idle while WRB is the serial
+          # phase) and match WRB_N_THREADS_BATCH to it in .env. Tunable via WRB_CPU_LIMIT.
+          cpus: "${WRB_CPU_LIMIT:-16}"
           memory: 12G
         reservations:
           cpus: "4.0"
