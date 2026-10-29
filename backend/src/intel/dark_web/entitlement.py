@@ -65,7 +65,9 @@ async def tenant_has_dwm_entitlement(session: Any, tenant_id: str) -> bool:
             status = (sub.status or "").strip().lower()
             if plan in _FREE_PLANS:
                 continue
-            if status not in ("active", "trialing", "past_due", ""):
+            # Fail closed on an unset/blank status: an imported or never-activated
+            # subscription row must NOT grant the paid dark-web capability.
+            if status not in ("active", "trialing", "past_due"):
                 continue
             if sub.valid_until is not None and sub.valid_until < now:
                 continue

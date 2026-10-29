@@ -1911,120 +1911,6 @@ def _generate_asgard_paid_json(
     return json.dumps(payload, ensure_ascii=False, sort_keys=False, default=str).encode("utf-8")
 
 
-def _generate_asgard_paid_xml(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
-) -> bytes:
-    """Paid-tier XML — ``<argus_report tier="asgard">`` with per-finding location.
-
-    Fixes the memory defect where ``<finding>`` carried no location: every
-    finding element nests ``<location><asset>``. Built by string assembly with
-    XML-escaping — no XML parser, so no XXE surface.
-    """
-    from xml.sax.saxutils import escape, quoteattr
-
-    from src.reports.asgard_paid import build_asgard_payload
-
-    p = build_asgard_payload(data, jinja_context)
-
-    def esc(v: Any) -> str:
-        return escape("" if v is None else str(v))
-
-    out: list[str] = ['<?xml version="1.0" encoding="utf-8"?>']
-    out.append('<argus_report tier="asgard" schema="asgard-v1">')
-    # meta
-    out.append("  <meta>")
-    for k, v in p["meta"].items():
-        out.append(f"    <{k}>{esc(v)}</{k}>")
-    out.append("  </meta>")
-    # severity counts
-    out.append("  <severity_counts>")
-    for sev in ("critical", "high", "medium", "low", "info"):
-        out.append(f'    <count severity="{sev}">{int(p["severity_counts"].get(sev, 0))}</count>')
-    out.append("  </severity_counts>")
-    # findings
-    out.append(f'  <findings count="{len(p["findings"])}">')
-    for f in p["findings"]:
-        out.append(
-            f'    <finding id={quoteattr(str(f.get("id", "")))} severity={quoteattr(str(f.get("severity", "")))}>'
-        )
-        out.append(f"      <title>{esc(f.get('title'))}</title>")
-        out.append(f"      <cwe>{esc(f.get('cwe'))}</cwe>")
-        out.append(f"      <owasp>{esc(f.get('owasp'))}</owasp>")
-        if f.get("cvss") is not None:
-            out.append(f"      <cvss>{esc(f.get('cvss'))}</cvss>")
-        if f.get("cvss_vector"):
-            out.append(f"      <cvss_vector>{esc(f.get('cvss_vector'))}</cvss_vector>")
-        out.append("      <location>")
-        out.append(f"        <asset>{esc(f.get('asset'))}</asset>")
-        out.append("      </location>")
-        out.append(f"      <status>{esc(f.get('status'))}</status>")
-        out.append(f"      <confidence>{esc(f.get('confidence'))}</confidence>")
-        out.append(f"      <what>{esc(f.get('what'))}</what>")
-        out.append(f"      <why>{esc(f.get('why'))}</why>")
-        out.append(f"      <evidence>{esc(f.get('evidence'))}</evidence>")
-        if f.get("negative_control"):
-            out.append(
-                f"      <negative_control>{esc(f.get('negative_control'))}</negative_control>"
-            )
-        out.append("      <remediation>")
-        for step in f.get("remediation", []) or []:
-            out.append(f"        <step>{esc(step)}</step>")
-        out.append("      </remediation>")
-        out.append(f"      <validation>{esc(f.get('validation'))}</validation>")
-        out.append("    </finding>")
-    out.append("  </findings>")
-    # paid sections
-    tls = p["tls_analysis"]
-    out.append("  <tls_analysis>")
-    out.append(f"    <summary>{esc(tls.get('summary'))}</summary>")
-    for r in tls.get("rows", []):
-        out.append(
-            f'    <row check={quoteattr(str(r.get("check", "")))} status={quoteattr(str(r.get("status", "")))}>'
-            f"{esc(r.get('result'))}</row>"
-        )
-    out.append("  </tls_analysis>")
-    hdr = p["header_analysis"]
-    out.append("  <header_analysis>")
-    out.append(f"    <summary>{esc(hdr.get('summary'))}</summary>")
-    for r in hdr.get("rows", []):
-        out.append(
-            f'    <header name={quoteattr(str(r.get("header", "")))} present={quoteattr(str(bool(r.get("present"))).lower())}>'
-            f"{esc(r.get('recommended'))}</header>"
-        )
-    out.append("  </header_analysis>")
-    dw = p["dark_web"]
-    out.append("  <dark_web>")
-    for k in (
-        "summary",
-        "monitored_domain",
-        "sources_checked",
-        "new_exposures",
-        "total_tracked",
-        "last_checked",
-    ):
-        out.append(f"    <{k}>{esc(dw.get(k))}</{k}>")
-    out.append("  </dark_web>")
-    out.append("  <owasp_alignment>")
-    for r in p["owasp_alignment"]:
-        out.append(
-            f'    <category count="{int(r.get("count", 0))}">{esc(r.get("category"))}</category>'
-        )
-    out.append("  </owasp_alignment>")
-    ai = p["ai_conclusions"]
-    out.append("  <ai_conclusions>")
-    out.append(
-        f"    <vulnerability_description>{esc(ai.get('vulnerability_description'))}</vulnerability_description>"
-    )
-    out.append(f"    <business_risk>{esc(ai.get('business_risk'))}</business_risk>")
-    out.append("    <prioritized_roadmap>")
-    for step in ai.get("prioritized_roadmap", []) or []:
-        out.append(f"      <step>{esc(step)}</step>")
-    out.append("    </prioritized_roadmap>")
-    out.append("  </ai_conclusions>")
-    out.append("</argus_report>")
-    return ("\n".join(out) + "\n").encode("utf-8")
-
-
 def _generate_midgard_free_json(
     data: ReportData, *, jinja_context: dict[str, Any] | None = None
 ) -> bytes:
@@ -2056,7 +1942,9 @@ def generate_xml(
     surface.
     """
     if _is_asgard_tier(tier):
-        return _generate_asgard_paid_xml(data, jinja_context=jinja_context)
+        from src.reports.asgard_xml import generate_asgard_paid_xml
+
+        return generate_asgard_paid_xml(data, jinja_context=jinja_context)
     payload = json.loads(generate_json(data, jinja_context=jinja_context, tier=tier))
     body = "".join(_value_to_xml(str(k), v) for k, v in payload.items())
     doc = (
@@ -3744,7 +3632,21 @@ def generate_markdown(
     jinja_context: dict[str, Any] | None = None,
     tier: str | None = None,
 ) -> bytes:
-    """Generate Markdown report — headings, tables, collapsible evidence blocks."""
+    """Generate Markdown report — headings, tables, collapsible evidence blocks.
+
+    Tier-branched (parity with generate_json/csv/xml): the free Midgard and the
+    paid Asgard tiers render from their single projection payload so the Markdown
+    carries exactly the tier's content — the free Markdown never leaks per-finding
+    description / verification commands / AI prose."""
+    _mk_tier = tier or _tier_from_jinja(jinja_context)
+    if _is_midgard_tier(_mk_tier) or _is_asgard_tier(_mk_tier):
+        from src.reports.markdown_tiers import (
+            generate_asgard_paid_markdown,
+            generate_midgard_free_markdown,
+        )
+        if _is_midgard_tier(_mk_tier):
+            return generate_midgard_free_markdown(data, jinja_context=jinja_context)
+        return generate_asgard_paid_markdown(data, jinja_context=jinja_context)
     from src.reports.valhalla_report_context import get_brand
 
     brand = get_brand()

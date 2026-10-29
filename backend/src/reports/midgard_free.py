@@ -332,24 +332,34 @@ def build_midgard_intel(
 
     vc = ctx.get("valhalla_context") or {}
     recon = ctx.get("recon_summary") or {}
+    # WHOIS/DNS/ASN live on the NESTED ``ownership_evidence`` (OwnershipEvidenceModel)
+    # of ValhallaReportContext, NOT at the top level of the model_dump()ed context.
+    # Read them from there (falling back to top-level vc for any legacy/flat context),
+    # otherwise the free-tier Target Intelligence block silently shows everything as
+    # "Not collected" even on a real domain where recon DID collect it.
+    oe = _attr(vc, "ownership_evidence") or {}
+
+    def _own(field: str) -> Any:
+        v = _attr(oe, field)
+        return v if v not in (None, "", [], {}) else _attr(vc, field)
 
     # --- WHOIS / registration -------------------------------------------
-    registrar = _nonempty_str(_attr(vc, "whois_registrar"))
+    registrar = _nonempty_str(_own("whois_registrar"))
     whois = {
         "registrar": registrar or INTEL_NOT_COLLECTED,
-        "registrant_org": _nonempty_str(_attr(vc, "whois_org")) or INTEL_NOT_COLLECTED,
-        "created": _nonempty_str(_attr(vc, "whois_creation_date")) or INTEL_NOT_COLLECTED,
-        "expires": _nonempty_str(_attr(vc, "whois_expiry_date")) or INTEL_NOT_COLLECTED,
-        "name_servers": _list_of_str(_attr(vc, "dns_ns_records")),
+        "registrant_org": _nonempty_str(_own("whois_org")) or INTEL_NOT_COLLECTED,
+        "created": _nonempty_str(_own("whois_creation_date")) or INTEL_NOT_COLLECTED,
+        "expires": _nonempty_str(_own("whois_expiry_date")) or INTEL_NOT_COLLECTED,
+        "name_servers": _list_of_str(_own("dns_ns_records")),
     }
 
     # --- DNS -------------------------------------------------------------
-    ns = _list_of_str(_attr(vc, "dns_ns_records"))
-    mx = _list_of_str(_attr(vc, "dns_mx_records"))
+    ns = _list_of_str(_own("dns_ns_records"))
+    mx = _list_of_str(_own("dns_mx_records"))
     dns = {
         "ns": ns,
         "mx": mx,
-        "soa_primary_ns": _nonempty_str(_attr(vc, "dns_soa_primary_ns")) or INTEL_NOT_COLLECTED,
+        "soa_primary_ns": _nonempty_str(_own("dns_soa_primary_ns")) or INTEL_NOT_COLLECTED,
     }
 
     # --- Email authentication / DNSSEC ----------------------------------
@@ -377,8 +387,8 @@ def build_midgard_intel(
 
     # --- ASN -------------------------------------------------------------
     asn = {
-        "asn": _nonempty_str(_attr(vc, "ip_whois_asn")) or INTEL_NOT_COLLECTED,
-        "org": _nonempty_str(_attr(vc, "ip_whois_org")) or INTEL_NOT_COLLECTED,
+        "asn": _nonempty_str(_own("ip_whois_asn")) or INTEL_NOT_COLLECTED,
+        "org": _nonempty_str(_own("ip_whois_org")) or INTEL_NOT_COLLECTED,
     }
 
     return {
