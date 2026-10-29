@@ -220,3 +220,30 @@ def test_rest_prefix_spa_login_and_search_are_discovered() -> None:
         for s in steps
         if not s.not_assessed_reason
     ), "no SQLi injection step planned against the REST login endpoint"
+
+
+def test_rest_api_path_in_template_literal_is_extracted() -> None:
+    """Regression: Angular HttpClient builds the URL with a template literal
+    (``\\`${this.hostServer}/rest/products/search?q=${q}\\``), so the /rest/* path
+    sits mid-string after an interpolation — the quote-anchored literal patterns
+    miss it, leaving only the SPA route (/search) to be scanned and the real
+    injectable API (/rest/products/search) invisible. The embedded-path matcher
+    must surface it as a GET q endpoint so sqlmap targets the API, not the shell."""
+    base = "http://shop.example/"
+    html = '<html><script src="/main.js"></script></html>'
+    js = """
+    search(q){ return this.http.get(`${this.hostServer}/rest/products/search?q=${q}`); }
+    getUser(id){ return this.http.get(this.hostServer + '/rest/user/' + id); }
+    """
+    surfaces = extract_spa_api_surfaces(base, html_text=html, script_bodies={base + "main.js": js})
+    eps = surfaces.endpoint_inventory
+    search = next((r for r in eps if r["url"].endswith("/rest/products/search")), None)
+    assert search is not None, "/rest/products/search (template literal) not extracted"
+    assert search["method"] == "GET"
+    assert "q" in search["query_params"]
+
+    inv = build_input_surface_inventory({"endpoint_inventory": eps})
+    assert any(
+        it.location == "query" and it.param_name == "q" and it.url.endswith("/rest/products/search")
+        for it in inv.items
+    ), "q query injection surface for /rest/products/search missing"
