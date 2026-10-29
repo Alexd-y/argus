@@ -86,6 +86,33 @@ def test_negative_verdict_is_not_a_false_positive() -> None:
     assert parse_sqlmap_stdout(neg) == []
 
 
+def test_tentative_injectable_then_retracted_is_suppressed() -> None:
+    # sqlmap logs "appears to be ... injectable" BEFORE checkFalsePositives();
+    # when that check fails it retracts and emits no summary. The earlier
+    # tentative line must NOT survive as a finding (regression guard).
+    retracted = (
+        "[INFO] GET parameter 'q' appears to be 'AND boolean-based blind - WHERE or HAVING "
+        "clause' injectable (with --string=\"oblonga\")\n"
+        "[WARNING] false positive or unexploitable injection point detected\n"
+        "[WARNING] GET parameter 'q' is not injectable\n"
+    )
+    assert parse_sqlmap_stdout(retracted) == []
+
+
+def test_confirmed_injectable_survives_even_with_unrelated_fp_earlier() -> None:
+    # A false-positive retraction for one param must not suppress a genuine
+    # confirmation of a DIFFERENT param that follows it.
+    mixed = (
+        "[INFO] GET parameter 'a' appears to be 'AND boolean-based blind' injectable\n"
+        "[WARNING] false positive or unexploitable injection point detected\n"
+        "[INFO] GET parameter 'q' is 'SQLite >= 3.9 AND error-based - WHERE clause (JSON path)' "
+        "injectable\n"
+    )
+    rows = parse_sqlmap_stdout(mixed)
+    assert len(rows) == 1
+    assert rows[0]["param"] == "q"
+
+
 def test_parser_handles_json_multiword_param() -> None:
     # The real confirmation names the param "JSON email ((custom) POST)".
     rows = parse_sqlmap_stdout(_SQLMAP_CONFIRMED)
