@@ -822,6 +822,31 @@ def _resolve_finding_model(finding: dict) -> str:
     return ""
 
 
+def _detection_demonstrated_summary(finding: dict[str, Any]) -> str:
+    """One-line exploit summary when the DETECTION tool itself already demonstrated
+    execution (so ``exploit_demonstrated`` is a fact), else ``""``.
+
+    Some detections ARE the demonstration and need no separate exploitation step:
+    * a headless-browser-verified XSS — the reflected verifier or the DOM-XSS sweep
+      actually executed the payload (a JS dialog fired with our canary); and
+    * a sqlmap finding, which the parser only emits once sqlmap confirmed
+      injectability (a parameter + a working payload).
+
+    This sets only the factual flag/summary; it never raises ``evidence_tier`` —
+    that stays the arbiter's artifact-driven verdict (see persist below).
+    """
+    poc = finding.get("proof_of_concept")
+    poc = poc if isinstance(poc, dict) else {}
+    if poc.get("verified_via_browser") is True or poc.get("browser_alert_text"):
+        return "Headless browser executed the payload (JS dialog fired with the canary)."
+    tool = str(poc.get("tool") or finding.get("source_tool") or "").lower()
+    if "sqlmap" in tool and (
+        poc.get("payload") or poc.get("replay_command") or finding.get("payload")
+    ):
+        return "sqlmap confirmed the injection with a working payload."
+    return ""
+
+
 async def _persist_report_and_findings(
     session: AsyncSession,
     tenant_id: str,
@@ -1039,6 +1064,16 @@ async def _persist_report_and_findings(
         _adv = float(_adv) if isinstance(_adv, (int, float)) else None
         _eds = f.get("exploit_demonstrated")
         _es = str(f.get("exploit_summary", ""))[:2000] if f.get("exploit_summary") else None
+        # When the detection tool itself demonstrated execution (browser-verified
+        # XSS / sqlmap-confirmed injection) but the exploitation phase did not set
+        # the flag (e.g. its executor has no re-confirmation tool for a DOM sink),
+        # carry that fact through so exploit_demonstrated + the summary reach the
+        # report. Factual only — evidence_tier stays the arbiter's verdict.
+        if not _eds:
+            _det_summary = _detection_demonstrated_summary(f)
+            if _det_summary:
+                _eds = True
+                _es = _es or _det_summary
         _cvss_vec = str(f.get("cvss_vector", ""))[:100] if f.get("cvss_vector") else None
         _dedup = str(f.get("dedup_status", "unchecked"))[:20] if f.get("dedup_status") else None
         finding = Finding(
