@@ -247,3 +247,23 @@ def test_rest_api_path_in_template_literal_is_extracted() -> None:
         it.location == "query" and it.param_name == "q" and it.url.endswith("/rest/products/search")
         for it in inv.items
     ), "q query injection surface for /rest/products/search missing"
+
+    # End to end: the sqlmap step must carry the query parameter in the URL
+    # (?q=1), otherwise sqlmap tests a parameterless GET and reports "not
+    # injectable" even though the endpoint is injectable.
+    steps = build_injection_plan(
+        inv,
+        mode="deep",
+        flags=ActiveInjectionPlannerFlags(
+            lab_destructive_execution_allowed=True,
+            oast_enabled=True,
+            destructive_tool_ids=frozenset({"sqlmap"}),
+        ),
+    )
+    assert any(
+        s.family == "sqli"
+        and s.tool == "sqlmap"
+        and "/rest/products/search?q=1" in (s.target_url or "")
+        for s in steps
+        if not s.not_assessed_reason
+    ), "sqlmap SQLi step for /rest/products/search lacks the ?q= injection point"
