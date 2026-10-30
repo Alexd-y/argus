@@ -65,6 +65,19 @@ class TestTechnologies:
     def test_no_tech_tool_empty(self):
         assert parse_technologies({"dig": {"stdout": "nginx here but not a tech tool"}}) == []
 
+    def test_modern_edge_platform_tokens_extracted(self):
+        # Regression: a Vercel/Next.js site reported an empty technology list
+        # because the token set predated modern edge hosts. whatweb --log-json
+        # for svalbard.ca (403 Vercel challenge) still exposes the server.
+        ww = (
+            '[{"target":"https://svalbard.ca","http_status":403,'
+            '"plugins":{"HTML5":{},"HTTPServer":{"string":["Vercel"]},'
+            '"Title":{"string":["Vercel Security Checkpoint"]}}}]'
+        )
+        techs = parse_technologies({"whatweb": {"stdout": ww}})
+        assert "Vercel" in techs
+        assert "Html5" in techs
+
 
 class TestReconcilePorts:
     def test_443_added_when_tls_live_but_naabu_empty(self):

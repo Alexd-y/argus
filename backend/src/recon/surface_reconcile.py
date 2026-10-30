@@ -67,6 +67,26 @@ _TECH_TOKENS = (
     "hsts",
     "http/2",
     "http/3",
+    # Modern edge/hosting platforms + JS frameworks (whatweb HTTPServer / httpx
+    # tech-detect surface these; without them a Vercel/Netlify/Next.js site
+    # reported an empty technology list — the apex of svalbard.ca is Vercel).
+    "vercel",
+    "netlify",
+    "next.js",
+    "nextjs",
+    "nuxt",
+    "gatsby",
+    "svelte",
+    "astro",
+    "fastly",
+    "caddy",
+    "gunicorn",
+    "html5",
+    "shopify",
+    "wix",
+    "squarespace",
+    "ghost",
+    "cloudflare pages",
 )
 
 
