@@ -122,6 +122,30 @@ def test_asgard_branded_pdf_html_escapes_injected_markup() -> None:
     assert "&lt;img src=file:///etc/passwd&gt;" in html
 
 
+def test_free_canonical_bundle_has_no_per_finding_detail() -> None:
+    # B3 made the free Midgard inventory list ALL findings; the canonical snapshot
+    # renders findings in full, so the free canonical_* artifacts must redact every
+    # finding's paid detail (description/impact/PoC/verification), leaving inventory
+    # only. Guards redact_free_canonical_finding (used in _rgp_canonical_snapshot).
+    from dataclasses import replace as dcr
+
+    from src.reports.report_pipeline import redact_free_canonical_finding
+    from src.reports.snapshot_builder import build_snapshot_from_report_data
+
+    f = _finding(
+        description="SECRETDESC_detail",
+        proof_of_concept={"reproducer": "SECRETPOC_cmd", "payload": "x"},
+        verification_command="SECRETVERIFY_cmd",
+        observed_impact="SECRETIMPACT_text",
+    )
+    data = _report_data([f, f, f])
+    pm = classify_for_tier(data, ReportTier.MIDGARD)
+    pm = dcr(pm, findings=[redact_free_canonical_finding(x) for x in pm.findings])
+    js = build_snapshot_from_report_data(pm).model_dump_json()
+    for secret in ("SECRETDESC_detail", "SECRETPOC_cmd", "SECRETVERIFY_cmd", "SECRETIMPACT_text"):
+        assert secret not in js, f"free canonical bundle leaked {secret}"
+
+
 def test_asgard_xml_carries_exploit_outcome() -> None:
     f = _finding(exploit_demonstrated=True, exploit_summary="Proven via boolean-blind SQLi")
     data = _report_data([f])

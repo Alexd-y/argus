@@ -898,6 +898,28 @@ async def _rgp_valhalla_llm_remediation(
     return (valhalla_llm_status, llm_merge_failed)
 
 
+def redact_free_canonical_finding(f: Any) -> Any:
+    """Redact paid per-finding DETAIL for the FREE (Midgard) canonical bundle.
+
+    The canonical snapshot renders findings in full; for a free report it must
+    stay inventory-only (title/severity/cwe/cvss). This nulls the description,
+    impact, exploit outcome, PoC and verification command so none of the paid
+    layer lands in the free canonical_* artifacts. The single free teaser writeup
+    is built elsewhere (build_free_payload) from un-redacted data, so this does
+    not blind it.
+    """
+    return f.model_copy(
+        update={
+            "exploit_demonstrated": False,
+            "exploit_summary": None,
+            "description": "",
+            "observed_impact": None,
+            "proof_of_concept": None,
+            "verification_command": None,
+        }
+    )
+
+
 async def _rgp_canonical_snapshot(
     built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
 ):
@@ -922,19 +944,20 @@ async def _rgp_canonical_snapshot(
                 from src.reports.tier_classifier import classify_for_tier
 
                 report_data = classify_for_tier(report_data, ReportTier.MIDGARD)
-                # Strip paid-tier exploit outcome from the findings the canonical
-                # bundle renders in full for a FREE report. Done here — not in
-                # _project_midgard — so the upstream free-payload teaser gate
+                # Strip paid-tier per-finding DETAIL from the findings the canonical
+                # bundle renders in full for a FREE report, leaving the inventory
+                # fields (title/severity/cwe/cvss) only. The free tier's single
+                # teaser writeup is built elsewhere (build_free_payload, from the
+                # un-stripped report_data), so redacting here does not blind it.
+                # Done here — not in _project_midgard — so the upstream teaser gate
                 # (_is_safe_teaser_candidate) can still read exploit_demonstrated to
                 # exclude proven-exploit findings from the free sample (clearing it
-                # earlier would blind that gate: fail-open).
+                # earlier would blind that gate: fail-open). Without this, every
+                # finding's description landed in the free canonical_* artifacts.
                 report_data = _dc_replace(
                     report_data,
                     findings=[
-                        f.model_copy(
-                            update={"exploit_demonstrated": False, "exploit_summary": None}
-                        )
-                        for f in report_data.findings
+                        redact_free_canonical_finding(f) for f in report_data.findings
                     ],
                 )
             snapshot = build_snapshot_from_report_data(
