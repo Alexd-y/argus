@@ -1142,8 +1142,56 @@ async def _run_nmap(
     return result
 
 
+def _dig_answer_via_dnspython(domain: str) -> str:
+    """Synthesize a ``dig +noall +answer`` block via dnspython.
+
+    ``dig ANY`` is unreliable (RFC 8482: resolvers answer ANY with a minimal
+    synthesised record, not the full set) AND the Kali sandbox ``dig`` binary
+    core-dumps on an OpenSSL init mismatch — so Target Intelligence DNS was always
+    empty. dnspython (present in the backend image) resolves each record type
+    explicitly and reliably. Returns '' if dnspython is unavailable or nothing
+    resolves, so the caller falls back to the legacy command path."""
+    try:
+        import dns.resolver as _dnsr
+    except Exception:  # noqa: BLE001
+        return ""
+    d = (domain or "").strip().rstrip(".")
+    if not d:
+        return ""
+    lines: list[str] = []
+    for rtype in ("NS", "MX", "SOA", "A", "AAAA", "TXT", "CNAME"):
+        try:
+            ans = _dnsr.resolve(d, rtype, lifetime=8)
+        except Exception:  # noqa: BLE001 — NXDOMAIN/NoAnswer/timeout per type
+            continue
+        ttl = getattr(getattr(ans, "rrset", None), "ttl", 3600) or 3600
+        for rd in ans:
+            try:
+                val = rd.to_text()
+            except Exception:  # noqa: BLE001
+                continue
+            if val:
+                # dig +noall +answer columns: name TTL IN RTYPE rdata
+                lines.append(f"{d}.\t{ttl}\tIN\t{rtype}\t{val}")
+    return "\n".join(lines)
+
+
 async def _run_dig(domain: str) -> dict[str, Any]:
-    """Run dig for DNS records."""
+    """Resolve DNS records, dnspython-first.
+
+    Output is kept in ``dig +noall +answer`` text form so ``_parse_dig_any`` and
+    any other consumers of the ``dig`` tool result are unchanged. Falls back to the
+    legacy ``dig ANY`` command only when dnspython yields nothing."""
+    answer = await asyncio.to_thread(_dig_answer_via_dnspython, domain)
+    if answer:
+        result: dict[str, Any] = {
+            "success": True,
+            "stdout": answer,
+            "stderr": "",
+            "return_code": 0,
+        }
+        _log_recon_tool_done("dig", "dig_dnspython", result)
+        return result
     cmd = f"dig {domain} ANY +noall +answer"
     result = execute_command(cmd, use_sandbox=False)
     _log_recon_tool_done("dig", cmd, result)
