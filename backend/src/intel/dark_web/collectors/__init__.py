@@ -23,6 +23,7 @@ from src.intel.dark_web.collectors.hidden_networks import (
     TorCrawlerCollector,
     hidden_network_collectors,
 )
+from src.intel.dark_web.collectors.intelx_search import IntelxSearchCollector
 from src.intel.dark_web.collectors.paste_github import (
     GithubLeakCollector,
     PsbdmpPasteCollector,
@@ -38,6 +39,7 @@ __all__ = [
     "GithubLeakCollector",
     "HibpBreachCollector",
     "I2pCrawlerCollector",
+    "IntelxSearchCollector",
     "LeakCheckCollector",
     "PsbdmpPasteCollector",
     "TelegramMonitorCollector",
@@ -58,6 +60,7 @@ def default_breach_first_collectors() -> list[BaseCollector]:
         PsbdmpPasteCollector(),
         AhmiaSearchCollector(),
         GithubLeakCollector(),
+        IntelxSearchCollector(),
         FeedsCollector(),
     ]
 
