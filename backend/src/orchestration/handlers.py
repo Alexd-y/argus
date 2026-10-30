@@ -1333,7 +1333,14 @@ def _email_auth_from_dns_findings(findings: Any) -> dict[str, str]:
 
     The DNS-security recon emits these as Finding dicts (e.g. vuln_type
     ``dnssec_missing``, title ``SPF record missing``); the report email-auth panel
-    needs plain status values, so collapse the findings into them."""
+    needs plain status values, so collapse the findings into them.
+
+    ``findings is None`` means the DNS-security step did not run at all, so we must
+    NOT assert "Present"/"Signed" — that would claim the records exist when nothing
+    was checked. Report "Unknown" in that case; an empty-but-present list means the
+    step ran and flagged nothing, which legitimately maps to the present defaults."""
+    if findings is None:
+        return {"dnssec": "Unknown", "spf": "Unknown", "dmarc": "Unknown", "dkim": "Unknown"}
     blob = " ".join(
         f"{f.get('vuln_type', '')} {f.get('title', '')}".lower()
         for f in (findings or [])
@@ -1351,6 +1358,34 @@ def _email_auth_from_dns_findings(findings: Any) -> dict[str, str]:
     }
 
 
+def _primary_asn_fields(asn_summary: Any) -> tuple[str, str, str]:
+    """Extract (asn, org, country) from the asnmap summary, shape-tolerant.
+
+    ``parse_asnmap_stdout_structured`` emits ``{"unique_asns": [{"as_number",
+    "as_name", "as_country", ...}], ...}`` — so the apex ASN lives under
+    ``unique_asns[0]``, NOT as flat ``asn``/``org``/``country`` keys. Earlier code
+    read the flat keys and always got blanks. Read the structured shape first and
+    fall back to flat keys for legacy/other producers."""
+    if not isinstance(asn_summary, dict):
+        return "", "", ""
+    uniq = asn_summary.get("unique_asns")
+    if isinstance(uniq, list):
+        for row in uniq:
+            if isinstance(row, dict) and (row.get("as_number") or row.get("asn")):
+                return (
+                    str(row.get("as_number") or row.get("asn") or ""),
+                    str(row.get("as_name") or row.get("org") or row.get("organization") or ""),
+                    str(
+                        row.get("as_country") or row.get("country") or row.get("country_code") or ""
+                    ),
+                )
+    return (
+        str(asn_summary.get("asn", "")),
+        str(asn_summary.get("org") or asn_summary.get("organization") or ""),
+        str(asn_summary.get("country") or asn_summary.get("country_code") or ""),
+    )
+
+
 def build_stage1_recon_results(domain: str, recon_out: Any) -> dict[str, Any]:
     """Shape recon tool output into the FLAT schema the report reads.
 
@@ -1359,10 +1394,18 @@ def build_stage1_recon_results(domain: str, recon_out: Any) -> dict[str, Any]:
     fed. whois is passed as the RAW string so ownership_evidence's regex path runs
     (its dict-key path expects different keys than the recon whois parser emits)."""
     tr = getattr(recon_out, "tool_results", None) or {}
-    whois_raw = str((tr.get("whois") or {}).get("stdout") or "") if isinstance(tr.get("whois"), dict) else str(tr.get("whois") or "")
-    dig_raw = str((tr.get("dig") or {}).get("stdout") or "") if isinstance(tr.get("dig"), dict) else str(tr.get("dig") or "")
+    whois_raw = (
+        str((tr.get("whois") or {}).get("stdout") or "")
+        if isinstance(tr.get("whois"), dict)
+        else str(tr.get("whois") or "")
+    )
+    dig_raw = (
+        str((tr.get("dig") or {}).get("stdout") or "")
+        if isinstance(tr.get("dig"), dict)
+        else str(tr.get("dig") or "")
+    )
     ns, mx, soa_primary = _parse_dig_any(dig_raw)
-    asn = tr.get("asn_summary") if isinstance(tr.get("asn_summary"), dict) else {}
+    asn_num, asn_org, asn_country = _primary_asn_fields(tr.get("asn_summary"))
     return {
         "target_domain": domain,
         "whois": whois_raw,
@@ -1373,9 +1416,9 @@ def build_stage1_recon_results(domain: str, recon_out: Any) -> dict[str, Any]:
             "soa": f"origin = {soa_primary}" if soa_primary else "",
         },
         "ip_lookup": {
-            "asn": str(asn.get("asn", "")),
-            "org": str(asn.get("org") or asn.get("organization") or ""),
-            "country": str(asn.get("country") or asn.get("country_code") or ""),
+            "asn": asn_num,
+            "org": asn_org,
+            "country": asn_country,
         },
         "email_auth": _email_auth_from_dns_findings(tr.get("dns_security_findings")),
     }
@@ -3573,9 +3616,7 @@ async def run_exploit_attempt(
         # Symbolic execution proves paths through a real BINARY. Only run it when the
         # exploit carries an actual binary artifact — never a web target_url (angr
         # cannot prove anything over a URL, and doing so would fabricate a proof).
-        _bin_path = str(
-            _exploit.get("binary_path") or _exploit.get("target_binary") or ""
-        ).strip()
+        _bin_path = str(_exploit.get("binary_path") or _exploit.get("target_binary") or "").strip()
         if _sev in ("critical", "high") and _bin_path:
             try:
                 from src.orchestration.symbolic_execution import (

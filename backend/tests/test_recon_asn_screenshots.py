@@ -116,7 +116,7 @@ async def test_run_recon_asnmap_bundle_merges_summary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_recon_asnmap_bundle_skips_without_pdcp_key() -> None:
+async def test_run_recon_asnmap_bundle_runs_keyless() -> None:
     cfg = ReconRuntimeConfig(
         mode="full",
         active_depth=1,
@@ -129,11 +129,20 @@ async def test_run_recon_asnmap_bundle_skips_without_pdcp_key() -> None:
         rate_limit_rps=10,
         asnmap_enabled=True,
     )
-    # No PDCP key configured → asnmap must be skipped without invoking the runner.
+    # No PDCP key → asnmap still runs (domain->ASN works keyless); ASN is part of
+    # Target Intelligence and must not silently vanish when no key is configured.
+    fake = {
+        "success": True,
+        "stdout": '{"as_number":"16509","as_name":"amazon-02","as_country":"US","input":"example.com"}\n',
+        "stderr": "",
+        "return_code": 0,
+        "execution_time": 0.1,
+        "minio_keys": [],
+    }
     with patch(
         "src.recon.recon_asn_screenshots.run_kal_mcp_tool",
-        side_effect=AssertionError("asnmap must not run without a PDCP key"),
-    ):
+        return_value=fake,
+    ) as runner:
         out = await run_recon_asnmap_bundle(
             "example.com",
             cfg,
@@ -142,7 +151,9 @@ async def test_run_recon_asnmap_bundle_skips_without_pdcp_key() -> None:
             scan_id="s1",
             app_settings=Settings(sandbox_enabled=True, recon_pdcp_api_key=""),
         )
-    assert out == {}
+    runner.assert_called_once()
+    assert "asn_summary" in out
+    assert out["asn_summary"]["row_count"] >= 1
 
 
 @pytest.mark.asyncio

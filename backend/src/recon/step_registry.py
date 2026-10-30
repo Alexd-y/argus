@@ -77,26 +77,34 @@ def _optional_full_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
     return out
 
 
+# External tool_selection token -> the optional full-mode step it enables.
+# These are the only steps tool_selection governs; base-mode steps always run.
+_OPTIONAL_TS_ALIASES: dict[str, ReconStepId] = {
+    "url_history": ReconStepId.CONTENT_DISCOVERY,
+    "js_analysis": ReconStepId.JS_ANALYSIS,
+    "asnmap": ReconStepId.ASN_MAP,
+    "screenshots": ReconStepId.SCREENSHOTS,
+}
+
+
 def plan_recon_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
-    """Ordered plan: base mode steps + optional full-only extras/flags; then tool_selection filter."""
-    steps = _base_steps_for_mode(cfg.mode)
-    steps = list(dict.fromkeys(steps))  # stable dedup
-    for extra in _optional_full_steps(cfg):
-        if extra not in steps:
-            steps.append(extra)
+    """Ordered plan: base-mode steps (always) + selected optional full-mode extras.
+
+    ``tool_selection`` is a picker for the heavy OPTIONAL full-mode extras only
+    (content discovery, JS analysis, asnmap, screenshots, deep port scan) — it
+    is NOT a global allow-list. The base-mode steps make up Target Intelligence
+    (WHOIS / DIG / DNS depth / crt.sh / subdomain / nmap / HTTP surface /
+    security headers), so they always run: a ``tool_selection`` meant to *enable*
+    extras can never silently blind WHOIS/DNS/email-auth/tech-profile recon.
+    """
+    base = list(dict.fromkeys(_base_steps_for_mode(cfg.mode)))  # stable dedup
+    extras = [e for e in _optional_full_steps(cfg) if e not in base]
 
     if cfg.tool_selection is not None:
         sel = set(cfg.tool_selection)
-        if "url_history" in sel:
-            sel.add(ReconStepId.CONTENT_DISCOVERY.value)
-        if "js_analysis" in sel:
-            sel.add(ReconStepId.JS_ANALYSIS.value)
-        if "asnmap" in sel:
-            sel.add(ReconStepId.ASN_MAP.value)
-        if "screenshots" in sel:
-            sel.add(ReconStepId.SCREENSHOTS.value)
-        if "security_headers" in sel:
-            sel.add(ReconStepId.SECURITY_HEADERS.value)
-        steps = [s for s in steps if s.value in sel]
+        for alias, step in _OPTIONAL_TS_ALIASES.items():
+            if alias in sel:
+                sel.add(step.value)
+        extras = [e for e in extras if e.value in sel]
 
-    return steps
+    return base + extras

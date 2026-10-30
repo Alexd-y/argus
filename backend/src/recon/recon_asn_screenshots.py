@@ -337,15 +337,18 @@ async def run_recon_asnmap_bundle(
     if not cfg.asnmap_enabled:
         return out
 
-    # asnmap requires a ProjectDiscovery Cloud (PDCP) API key; without one it
-    # prompts on /dev/tty and aborts in the non-interactive sandbox. Skip cleanly
-    # instead of recording a guaranteed-failing tool run.
-    if not str(getattr(s, "recon_pdcp_api_key", "") or "").strip():
+    # A ProjectDiscovery Cloud (PDCP) API key lifts asnmap's rate limits, but the
+    # domain->ASN lookup works keyless (verified: `asnmap -d <domain> -silent -json`
+    # emits as_number/as_name/as_country with no key). So we attempt it regardless
+    # of the key — ASN is part of Target Intelligence and must not silently vanish
+    # when no key is configured. The non-interactive sandbox + run_kal_mcp_tool
+    # timeout bound any edge case where a prompt would otherwise block.
+    has_pdcp = bool(str(getattr(s, "recon_pdcp_api_key", "") or "").strip())
+    if not has_pdcp:
         logger.info(
-            "recon_asnmap_skipped",
-            extra={"event": "recon_asnmap_skipped", "reason": "no_pdcp_api_key"},
+            "recon_asnmap_keyless",
+            extra={"event": "recon_asnmap_keyless", "reason": "no_pdcp_api_key_attempting_anyway"},
         )
-        return out
 
     argv = build_recon_asnmap_argv(domain)
     if not argv:

@@ -7,7 +7,7 @@ email-auth were empty in every report. This checks the mapper → ownership_evid
 
 from __future__ import annotations
 
-from src.orchestration.handlers import build_stage1_recon_results
+from src.orchestration.handlers import _primary_asn_fields, build_stage1_recon_results
 from src.reports.midgard_free import INTEL_NOT_COLLECTED, build_midgard_intel
 from src.reports.ownership_evidence import build_ownership_evidence
 
@@ -79,3 +79,55 @@ def test_email_auth_derived_and_persisted_in_recon_results() -> None:
     rr = build_stage1_recon_results("example.com", _ReconOut())
     assert rr["email_auth"]["dnssec"] == "Missing"
     assert rr["email_auth"]["dmarc"] == "Missing"
+
+
+def test_asn_from_real_asnmap_summary_shape() -> None:
+    # parse_asnmap_stdout_structured emits {"unique_asns": [{as_number, as_name,
+    # as_country, ...}]}, NOT flat asn/org/country. The builder must read that
+    # structured shape (regression: it read flat keys and always got blanks).
+    class _AsnReconOut:
+        tool_results = {
+            "asn_summary": {
+                "row_count": 2,
+                "unique_asns": [
+                    {
+                        "as_number": "AS16509",
+                        "as_name": "amazon-02",
+                        "as_country": "US",
+                        "ranges": ["216.198.79.0/24"],
+                    }
+                ],
+                "cidrs_sample": ["216.198.79.0/24"],
+                "inputs": ["svalbard.ca"],
+            }
+        }
+        technologies: list[str] = []
+        assets = ["svalbard.ca"]
+        subdomains: list[str] = []
+
+    rr = build_stage1_recon_results("svalbard.ca", _AsnReconOut())
+    assert rr["ip_lookup"]["asn"] == "AS16509"
+    assert rr["ip_lookup"]["org"] == "amazon-02"
+    assert rr["ip_lookup"]["country"] == "US"
+    # helper is shape-tolerant: flat legacy shape still works
+    assert _primary_asn_fields({"asn": "AS1", "org": "O", "country": "CA"}) == ("AS1", "O", "CA")
+    assert _primary_asn_fields(None) == ("", "", "")
+
+
+def test_email_auth_unknown_when_dns_security_step_absent() -> None:
+    # When the DNS-security recon step did not run (no dns_security_findings key),
+    # email-auth must report "Unknown" — never falsely claim SPF/DMARC/DKIM/DNSSEC
+    # are present/signed for records that were never checked.
+    class _NoDnsSec:
+        tool_results = {"whois": {"stdout": ""}, "dig": {"stdout": ""}}
+        technologies: list[str] = []
+        assets = ["example.com"]
+        subdomains: list[str] = []
+
+    rr = build_stage1_recon_results("example.com", _NoDnsSec())
+    assert rr["email_auth"] == {
+        "dnssec": "Unknown",
+        "spf": "Unknown",
+        "dmarc": "Unknown",
+        "dkim": "Unknown",
+    }
