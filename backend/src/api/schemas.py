@@ -1366,7 +1366,7 @@ class ReportGenerateAcceptedResponse(BaseModel):
     )
 
 
-DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv", "md")
+DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv", "md", "xml")
 
 
 class ReportGenerateAllRequest(BaseModel):

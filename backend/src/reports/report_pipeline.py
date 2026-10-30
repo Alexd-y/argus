@@ -1050,15 +1050,16 @@ async def _rgp_generate_formats(
         report_data, template_context = _apply_midgard_free_projection(
             report_data, template_context
         )
-        # Guarantee the five free-tier formats are emitted (prompt §5.5), union-in
-        # the required set while preserving the caller's requested order.
-        fmt_list = list(fmt_list) + [f for f in MIDGARD_FREE_FORMATS if f not in fmt_list]
     elif _tier_norm == "asgard":
         from src.services.reporting import _apply_asgard_paid_projection
 
         report_data, template_context = _apply_asgard_paid_projection(report_data, template_context)
-        # Guarantee the five paid-tier formats are emitted (prompt §4).
-        fmt_list = list(fmt_list) + [f for f in ASGARD_PAID_FORMATS if f not in fmt_list]
+    # No per-row format union: each Report row renders ONLY its own requested
+    # format. The generate-all bundle already creates one row per format
+    # (DEFAULT_GENERATE_ALL_FORMATS), so unioning the full tier format set here
+    # made every row re-render ALL formats — N duplicate objects per format and an
+    # N-times slower bundle. The per-format rows still guarantee every format is
+    # emitted, exactly once each.
     for fmt in fmt_list:
         if fmt == "html":
             content = generate_html(
@@ -1367,13 +1368,22 @@ async def run_generate_report_pipeline(
         # R7 — canonical immutable snapshot: emit JSON/MD/XML(/PDF) companion
         # artifacts rendered from ONE ReportDocumentV1. Additive + fail-soft:
         # never breaks the standard tier outputs above (opt-in via flag).
-        (
-            artifact,
-            canon_fmt,
-            canon_key,
-        ) = await _rgp_canonical_snapshot(
-            built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
-        )
+        # Canonical snapshot (canonical_* companion artifacts) is a Valhalla
+        # provability deliverable rendered from one ReportDocumentV1. For
+        # Midgard/Asgard it is NOT consumed downstream (the plain per-format
+        # objects are the deliverable) and emitting it per row produced duplicate
+        # canonical_json/html/md/pdf/xml objects alongside the plain formats. Emit
+        # it only for Valhalla.
+        if tier_str == "valhalla":
+            (
+                artifact,
+                canon_fmt,
+                canon_key,
+            ) = await _rgp_canonical_snapshot(
+                built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
+            )
+        else:
+            artifact, canon_fmt, canon_key = None, None, None
 
         # Valhalla mandatory LLM remediation/closure deliverable (VH-LLM):
         # per-finding remediation plan + closure conclusion projected into
