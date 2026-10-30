@@ -4,9 +4,11 @@ Upload path: {scan_id}/recon_results.json, {scan_id}/mcp_trace.jsonl,
 {scan_id}/tech_profile.json, {scan_id}/raw_tool_outputs/*
 """
 
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from src.core.config import settings
 from src.recon.stage_object_download import (
@@ -49,6 +51,54 @@ def _content_type_for(path: Path) -> str:
     if suffix in (".txt", ".md", ".csv"):
         return "text/plain"
     return "application/octet-stream"
+
+
+def upload_stage1_json_objects(scan_id: str, objects: dict[str, Any]) -> list[str]:
+    """Upload in-memory ``{filename: json-able}`` to ``{scan_id}/{filename}`` in the
+    stage1 bucket.
+
+    The live scan pipeline uses this to persist recon_results.json /
+    tech_profile.json / anomalies_structured.json so the report data collector can
+    read them — the file-tree uploader above is only reachable from the CLI, which
+    is why the Target Intelligence / tech-profile / anomalies report sections were
+    empty for every scan. Best-effort: never raises (an artifact hiccup must never
+    fail the scan). Only the three Stage-1 JSON root files are accepted.
+    """
+    client = _get_client()
+    if not client:
+        logger.warning("S3 client unavailable; stage1 json objects not uploaded")
+        return []
+    if not ensure_stage1_artifacts_bucket():
+        logger.warning("Stage1 artifacts bucket unavailable; stage1 json not uploaded")
+        return []
+    bucket = settings.stage1_artifacts_bucket
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    uploaded: list[str] = []
+    for filename, payload in (objects or {}).items():
+        if filename not in STAGE1_ROOT_FILES or payload is None:
+            continue
+        try:
+            key = _build_object_key(scan_id, filename)
+            body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+            client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType="application/json",
+                Metadata={"scan_id": scan_id, "generated_at": generated_at},
+            )
+            uploaded.append(key)
+        except (ValueError, OSError, TypeError) as e:
+            logger.warning(
+                "Failed to upload stage1 json object",
+                extra={"file": filename, "error": str(e)},
+            )
+    if uploaded:
+        logger.info(
+            "stage1_json_objects_uploaded",
+            extra={"scan_id": scan_id, "count": len(uploaded), "files": uploaded},
+        )
+    return uploaded
 
 
 def upload_stage1_artifacts(

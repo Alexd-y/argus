@@ -1301,6 +1301,112 @@ def _harvest_emails(tool_results: dict[str, Any], domain: str) -> list[str]:
     return sorted(emails)
 
 
+def _parse_dig_any(dig_stdout: str) -> tuple[list[str], list[str], str]:
+    """Extract (NS hosts, MX hosts, SOA primary-NS) from ``dig ANY`` answer lines."""
+    ns: list[str] = []
+    mx: list[str] = []
+    soa = ""
+    for line in (dig_stdout or "").splitlines():
+        if line.startswith(";"):
+            continue
+        p = line.split()
+        # Anchor on the class token "IN" so this works with or without the TTL
+        # column (dig ANY, dig +noall +answer, etc.): rtype = token after IN.
+        if "IN" not in p:
+            continue
+        i = p.index("IN")
+        rest = p[i + 1 :]
+        if len(rest) < 2:
+            continue
+        rtype = rest[0].upper()
+        if rtype == "NS":
+            ns.append(rest[1].rstrip("."))
+        elif rtype == "MX" and len(rest) >= 3:
+            mx.append(rest[2].rstrip("."))
+        elif rtype == "SOA" and not soa:
+            soa = rest[1].rstrip(".")
+    return sorted(set(ns)), sorted(set(mx)), soa
+
+
+def _email_auth_from_dns_findings(findings: Any) -> dict[str, str]:
+    """Derive dnssec/spf/dmarc/dkim status strings from dns_security_findings.
+
+    The DNS-security recon emits these as Finding dicts (e.g. vuln_type
+    ``dnssec_missing``, title ``SPF record missing``); the report email-auth panel
+    needs plain status values, so collapse the findings into them."""
+    blob = " ".join(
+        f"{f.get('vuln_type', '')} {f.get('title', '')}".lower()
+        for f in (findings or [])
+        if isinstance(f, dict)
+    )
+
+    def status(missing_markers: tuple[str, ...], present: str) -> str:
+        return "Missing" if any(m in blob for m in missing_markers) else present
+
+    return {
+        "dnssec": status(("dnssec_missing", "dnssec not", "dnssec disabled"), "Signed"),
+        "spf": status(("spf record missing", "spf missing", "no spf"), "Present"),
+        "dmarc": status(("dmarc record missing", "dmarc missing", "no dmarc"), "Present"),
+        "dkim": status(("dkim missing", "dkim record missing", "no dkim"), "Present"),
+    }
+
+
+def build_stage1_recon_results(domain: str, recon_out: Any) -> dict[str, Any]:
+    """Shape recon tool output into the FLAT schema the report reads.
+
+    Produces the recon_results.json the report data collector downloads so
+    build_ownership_evidence populates WHOIS/DNS/ASN and the email-auth panel is
+    fed. whois is passed as the RAW string so ownership_evidence's regex path runs
+    (its dict-key path expects different keys than the recon whois parser emits)."""
+    tr = getattr(recon_out, "tool_results", None) or {}
+    whois_raw = str((tr.get("whois") or {}).get("stdout") or "") if isinstance(tr.get("whois"), dict) else str(tr.get("whois") or "")
+    dig_raw = str((tr.get("dig") or {}).get("stdout") or "") if isinstance(tr.get("dig"), dict) else str(tr.get("dig") or "")
+    ns, mx, soa_primary = _parse_dig_any(dig_raw)
+    asn = tr.get("asn_summary") if isinstance(tr.get("asn_summary"), dict) else {}
+    return {
+        "target_domain": domain,
+        "whois": whois_raw,
+        "dns": {
+            "ns": ns,
+            "mx": mx,
+            # ownership_evidence extracts the primary NS via `origin = <ns>`.
+            "soa": f"origin = {soa_primary}" if soa_primary else "",
+        },
+        "ip_lookup": {
+            "asn": str(asn.get("asn", "")),
+            "org": str(asn.get("org") or asn.get("organization") or ""),
+            "country": str(asn.get("country") or asn.get("country_code") or ""),
+        },
+        "email_auth": _email_auth_from_dns_findings(tr.get("dns_security_findings")),
+    }
+
+
+def build_stage1_tech_profile(recon_out: Any) -> list[dict[str, Any]]:
+    """Technology fingerprint as the JSON LIST the collector expects."""
+    domain = ""
+    try:
+        domain = str((getattr(recon_out, "assets", None) or [""])[0])
+    except Exception:  # noqa: BLE001
+        domain = ""
+    techs = [str(t) for t in (getattr(recon_out, "technologies", None) or []) if str(t).strip()]
+    return [
+        {
+            "host": domain,
+            "indicator_type": "technology",
+            "value": t,
+            "evidence": "recon_fingerprint",
+            "confidence": "medium",
+        }
+        for t in techs
+    ]
+
+
+def build_stage1_anomalies(recon_out: Any) -> dict[str, Any]:
+    """Anomalies snapshot as the JSON OBJECT the collector expects (may be empty)."""
+    subs = [str(s) for s in (getattr(recon_out, "subdomains", None) or []) if str(s).strip()]
+    return {"anomalies": [], "hypotheses": [], "coverage_gaps": [], "subdomains": subs}
+
+
 async def run_recon(
     target: str,
     options: dict,

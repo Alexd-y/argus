@@ -1843,6 +1843,31 @@ async def _dispatch_phase_recon(
         )
     except Exception:  # noqa: BLE001 - defence in depth; trigger is already fail-safe
         logger.debug("darkweb_t1_dispatch_noop", extra={"scan_id": scan_id})
+    # Persist the Stage-1 recon artifacts (recon_results.json / tech_profile.json /
+    # anomalies_structured.json) so the report data collector can read them and the
+    # Target Intelligence (WHOIS/DNS/ASN/email-auth), technology-profile and
+    # anomalies report sections populate. recon_out.tool_results is model-excluded
+    # (never reaches phase_outputs), so this must run here while it is in memory.
+    # Best-effort: an artifact hiccup must never fail the RECON phase.
+    try:
+        from src.orchestration.handlers import (
+            build_stage1_anomalies,
+            build_stage1_recon_results,
+            build_stage1_tech_profile,
+        )
+        from src.recon.stage1_storage import upload_stage1_json_objects
+
+        _domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
+        upload_stage1_json_objects(
+            scan_id,
+            {
+                "recon_results.json": build_stage1_recon_results(_domain, recon_out),
+                "tech_profile.json": build_stage1_tech_profile(recon_out),
+                "anomalies_structured.json": build_stage1_anomalies(recon_out),
+            },
+        )
+    except Exception:  # noqa: BLE001 - artifact persistence must never break the scan
+        logger.warning("stage1_persist_failed", extra={"scan_id": scan_id})
     output_data = recon_out.model_dump()
     return output_data
 
