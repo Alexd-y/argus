@@ -1248,12 +1248,43 @@ async def run_source_analysis(
 _EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b")
 
 
+#: HTML/JSON escapes that commonly sit immediately before a harvested address in
+#: tool stdout (``>info@x`` from a JSON-escaped ``>``, ``&gt;info@x`` from
+#: HTML). Left undecoded, the ``>``/``&`` leaks into the captured local-part
+#: (``u003einfo@x``, ``gt;info@x``) — a malformed selector that makes the breach
+#: lookup query the wrong address and miss a real leak.
+_EMAIL_WRAPPER_SUBS: tuple[tuple[str, str], ...] = (
+    (r"\\u003c", "<"),
+    (r"\\u003e", ">"),
+    (r"\\u0026", "&"),
+    (r"\\u0022", '"'),
+    (r"\\u0027", "'"),
+    (r"&lt;", "<"),
+    (r"&gt;", ">"),
+    (r"&amp;", "&"),
+    (r"&quot;", '"'),
+    (r"&#0*60;", "<"),
+    (r"&#0*62;", ">"),
+)
+
+
+def _decode_email_wrappers(text: str) -> str:
+    """Decode the escape/entity encodings of ``< > & " '`` so a bracket adjacent
+    to an address is a real (non-word) char and never leaks into the local-part."""
+    out = text
+    for esc, ch in _EMAIL_WRAPPER_SUBS:
+        out = re.sub(esc, ch, out, flags=re.IGNORECASE)
+    return out
+
+
 def _harvest_emails(tool_results: dict[str, Any], domain: str) -> list[str]:
     """Extract in-scope email addresses from recon tool outputs (for breach check).
 
     Scans stdout of tools that commonly surface addresses (whois, whatweb,
     http_crawl). Only returns addresses whose host matches the target domain to
-    avoid feeding unrelated third-party addresses to breach lookups.
+    avoid feeding unrelated third-party addresses to breach lookups. HTML/JSON
+    escapes wrapping an address are decoded first so the captured local-part is
+    the real address, not an escape artifact (``\\u003einfo@`` -> ``info@``).
     """
     d = (domain or "").lower().lstrip(".")
     emails: set[str] = set()
@@ -1263,7 +1294,7 @@ def _harvest_emails(tool_results: dict[str, Any], domain: str) -> list[str]:
         stdout = res.get("stdout") if isinstance(res, dict) else None
         if not isinstance(stdout, str):
             continue
-        for match in _EMAIL_RE.finditer(stdout):
+        for match in _EMAIL_RE.finditer(_decode_email_wrappers(stdout)):
             host = match.group(1).lower()
             if host == d or host.endswith("." + d):
                 emails.add(match.group(0).lower())
