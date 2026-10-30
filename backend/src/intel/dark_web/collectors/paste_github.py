@@ -48,7 +48,9 @@ class PsbdmpPasteCollector(BaseCollector):
     async def collect(self, selector: DarkWebSelector) -> list[DarkWebRawRecord]:
         resp = await self._client.query(domain=selector.value)
         out: list[DarkWebRawRecord] = []
-        for item in _as_list(resp.get("data")):
+        # resp may be a bare list OR a {"data": [...]} envelope depending on the
+        # client; _as_list handles both (resp.get() crashed on a list response).
+        for item in _as_list(resp):
             pid = str(item.get("id", "")) if isinstance(item, dict) else str(item)
             out.append(
                 DarkWebRawRecord(
@@ -81,7 +83,9 @@ class GithubLeakCollector(BaseCollector):
             query_type="code_search", query=selector.value, q=selector.value
         )
         out: list[DarkWebRawRecord] = []
-        for item in _as_list(resp.get("data"))[:25]:
+        # resp may be a bare list (GitHub code-search) OR a {"data": [...]} envelope;
+        # _as_list handles both. resp.get("data") crashed on the list response.
+        for item in _as_list(resp)[:25]:
             repo = ""
             path = ""
             if isinstance(item, dict):
