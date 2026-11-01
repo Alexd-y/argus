@@ -8,7 +8,11 @@ subject/SAN/validity for a perfectly valid Let's Encrypt certificate.
 
 from __future__ import annotations
 
-from src.reports.tls_parser_v2 import parse_testssl_cert_fields
+from src.reports.tls_parser_v2 import (
+    canon_tls_version,
+    parse_testssl_cert_fields,
+    reconcile_tls_protocols,
+)
 
 # Trimmed real testssl output for svalbard.ca (Vercel / Let's Encrypt), including
 # the stray `}` line prefixes and the CAA commentary that fooled the old parser.
@@ -59,12 +63,14 @@ def test_empty_text_is_safe() -> None:
         "validity": "",
         "protocols": [],
         "weak_protocols": [],
+        "not_offered": [],
     }
 
 
-def test_protocols_are_offered_only() -> None:
+def test_protocols_are_offered_only_and_record_negatives() -> None:
     # testssl reports each version's offered status; not-offered legacy versions
-    # must NOT appear (regression: SSLv2 / TLS 1.1 were falsely listed as present).
+    # must NOT appear (regression: SSLv2 / TLS 1.1 were falsely listed as present),
+    # and the explicit negatives are recorded for the reconcile step.
     text = (
         " SSLv2      not offered (OK)\n"
         " SSLv3      not offered (OK)\n"
@@ -76,9 +82,31 @@ def test_protocols_are_offered_only() -> None:
     cf = parse_testssl_cert_fields(text)
     assert cf["protocols"] == ["TLS 1.2", "TLS 1.3"]
     assert cf["weak_protocols"] == []
+    assert set(cf["not_offered"]) == {"sslv2", "sslv3", "tls 1.0", "tls 1.1"}
 
 
 def test_offered_weak_protocol_flagged() -> None:
     cf = parse_testssl_cert_fields(" TLS 1.1    offered\n TLS 1.2    offered (OK)\n")
     assert "TLS 1.1" in cf["protocols"]
     assert cf["weak_protocols"] == ["TLS 1.1"]
+
+
+def test_canon_tls_version_forms() -> None:
+    assert canon_tls_version("TLSv1.1") == "tls 1.1"
+    assert canon_tls_version("TLS1.1") == "tls 1.1"
+    assert canon_tls_version("tls 1") == "tls 1.0"
+    assert canon_tls_version("tlsv1.0") == "tls 1.0"
+    assert canon_tls_version("SSLv2") == "sslv2"
+    assert canon_tls_version("http/2") == ""
+
+
+def test_reconcile_no_fail_open() -> None:
+    # A legacy-detected weak protocol that the column parse did NOT explicitly mark
+    # 'not offered' must be KEPT, not dropped (no fail-open). Differently-cased
+    # forms normalise to the same version.
+    cf = {"protocols": ["TLS 1.2"], "weak_protocols": [], "not_offered": ["sslv2"]}
+    protocols, weak = reconcile_tls_protocols(["SSLv2", "TLS1.1"], ["SSLv2", "TLS1.1"], cf)
+    # SSLv2 explicitly not-offered -> removed; TLS1.1 not contradicted -> kept weak
+    assert "SSLv2" not in protocols and "SSLv2" not in weak
+    assert "TLS1.1" in protocols and "TLS1.1" in weak
+    assert "TLS 1.2" in protocols

@@ -15,6 +15,62 @@ def _clean_cert(value: str) -> str:
     return re.sub(r"\s+", " ", s).strip()[:512]
 
 
+# Single shared weak-protocol registry (canonical lower-case labels) so the column
+# parser and the reconcile step classify identically — no parser/validator drift.
+WEAK_TLS_VERSIONS = frozenset({"sslv2", "sslv3", "tls 1.0", "tls 1.1"})
+
+
+def canon_tls_version(raw: Any) -> str:
+    """Canonical lower-case protocol label for comparison.
+
+    ``TLSv1.1`` / ``TLS1.1`` / ``tls 1.1`` -> ``tls 1.1``; ``TLS 1`` / ``TLS1`` ->
+    ``tls 1.0`` (missing minor is 1.0); ``SSLv2`` -> ``sslv2``. ``""`` when the
+    token is not a recognised SSL/TLS version (so unrelated text never matches a
+    weak-protocol or not-offered check)."""
+    s = re.sub(r"\s+", " ", str(raw or "").strip().lower())
+    m = re.match(r"ssl\s*v?\s*([23])\b", s)
+    if m:
+        return f"sslv{m.group(1)}"
+    m = re.match(r"tls\s*v?\s*1(?:\.(\d))?\b", s)
+    if m:
+        return f"tls 1.{m.group(1) if m.group(1) is not None else '0'}"
+    return ""
+
+
+def _display_tls_version(canon: str) -> str:
+    if canon.startswith("sslv"):
+        return "SSLv" + canon[-1]
+    if canon.startswith("tls "):
+        return "TLS " + canon[4:]
+    return canon
+
+
+def reconcile_tls_protocols(
+    legacy_protocols: Any, legacy_weak: Any, cf: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """Combine the legacy token-scan protocol lists with the column parse WITHOUT
+    fail-open: versions testssl reports ``not offered`` are the only authoritative
+    negatives and are removed from both lists; every other legacy-flagged weak
+    protocol is kept (never silently dropped). Classification uses the shared
+    :data:`WEAK_TLS_VERSIONS` registry via :func:`canon_tls_version`."""
+    not_off = {canon_tls_version(p) for p in (cf.get("not_offered") or [])}
+    not_off.discard("")
+
+    def _dropped(label: str) -> bool:
+        cv = canon_tls_version(label)
+        return bool(cv) and cv in not_off
+
+    protocols: list[str] = []
+    for p in list(legacy_protocols or []) + list(cf.get("protocols") or []):
+        if p and not _dropped(p) and p not in protocols:
+            protocols.append(p)
+    weak: list[str] = []
+    for p in list(legacy_weak or []) + list(cf.get("weak_protocols") or []):
+        if p and not _dropped(p) and p not in weak:
+            weak.append(p)
+    return protocols, weak
+
+
 def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
     """Extract issuer/subject/SAN/validity from testssl (or openssl) TLS text.
 
@@ -34,25 +90,28 @@ def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
         "validity": "",
         "protocols": [],
         "weak_protocols": [],
+        "not_offered": [],
     }
     text = stdout or ""
-    # Protocols from testssl's per-version column: keep ONLY versions reported
-    # "offered". The legacy regexes matched version tokens regardless of their
-    # offered/not-offered status, so a hardened endpoint falsely listed SSLv2 /
-    # TLS 1.1. testssl prints e.g. ``SSLv2  not offered (OK)`` / ``TLS 1.2  offered``.
-    _weak = {"sslv2", "sslv3", "tls 1.0", "tls 1.1"}
+    # Protocols from testssl's per-version column. Record offered versions AND the
+    # authoritative ``not offered`` negatives (the reconcile step removes the latter
+    # from the legacy token scan). testssl prints e.g. ``SSLv2 not offered (OK)`` /
+    # ``TLS 1.2 offered``. Classify weakness via the shared WEAK_TLS_VERSIONS set.
     for pm in re.finditer(
         r"(?mi)^[\s}]*(SSLv2|SSLv3|TLS\s*1(?:\.[0-3])?|TLSv1\.[0-3])\s+(not offered|offered)",
         text,
     ):
-        status = pm.group(2).strip().lower()
-        if status != "offered":
+        canon = canon_tls_version(pm.group(1))
+        if not canon:
             continue
-        raw = re.sub(r"\s+", " ", pm.group(1).strip()).replace("TLSv", "TLS ")
-        label = "TLS 1.0" if raw.lower() in ("tls 1", "tls1") else raw
+        if pm.group(2).strip().lower() == "not offered":
+            if canon not in out["not_offered"]:
+                out["not_offered"].append(canon)
+            continue
+        label = _display_tls_version(canon)
         if label not in out["protocols"]:
             out["protocols"].append(label)
-            if label.lower() in _weak:
+            if canon in WEAK_TLS_VERSIONS:
                 out["weak_protocols"].append(label)
     # testssl prefixes some field lines with a stray ``}`` from its formatting, so
     # tolerate a leading brace/space before each label.

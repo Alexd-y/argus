@@ -34,7 +34,7 @@ from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
 )
-from src.reports.tls_parser_v2 import parse_testssl_cert_fields
+from src.reports.tls_parser_v2 import parse_testssl_cert_fields, reconcile_tls_protocols
 from src.reports.valhalla_sections._common import _finding_id_for_risk, _truncate
 from src.reports.valhalla_sections.branding import (  # noqa: F401 — re-export
     BRAND_NAME,
@@ -3048,11 +3048,9 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         issuer = _cf["issuer"]
     if _cf["validity"]:
         validity = _cf["validity"]
-    # Offered-only protocol list from testssl's per-version column overrides the
-    # noisy token scan (which listed not-offered SSLv2 / TLS 1.1 as present).
-    if _cf.get("protocols"):
-        protocols = list(_cf["protocols"])
-        weak_protocols = list(_cf.get("weak_protocols") or [])
+    # Remove only versions testssl explicitly reports "not offered" from the noisy
+    # token scan; never drop a legacy-detected weak protocol (no fail-open).
+    protocols, weak_protocols = reconcile_tls_protocols(protocols, weak_protocols, _cf)
 
     hsts_match = re.search(r"Strict.Transport.Security[:\s]+(.+)", stdout, re.IGNORECASE)
     if hsts_match:
