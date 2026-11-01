@@ -620,6 +620,43 @@ def recon_summary_for_jinja(data: ScanReportData) -> dict[str, Any]:
     technologies: list[str] = []
     if data.report and data.report.technologies:
         technologies = [str(t) for t in data.report.technologies]
+
+    def _stage1_json(filename: str) -> Any:
+        for it in getattr(getattr(data, "stage1", None), "items", None) or []:
+            if getattr(it, "filename", "") == filename:
+                return getattr(it, "json_value", None)
+        return None
+
+    # Technology fingerprint fallback: the Report row's technologies column is often
+    # empty, but Stage-1 persists tech_profile.json (Vercel/Next.js/etc.). Use it so
+    # the Target Intelligence technology list is populated across tiers.
+    if not technologies:
+        tp = _stage1_json("tech_profile.json")
+        if isinstance(tp, list):
+            seen: set[str] = set()
+            for ent in tp:
+                val = (
+                    str((ent or {}).get("value") or "").strip()
+                    if isinstance(ent, dict)
+                    else str(ent).strip()
+                )
+                if val and val.lower() not in seen:
+                    seen.add(val.lower())
+                    technologies.append(val)
+    # Subdomains discovered — Stage-1 anomalies_structured.json carries the list;
+    # expose it as pipeline_subdomains for the Target Intelligence block.
+    pipeline_subdomains: list[str] = []
+    anomalies = _stage1_json("anomalies_structured.json")
+    if isinstance(anomalies, dict):
+        subs = anomalies.get("subdomains")
+        if isinstance(subs, list):
+            sseen: set[str] = set()
+            for sd in subs:
+                sv = str(sd).strip()
+                if sv and sv.lower() not in sseen:
+                    sseen.add(sv.lower())
+                    pipeline_subdomains.append(sv)
+
     summary_counts: dict[str, Any] = dict(
         executive_severity_totals_from_finding_rows(data.findings)
     )
@@ -635,6 +672,7 @@ def recon_summary_for_jinja(data: ScanReportData) -> dict[str, Any]:
         "scan": data.scan.model_dump(mode="json") if data.scan else None,
         "summary_counts": summary_counts,
         "technologies": technologies,
+        "pipeline_subdomains": pipeline_subdomains,
         "timeline_preview": timeline_preview,
         "phase_inputs_count": len(data.phase_inputs),
         "phase_outputs_count": len(data.phase_outputs),

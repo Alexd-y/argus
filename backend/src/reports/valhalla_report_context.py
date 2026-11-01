@@ -34,6 +34,7 @@ from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
 )
+from src.reports.tls_parser_v2 import parse_testssl_cert_fields
 from src.reports.valhalla_sections._common import _finding_id_for_risk, _truncate
 from src.reports.valhalla_sections.branding import (  # noqa: F401 — re-export
     BRAND_NAME,
@@ -3042,24 +3043,11 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
                 weak_protocols.append(normalized)
             break
 
-    cn_match = re.search(r"CN\s*=\s*([^\s,]+)", stdout)
-    if cn_match:
-        issuer = cn_match.group(1).strip()[:512]
-
-    issuer_match = re.search(r"(?:Issuer|issuer=|i:)\s*:?\s*(.+)", stdout)
-    if issuer_match:
-        issuer = issuer_match.group(1).strip()[:512]
-
-    not_before = re.search(
-        r"(?:Not Before|notBefore=|Not valid before)\s*:?\s*(.+)", stdout, re.IGNORECASE
-    )
-    not_after = re.search(
-        r"(?:Not After|notAfter=|Not valid after)\s*:?\s*(.+)", stdout, re.IGNORECASE
-    )
-    if not_before and not_after:
-        validity = f"{not_before.group(1).strip()[:120]} - {not_after.group(1).strip()[:120]}"
-    elif not_after:
-        validity = not_after.group(1).strip()[:256]
+    _cf = parse_testssl_cert_fields(stdout)
+    if _cf["issuer"]:
+        issuer = _cf["issuer"]
+    if _cf["validity"]:
+        validity = _cf["validity"]
 
     hsts_match = re.search(r"Strict.Transport.Security[:\s]+(.+)", stdout, re.IGNORECASE)
     if hsts_match:
@@ -3107,10 +3095,7 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
             hsts_max_age_tt = int(ma_m.group(1))
         hsts_include_subdomains_tt = "includesubdomains" in hsts.lower()
         hsts_preload_tt = "preload" in hsts.lower()
-    cert_subject_tt = ""
-    cn_m_tt = re.search(r"CN\s*=\s*([^\s,]+)", stdout)
-    if cn_m_tt:
-        cert_subject_tt = cn_m_tt.group(1).strip()[:512]
+    cert_subject_tt = _cf["subject"]
     tls_versions_tt = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
     cipher_detail_tt: list[dict[str, str]] = []
     for cs in sorted(cipher_set)[:16]:
@@ -3124,6 +3109,10 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         recommendations_tt.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
         issuer=issuer,
+        subject=_cf["subject"] or None,
+        san=list(_cf["san"]),
+        valid_from=_cf["valid_from"] or None,
+        valid_to=_cf["valid_to"] or None,
         validity=validity,
         protocols=protocols[:32],
         weak_protocols=weak_protocols[:32],

@@ -1,6 +1,66 @@
-from typing import Literal
+import re
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+
+def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
+    """Extract issuer/subject/SAN/validity from testssl (or openssl) TLS text.
+
+    testssl prints a column layout -- ``Issuer   <v>``, ``Common Name (CN)  <v>``,
+    ``subjectAltName (SAN)  <hosts>``, ``Certificate Validity (UTC) ... (<from> --> <to>)``
+    -- which the legacy openssl-oriented matcher missed, and its greedy ``Issuer``
+    regex grabbed the CAA commentary line (``match with "Issuer" below``) instead of
+    the real field. Anchor on the field line; also accept openssl ``issuer=``/``CN=``/
+    ``notBefore=``/``notAfter=``. Returns empty strings/lists when absent.
+    """
+    out: dict[str, Any] = {
+        "issuer": "",
+        "subject": "",
+        "san": [],
+        "valid_from": "",
+        "valid_to": "",
+        "validity": "",
+    }
+    text = stdout or ""
+    # testssl prefixes some field lines with a stray ``}`` from its formatting, so
+    # tolerate a leading brace/space before each label.
+    m = re.search(r"(?mi)^[\s}]*Issuer\s{2,}(\S[^\n]*)", text) or re.search(
+        r"(?i)\b(?:issuer=|i:)\s*(\S[^\n]*)", text
+    )
+    if m:
+        cand = m.group(1).strip().strip('"').strip()[:512]
+        if cand and "below" not in cand.lower():
+            out["issuer"] = cand
+    m = re.search(r"(?mi)^[\s}]*Common Name \(CN\)\s+(\S[^\n,{]*)", text) or re.search(
+        r"(?i)\bCN\s*=\s*([^\s,/]+)", text
+    )
+    if m:
+        out["subject"] = m.group(1).strip()[:512]
+    m = re.search(r"(?mi)^[\s}]*subjectAltName \(SAN\)\s+(\S[^\n{]*)", text)
+    if m:
+        out["san"] = [
+            h.strip() for h in re.split(r"[\s,]+", m.group(1).strip()) if h.strip() and "." in h
+        ][:32]
+    vm = re.search(
+        r"Certificate Validity.*?\((\d{4}-\d\d-\d\d[^-]*?)-->\s*(\d{4}-\d\d-\d\d[^)]*)\)",
+        text,
+    )
+    if vm:
+        out["valid_from"] = vm.group(1).strip()[:64]
+        out["valid_to"] = vm.group(2).strip()[:64]
+    else:
+        nb = re.search(r"(?i)(?:Not Before|notBefore=|Not valid before)\s*:?\s*(.+)", text)
+        na = re.search(r"(?i)(?:Not After|notAfter=|Not valid after)\s*:?\s*(.+)", text)
+        if nb:
+            out["valid_from"] = nb.group(1).strip()[:64]
+        if na:
+            out["valid_to"] = na.group(1).strip()[:64]
+    if out["valid_from"] and out["valid_to"]:
+        out["validity"] = f"{out['valid_from']} - {out['valid_to']}"
+    elif out["valid_to"]:
+        out["validity"] = out["valid_to"]
+    return out
 
 
 class CertificateChain(BaseModel):
