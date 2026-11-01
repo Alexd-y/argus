@@ -54,19 +54,31 @@ def reconcile_tls_protocols(
     protocol is kept (never silently dropped). Classification uses the shared
     :data:`WEAK_TLS_VERSIONS` registry via :func:`canon_tls_version`."""
     not_off = {canon_tls_version(p) for p in (cf.get("not_offered") or [])}
+    # Positive evidence wins: a version explicitly reported offered anywhere is NOT
+    # a negative, even if another section said "not offered".
+    not_off -= {canon_tls_version(p) for p in (cf.get("protocols") or [])}
     not_off.discard("")
 
     def _dropped(label: str) -> bool:
         cv = canon_tls_version(label)
         return bool(cv) and cv in not_off
 
+    # Only the legacy token-scan entries are removable (they produced the false
+    # positives); the column parse's offered/weak lists are authoritative positives
+    # and are never dropped — no negative result erases positive weak evidence.
     protocols: list[str] = []
-    for p in list(legacy_protocols or []) + list(cf.get("protocols") or []):
+    for p in list(legacy_protocols or []):
         if p and not _dropped(p) and p not in protocols:
             protocols.append(p)
+    for p in cf.get("protocols") or []:
+        if p and p not in protocols:
+            protocols.append(p)
     weak: list[str] = []
-    for p in list(legacy_weak or []) + list(cf.get("weak_protocols") or []):
+    for p in list(legacy_weak or []):
         if p and not _dropped(p) and p not in weak:
+            weak.append(p)
+    for p in cf.get("weak_protocols") or []:
+        if p and p not in weak:
             weak.append(p)
     return protocols, weak
 

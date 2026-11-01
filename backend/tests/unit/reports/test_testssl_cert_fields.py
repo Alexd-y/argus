@@ -110,3 +110,16 @@ def test_reconcile_no_fail_open() -> None:
     assert "SSLv2" not in protocols and "SSLv2" not in weak
     assert "TLS1.1" in protocols and "TLS1.1" in weak
     assert "TLS 1.2" in protocols
+
+
+def test_reconcile_positive_evidence_wins_over_negative() -> None:
+    # Same version reported BOTH offered and not-offered (e.g. two testssl IP
+    # sections): the offered (positive) evidence must win — it stays weak.
+    cf = {
+        "protocols": ["TLS 1.1"],
+        "weak_protocols": ["TLS 1.1"],
+        "not_offered": ["tls 1.1"],
+    }
+    protocols, weak = reconcile_tls_protocols([], [], cf)
+    assert "TLS 1.1" in protocols
+    assert "TLS 1.1" in weak  # never erased by the conflicting negative
