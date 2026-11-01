@@ -27,6 +27,8 @@ Valhalla-only. Nothing here reads ``proof_of_concept``, ``raw_request``,
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -36,6 +38,57 @@ if TYPE_CHECKING:
 # ``on_absent`` sentinels (midgard discipline): distinguish "did not run" from
 # "ran, found nothing".
 NOT_ASSESSED = "not assessed"
+
+# Certificate-derived strings (issuer/subject/SAN) are controlled by whoever runs
+# the scanned endpoint, so neutralise control chars + Markdown/HTML metacharacters
+# before they enter a rendered report (the Markdown tier embeds them verbatim).
+# ``*`` is kept so wildcard cert names (``*.example.com``) survive.
+_CERT_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f`#\[\]<>|\\~]")
+_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
+
+def _sanitize_cert_value(value: Any) -> str:
+    if not value:
+        return ""
+    s = _CERT_UNSAFE_RE.sub(" ", str(value))
+    return re.sub(r"\s+", " ", s).strip()[:256]
+
+
+def _parse_cert_date(text: Any) -> date | None:
+    m = _DATE_RE.search(str(text or ""))
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _validity_status(valid_from: Any, valid_to: Any, scan_ts: Any) -> str:
+    """pass only when the scan time is within [not_before, not_after]; fail when
+    expired / not-yet-valid; NOT_ASSESSED when the dates cannot be parsed."""
+    vt = _parse_cert_date(valid_to)
+    if vt is None:
+        return NOT_ASSESSED
+    now = _parse_cert_date(scan_ts) or date.today()
+    vf = _parse_cert_date(valid_from)
+    if vt < now or (vf is not None and vf > now):
+        return "fail"
+    return "pass"
+
+
+def _hsts_status(hsts: Any) -> tuple[str, str]:
+    """Return (display, status). pass only on a positive max-age; 'not offered' /
+    absent / max-age=0 is fail (never a false pass on a truthy 'not offered' string)."""
+    h = _sanitize_cert_value(hsts)
+    low = h.lower()
+    if not h or any(m in low for m in ("not offered", "absent", "missing", "no hsts", "not set")):
+        return ("Absent", "fail")
+    m = re.search(r"max-age\s*=\s*(\d+)", low)
+    if m and int(m.group(1)) > 0:
+        return (h, "pass")
+    return (h or "Absent", "fail")
+
 
 # Plan catalogue — drive price/blurb/cadence from config, not literals in the
 # template, so Valhalla/other plans differ (prompt §3.4). Kept here as the Asgard
@@ -417,28 +470,35 @@ def build_tls_analysis(
     # Build the check rows from the structured ssl_tls_analysis (certificate,
     # protocols, HSTS) — the sparse ssl_tls_table_rows carry no check/result fields.
     ssl = _attr(vc, "ssl_tls_analysis")
-    issuer = _nonempty(_attr(ssl, "issuer")) or _nonempty(_attr(ssl, "cert_issuer"))
-    subject = _nonempty(_attr(ssl, "subject")) or _nonempty(_attr(ssl, "cert_subject"))
-    sans = [str(s) for s in (_attr(ssl, "san") or []) if str(s).strip()]
-    valid_from = _nonempty(_attr(ssl, "valid_from"))
-    valid_to = _nonempty(_attr(ssl, "valid_to"))
+    issuer = _sanitize_cert_value(_attr(ssl, "issuer") or _attr(ssl, "cert_issuer"))
+    subject = _sanitize_cert_value(_attr(ssl, "subject") or _attr(ssl, "cert_subject"))
+    sans = [_sanitize_cert_value(s) for s in (_attr(ssl, "san") or []) if str(s).strip()]
+    sans = [s for s in sans if s]
+    valid_from = _sanitize_cert_value(_attr(ssl, "valid_from"))
+    valid_to = _sanitize_cert_value(_attr(ssl, "valid_to"))
     protocols: list[str] = []
     for p in _attr(ssl, "protocols") or []:
-        if str(p) and str(p) not in protocols:
-            protocols.append(str(p))
-    weak_protocols = [str(p) for p in (_attr(ssl, "weak_protocols") or [])]
-    hsts = _nonempty(_attr(ssl, "hsts"))
+        ps = _sanitize_cert_value(p)
+        if ps and ps not in protocols:
+            protocols.append(ps)
+    weak_protocols = [_sanitize_cert_value(p) for p in (_attr(ssl, "weak_protocols") or [])]
+    weak_protocols = [p for p in weak_protocols if p]
+    scan_ts = getattr(report_data, "created_at", None) or ""
+    validity_status = _validity_status(valid_from, valid_to, scan_ts)
+    hsts_display, hsts_status = _hsts_status(_attr(ssl, "hsts"))
     rows = [
         {
+            # Issuer presence is informational, not a trust verdict (chain-of-trust
+            # is a separate check), so never report it as a security "pass".
             "check": "Certificate Issuer",
             "result": issuer or NOT_ASSESSED,
-            "status": "pass" if issuer else NOT_ASSESSED,
+            "status": "info" if issuer else NOT_ASSESSED,
             "detail": "X.509 certificate issuer (CA).",
         },
         {
             "check": "Certificate Subject",
             "result": subject or NOT_ASSESSED,
-            "status": "pass" if subject else NOT_ASSESSED,
+            "status": "info" if subject else NOT_ASSESSED,
             "detail": (
                 ("Subject Alternative Names: " + ", ".join(sans[:12]))
                 if sans
@@ -452,8 +512,12 @@ def build_tls_analysis(
                 if valid_from and valid_to
                 else (valid_to or NOT_ASSESSED)
             ),
-            "status": "pass" if valid_to else NOT_ASSESSED,
-            "detail": "Certificate not-before / not-after window.",
+            "status": validity_status,
+            "detail": (
+                "Certificate is outside its validity window at scan time."
+                if validity_status == "fail"
+                else "Certificate not-before / not-after window."
+            ),
         },
         {
             "check": "Negotiated protocols",
@@ -467,14 +531,14 @@ def build_tls_analysis(
         },
         {
             "check": "HSTS",
-            "result": hsts or "Absent",
-            "status": "pass" if hsts else "fail",
+            "result": hsts_display,
+            "status": hsts_status,
             "detail": "Strict-Transport-Security response header.",
         },
     ]
     return {
         "summary": (
-            f"TLS certificate issued by {issuer} for {subject or target}; "
+            f"TLS certificate issued by {issuer} for {subject or _sanitize_cert_value(target)}; "
             f"protocols: {', '.join(protocols) if protocols else 'see scan'}."
             if issuer
             else "Negotiated TLS parameters for the scanned endpoint."

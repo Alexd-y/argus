@@ -6770,6 +6770,10 @@ def _vh_build_ssl(fetch_raw_bodies, raw_artifact_keys, recon_results):
         merged = _ssl_from_testssl_json(tls_blob)
         ssl_out = SslTlsAnalysisModel(
             issuer=merged.issuer or ssl_part.issuer,
+            subject=merged.subject or ssl_part.subject,
+            san=(merged.san or ssl_part.san),
+            valid_from=merged.valid_from or ssl_part.valid_from,
+            valid_to=merged.valid_to or ssl_part.valid_to,
             validity=merged.validity or ssl_part.validity,
             protocols=(merged.protocols or ssl_part.protocols),
             weak_protocols=(merged.weak_protocols or ssl_part.weak_protocols),
@@ -6797,6 +6801,10 @@ def _vh_build_ssl(fetch_raw_bodies, raw_artifact_keys, recon_results):
         if text_ssl and not _ssl_surface_empty(text_ssl):
             ssl_out = SslTlsAnalysisModel(
                 issuer=text_ssl.issuer or ssl_out.issuer,
+                subject=text_ssl.subject or ssl_out.subject,
+                san=(text_ssl.san or ssl_out.san),
+                valid_from=text_ssl.valid_from or ssl_out.valid_from,
+                valid_to=text_ssl.valid_to or ssl_out.valid_to,
                 validity=text_ssl.validity or ssl_out.validity,
                 protocols=text_ssl.protocols or ssl_out.protocols,
                 weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,

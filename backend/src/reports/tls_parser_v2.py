@@ -3,6 +3,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+# Certificate fields are set by whoever controls the scanned endpoint, so strip
+# control chars + Markdown/HTML metacharacters before they reach a renderer. ``*``
+# is kept (legitimate in wildcard cert names, e.g. ``*.example.com``); emphasis
+# runs are harmless compared with newlines/link/code/HTML injection.
+_CERT_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f`#\[\]<>|\\~]")
+
+
+def _clean_cert(value: str) -> str:
+    s = _CERT_UNSAFE_RE.sub(" ", str(value or ""))
+    return re.sub(r"\s+", " ", s).strip()[:512]
+
 
 def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
     """Extract issuer/subject/SAN/validity from testssl (or openssl) TLS text.
@@ -29,18 +40,20 @@ def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
         r"(?i)\b(?:issuer=|i:)\s*(\S[^\n]*)", text
     )
     if m:
-        cand = m.group(1).strip().strip('"').strip()[:512]
+        cand = _clean_cert(m.group(1).strip().strip('"'))
         if cand and "below" not in cand.lower():
             out["issuer"] = cand
     m = re.search(r"(?mi)^[\s}]*Common Name \(CN\)\s+(\S[^\n,{]*)", text) or re.search(
         r"(?i)\bCN\s*=\s*([^\s,/]+)", text
     )
     if m:
-        out["subject"] = m.group(1).strip()[:512]
+        out["subject"] = _clean_cert(m.group(1))
     m = re.search(r"(?mi)^[\s}]*subjectAltName \(SAN\)\s+(\S[^\n{]*)", text)
     if m:
         out["san"] = [
-            h.strip() for h in re.split(r"[\s,]+", m.group(1).strip()) if h.strip() and "." in h
+            _clean_cert(h)
+            for h in re.split(r"[\s,]+", m.group(1).strip())
+            if h.strip() and "." in h
         ][:32]
     vm = re.search(
         r"Certificate Validity.*?\((\d{4}-\d\d-\d\d[^-]*?)-->\s*(\d{4}-\d\d-\d\d[^)]*)\)",
