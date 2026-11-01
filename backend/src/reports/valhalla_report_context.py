@@ -3048,6 +3048,11 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         issuer = _cf["issuer"]
     if _cf["validity"]:
         validity = _cf["validity"]
+    # Offered-only protocol list from testssl's per-version column overrides the
+    # noisy token scan (which listed not-offered SSLv2 / TLS 1.1 as present).
+    if _cf.get("protocols"):
+        protocols = list(_cf["protocols"])
+        weak_protocols = list(_cf.get("weak_protocols") or [])
 
     hsts_match = re.search(r"Strict.Transport.Security[:\s]+(.+)", stdout, re.IGNORECASE)
     if hsts_match:

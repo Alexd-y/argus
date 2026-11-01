@@ -57,4 +57,28 @@ def test_empty_text_is_safe() -> None:
         "valid_from": "",
         "valid_to": "",
         "validity": "",
+        "protocols": [],
+        "weak_protocols": [],
     }
+
+
+def test_protocols_are_offered_only() -> None:
+    # testssl reports each version's offered status; not-offered legacy versions
+    # must NOT appear (regression: SSLv2 / TLS 1.1 were falsely listed as present).
+    text = (
+        " SSLv2      not offered (OK)\n"
+        " SSLv3      not offered (OK)\n"
+        " TLS 1      not offered\n"
+        " TLS 1.1    not offered\n"
+        " TLS 1.2    offered (OK)\n"
+        " TLS 1.3    offered (OK)\n"
+    )
+    cf = parse_testssl_cert_fields(text)
+    assert cf["protocols"] == ["TLS 1.2", "TLS 1.3"]
+    assert cf["weak_protocols"] == []
+
+
+def test_offered_weak_protocol_flagged() -> None:
+    cf = parse_testssl_cert_fields(" TLS 1.1    offered\n TLS 1.2    offered (OK)\n")
+    assert "TLS 1.1" in cf["protocols"]
+    assert cf["weak_protocols"] == ["TLS 1.1"]

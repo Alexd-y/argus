@@ -32,8 +32,28 @@ def parse_testssl_cert_fields(stdout: str) -> dict[str, Any]:
         "valid_from": "",
         "valid_to": "",
         "validity": "",
+        "protocols": [],
+        "weak_protocols": [],
     }
     text = stdout or ""
+    # Protocols from testssl's per-version column: keep ONLY versions reported
+    # "offered". The legacy regexes matched version tokens regardless of their
+    # offered/not-offered status, so a hardened endpoint falsely listed SSLv2 /
+    # TLS 1.1. testssl prints e.g. ``SSLv2  not offered (OK)`` / ``TLS 1.2  offered``.
+    _weak = {"sslv2", "sslv3", "tls 1.0", "tls 1.1"}
+    for pm in re.finditer(
+        r"(?mi)^[\s}]*(SSLv2|SSLv3|TLS\s*1(?:\.[0-3])?|TLSv1\.[0-3])\s+(not offered|offered)",
+        text,
+    ):
+        status = pm.group(2).strip().lower()
+        if status != "offered":
+            continue
+        raw = re.sub(r"\s+", " ", pm.group(1).strip()).replace("TLSv", "TLS ")
+        label = "TLS 1.0" if raw.lower() in ("tls 1", "tls1") else raw
+        if label not in out["protocols"]:
+            out["protocols"].append(label)
+            if label.lower() in _weak:
+                out["weak_protocols"].append(label)
     # testssl prefixes some field lines with a stray ``}`` from its formatting, so
     # tolerate a leading brace/space before each label.
     m = re.search(r"(?mi)^[\s}]*Issuer\s{2,}(\S[^\n]*)", text) or re.search(
