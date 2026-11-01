@@ -368,15 +368,27 @@ def build_midgard_intel(
     ea = _own("email_auth")
     ea = ea if isinstance(ea, dict) else {}
     email_auth = {
-        "dnssec": _nonempty_str(ea.get("dnssec")) or _nonempty_str(_attr(vc, "dnssec_status")) or INTEL_NOT_ASSESSED,
-        "spf": _nonempty_str(ea.get("spf")) or _nonempty_str(_attr(vc, "spf_record")) or INTEL_NOT_ASSESSED,
-        "dmarc": _nonempty_str(ea.get("dmarc")) or _nonempty_str(_attr(vc, "dmarc_record")) or INTEL_NOT_ASSESSED,
-        "dkim": _nonempty_str(ea.get("dkim")) or _nonempty_str(_attr(vc, "dkim_status")) or INTEL_NOT_ASSESSED,
+        "dnssec": _nonempty_str(ea.get("dnssec"))
+        or _nonempty_str(_attr(vc, "dnssec_status"))
+        or INTEL_NOT_ASSESSED,
+        "spf": _nonempty_str(ea.get("spf"))
+        or _nonempty_str(_attr(vc, "spf_record"))
+        or INTEL_NOT_ASSESSED,
+        "dmarc": _nonempty_str(ea.get("dmarc"))
+        or _nonempty_str(_attr(vc, "dmarc_record"))
+        or INTEL_NOT_ASSESSED,
+        "dkim": _nonempty_str(ea.get("dkim"))
+        or _nonempty_str(_attr(vc, "dkim_status"))
+        or INTEL_NOT_ASSESSED,
     }
 
     # --- TLS / certificate ----------------------------------------------
-    ssl_rows = _attr(vc, "ssl_tls_table_rows") or recon.get("ssl_tls_table_rows") or []
-    tls = _tls_from_rows(ssl_rows)
+    # Prefer the structured ssl_tls_analysis (carries issuer/subject/SAN/validity/
+    # protocols); fall back to the sparse table rows only when it has nothing.
+    tls = _tls_from_analysis(_attr(vc, "ssl_tls_analysis"))
+    if tls["issuer"] == INTEL_NOT_COLLECTED and tls["subject"] == INTEL_NOT_COLLECTED:
+        ssl_rows = _attr(vc, "ssl_tls_table_rows") or recon.get("ssl_tls_table_rows") or []
+        tls = _tls_from_rows(ssl_rows)
 
     # --- Ports / services -----------------------------------------------
     ports = _ports_from_context(vc, recon)
@@ -404,6 +416,39 @@ def build_midgard_intel(
         "technologies": technologies,
         "subdomains": subdomains,
         "asn": asn,
+    }
+
+
+def _tls_from_analysis(ssl: Any) -> dict[str, Any]:
+    """Single-cert TLS summary from the structured ssl_tls_analysis model/dict.
+
+    Reads issuer/subject/SAN/validity/protocols (the fields the testssl cert parser
+    now populates), de-duplicating the protocol list while preserving order."""
+    blank = {
+        "issuer": INTEL_NOT_COLLECTED,
+        "subject": INTEL_NOT_COLLECTED,
+        "sans": [],
+        "not_before": INTEL_NOT_COLLECTED,
+        "not_after": INTEL_NOT_COLLECTED,
+        "protocols": [],
+    }
+    if not ssl:
+        return blank
+    protocols: list[str] = []
+    for p in _list_of_str(_attr(ssl, "protocols")):
+        if p not in protocols:
+            protocols.append(p)
+    return {
+        "issuer": _nonempty_str(_attr(ssl, "issuer"))
+        or _nonempty_str(_attr(ssl, "cert_issuer"))
+        or INTEL_NOT_COLLECTED,
+        "subject": _nonempty_str(_attr(ssl, "subject"))
+        or _nonempty_str(_attr(ssl, "cert_subject"))
+        or INTEL_NOT_COLLECTED,
+        "sans": _list_of_str(_attr(ssl, "san")),
+        "not_before": _nonempty_str(_attr(ssl, "valid_from")) or INTEL_NOT_COLLECTED,
+        "not_after": _nonempty_str(_attr(ssl, "valid_to")) or INTEL_NOT_COLLECTED,
+        "protocols": protocols,
     }
 
 

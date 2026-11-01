@@ -414,21 +414,71 @@ def build_tls_analysis(
             ],
         }
 
-    rows: list[dict[str, Any]] = []
-    for r in ssl_rows:
-        check = _nonempty(_attr(r, "check")) or _nonempty(_attr(r, "label")) or "TLS"
-        result = _nonempty(_attr(r, "result")) or _nonempty(_attr(r, "value")) or ""
-        st = (_nonempty(_attr(r, "status")) or "pass").lower()
-        rows.append(
-            {
-                "check": check,
-                "result": result,
-                "status": st,
-                "detail": _nonempty(_attr(r, "detail")) or "",
-            }
-        )
+    # Build the check rows from the structured ssl_tls_analysis (certificate,
+    # protocols, HSTS) — the sparse ssl_tls_table_rows carry no check/result fields.
+    ssl = _attr(vc, "ssl_tls_analysis")
+    issuer = _nonempty(_attr(ssl, "issuer")) or _nonempty(_attr(ssl, "cert_issuer"))
+    subject = _nonempty(_attr(ssl, "subject")) or _nonempty(_attr(ssl, "cert_subject"))
+    sans = [str(s) for s in (_attr(ssl, "san") or []) if str(s).strip()]
+    valid_from = _nonempty(_attr(ssl, "valid_from"))
+    valid_to = _nonempty(_attr(ssl, "valid_to"))
+    protocols: list[str] = []
+    for p in _attr(ssl, "protocols") or []:
+        if str(p) and str(p) not in protocols:
+            protocols.append(str(p))
+    weak_protocols = [str(p) for p in (_attr(ssl, "weak_protocols") or [])]
+    hsts = _nonempty(_attr(ssl, "hsts"))
+    rows = [
+        {
+            "check": "Certificate Issuer",
+            "result": issuer or NOT_ASSESSED,
+            "status": "pass" if issuer else NOT_ASSESSED,
+            "detail": "X.509 certificate issuer (CA).",
+        },
+        {
+            "check": "Certificate Subject",
+            "result": subject or NOT_ASSESSED,
+            "status": "pass" if subject else NOT_ASSESSED,
+            "detail": (
+                ("Subject Alternative Names: " + ", ".join(sans[:12]))
+                if sans
+                else "Common name on the served certificate."
+            ),
+        },
+        {
+            "check": "Validity",
+            "result": (
+                f"{valid_from} -> {valid_to}"
+                if valid_from and valid_to
+                else (valid_to or NOT_ASSESSED)
+            ),
+            "status": "pass" if valid_to else NOT_ASSESSED,
+            "detail": "Certificate not-before / not-after window.",
+        },
+        {
+            "check": "Negotiated protocols",
+            "result": ", ".join(protocols) if protocols else NOT_ASSESSED,
+            "status": ("fail" if weak_protocols else ("pass" if protocols else NOT_ASSESSED)),
+            "detail": (
+                ("Weak protocols offered: " + ", ".join(sorted(set(weak_protocols))))
+                if weak_protocols
+                else "TLS versions observed on the endpoint."
+            ),
+        },
+        {
+            "check": "HSTS",
+            "result": hsts or "Absent",
+            "status": "pass" if hsts else "fail",
+            "detail": "Strict-Transport-Security response header.",
+        },
+    ]
     return {
-        "summary": "Negotiated TLS parameters for the scanned endpoint.",
+        "summary": (
+            f"TLS certificate issued by {issuer} for {subject or target}; "
+            f"protocols: {', '.join(protocols) if protocols else 'see scan'}."
+            if issuer
+            else "Negotiated TLS parameters for the scanned endpoint."
+        ),
         "rows": rows,
         "remediation": [
             "Keep TLS 1.2+ only with ECDHE/AEAD cipher suites and a current certificate chain.",
@@ -735,10 +785,15 @@ def build_asgard_payload(
         "completed_at": str(completed_at or ""),
         "engagement_window": str(ctx.get("engagement_window") or ""),
     }
+    from src.reports.midgard_free import build_midgard_intel
+
     return {
         "meta": meta,
         "severity_counts": counts,
         "findings": rows,
+        # Target Intelligence parity with the free tier: WHOIS/DNS/ASN,
+        # email-auth (DNSSEC/SPF/DMARC/DKIM), TLS cert, subdomains, technologies.
+        "target_intelligence": build_midgard_intel(ctx, report_data),
         "tls_analysis": build_tls_analysis(report_data, ctx),
         "header_analysis": build_header_analysis(report_data, ctx),
         "dark_web": build_dark_web_summary(report_data, ctx),
