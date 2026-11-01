@@ -703,6 +703,7 @@ class OwnershipEvidenceModel(BaseModel):
     ip_whois_org: str = ""
     ip_whois_asn: str = ""
     ip_country: str = ""
+    email_auth: dict[str, str] = Field(default_factory=dict)
     ownership_confidence: str = ""
 
 

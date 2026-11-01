@@ -151,6 +151,20 @@ def build_ownership_evidence(
             ip_asn = str(ip_data.get("asn") or "")[:64]
             ip_country = str(ip_data.get("country") or ip_data.get("country_code") or "")[:64]
 
+    # Email authentication posture (DNSSEC/SPF/DMARC/DKIM) comes from the DNS-security
+    # recon step, persisted on recon_results.email_auth. Carry it on the ownership
+    # model so every report tier can render the email-auth panel (previously this
+    # lived only in stage1 json and never reached the renderers).
+    email_auth: dict[str, str] = {}
+    if isinstance(recon_results, dict):
+        ea = recon_results.get("email_auth")
+        if isinstance(ea, dict):
+            email_auth = {
+                str(k): str(v)[:64]
+                for k, v in ea.items()
+                if str(k).strip() and str(v).strip()
+            }
+
     ownership_signals = sum(
         [
             bool(whois_org),
@@ -186,6 +200,7 @@ def build_ownership_evidence(
         ip_whois_org=ip_org,
         ip_whois_asn=ip_asn,
         ip_country=ip_country,
+        email_auth=email_auth,
         ownership_confidence=confidence,
     )
 

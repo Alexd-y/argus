@@ -363,11 +363,15 @@ def build_midgard_intel(
     }
 
     # --- Email authentication / DNSSEC ----------------------------------
+    # Primary source: ownership_evidence.email_auth (carried from recon_results'
+    # DNS-security step). Fall back to any legacy top-level vc fields.
+    ea = _own("email_auth")
+    ea = ea if isinstance(ea, dict) else {}
     email_auth = {
-        "dnssec": _nonempty_str(_attr(vc, "dnssec_status")) or INTEL_NOT_ASSESSED,
-        "spf": _nonempty_str(_attr(vc, "spf_record")) or INTEL_NOT_ASSESSED,
-        "dmarc": _nonempty_str(_attr(vc, "dmarc_record")) or INTEL_NOT_ASSESSED,
-        "dkim": _nonempty_str(_attr(vc, "dkim_status")) or INTEL_NOT_ASSESSED,
+        "dnssec": _nonempty_str(ea.get("dnssec")) or _nonempty_str(_attr(vc, "dnssec_status")) or INTEL_NOT_ASSESSED,
+        "spf": _nonempty_str(ea.get("spf")) or _nonempty_str(_attr(vc, "spf_record")) or INTEL_NOT_ASSESSED,
+        "dmarc": _nonempty_str(ea.get("dmarc")) or _nonempty_str(_attr(vc, "dmarc_record")) or INTEL_NOT_ASSESSED,
+        "dkim": _nonempty_str(ea.get("dkim")) or _nonempty_str(_attr(vc, "dkim_status")) or INTEL_NOT_ASSESSED,
     }
 
     # --- TLS / certificate ----------------------------------------------
