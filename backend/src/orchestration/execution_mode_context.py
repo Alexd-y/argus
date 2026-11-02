@@ -645,16 +645,31 @@ def target_in_declared_scope(target: str, options: dict[str, Any] | None) -> boo
     """
     if not isinstance(options, dict):
         return True
-    allowed: list[str] = []
-    v = options.get("lab_allowed_targets")
-    if isinstance(v, (list, tuple)):
-        allowed += [str(x).strip() for x in v if str(x).strip()]
-    raw = options.get("argus_lab_allowed_targets")
-    if isinstance(raw, str):
-        allowed += [t.strip() for t in raw.split(",") if t.strip()]
-    allowed = list(dict.fromkeys(allowed))
+
+    def _norm(value: Any) -> tuple[list[str], bool]:
+        """Return (entries, declared). An empty string/list/None is NOT a declared
+        scope (scope-less -> unrestricted; the API emits "" / [] for no scope, so
+        these must not deny). A NON-empty value with no usable entries, or an
+        unexpected shape (dict/number), is declared-but-unparseable -> fail-closed."""
+        if value is None:
+            return [], False
+        if isinstance(value, str):
+            entries = [t.strip() for t in value.replace(",", " ").split() if t.strip()]
+            return entries, bool(entries)
+        if isinstance(value, (list, tuple, set, frozenset)):
+            entries = [str(x).strip() for x in value if str(x).strip()]
+            return entries, bool(entries)
+        # present but an unexpected shape (dict/number/...) -> declared, unparseable
+        return [], True
+
+    entries_a, decl_a = _norm(options.get("lab_allowed_targets"))
+    entries_b, decl_b = _norm(options.get("argus_lab_allowed_targets"))
+    allowed = list(dict.fromkeys(entries_a + entries_b))
+    declared = decl_a or decl_b
+    if not declared:
+        return True  # no scope declared -> unrestricted (scope-less scan, unchanged)
     if not allowed:
-        return True
+        return False  # scope declared but empty/unparseable -> fail-closed (deny)
     parts = [p.strip() for p in str(target or "").replace(",", " ").split() if p.strip()]
     return bool(parts) and all(_target_in_lab_scope(p, allowed) for p in parts)
 
