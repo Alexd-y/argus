@@ -1287,31 +1287,11 @@ async def run_generate_report_pipeline(
     )
     await session.commit()
 
-    # Report AI (cloud/DeepSeek) runs in this reports worker process, which — unlike
-    # the scan worker — has no budget ledger registered for the scan, so the §8.3
-    # fail-closed guard would deny the paid cloud call and force the slow local
-    # fallback. Register a bounded report-scoped ledger here (only if none exists)
-    # so report generation can use the cloud reasoner within a hard cost cap.
-    if getattr(settings, "budget_ledger_enabled", False):
-        try:
-            from src.orchestration.budget_scan_registry import get_scan_ledger
-            from src.orchestration.budget_scan_wiring import register_scan_budget_ledger
-
-            if get_scan_ledger(scan_id) is None:
-                await register_scan_budget_ledger(
-                    scan_id=scan_id,
-                    tenant_id=tenant_id,
-                    max_cost_usd=float(getattr(settings, "report_ledger_max_cost_usd", 1.0) or 1.0),
-                    max_total_tokens=int(
-                        getattr(settings, "report_ledger_max_tokens", 400000) or 400000
-                    ),
-                )
-        except Exception:
-            logger.warning(
-                "report_budget_ledger_register_failed",
-                extra={"event": "report_budget_ledger_register_failed", "scan_id": scan_id},
-            )
-
+    # NOTE: report AI runs in a reports worker, which has no scan budget ledger
+    # registered (the registry is process-local to the scan worker). Rather than
+    # mutate the scan's shared budget row from here (budget-control bypass), report
+    # workers disable BUDGET_LEDGER_ENABLED in their environment, so the §8.3 guard
+    # skips budgeting for the cheap, bounded report path while scan workers keep it.
     try:
         gen = generator_cls()
         redis = redis_client if redis_client is not None else get_redis()
