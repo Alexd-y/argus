@@ -53,6 +53,18 @@ def validate_startup_config() -> list[str]:
             extra={"event": "startup_recon_plan_check_failed", "error_type": type(exc).__name__},
         )
 
+    # --- Report budget cap must not be silently ignored (fail-open) -----------
+    try:
+        cap = float(getattr(settings, "report_ledger_max_cost_usd", 0.0) or 0.0)
+        if cap > 0 and not getattr(settings, "budget_ledger_enabled", False):
+            warnings.append(
+                "REPORT_LEDGER_MAX_COST_USD is set but BUDGET_LEDGER_ENABLED is off — the "
+                "report cloud spend cap is NOT enforced on this process; set "
+                "BUDGET_LEDGER_ENABLED=true on report workers"
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
     # --- LLM: reporting should not run on the slow local path if cloud is set --
     try:
         from src.llm.phase_routing import get_phase_route, is_enabled

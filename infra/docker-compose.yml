@@ -493,8 +493,13 @@ services:
       REPORT_PDF_BACKEND: ${REPORT_PDF_BACKEND:-chromium}
       # Report AI reaches the cloud reasoner within a bounded, isolated report-scoped
       # budget ledger registered by run_generate_report_pipeline (not by disabling the
-      # guard, and without touching the scan's budget row). The cap is operator-tunable
-      # via REPORT_LEDGER_MAX_COST_USD / REPORT_LEDGER_MAX_TOKENS (0 = deny -> local).
+      # guard, and without touching the scan's budget row). The budget guard is forced
+      # ON here (not inherited from .env) so the per-run report cap is always enforced
+      # and cannot fail open; the cap is operator-tunable via the two vars below
+      # (REPORT_LEDGER_MAX_COST_USD=0 => deny the paid cloud call -> local fallback).
+      # NOTE: the cap bounds EACH report run; a durable cross-run per-tenant report
+      # quota + endpoint rate-limit is tracked as a follow-up (docs/ARGUS_IMPROVEMENTS).
+      BUDGET_LEDGER_ENABLED: "true"
       REPORT_LEDGER_MAX_COST_USD: ${REPORT_LEDGER_MAX_COST_USD:-0.5}
       REPORT_LEDGER_MAX_TOKENS: ${REPORT_LEDGER_MAX_TOKENS:-200000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
