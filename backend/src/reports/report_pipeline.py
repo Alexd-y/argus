@@ -956,9 +956,7 @@ async def _rgp_canonical_snapshot(
                 # finding's description landed in the free canonical_* artifacts.
                 report_data = _dc_replace(
                     report_data,
-                    findings=[
-                        redact_free_canonical_finding(f) for f in report_data.findings
-                    ],
+                    findings=[redact_free_canonical_finding(f) for f in report_data.findings],
                 )
             snapshot = build_snapshot_from_report_data(
                 report_data,
@@ -1405,7 +1403,15 @@ async def run_generate_report_pipeline(
                 canon_fmt,
                 canon_key,
             ) = await _rgp_canonical_snapshot(
-                built, generated, report_data, report_id, scan_id, session, tenant_id, tier_str, upload
+                built,
+                generated,
+                report_data,
+                report_id,
+                scan_id,
+                session,
+                tenant_id,
+                tier_str,
+                upload,
             )
         else:
             artifact, canon_fmt, canon_key = None, None, None
