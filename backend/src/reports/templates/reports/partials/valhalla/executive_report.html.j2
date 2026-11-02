@@ -347,11 +347,13 @@
     {% endif %}
 
     {# Dark Web Monitoring — leaked-credential / mention exposure (paid tier only). #}
-    <h3>Dark Web Exposure</h3>
+    <h3>Dark-Web Exposure &mdash; indicators requiring validation</h3>
     {% set dwm = _ver.dark_web_monitoring or {} %}
     {% set dw_rows = _ver.dark_web_exposure or [] %}
     {% if dw_rows %}
-    <p>
+    <p class="note-box">
+        External OSINT exposure indicators (capped at SUSPECTED, never proof of
+        compromise &mdash; each requires validation before action).
         {{ dwm.get('observation_count', dw_rows|length) }} observation(s) across
         {{ dwm.get('selectors_count', 0) }} selector(s).
     </p>

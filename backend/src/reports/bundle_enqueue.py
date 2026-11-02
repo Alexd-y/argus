@@ -15,24 +15,39 @@ from src.db.models import ArtifactLedger as ArtifactLedgerModel
 from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
 from src.db.models import ReportObject as ReportObjectModel
+from src.db.models import ReportShareLink as ReportShareLinkModel
 from src.db.models import Scan
 
 logger = logging.getLogger(__name__)
 
 
-def _select_gc_targets(rows: list[tuple[str, Any, Any]]) -> list[str]:
+# generation_status values that mean a report is still being produced. GC must
+# never touch one — deleting an in-flight report orphans its in-progress artifacts
+# and races a concurrent bundle. Only terminal rows are GC candidates.
+_NON_TERMINAL_STATUSES: frozenset[str] = frozenset({"pending", "processing", "queued"})
+
+
+def _select_gc_targets(rows: list[tuple[str, Any, Any, Any, Any]]) -> list[str]:
     """Pick the report rows that are safe to GC — PURE, so the scoping is testable.
 
-    ``rows`` is ``[(report_id, report_metadata, assigned_to), ...]``. A row is a GC
-    target ONLY when it is an auto-generated generate-all *bundle* row
-    (``report_metadata.generate_all is True``) AND is not operator-owned
-    (``assigned_to`` unset). This deliberately EXCLUDES the finalize/base report, any
-    single-tier API report, and any report an operator has taken ownership of — so GC
-    can never remove a report a human kept.
+    ``rows`` is ``[(report_id, report_metadata, assigned_to, compliance_tags,
+    generation_status), ...]``. A row is a GC target ONLY when ALL hold:
+
+    * it is an auto-generated generate-all *bundle* row (``report_metadata.generate_all
+      is True``) — excludes the finalize/base report and single-tier API reports;
+    * it is not operator-owned (``assigned_to`` unset) and carries no
+      ``compliance_tags`` (operator retention signals);
+    * its ``generation_status`` is terminal (not pending/processing/queued) — never
+      delete an in-flight report out from under a concurrent generation.
+
+    Share-linked reports and reports that are a parent of another report are excluded
+    separately in :func:`_gc_prior_reports` (those need a DB lookup).
     """
     out: list[str] = []
-    for rid, md, assigned_to in rows:
-        if assigned_to:
+    for rid, md, assigned_to, compliance_tags, generation_status in rows:
+        if assigned_to or compliance_tags:
+            continue
+        if str(generation_status or "").strip().lower() in _NON_TERMINAL_STATUSES:
             continue
         if isinstance(md, dict) and md.get("generate_all") is True:
             out.append(str(rid))
@@ -90,14 +105,49 @@ async def _gc_prior_reports(session: AsyncSession, tenant_id: str, scan_id: str)
     rows = (
         await session.execute(
             select(
-                ReportModel.id, ReportModel.report_metadata, ReportModel.assigned_to
+                ReportModel.id,
+                ReportModel.report_metadata,
+                ReportModel.assigned_to,
+                ReportModel.compliance_tags,
+                ReportModel.generation_status,
             ).where(
                 cast(ReportModel.scan_id, String) == scan_id,
                 cast(ReportModel.tenant_id, String) == tenant_id,
             )
         )
     ).all()
-    ids = _select_gc_targets([(r[0], r[1], r[2]) for r in rows])
+    ids = _select_gc_targets([(r[0], r[1], r[2], r[3], r[4]) for r in rows])
+    if not ids:
+        return 0
+
+    # Exclude reports an operator can still reach: an existing share link (its token
+    # URL would 404 after delete) or a report that is the parent of another report.
+    # Both FK-CASCADE off reports, so they must be protected explicitly.
+    shared = set(
+        (
+            await session.execute(
+                select(ReportShareLinkModel.report_id).where(
+                    ReportShareLinkModel.report_id.in_(ids),
+                    cast(ReportShareLinkModel.tenant_id, String) == tenant_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    parents = set(
+        (
+            await session.execute(
+                select(ReportModel.parent_report_id).where(
+                    ReportModel.parent_report_id.in_(ids),
+                    cast(ReportModel.tenant_id, String) == tenant_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ids = [rid for rid in ids if rid not in shared and rid not in parents]
     if not ids:
         return 0
 
@@ -143,7 +193,14 @@ async def _gc_prior_reports(session: AsyncSession, tenant_id: str, scan_id: str)
     )
     return len(ids)
 
+
 GENERATE_ALL_REPORT_TIERS: tuple[str, ...] = ("midgard", "asgard", "valhalla")
+
+# The Valhalla tier is delivered as ONE report per format in EXACTLY these four
+# formats (provable-report contract): json / pdf / xml / html — never csv or md,
+# so a scan never shows duplicate/extra Valhalla artifacts. Other tiers keep
+# whatever formats the caller asked for.
+VALHALLA_REPORT_FORMATS: tuple[str, ...] = ("json", "pdf", "xml", "html")
 
 # Scan.options key — idempotency for automatic generate-all after successful scan completion.
 POST_SCAN_GENERATE_ALL_BUNDLE_OPTION_KEY = "_argus_post_scan_generate_all_bundle_id"
@@ -211,7 +268,12 @@ async def enqueue_generate_all_bundle(
     report_ids: list[str] = []
     meta_extra = "post_scan_complete" if set_post_scan_idempotency_flag else None
     for tier in report_tiers_for_scan(scan):
-        for fmt in formats:
+        # Valhalla is pinned to its four-format contract (one report per format);
+        # dict.fromkeys dedups while preserving order for the other tiers.
+        tier_formats = (
+            list(VALHALLA_REPORT_FORMATS) if tier == "valhalla" else list(dict.fromkeys(formats))
+        )
+        for fmt in tier_formats:
             rid = str(uuid.uuid4())
             report_ids.append(rid)
             md: dict[str, Any] = {"bundle_id": bundle_id, "generate_all": True}
