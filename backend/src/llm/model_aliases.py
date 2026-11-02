@@ -186,12 +186,12 @@ class AliasRegistry:
                 "role": "osint",
                 "providers": [
                     {
-                        "key": "perplexity",
-                        "base_url": "https://api.perplexity.ai",
-                        "model": "sonar",
+                        "key": "llama-3.3-70b-osint",
+                        "base_url": "https://openrouter.ai/api/v1",
+                        "model": "meta-llama/llama-3.3-70b-instruct",
                         "cloud_allowed": True,
-                        "price_input_per_million_usd": 1.00,
-                        "price_output_per_million_usd": 1.00,
+                        "price_input_per_million_usd": 0.0,
+                        "price_output_per_million_usd": 0.0,
                     },
                 ],
             },

@@ -506,6 +506,23 @@ def _any_cloud_key_configured() -> bool:
     return any(_get_key(k) for k in _CLOUD_KEY_ENVS)
 
 
+#: Cloud providers consulted by the §4 health gate (OpenAI-compatible /v1/models).
+_CLOUD_HEALTH_PROBES: tuple[tuple[str, str], ...] = (
+    ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+    ("https://openrouter.ai/api", "OPENROUTER_API_KEY"),
+    ("https://api.openai.com", "OPENAI_API_KEY"),
+)
+
+
+def _any_cloud_provider_healthy() -> bool:
+    """True when at least one configured cloud provider passes the cached health
+    probe. Used to skip a KNOWN-down cloud primary proactively (fall back to local)
+    rather than eating a failed call first. Cached per-provider (short TTL)."""
+    from src.llm.health_gate import provider_healthy
+
+    return any(_get_key(env) and provider_healthy(base, env) for base, env in _CLOUD_HEALTH_PROBES)
+
+
 def _count_tokens_tiktoken(text: str) -> int:
     """Count tokens using tiktoken cl100k_base encoding (lazy-init cached encoder)."""
     global _tiktoken_enc
@@ -961,7 +978,9 @@ async def _execute_phase_route(
 
     def _primary_available() -> bool:
         if route.mode == "cloud":
-            return _any_cloud_key_configured()
+            # Health-gated: a configured but KNOWN-down cloud primary is treated as
+            # unavailable so the route falls back proactively (logged as degradation).
+            return _any_cloud_key_configured() and _any_cloud_provider_healthy()
         if route.mode == "wrb":
             return wrb.is_configured
         if route.mode == "qwythos":

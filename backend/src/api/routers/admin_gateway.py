@@ -90,3 +90,57 @@ async def list_invocations(
         and (not scan_id or e.get("scan_id") == scan_id)
     ]
     return filtered[-limit:]
+
+
+@router.get("/cost-dashboard")
+async def cost_dashboard(
+    tenant_id: str = "",
+    scan_id: str = "",
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
+    """Consolidated LLM cost view for the admin dashboard (§4).
+
+    Combines the gateway usage summary with the per-role price table and the
+    effective phase routing, so the admin panel can show "$/role, model per phase,
+    cloud vs local" in one call. Pure reads; no side effects.
+    """
+    from src.llm_gateway.usage_ledger import get_usage_summary
+
+    usage = get_usage_summary(tenant_id=tenant_id, scan_id=scan_id)
+
+    prices: list[dict[str, Any]] = []
+    try:
+        from src.llm.model_aliases import get_alias_registry
+
+        for a in get_alias_registry().list_all():
+            p = a.providers[0] if a.providers else None
+            prices.append(
+                {
+                    "alias": a.alias,
+                    "role": a.role,
+                    "model": getattr(p, "model", "") if p else "",
+                    "cloud": bool(getattr(p, "cloud_allowed", False)) if p else False,
+                    "price_input_per_million_usd": (
+                        getattr(p, "price_input_per_million_usd", 0.0) if p else 0.0
+                    ),
+                    "price_output_per_million_usd": (
+                        getattr(p, "price_output_per_million_usd", 0.0) if p else 0.0
+                    ),
+                }
+            )
+    except Exception:  # noqa: BLE001 — telemetry view must not fail on a registry hiccup
+        prices = []
+
+    routing: dict[str, Any] = {}
+    try:
+        from src.llm.phase_routing import _load_routes, is_enabled
+
+        if is_enabled():
+            routing = {
+                ph: {"mode": r.mode, "fallback": r.fallback, "primary_alias": r.primary_alias}
+                for ph, r in _load_routes().items()
+            }
+    except Exception:  # noqa: BLE001
+        routing = {}
+
+    return {"usage": usage, "price_table": prices, "phase_routing": routing}

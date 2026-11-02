@@ -262,13 +262,16 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         max_tokens=500,
         temperature=0.0,
     ),
+    # OSINT runs on a free/open-source model via OpenRouter (working key) instead of
+    # Perplexity (out of credits). The LLM reasons over the platform's own OSINT data
+    # sources (crt.sh/Shodan/DWM/etc.); it does not need Perplexity's live web search.
     LLMTask.PERPLEXITY_OSINT: LLMRoute(
-        provider_env_key="PERPLEXITY_API_KEY",
-        base_url="https://api.perplexity.ai",
-        model="sonar-pro",
-        fallback_env_key="PERPLEXITY_API_KEY",
-        fallback_base_url="https://api.perplexity.ai",
-        fallback_model="sonar",
+        provider_env_key="OPENROUTER_API_KEY",
+        base_url="https://openrouter.ai/api",
+        model="meta-llama/llama-3.3-70b-instruct",
+        fallback_env_key="OPENROUTER_API_KEY",
+        fallback_base_url="https://openrouter.ai/api",
+        fallback_model="qwen/qwen-2.5-72b-instruct",
         max_tokens=1000,
         temperature=0.2,
     ),

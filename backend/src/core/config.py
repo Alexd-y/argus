@@ -1546,15 +1546,18 @@ class Settings(BaseSettings):
     # When true, forces passive mode regardless of recon_mode.
     recon_passive_only: bool = False
     recon_active_depth: int = 1
-    recon_enable_content_discovery: bool = False
-    recon_deep_port_scan: bool = False
+    # Recon extras default ON ("run everything"): a declared scope confines targets,
+    # but which recon STEPS run is no longer reduced by config. Operators can still
+    # turn an individual extra off via its env var.
+    recon_enable_content_discovery: bool = True
+    recon_deep_port_scan: bool = True
     # RECON-005 — optional naabu + nmap -sV deep scan (full mode + RECON_DEEP_PORT_SCAN only)
     recon_deep_naabu_enabled: bool = True
     recon_deep_naabu_top_ports: int = 500
     recon_deep_max_hosts: int = 5
     recon_deep_max_ports_per_host: int = 40
     recon_deep_timeout_sec: int | None = None
-    recon_js_analysis: bool = False
+    recon_js_analysis: bool = True
     # RECON-007 — JS / query-param harvest (caps + optional linkfinder / unfurl CLI)
     recon_js_max_merged_urls: int = 20000
     recon_js_max_js_urls: int = 200
@@ -1563,7 +1566,7 @@ class Settings(BaseSettings):
     recon_js_linkfinder_enabled: bool = True
     recon_js_unfurl_enabled: bool = False
     recon_js_unfurl_max_urls: int = 10
-    recon_screenshots: bool = False
+    recon_screenshots: bool = True
     # RECON-008 — asnmap (apex) + gowitness caps (full mode + flags; passive has no optional steps)
     recon_asnmap_enabled: bool = True
     # asnmap requires a ProjectDiscovery Cloud (PDCP) API key; without it the tool
