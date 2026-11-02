@@ -408,8 +408,18 @@ def build_tls_analysis(
     target = (getattr(report_data, "target", None) or "").strip()
     is_cleartext = target.lower().startswith("http://")
     ssl_rows = _attr(vc, "ssl_tls_table_rows") or []
+    _ssl = _attr(vc, "ssl_tls_analysis")
+    # TLS data may arrive via the structured ssl_tls_analysis even when the sparse
+    # ssl_tls_table_rows is empty — treat either as "TLS was assessed".
+    _has_tls = bool(ssl_rows) or bool(
+        _nonempty(_attr(_ssl, "issuer"))
+        or _nonempty(_attr(_ssl, "cert_issuer"))
+        or _nonempty(_attr(_ssl, "subject"))
+        or _nonempty(_attr(_ssl, "cert_subject"))
+        or (_attr(_ssl, "protocols") or [])
+    )
 
-    if is_cleartext or not ssl_rows:
+    if is_cleartext or not _has_tls:
         summary = (
             "The in-scope service is published on cleartext HTTP with no TLS layer "
             "on the scanned endpoint. No certificate, protocol or cipher could be "
