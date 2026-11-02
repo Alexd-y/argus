@@ -10,7 +10,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
-from src.orchestration.execution_mode_context import lab_authorized_target
+from src.orchestration.execution_mode_context import (
+    lab_authorized_target,
+    target_in_declared_scope,
+)
 from src.orchestration.signed_tool_runner import run_coro_sync, run_signed_tool
 from src.pipeline.contracts.tool_job import TargetKind
 from src.recon.mcp.policy import evaluate_kal_mcp_policy, normalize_kal_binary
@@ -158,6 +161,24 @@ def run_kal_mcp_tool(
             "return_code": -1,
             "execution_time": 0.0,
             "policy_reason": decision.reason,
+            "minio_keys": [],
+        }
+
+    # Engagement-scope confine: when the scan declares an allow-list, an active tool
+    # may only run against in-scope targets — in production as well as lab. A
+    # scope-less scan is unaffected (target_in_declared_scope returns True).
+    if settings.scan_scope_enforcement and not target_in_declared_scope(target, scan_options):
+        logger.info(
+            "kal_mcp_out_of_scope_denied",
+            extra={"event": "kal_mcp_out_of_scope_denied", "category": category},
+        )
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": "target is outside the declared engagement scope",
+            "return_code": -1,
+            "execution_time": time.perf_counter() - start,
+            "policy_reason": "out_of_declared_scope",
             "minio_keys": [],
         }
 

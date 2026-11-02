@@ -79,6 +79,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("BUDGET_LEDGER_ENABLED", "budget_ledger_enabled"),
     )
+    # When a scan declares an engagement scope (lab_allowed_targets /
+    # argus_lab_allowed_targets), confine active sandbox tools to it in EVERY mode:
+    # an out-of-scope target is denied at the tool choke point. Scope-less scans are
+    # unaffected. Operators can disable the confine here if it misfires.
+    scan_scope_enforcement: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SCAN_SCOPE_ENFORCEMENT", "scan_scope_enforcement"),
+    )
     # Hard cap for the report-generation LLM path (cloud reasoner). Report workers
     # have no scan ledger (the registry is process-local to the scan worker), so a
     # bounded, isolated in-memory ledger is registered per report run under these

@@ -631,6 +631,34 @@ def _target_in_lab_scope(target: str, allowed: list[str]) -> bool:
     return False
 
 
+def target_in_declared_scope(target: str, options: dict[str, Any] | None) -> bool:
+    """Whether ``target`` is within the scan's DECLARED engagement scope.
+
+    The declared scope is the operator's allow-list in scan options
+    (``lab_allowed_targets`` list and/or ``argus_lab_allowed_targets`` CSV —
+    CIDR/IP/domain entries). When that allow-list is non-empty, active tools must be
+    confined to it in EVERY execution mode: a declared scope is a hard engagement
+    boundary, not merely the lab private-IP bypass. When NO allow-list is declared,
+    returns ``True`` (a scope-less scan is unrestricted — unchanged behaviour, so
+    this never breaks scans that do not set a scope). Fail-closed within a declared
+    scope: a mixed in/out-of-scope target string is rejected.
+    """
+    if not isinstance(options, dict):
+        return True
+    allowed: list[str] = []
+    v = options.get("lab_allowed_targets")
+    if isinstance(v, (list, tuple)):
+        allowed += [str(x).strip() for x in v if str(x).strip()]
+    raw = options.get("argus_lab_allowed_targets")
+    if isinstance(raw, str):
+        allowed += [t.strip() for t in raw.split(",") if t.strip()]
+    allowed = list(dict.fromkeys(allowed))
+    if not allowed:
+        return True
+    parts = [p.strip() for p in str(target or "").replace(",", " ").split() if p.strip()]
+    return bool(parts) and all(_target_in_lab_scope(p, allowed) for p in parts)
+
+
 def lab_authorized_target(
     target: str,
     options: dict[str, Any] | None,
