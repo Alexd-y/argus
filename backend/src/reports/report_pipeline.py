@@ -1311,9 +1311,10 @@ async def run_generate_report_pipeline(
 
             if get_scan_ledger(scan_id) is None:
                 _store = InMemoryBudgetStore()
-                for _k in BudgetScope(
+                _scope_keys = BudgetScope(
                     tenant_id=tenant_id, scan_id=scan_id
-                ).keys():  # noqa: SIM118 — BudgetScope.keys() is a method, not a dict
+                ).keys()  # noqa: SIM118 — method, not dict
+                for _k in _scope_keys:
                     await _store.set_limits(
                         _k,
                         max_tokens=int(settings.report_ledger_max_tokens),
