@@ -1955,6 +1955,36 @@ async def build_report_export_payload(
     elif tier_norm == "asgard":
         report_data, template_context = _apply_asgard_paid_projection(report_data, template_context)
 
+    # Layer the tier assembly slot (executive lens + Dark-Web Exposure) into the
+    # context so the ON-DEMAND export (download_report -> generate_html/pdf/json/xml)
+    # renders it. The scan pipeline builds this via ReportService, but the download
+    # path builds its context through prepare_template_context, which omits the
+    # assembly — leaving the Dark-Web Exposure section and executive lens silently
+    # empty even when DWM observations were collected. Additive + fail-soft.
+    # Valhalla's executive_report partial (business lens + Dark-Web Exposure) binds to
+    # the ``valhalla_executive_report`` slot, which the download path's
+    # prepare_template_context omits (only ReportService built it). Without this the
+    # section is silently empty even when DWM observations were collected. Additive +
+    # fail-soft. (Asgard builds its own dark-web section via _apply_asgard_paid_projection.)
+    if tier_norm == "valhalla" and "valhalla_executive_report" not in template_context:
+        try:
+            from src.reports.valhalla_tier_renderer import (
+                assemble_valhalla_sections,
+                valhalla_assembly_to_jinja_context,
+            )
+
+            _slot = valhalla_assembly_to_jinja_context(
+                assemble_valhalla_sections(report_data), base_context={}
+            )
+            for _k in ("valhalla_executive_report", "valhalla_executive_section_order"):
+                if _slot.get(_k) is not None:
+                    template_context[_k] = _slot[_k]
+        except Exception:  # noqa: BLE001 — exec-lens/DWM slot is additive; never break export
+            logger.warning(
+                "report_export_valhalla_slot_failed",
+                extra={"event": "report_export_valhalla_slot_failed"},
+            )
+
     return report_data, template_context
 
 
