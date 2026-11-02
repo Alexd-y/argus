@@ -334,7 +334,45 @@ def generate_all_reports_task(
         finally:
             await engine.dispose()
 
+    async def _tiers_for(rids: list[str]) -> dict[str, str]:
+        """Map report_id -> tier for the given ids (one read)."""
+        engine, session_factory = create_task_engine_and_session()
+        try:
+            async with session_factory() as session:
+                await set_session_tenant(session, tenant_id)
+                res = await session.execute(
+                    select(Report.id, Report.tier).where(cast(Report.id, String).in_(rids))
+                )
+                return {str(r[0]): str(r[1] or "") for r in res.all()}
+        finally:
+            await engine.dispose()
+
     async def _run_all() -> dict[str, Any]:
+        # Valhalla reports run the heavy LLM sections (~minutes each on local models)
+        # and would serialize the whole bundle on worker-reports. Offload them to the
+        # dedicated argus.reports.valhalla queue so Midgard/Asgard render promptly on
+        # worker-reports; the light tiers run inline here.
+        tiers = await _tiers_for(report_ids)
+        inline_ids: list[str] = []
+        dispatched_valhalla: list[str] = []
+        for rid in report_ids:
+            if tiers.get(rid, "").lower() == "valhalla":
+                try:
+                    generate_report_task.apply_async(
+                        args=[rid, tenant_id, scan_id, None],
+                        kwargs={"include_minio": True},
+                        queue="argus.reports.valhalla",
+                    )
+                    dispatched_valhalla.append(rid)
+                except Exception:
+                    logger.exception(
+                        "valhalla_dispatch_failed",
+                        extra={"event": "valhalla_dispatch_failed", "report_id": rid},
+                    )
+                    inline_ids.append(rid)  # fail-safe: render inline rather than drop
+            else:
+                inline_ids.append(rid)
+
         sem = asyncio.Semaphore(1)
 
         async def _bounded(rid: str) -> dict[str, Any]:
@@ -342,12 +380,12 @@ def generate_all_reports_task(
                 return await _run_one(rid)
 
         results = await asyncio.gather(
-            *(_bounded(rid) for rid in report_ids),
+            *(_bounded(rid) for rid in inline_ids),
             return_exceptions=True,
         )
         normalized: list[dict[str, Any]] = []
         for i, r in enumerate(results):
-            rid = report_ids[i] if i < len(report_ids) else ""
+            rid = inline_ids[i] if i < len(inline_ids) else ""
             if isinstance(r, Exception):
                 logger.error(
                     "generate_all_report_item_failed",
@@ -361,11 +399,16 @@ def generate_all_reports_task(
                 normalized.append({"status": "failed", "report_id": rid, "error": "task_error"})
             else:
                 normalized.append(r)  # type: ignore[arg-type]
+        for rid in dispatched_valhalla:
+            normalized.append(
+                {"status": "dispatched", "report_id": rid, "queue": "argus.reports.valhalla"}
+            )
         ok = sum(1 for x in normalized if x.get("status") == "completed")
         return {
             "bundle_id": bundle_id,
             "scan_id": scan_id,
             "completed": ok,
+            "dispatched_valhalla": len(dispatched_valhalla),
             "total": len(report_ids),
             "results": normalized,
         }

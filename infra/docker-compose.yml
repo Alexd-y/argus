@@ -464,7 +464,7 @@ services:
       minio:
         condition: service_healthy
 
-  worker-reports:
+  worker-reports: &worker-reports-svc
     image: argus-backend
     container_name: argus-worker-reports
     restart: unless-stopped
@@ -524,6 +524,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  # Dedicated worker for the heavy Valhalla report tier. generate_all_reports_task
+  # offloads Valhalla report_ids to the argus.reports.valhalla queue so their slow
+  # per-section LLM generation no longer serializes Midgard/Asgard on worker-reports.
+  # Inherits worker-reports config via the YAML anchor; only the queue + names differ.
+  worker-reports-valhalla:
+    <<: *worker-reports-svc
+    container_name: argus-worker-reports-valhalla
+    command: celery -A src.celery_app worker -l INFO -Q argus.reports.valhalla --concurrency 1
 
   # Celery beat scheduler (RedBeat) + housekeeping worker.
   #

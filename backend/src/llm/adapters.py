@@ -9,11 +9,15 @@ import httpx
 _OPENAI_CHAT_URL = "/v1/chat/completions"
 
 # Provider configs: (env_key, base_url, default_model)
+# Kimi (Moonshot) and Gemini are served THROUGH OpenRouter: the direct Moonshot /
+# Google keys are unreliable here, while OPENROUTER_API_KEY is valid and fronts both
+# models (verified slugs: moonshotai/kimi-k2, google/gemini-2.5-flash).
 _PROVIDERS: list[tuple[str, str, str]] = [
     ("OPENAI_API_KEY", "https://api.openai.com", "gpt-4o-mini"),
     ("DEEPSEEK_API_KEY", "https://api.deepseek.com", "deepseek-chat"),
     ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "openai/gpt-4o-mini"),
-    ("KIMI_API_KEY", "https://api.moonshot.cn", "moonshot-v1-8k"),
+    ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "moonshotai/kimi-k2"),
+    ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "google/gemini-2.5-flash"),
     ("PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
 ]
 
@@ -121,11 +125,19 @@ class GeminiAdapter:
 
 
 def _build_adapters() -> list[OpenAICompatibleAdapter | GeminiAdapter]:
-    """Build list of adapters in priority order."""
+    """Build list of adapters in priority order.
+
+    Gemini is reached through OpenRouter (``google/gemini-2.5-flash`` in
+    ``_PROVIDERS``), not the direct Google endpoint — the native GeminiAdapter is
+    only appended when a GOOGLE_API_KEY is explicitly set, so a stale/invalid key
+    is never tried ahead of the working OpenRouter route.
+    """
     adapters: list[OpenAICompatibleAdapter | GeminiAdapter] = []
     for env_key, base_url, default_model in _PROVIDERS:
         adapters.append(OpenAICompatibleAdapter(env_key, base_url, default_model))
-    adapters.append(GeminiAdapter())
+    # The native GeminiAdapter (direct Google endpoint) is intentionally NOT in the
+    # active chain: Gemini is reached via OpenRouter (_PROVIDERS). The class is kept
+    # for callers that construct it explicitly against a known-good GOOGLE_API_KEY.
     return adapters
 
 

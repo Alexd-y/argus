@@ -47,9 +47,12 @@ phases:
     evidence_contract: post_exploit_impact_pack_v1
     degrade: skip_review
 
+  # Reports run on the cloud reasoner (DeepSeek via argus-report): fast (~1-3s/call
+  # vs ~290s on CPU-WRB) and report prose carries no raw exploit payloads. WRB stays
+  # the fallback if the cloud call fails. Analysis phases remain local (above).
   reporting:
     primary_alias: argus-report
-    mode: qwythos
+    mode: cloud
     fallback: wrb
     evidence_contract: report_section_input_v1
     degrade: concise_mode
@@ -84,7 +87,7 @@ phases:
 
   quick_reporter:
     primary_alias: argus-report
-    mode: qwythos
+    mode: cloud
     fallback: none
     evidence_contract: report_section_input_v1
     degrade: template_renderer

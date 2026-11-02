@@ -52,7 +52,6 @@ from src.api.routers import (
     ws,
 )
 from src.api.routers.admin_gateway import router as admin_gateway_router
-from src.cairn.errors import CairnError
 from src.api.routers.analysis import router as analysis_router
 from src.api.routers.benchmarks import router as benchmarks_router
 from src.api.routers.binary_triage import router as binary_router
@@ -70,6 +69,7 @@ from src.api.routers.web_workbench import web_workbench_router
 from src.auth.admin_dependencies import log_mfa_enforcement_state
 from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
+from src.cairn.errors import CairnError
 from src.core.auth import get_required_auth
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
@@ -123,6 +123,15 @@ async def lifespan(_app: FastAPI):
         logger.warning(
             "kb_warm_skipped",
             extra={"event": "kb_warm_skipped", "error_type": type(e).__name__},
+        )
+    try:
+        from src.core.startup_checks import validate_startup_config
+
+        validate_startup_config()
+    except Exception as e:
+        logger.warning(
+            "startup_config_validation_skipped",
+            extra={"event": "startup_config_validation_skipped", "error_type": type(e).__name__},
         )
     try:
         if not settings.skip_prompt_verification:

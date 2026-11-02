@@ -59,12 +59,20 @@ async def run_recon_planned_tool_gather(
 
     steps = plan_recon_steps(cfg)
     planned = [s.value for s in steps]
+    # Flag whether the resolved plan keeps the core Target-Intelligence steps, so a
+    # config that would blank out WHOIS/DNS/tech in reports is visible in the logs
+    # of the scan itself (not only discovered by opening an empty report).
+    _core_ti = ("whois", "dig", "dns_depth", "http_surface")
+    _missing_ti = [s for s in _core_ti if s not in planned]
     logger.info(
         "recon_pipeline_plan",
         extra={
             "event": "recon_pipeline_plan",
             "mode": cfg.mode,
             "steps": planned,
+            "core_ti_present": not _missing_ti,
+            "core_ti_missing": _missing_ti or None,
+            "tool_selection": sorted(cfg.tool_selection) if cfg.tool_selection else None,
             "rate_limit_rps": cfg.rate_limit_rps,
             "active_depth": cfg.active_depth,
         },
