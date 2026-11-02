@@ -6765,66 +6765,62 @@ def _vh_build_headers(
     )
 
 
+# Fields merged field-wise (``primary.<f> or fallback.<f>``) when the JSON/structured
+# SSL source is filled in by the recon-cert / text-fallback source. Kept explicit (not
+# a dynamic model-field sweep) so the merged surface is exactly these fields and an
+# unrelated future model field can't silently change the merge.
+_SSL_MERGE_FIELDS: tuple[str, ...] = (
+    "issuer",
+    "subject",
+    "san",
+    "valid_from",
+    "valid_to",
+    "validity",
+    "protocols",
+    "weak_protocols",
+    "weak_ciphers",
+    "hsts",
+    "tls_versions",
+    "cipher_detail",
+    "cert_subject",
+    "cert_issuer",
+    "cert_expiry",
+    "hsts_present",
+    "hsts_max_age",
+    "hsts_include_subdomains",
+    "hsts_preload",
+    "recommendations",
+)
+
+
+def _merge_ssl_models(
+    primary: SslTlsAnalysisModel, fallback: SslTlsAnalysisModel
+) -> SslTlsAnalysisModel:
+    """Field-wise ``primary or fallback`` merge of the SSL surface (JSON-first wins,
+    the gap-filler supplies anything the primary left empty). Behaviour-identical to
+    the two hand-rolled merges this consolidates."""
+    return SslTlsAnalysisModel(
+        **{f: (getattr(primary, f, None) or getattr(fallback, f, None)) for f in _SSL_MERGE_FIELDS}
+    )
+
+
 def _vh_build_ssl(fetch_raw_bodies, raw_artifact_keys, recon_results):
-    ssl_out = None
     tls_blob = _latest_tls_blob_from_raw(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
     ssl_part = _ssl_from_recon_certs(recon_results)
+    # testssl-JSON-first: structured JSON blob wins, recon certs fill the gaps.
     if tls_blob:
-        merged = _ssl_from_testssl_json(tls_blob)
-        ssl_out = SslTlsAnalysisModel(
-            issuer=merged.issuer or ssl_part.issuer,
-            subject=merged.subject or ssl_part.subject,
-            san=(merged.san or ssl_part.san),
-            valid_from=merged.valid_from or ssl_part.valid_from,
-            valid_to=merged.valid_to or ssl_part.valid_to,
-            validity=merged.validity or ssl_part.validity,
-            protocols=(merged.protocols or ssl_part.protocols),
-            weak_protocols=(merged.weak_protocols or ssl_part.weak_protocols),
-            weak_ciphers=merged.weak_ciphers or ssl_part.weak_ciphers,
-            hsts=merged.hsts or ssl_part.hsts,
-            tls_versions=merged.tls_versions or ssl_part.tls_versions,
-            cipher_detail=merged.cipher_detail or ssl_part.cipher_detail,
-            cert_subject=merged.cert_subject or ssl_part.cert_subject,
-            cert_issuer=merged.cert_issuer or ssl_part.cert_issuer,
-            cert_expiry=merged.cert_expiry or ssl_part.cert_expiry,
-            hsts_present=merged.hsts_present or ssl_part.hsts_present,
-            hsts_max_age=merged.hsts_max_age or ssl_part.hsts_max_age,
-            hsts_include_subdomains=merged.hsts_include_subdomains
-            or ssl_part.hsts_include_subdomains,
-            hsts_preload=merged.hsts_preload or ssl_part.hsts_preload,
-            recommendations=merged.recommendations or ssl_part.recommendations,
-        )
+        ssl_out = _merge_ssl_models(_ssl_from_testssl_json(tls_blob), ssl_part)
     else:
         ssl_out = ssl_part
 
+    # Only when the JSON/recon surface is still empty do we fall back to plain-text
+    # artifact parsers (testssl/openssl/nmap text); the text result fills the gaps.
     if _ssl_surface_empty(ssl_out):
         text_ssl = _ssl_from_testssl_text_artifacts(
             raw_artifact_keys, fetch_bodies=fetch_raw_bodies
         )
         if text_ssl and not _ssl_surface_empty(text_ssl):
-            ssl_out = SslTlsAnalysisModel(
-                issuer=text_ssl.issuer or ssl_out.issuer,
-                subject=text_ssl.subject or ssl_out.subject,
-                san=(text_ssl.san or ssl_out.san),
-                valid_from=text_ssl.valid_from or ssl_out.valid_from,
-                valid_to=text_ssl.valid_to or ssl_out.valid_to,
-                validity=text_ssl.validity or ssl_out.validity,
-                protocols=text_ssl.protocols or ssl_out.protocols,
-                weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,
-                weak_ciphers=text_ssl.weak_ciphers or ssl_out.weak_ciphers,
-                hsts=text_ssl.hsts or ssl_out.hsts,
-                tls_versions=text_ssl.tls_versions or ssl_out.tls_versions,
-                cipher_detail=text_ssl.cipher_detail or ssl_out.cipher_detail,
-                cert_subject=text_ssl.cert_subject or ssl_out.cert_subject,
-                cert_issuer=text_ssl.cert_issuer or ssl_out.cert_issuer,
-                cert_expiry=text_ssl.cert_expiry or ssl_out.cert_expiry,
-                hsts_present=text_ssl.hsts_present or ssl_out.hsts_present,
-                hsts_max_age=text_ssl.hsts_max_age or ssl_out.hsts_max_age,
-                hsts_include_subdomains=text_ssl.hsts_include_subdomains
-                or ssl_out.hsts_include_subdomains,
-                hsts_preload=text_ssl.hsts_preload or ssl_out.hsts_preload,
-                recommendations=text_ssl.recommendations or ssl_out.recommendations,
-            )
+            ssl_out = _merge_ssl_models(text_ssl, ssl_out)
     return (ssl_out,)
 
 
