@@ -27,6 +27,7 @@ from src.execution_mode.mode import (
 from src.execution_mode.policy_bridge import evaluate_with_execution_mode
 from src.execution_mode.runtime_context import bind_phase_execution_mode
 from src.recon.mcp.policy import evaluate_tool_approval_policy
+from src.security.verdict import SecurityVerdict
 
 logger = logging.getLogger(__name__)
 
@@ -631,20 +632,20 @@ def _target_in_lab_scope(target: str, allowed: list[str]) -> bool:
     return False
 
 
-def target_in_declared_scope(target: str, options: dict[str, Any] | None) -> bool:
-    """Whether ``target`` is within the scan's DECLARED engagement scope.
+def evaluate_declared_scope(target: str, options: dict[str, Any] | None) -> SecurityVerdict:
+    """Gate ``target`` against the scan's DECLARED engagement scope → SecurityVerdict.
 
     The declared scope is the operator's allow-list in scan options
     (``lab_allowed_targets`` list and/or ``argus_lab_allowed_targets`` CSV —
     CIDR/IP/domain entries). When that allow-list is non-empty, active tools must be
     confined to it in EVERY execution mode: a declared scope is a hard engagement
     boundary, not merely the lab private-IP bypass. When NO allow-list is declared,
-    returns ``True`` (a scope-less scan is unrestricted — unchanged behaviour, so
-    this never breaks scans that do not set a scope). Fail-closed within a declared
-    scope: a mixed in/out-of-scope target string is rejected.
+    ALLOWS (a scope-less scan is unrestricted — unchanged behaviour, so this never
+    breaks scans that do not set a scope). Fail-closed within a declared scope: an
+    empty/unparseable allow-list, or a mixed in/out-of-scope target string, denies.
     """
     if not isinstance(options, dict):
-        return True
+        return SecurityVerdict.allow("no_declared_scope")
 
     def _norm(value: Any) -> tuple[list[str], bool]:
         """Return (entries, declared). An empty string/list/None is NOT a declared
@@ -667,11 +668,21 @@ def target_in_declared_scope(target: str, options: dict[str, Any] | None) -> boo
     allowed = list(dict.fromkeys(entries_a + entries_b))
     declared = decl_a or decl_b
     if not declared:
-        return True  # no scope declared -> unrestricted (scope-less scan, unchanged)
+        return SecurityVerdict.allow("no_declared_scope")  # scope-less -> unrestricted
     if not allowed:
-        return False  # scope declared but empty/unparseable -> fail-closed (deny)
+        # scope declared but empty/unparseable -> fail-closed
+        return SecurityVerdict.deny("SCOPE_UNPARSEABLE", "declared scope is empty or unparseable")
     parts = [p.strip() for p in str(target or "").replace(",", " ").split() if p.strip()]
-    return bool(parts) and all(_target_in_lab_scope(p, allowed) for p in parts)
+    if parts and all(_target_in_lab_scope(p, allowed) for p in parts):
+        return SecurityVerdict.allow("in_declared_scope")
+    return SecurityVerdict.deny(
+        "OUT_OF_DECLARED_SCOPE", "target is outside the declared engagement scope"
+    )
+
+
+def target_in_declared_scope(target: str, options: dict[str, Any] | None) -> bool:
+    """Bool wrapper over :func:`evaluate_declared_scope` (back-compat for callers)."""
+    return evaluate_declared_scope(target, options).allowed
 
 
 def lab_authorized_target(
