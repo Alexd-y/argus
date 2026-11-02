@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
+from src.execution_mode.runtime_context import get_runtime_scan_options
 from src.orchestration.execution_mode_context import (
     evaluate_declared_scope,
     lab_authorized_target,
@@ -208,20 +209,25 @@ def run_kal_mcp_tool(
 
     # Engagement-scope confine: when the scan declares an allow-list, an active tool
     # may only run against in-scope targets — in production as well as lab. A
-    # scope-less scan is unaffected (target_in_declared_scope returns True).
+    # scope-less scan is unaffected (evaluate_declared_scope allows).
     if settings.scan_scope_enforcement:
+        # Recon tools call with scan_options=None (they deliberately bypass the
+        # lease/lab gates above). Fall back to the phase-bound scan options for the
+        # SCOPE gate ONLY, so a declared engagement scope still confines recon — the
+        # lease/lab gates keep using the explicit (None) arg, so their behaviour is
+        # unchanged. Scope-less scans still allow (no allow-list in the options).
+        scope_opts = scan_options if scan_options is not None else get_runtime_scan_options()
         # The declared target must be in scope...
-        scope_verdict = evaluate_declared_scope(target, scan_options)
+        scope_verdict = evaluate_declared_scope(target, scope_opts)
         # ...and so must every unambiguous network destination inside argv — a
         # divergent host/URL/IP in argv would otherwise run against an out-of-scope
-        # host the `target` check never saw. Inert for scope-less scans (every
-        # verdict allows when no allow-list is declared).
+        # host the `target` check never saw.
         if scope_verdict:
             bad_dest = next(
                 (
                     d
                     for d in _argv_network_destinations(argv)
-                    if not evaluate_declared_scope(d, scan_options)
+                    if not evaluate_declared_scope(d, scope_opts)
                 ),
                 None,
             )

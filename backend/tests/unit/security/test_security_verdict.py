@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.execution_mode.runtime_context import get_runtime_scan_options
 from src.orchestration.execution_mode_context import (
     evaluate_declared_scope,
     target_in_declared_scope,
@@ -41,6 +42,25 @@ def test_declared_scope_denies_out_of_scope() -> None:
 def test_declared_scope_fail_closed_on_unparseable() -> None:
     v = evaluate_declared_scope("x", {"lab_allowed_targets": {"bad": "shape"}})
     assert not v.allowed and v.code == "SCOPE_UNPARSEABLE"
+
+
+def test_phase_bound_scope_confines_recon_when_scan_options_omitted() -> None:
+    # Recon tools call run_kal_mcp_tool with scan_options=None; the scope gate falls
+    # back to the phase-bound options so a declared scope still confines them.
+    from src.execution_mode.runtime_context import (
+        clear_runtime_execution_context,
+        set_runtime_scan_options,
+    )
+
+    try:
+        set_runtime_scan_options({"lab_allowed_targets": ["svalbard.ca"]})
+        bound = get_runtime_scan_options()
+        assert evaluate_declared_scope("api.svalbard.ca", bound).allowed
+        assert not evaluate_declared_scope("attacker.com", bound).allowed
+    finally:
+        clear_runtime_execution_context()
+    # No phase binding -> scope-less -> allow (recon in an unscoped scan is unaffected).
+    assert evaluate_declared_scope("anything.com", get_runtime_scan_options()).allowed
 
 
 def test_argv_network_destinations_extracts_only_urls_and_ips() -> None:
