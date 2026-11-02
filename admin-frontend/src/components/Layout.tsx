@@ -16,6 +16,7 @@ const navItems = [
   { href: "/policies", label: "Policies" },
   { href: "/audit", label: "Audit Logs" },
   { href: "/usage", label: "Usage" },
+  { href: "/cost", label: "LLM Cost" },
   { href: "/auth", label: "Auth" },
 ];
 

@@ -178,6 +178,29 @@ export const adminApi = {
         );
       },
     },
+    costDashboard: (params?: { tenant_id?: string; scan_id?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.tenant_id) q.set("tenant_id", params.tenant_id);
+      if (params?.scan_id) q.set("scan_id", params.scan_id);
+      return fetchAdmin<{
+        usage: {
+          total_calls: number;
+          total_tokens: number;
+          total_cost_usd: number;
+          by_provider?: Record<string, number>;
+          by_model?: Record<string, number>;
+        };
+        price_table: Array<{
+          alias: string;
+          role: string;
+          model: string;
+          cloud: boolean;
+          price_input_per_million_usd: number;
+          price_output_per_million_usd: number;
+        }>;
+        phase_routing: Record<string, { mode: string; fallback: boolean; primary_alias: string }>;
+      }>(`/gateway/cost-dashboard?${q}`);
+    },
     health: {
       wrb: () =>
         fetch("/api/v1/llm/whiterabbitneo/health").then(r => r.json()),
