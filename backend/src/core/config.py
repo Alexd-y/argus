@@ -79,6 +79,18 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("BUDGET_LEDGER_ENABLED", "budget_ledger_enabled"),
     )
+    # Hard cap for the report-generation LLM path (cloud reasoner). Report workers
+    # have no scan ledger (the registry is process-local to the scan worker), so a
+    # bounded, isolated in-memory ledger is registered per report run under these
+    # caps. 0 = deny the paid cloud report call (falls back to the local model).
+    report_ledger_max_cost_usd: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("REPORT_LEDGER_MAX_COST_USD", "report_ledger_max_cost_usd"),
+    )
+    report_ledger_max_tokens: int = Field(
+        default=200000,
+        validation_alias=AliasChoices("REPORT_LEDGER_MAX_TOKENS", "report_ledger_max_tokens"),
+    )
     # Distributed concurrency leases (§8). Conservative defaults — do NOT raise
     # target load automatically. 0 = unbounded (lease not enforced for that pool).
     lease_enabled: bool = Field(

@@ -1287,11 +1287,46 @@ async def run_generate_report_pipeline(
     )
     await session.commit()
 
-    # NOTE: report AI runs in a reports worker, which has no scan budget ledger
-    # registered (the registry is process-local to the scan worker). Rather than
-    # mutate the scan's shared budget row from here (budget-control bypass), report
-    # workers disable BUDGET_LEDGER_ENABLED in their environment, so the §8.3 guard
-    # skips budgeting for the cheap, bounded report path while scan workers keep it.
+    # Report AI runs in a reports worker, which has no scan budget ledger (the
+    # registry is process-local to the scan worker), so the §8.3 guard would deny
+    # the paid cloud call. Register a bounded, ISOLATED in-memory ledger for the
+    # report path: it enforces a hard report cap (no unbounded cloud spend) WITHOUT
+    # touching the scan's shared Postgres budget row (no budget-control bypass). A
+    # cap of 0 means "deny" — the cloud call then falls back to the local model.
+    _report_ledger_registered = False
+    if (
+        getattr(settings, "budget_ledger_enabled", False)
+        and float(getattr(settings, "report_ledger_max_cost_usd", 0.0) or 0.0) > 0
+    ):
+        try:
+            from src.orchestration.budget_ledger import (
+                BudgetLedger,
+                BudgetScope,
+                InMemoryBudgetStore,
+            )
+            from src.orchestration.budget_scan_registry import (
+                get_scan_ledger,
+                register_scan_ledger,
+            )
+
+            if get_scan_ledger(scan_id) is None:
+                _store = InMemoryBudgetStore()
+                for _k in BudgetScope(
+                    tenant_id=tenant_id, scan_id=scan_id
+                ).keys():  # noqa: SIM118 — BudgetScope.keys() is a method, not a dict
+                    await _store.set_limits(
+                        _k,
+                        max_tokens=int(settings.report_ledger_max_tokens),
+                        max_cost_usd=float(settings.report_ledger_max_cost_usd),
+                    )
+                register_scan_ledger(scan_id, BudgetLedger(_store))
+                _report_ledger_registered = True
+        except Exception:
+            logger.warning(
+                "report_budget_ledger_register_failed",
+                extra={"event": "report_budget_ledger_register_failed", "scan_id": scan_id},
+            )
+
     try:
         gen = generator_cls()
         redis = redis_client if redis_client is not None else get_redis()
@@ -1573,6 +1608,14 @@ async def run_generate_report_pipeline(
     except Exception as exc:
         logger.error("Unexpected report generation failure", exc_info=exc)
         err_msg = safe_report_task_error_message(exc)
+    finally:
+        # Drop the per-report in-memory ledger so its bounded budget does not leak
+        # (and accumulate) across report runs for the same scan in this worker.
+        if _report_ledger_registered:
+            with contextlib.suppress(Exception):
+                from src.orchestration.budget_scan_registry import unregister_scan_ledger
+
+                unregister_scan_ledger(scan_id)
 
     try:
         await session.execute(

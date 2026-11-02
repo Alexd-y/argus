@@ -491,12 +491,12 @@ services:
       # Report PDF backend: Chromium (Playwright). The report pipeline renders
       # PDFs on this worker (argus.reports queue); same image + browser as backend.
       REPORT_PDF_BACKEND: ${REPORT_PDF_BACKEND:-chromium}
-      # Reports run in this worker where no scan budget ledger is registered (the
-      # registry is process-local to the scan worker). Disabling the ledger here
-      # lets the cheap, bounded report AI reach the cloud reasoner (DeepSeek)
-      # instead of being denied by the §8.3 fail-closed guard and forced onto the
-      # slow local fallback. Scan/analysis workers keep BUDGET_LEDGER_ENABLED on.
-      BUDGET_LEDGER_ENABLED: "false"
+      # Report AI reaches the cloud reasoner within a bounded, isolated report-scoped
+      # budget ledger registered by run_generate_report_pipeline (not by disabling the
+      # guard, and without touching the scan's budget row). The cap is operator-tunable
+      # via REPORT_LEDGER_MAX_COST_USD / REPORT_LEDGER_MAX_TOKENS (0 = deny -> local).
+      REPORT_LEDGER_MAX_COST_USD: ${REPORT_LEDGER_MAX_COST_USD:-0.5}
+      REPORT_LEDGER_MAX_TOKENS: ${REPORT_LEDGER_MAX_TOKENS:-200000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
