@@ -41,3 +41,23 @@ def test_declared_scope_denies_out_of_scope() -> None:
 def test_declared_scope_fail_closed_on_unparseable() -> None:
     v = evaluate_declared_scope("x", {"lab_allowed_targets": {"bad": "shape"}})
     assert not v.allowed and v.code == "SCOPE_UNPARSEABLE"
+
+
+def test_argv_network_destinations_extracts_only_urls_and_ips() -> None:
+    from src.recon.mcp.kal_executor import _argv_network_destinations
+
+    argv = [
+        "nuclei",
+        "-u",
+        "https://api.svalbard.ca/x",
+        "-t",
+        "50",  # threads — NOT a destination (must not be extracted)
+        "--target=10.0.0.5",
+        "203.0.113.9",
+        "-w",
+        "wordlist.txt",  # dotted but not a URL/IP -> ignored
+    ]
+    dests = _argv_network_destinations(argv)
+    assert dests == ["api.svalbard.ca", "10.0.0.5", "203.0.113.9"]
+    # "50" and "wordlist.txt" are not misclassified as hosts.
+    assert "50" not in dests and "wordlist.txt" not in dests

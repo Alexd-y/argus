@@ -19,6 +19,7 @@ from src.pipeline.contracts.tool_job import TargetKind
 from src.recon.mcp.policy import evaluate_kal_mcp_policy, normalize_kal_binary
 from src.recon.raw_artifact_sink import sink_raw_text, slug_for_artifact_type_component
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
+from src.security.verdict import SecurityVerdict
 from src.tools.executor import record_tool_run
 from src.tools.guardrails import validate_target_for_tool
 
@@ -43,6 +44,47 @@ def _host_from_target(raw: str) -> str:
     if s.startswith(("http://", "https://")):
         return (urlparse(s).hostname or "").strip()
     return s
+
+
+def _is_ip_literal(value: str) -> bool:
+    import ipaddress
+
+    try:
+        ipaddress.ip_address((value or "").strip())
+        return True
+    except ValueError:
+        return False
+
+
+def _argv_network_destinations(argv: list[str]) -> list[str]:
+    """Extract UNAMBIGUOUS network destinations from a tool argv for scope checking.
+
+    Only http(s) URLs and bare IP literals (including ``--flag=URL`` / ``--flag=IP``
+    forms) count — never bare flag VALUES by position, because a value like ``-t 50``
+    (threads in gobuster/ffuf) must not be mistaken for a host and wrongly denied.
+    A URL/IP token appearing in the argv of a scoped engagement must be in-scope by
+    definition, so validating these against the declared allow-list is false-positive
+    safe. Bare hostnames without a scheme are left to the ``target`` guardrail.
+    """
+    out: list[str] = []
+    for tok in argv[1:] if argv else []:
+        t = str(tok).strip()
+        if not t:
+            continue
+        cand = ""
+        if t.startswith(("http://", "https://")):
+            cand = _host_from_target(t)
+        elif "=" in t and not t.startswith("-=") and len(t.split("=", 1)) == 2:
+            v = t.split("=", 1)[1].strip()
+            if v.startswith(("http://", "https://")):
+                cand = _host_from_target(v)
+            elif _is_ip_literal(v):
+                cand = v
+        elif _is_ip_literal(t):
+            cand = t
+        if cand:
+            out.append(cand)
+    return list(dict.fromkeys(out))
 
 
 def _upload_kal_raw_streams(
@@ -167,21 +209,45 @@ def run_kal_mcp_tool(
     # Engagement-scope confine: when the scan declares an allow-list, an active tool
     # may only run against in-scope targets — in production as well as lab. A
     # scope-less scan is unaffected (target_in_declared_scope returns True).
-    scope_verdict = evaluate_declared_scope(target, scan_options)
-    if settings.scan_scope_enforcement and not scope_verdict:
-        logger.info(
-            "kal_mcp_out_of_scope_denied",
-            extra={**scope_verdict.log_extra("kal_mcp_out_of_scope_denied"), "category": category},
-        )
-        return {
-            "success": False,
-            "stdout": "",
-            "stderr": scope_verdict.reason,
-            "return_code": -1,
-            "execution_time": time.perf_counter() - start,
-            "policy_reason": scope_verdict.code.lower(),
-            "minio_keys": [],
-        }
+    if settings.scan_scope_enforcement:
+        # The declared target must be in scope...
+        scope_verdict = evaluate_declared_scope(target, scan_options)
+        # ...and so must every unambiguous network destination inside argv — a
+        # divergent host/URL/IP in argv would otherwise run against an out-of-scope
+        # host the `target` check never saw. Inert for scope-less scans (every
+        # verdict allows when no allow-list is declared).
+        if scope_verdict:
+            bad_dest = next(
+                (
+                    d
+                    for d in _argv_network_destinations(argv)
+                    if not evaluate_declared_scope(d, scan_options)
+                ),
+                None,
+            )
+            if bad_dest is not None:
+                scope_verdict = SecurityVerdict.deny(
+                    "ARGV_OUT_OF_DECLARED_SCOPE",
+                    "an argv destination is outside the declared engagement scope",
+                    host=bad_dest,
+                )
+        if not scope_verdict:
+            logger.info(
+                "kal_mcp_out_of_scope_denied",
+                extra={
+                    **scope_verdict.log_extra("kal_mcp_out_of_scope_denied"),
+                    "category": category,
+                },
+            )
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": scope_verdict.reason,
+                "return_code": -1,
+                "execution_time": time.perf_counter() - start,
+                "policy_reason": scope_verdict.code.lower(),
+                "minio_keys": [],
+            }
 
     host = _host_from_target(target)
     if host:
