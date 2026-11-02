@@ -1,0 +1,48 @@
+# Opt-in GPU overlay for WhiteRabbitNeo (§9) — serve the pentest LLM on an NVIDIA
+# GPU via vLLM instead of the default CPU llama.cpp GGUF path.
+#
+# WHY: the CPU GGUF server (the base `whiterabbitneo` service) is the scan
+# wall-clock bottleneck — WRB prompt-eval is compute-bound and a deep scan spends
+# minutes per call. On a GPU, vLLM serves the AWQ-quantized 7B model at a fraction
+# of that latency (~6-8 GiB VRAM for 7B AWQ).
+#
+# PREREQUISITES (host):
+#   * NVIDIA GPU + recent driver.
+#   * nvidia-container-toolkit installed and the runtime wired into Docker/Podman
+#     (`nvidia-ctk runtime configure`), so `deploy.resources.reservations.devices`
+#     can hand the GPU to the container.
+#
+# USAGE (rebuild required — flips the WRB image from the cpu to the gpu stage):
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.gpu.yml \
+#     build whiterabbitneo
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.gpu.yml \
+#     up -d whiterabbitneo
+#
+# This overlay changes ONLY the whiterabbitneo service; every other service and the
+# default CPU path are untouched. AWS note: the prod host runs Podman rootless with a
+# CPU-only WRB today — enabling this there needs a GPU instance + the toolkit first.
+services:
+  whiterabbitneo:
+    build:
+      args:
+        # Select the vLLM GPU stage of infra/whiterabbitneo/Dockerfile.
+        GPU_MODE: gpu
+    environment:
+      VLLM_API_KEY: ${WRB_API_KEY:-argus-wrb-key}
+      # Pass the GPU through to the CUDA runtime inside the container.
+      NVIDIA_VISIBLE_DEVICES: ${WRB_GPU_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${WRB_GPU_COUNT:-1}
+              capabilities: [gpu]
+        limits:
+          # vLLM keeps weights in VRAM; host RAM is mostly the CUDA/runtime overhead.
+          memory: 16G
+    healthcheck:
+      # GPU warmup is quick next to the CPU path's multi-GiB GGUF download, so the
+      # first-boot grace window can be far shorter.
+      start_period: 300s
