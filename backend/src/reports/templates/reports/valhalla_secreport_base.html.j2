@@ -388,6 +388,89 @@
             margin-top: 0.35rem;
         }
 
+        /* --- json2pdf-style per-finding articles (primary findings) --------- */
+        .findings-articles { margin: 0.5rem 0 1.5rem; }
+        .finding {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--border2);
+            border-radius: 6px;
+            margin: 0 0 1.1rem;
+            padding: 0.9rem 1.1rem 1rem;
+            break-inside: avoid;
+        }
+        .finding.sev-rail-critical { border-left-color: var(--crit); }
+        .finding.sev-rail-high     { border-left-color: var(--high); }
+        .finding.sev-rail-medium   { border-left-color: var(--med); }
+        .finding.sev-rail-low      { border-left-color: var(--low); }
+        .finding.sev-rail-info     { border-left-color: var(--info); }
+        .finding-topline {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .finding-num { color: var(--text-dim); font-weight: 700; }
+        .sev-badge {
+            border-radius: 3px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            padding: 0.1rem 0.5rem;
+        }
+        .sev-badge.sev-critical { background: var(--crit); color: #140207; }
+        .sev-badge.sev-high     { background: var(--high); color: #180800; }
+        .sev-badge.sev-medium   { background: var(--med);  color: #1a1600; }
+        .sev-badge.sev-low      { background: var(--low);  color: #001318; }
+        .sev-badge.sev-info     { background: var(--info); color: #0a0c10; }
+        .finding-conf { color: var(--text-muted); font-size: 0.78rem; }
+        .finding-status-confirmed {
+            background: var(--accent2);
+            border-radius: 3px;
+            color: #15020a;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            padding: 0.1rem 0.5rem;
+        }
+        .finding-vid { color: var(--text-muted); font-size: 0.78rem; margin-left: auto; }
+        .finding-title { color: var(--text); font-size: 1.02rem; margin: 0.1rem 0 0.6rem; }
+        .finding-block { margin: 0.55rem 0; }
+        .finding-block > h4 {
+            border-bottom: 1px solid var(--border);
+            color: var(--accent);
+            font-size: 0.74rem;
+            letter-spacing: 0.1em;
+            margin: 0 0 0.35rem;
+            padding-bottom: 0.15rem;
+            text-transform: uppercase;
+        }
+        .finding-evidence > h4 { color: var(--accent3); }
+        .finding-classification > h4 { color: var(--text-muted); }
+        .finding-meta-grid {
+            display: grid;
+            gap: 0.4rem 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            margin: 0.5rem 0;
+        }
+        .finding-meta-grid .mg-cell {
+            border-left: 2px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            padding-left: 0.5rem;
+        }
+        .finding-meta-grid .k {
+            color: var(--text-dim);
+            font-size: 0.64rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .finding-meta-grid .v { color: var(--text); font-size: 0.82rem; }
+        .finding-evidence-meta { color: var(--text-dim); font-size: 0.72rem; }
+        .finding-evidence-meta span { margin-right: 1rem; }
+        .finding-exploit-confirmed { color: var(--accent2); font-weight: 600; }
+
         .valhalla-exec {
             background: var(--surface);
             border: 1px solid var(--border);

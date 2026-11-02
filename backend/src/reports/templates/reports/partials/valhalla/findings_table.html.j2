@@ -1,166 +1,128 @@
-{# Valhalla — detailed findings table: confidence, evidence, applicability; advisory separate (T4/T5). #}
+{# Valhalla — detailed findings. Primary findings render as per-finding "articles"
+   (json2pdf / Ragnarøk layout): topline → What we found → meta → Why this matters →
+   Evidence → Recommended remediation → Classification. Advisory/contextual findings
+   stay in a compact table. All provable data + evidence is preserved; nothing is
+   invented (empty fields degrade to an explicit marker). #}
 {% set labels = owasp_top10_labels if owasp_top10_labels is defined else {} %}
 {% set col_count = 11 %}
 <section class="findings valhalla-findings" id="findings">
     <h2>Detailed Vulnerability Descriptions (Findings)</h2>
-    <table class="findings-main-table">
-        <thead>
-            <tr>
-                <th>Severity</th>
-                <th>Confidence</th>
-                <th>Evidence</th>
-                <th>Applicability</th>
-                <th>Vuln-ID</th>
-                <th>Title</th>
-                <th>Description</th>
-                <th>CWE</th>
-                <th>OWASP</th>
-                <th>CVE</th>
-                <th>CVSS</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% set primary = namespace(any=false) %}
-            {% for row in findings %}
-                    {% if not (row.is_advisory | default(false)) %}
-                    {% set primary.any = true %}
-                <tr>
-                    <td><span class="sev-{{ (row.severity or "info") | lower | e }}">{{ (row.severity or "") | e }}</span></td>
-                    <td>{{ (row.confidence or "likely") | e }}</td>
-                    <td class="desc">{{ (row.evidence_summary or "—") | e }}</td>
-                    <td class="desc">{{ (row.applicability_notes or "—") | e }}</td>
-                    <td><code>{{ (row.id or "—") | e }}</code></td>
-                    <td>{{ (row.title or "") | e }}</td>
-                    <td class="desc">{{ (row.description or "") | e }}</td>
-                    <td>{{ (row.cwe or "—") | e }}</td>
-                    <td class="owasp-finding-cell">
+
+    <div class="findings-articles">
+        {% set primary = namespace(any=false, n=0) %}
+        {% for row in findings %}
+            {% if not (row.is_advisory | default(false)) %}
+            {% set primary.any = true %}
+            {% set primary.n = primary.n + 1 %}
+            {% set poc = row.proof_of_concept or {} %}
+            {% set param_label = row.parameter or row.param or poc.parameter %}
+            {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
+            {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
+            {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or row.exploit_demonstrated or (row.verification_commands is defined and row.verification_commands) %}
+            <article class="finding sev-rail-{{ (row.severity or 'info') | lower | e }}" id="finding-{{ (row.id or primary.n) | e }}">
+                <div class="finding-topline">
+                    <span class="finding-num">#{{ primary.n }}</span>
+                    <span class="sev-badge sev-{{ (row.severity or 'info') | lower | e }}">{{ (row.severity or 'info') | upper | e }}</span>
+                    <span class="finding-conf">confidence: {{ (row.confidence or 'likely') | e }}</span>
+                    {% if row.exploit_demonstrated %}<span class="finding-status-confirmed">EXPLOIT CONFIRMED</span>{% endif %}
+                    <span class="finding-vid">Vuln-ID <code>{{ (row.id or '—') | e }}</code></span>
+                </div>
+                <h3 class="finding-title">{{ (row.title or 'Untitled finding') | e }}</h3>
+
+                {% if row.description %}
+                <div class="finding-block">
+                    <h4>What we found</h4>
+                    <p class="desc">{{ row.description | e }}</p>
+                </div>
+                {% endif %}
+
+                <div class="finding-meta-grid">
+                    <div class="mg-cell"><span class="k">CWE</span><span class="v">{{ (row.cwe or '—') | e }}</span></div>
+                    <div class="mg-cell"><span class="k">OWASP</span><span class="v">
                         {% set ow_disp = row.owasp_top10_2021 or row.owasp_display_code or row.owasp_category %}
-                        {% if ow_disp %}
-                            <span class="owasp-finding-id"><code>{{ ow_disp | e }}</code></span>
-                            {% if row.owasp_title %}
-                            <span class="owasp-finding-sep"> — </span>
-                            <span class="owasp-finding-label">{{ row.owasp_title | e }}</span>
-                            {% elif row.owasp_category and labels.get(row.owasp_category) %}
-                            <span class="owasp-finding-sep"> — </span>
-                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
-                            {% endif %}
-                        {% else %}
-                            Not mapped
+                        {% if ow_disp %}<code>{{ ow_disp | e }}</code>{% if row.owasp_title %} — {{ row.owasp_title | e }}{% elif row.owasp_category and labels.get(row.owasp_category) %} — {{ labels.get(row.owasp_category) | e }}{% endif %}{% else %}Not mapped{% endif %}
+                    </span></div>
+                    <div class="mg-cell"><span class="k">CVE</span><span class="v">{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</span></div>
+                    <div class="mg-cell"><span class="k">CVSS</span><span class="v">{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}{% if row.cvss_vector %} <code class="cvss-vector">{{ row.cvss_vector | e }}</code>{% endif %}</span></div>
+                    {% if row.affected_layer %}<div class="mg-cell"><span class="k">Affected layer</span><span class="v">{{ row.affected_layer | e }}</span></div>{% endif %}
+                    {% if param_label %}<div class="mg-cell"><span class="k">Parameter</span><span class="v"><code>{{ param_label | e }}</code></span></div>{% endif %}
+                    {% if row.tool_name %}<div class="mg-cell"><span class="k">Tool</span><span class="v">{{ row.tool_name | e }}{% if row.tool_version %} ({{ row.tool_version | e }}){% endif %}</span></div>{% endif %}
+                    {% if row.applicability_notes %}<div class="mg-cell"><span class="k">Applicability</span><span class="v">{{ row.applicability_notes | e }}</span></div>{% endif %}
+                </div>
+
+                {% if row.observed_impact %}
+                <div class="finding-block">
+                    <h4>Why this matters</h4>
+                    <p class="desc">{{ row.observed_impact | e }}</p>
+                </div>
+                {% endif %}
+
+                <div class="finding-block finding-evidence">
+                    <h4>Evidence</h4>
+                    {% if has_detail %}
+                        {% if row.exploit_demonstrated %}
+                        <p class="finding-exploit-confirmed"><strong>Exploitation</strong>: confirmed exploitable during testing{% if row.exploit_summary %} — {{ row.exploit_summary | e }}{% endif %}.</p>
                         {% endif %}
-                    </td>
-                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</td>
-                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}{% if row.cvss_vector %}<br><code class="cvss-vector">{{ row.cvss_vector | e }}</code>{% endif %}</td>
-                </tr>
-                {% if row.proof_of_concept or row.exploit_demonstrated or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
-                    {% set poc = row.proof_of_concept or {} %}
-                    {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
-                    {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or row.exploit_demonstrated or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
-                    {% set param_label = row.parameter or row.param or poc.parameter %}
-                    <tr class="poc-row">
-                        <td colspan="{{ col_count }}">
-                            {% if has_detail %}
-                            <section class="finding-poc">
-                                <h3 class="finding-poc-title">Evidence (PoC)</h3>
-                                {% if row.exploit_demonstrated %}
-                                    <p class="finding-exploit-confirmed"><strong>Exploitation</strong>: confirmed exploitable during testing{% if row.exploit_summary %} — {{ row.exploit_summary | e }}{% endif %}.</p>
-                                {% endif %}
-                                {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
-                                {% include "partials/valhalla/finding_evidence_block.html.j2" %}
-                                {% if row.poc_screenshot_url and not (row.http_evidence is defined and row.http_evidence) %}
-                                    <p><strong>Screenshot</strong></p>
-                                    <p><a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">Open screenshot</a></p>
-                                    {% if embed_poc_screenshot_inline %}
-                                    <p class="finding-poc-screenshot-thumb"><img src="{{ row.poc_screenshot_url | e }}" alt="PoC" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
-                                    {% endif %}
-                                {% endif %}
-                                {% if param_label %}
-                                    <p><strong>Parameter</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ param_label | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.payload %}
-                                    <p><strong>Payload</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.payload | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.javascript_code %}
-                                    <p><strong>JavaScript</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.javascript_code | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.curl_command and not (row.http_evidence is defined and row.http_evidence) %}
-                                    <p><strong>cURL</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.request %}
-                                    <p><strong>Request</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.request | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.response_snippet %}
-                                    <p><strong>Response Snippet</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.response_snippet | e }}</code></pre>
-                                {% endif %}
-                                {% if poc.response %}
-                                    <p><strong>Response (excerpt)</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.response | e }}</code></pre>
-                                {% endif %}
-                                {% if row.tool_command %}
-                                    <p><strong>Tool Command</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ row.tool_command | e }}</code></pre>
-                                {% endif %}
-                                {% if row.tool_name %}
-                                    <p><strong>Tool</strong>: {{ row.tool_name | e }}{% if row.tool_version %} ({{ row.tool_version | e }}){% endif %}</p>
-                                {% endif %}
-                                {% if row.timestamp_utc %}
-                                    <p><strong>Timestamp</strong>: {{ row.timestamp_utc | e }}</p>
-                                {% endif %}
-                                {% if row.auth_state %}
-                                    <p><strong>Auth State</strong>: {{ row.auth_state | e }}</p>
-                                {% endif %}
-                                {% if row.response_status %}
-                                    <p><strong>Response Status</strong>: {{ row.response_status | e }}</p>
-                                {% endif %}
-                                {% if row.affected_layer %}
-                                    <p><strong>Affected Layer</strong>: {{ row.affected_layer | e }}</p>
-                                {% endif %}
-                                {% if row.observed_impact %}
-                                    <p><strong>Observed Impact</strong>: {{ row.observed_impact | e }}</p>
-                                {% endif %}
-                                {% if row.evidence_classification %}
-                                    <p><strong>Evidence Classification</strong>: <span class="sev-{{ (row.evidence_classification or "candidate") | lower | e }}">{{ row.evidence_classification | e }}</span></p>
-                                {% endif %}
-                                {% if row.verification_commands is defined and row.verification_commands %}
-                                    <p><strong>Verification (evidence collection)</strong></p>
-                                    {% for vcmd in row.verification_commands %}
-                                    <pre class="finding-poc-block"><code>{{ (vcmd.tool ~ ": " ~ vcmd.command) | e }}</code></pre>
-                                    {% endfor %}
-                                {% endif %}
-                                {% if row.remediation_text is defined and row.remediation_text %}
-                                    <p><strong>Remediation (summary)</strong></p>
-                                    <p class="desc">{{ row.remediation_text | e }}</p>
-                                {% endif %}
-                            </section>
-                            {% else %}
-                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
+                        {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
+                        {% include "partials/valhalla/finding_evidence_block.html.j2" %}
+                        {% if row.poc_screenshot_url and not has_http_evidence %}
+                            <p><strong>Screenshot</strong>: <a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">open</a></p>
+                            {% if embed_poc_screenshot_inline %}
+                            <p class="finding-poc-screenshot-thumb"><img src="{{ row.poc_screenshot_url | e }}" alt="PoC" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
                             {% endif %}
-                        </td>
-                    </tr>
+                        {% endif %}
+                        {% if poc.payload %}<p><strong>Payload</strong></p><pre class="finding-poc-block"><code>{{ poc.payload | e }}</code></pre>{% endif %}
+                        {% if poc.javascript_code %}<p><strong>JavaScript</strong></p><pre class="finding-poc-block"><code>{{ poc.javascript_code | e }}</code></pre>{% endif %}
+                        {% if poc.curl_command and not has_http_evidence %}<p><strong>cURL</strong></p><pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>{% endif %}
+                        {% if poc.request %}<p><strong>Request</strong></p><pre class="finding-poc-block"><code>{{ poc.request | e }}</code></pre>{% endif %}
+                        {% if poc.response_snippet %}<p><strong>Response Snippet</strong></p><pre class="finding-poc-block"><code>{{ poc.response_snippet | e }}</code></pre>{% endif %}
+                        {% if poc.response %}<p><strong>Response (excerpt)</strong></p><pre class="finding-poc-block"><code>{{ poc.response | e }}</code></pre>{% endif %}
+                        {% if row.tool_command %}<p><strong>Tool Command</strong></p><pre class="finding-poc-block"><code>{{ row.tool_command | e }}</code></pre>{% endif %}
+                        {% if row.verification_commands is defined and row.verification_commands %}
+                            <p><strong>Verification (evidence collection)</strong></p>
+                            {% for vcmd in row.verification_commands %}
+                            <pre class="finding-poc-block"><code>{{ (vcmd.tool ~ ": " ~ vcmd.command) | e }}</code></pre>
+                            {% endfor %}
+                        {% endif %}
+                        <p class="finding-evidence-meta">
+                            {% if row.timestamp_utc %}<span>Timestamp: {{ row.timestamp_utc | e }}</span>{% endif %}
+                            {% if row.auth_state %}<span>Auth state: {{ row.auth_state | e }}</span>{% endif %}
+                            {% if row.response_status %}<span>Response status: {{ row.response_status | e }}</span>{% endif %}
+                        </p>
+                    {% else %}
+                        <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
+                    {% endif %}
+                </div>
+
+                {% if row.remediation_text is defined and row.remediation_text %}
+                <div class="finding-block">
+                    <h4>Recommended remediation</h4>
+                    <p class="desc">{{ row.remediation_text | e }}</p>
+                </div>
                 {% endif %}
+
                 {% if row.reproducible_steps %}
-                    <tr class="poc-row finding-repro-row">
-                        <td colspan="{{ col_count }}">
-                            <p><strong>Reproduction Steps</strong></p>
-                            <pre class="finding-poc-block"><code>{{ row.reproducible_steps | e }}</code></pre>
-                        </td>
-                    </tr>
+                <div class="finding-block">
+                    <h4>Reproduction steps</h4>
+                    <pre class="finding-poc-block"><code>{{ row.reproducible_steps | e }}</code></pre>
+                </div>
                 {% endif %}
-                {% endif %}
-            {% endfor %}
-            {% if not primary.any %}
-                <tr>
-                    <td colspan="{{ col_count }}" class="empty">No primary findings are listed in this report context.</td>
-                </tr>
+
+                <div class="finding-block finding-classification">
+                    <h4>Classification</h4>
+                    <p>Severity <span class="sev-{{ (row.severity or 'info') | lower | e }}">{{ (row.severity or '') | e }}</span>
+                       · Confidence {{ (row.confidence or 'likely') | e }}
+                       {% if row.evidence_classification %} · Evidence <span class="sev-{{ (row.evidence_classification or 'candidate') | lower | e }}">{{ row.evidence_classification | e }}</span>{% endif %}.
+                       {% if row.evidence_summary %} Evidence summary: {{ row.evidence_summary | e }}.{% endif %}
+                    </p>
+                </div>
+            </article>
             {% endif %}
-        </tbody>
-    </table>
+        {% endfor %}
+        {% if not primary.any %}
+            <p class="empty">No primary findings are listed in this report context.</p>
+        {% endif %}
+    </div>
 
     <h3 class="valhalla-advisory-findings-heading">Advisory / Contextual Findings</h3>
     <table class="findings-main-table valhalla-advisory-findings-table">
