@@ -61,8 +61,10 @@ def _base_steps_for_mode(mode: str) -> list[ReconStepId]:
 
 
 def _optional_full_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
-    if cfg.mode != "full":
-        return []
+    """Optional heavy recon steps, added ADDITIVELY by their own flags.
+
+    Each flag only ever ADDS its step — it never subtracts one. Flags are read in
+    every mode (not gated on mode="full"): the step plan is not reduced by mode."""
     out: list[ReconStepId] = []
     if cfg.enable_content_discovery:
         out.append(ReconStepId.CONTENT_DISCOVERY)
@@ -77,34 +79,16 @@ def _optional_full_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
     return out
 
 
-# External tool_selection token -> the optional full-mode step it enables.
-# These are the only steps tool_selection governs; base-mode steps always run.
-_OPTIONAL_TS_ALIASES: dict[str, ReconStepId] = {
-    "url_history": ReconStepId.CONTENT_DISCOVERY,
-    "js_analysis": ReconStepId.JS_ANALYSIS,
-    "asnmap": ReconStepId.ASN_MAP,
-    "screenshots": ReconStepId.SCREENSHOTS,
-}
-
-
 def plan_recon_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
-    """Ordered plan: base-mode steps (always) + selected optional full-mode extras.
+    """Ordered plan: the FULL recon surface — nothing is ever cut.
 
-    ``tool_selection`` is a picker for the heavy OPTIONAL full-mode extras only
-    (content discovery, JS analysis, asnmap, screenshots, deep port scan) — it
-    is NOT a global allow-list. The base-mode steps make up Target Intelligence
-    (WHOIS / DIG / DNS depth / crt.sh / subdomain / nmap / HTTP surface /
-    security headers), so they always run: a ``tool_selection`` meant to *enable*
-    extras can never silently blind WHOIS/DNS/email-auth/tech-profile recon.
+    Policy (operator request): recon runs every step; ``tool_selection``, ``mode``
+    and ``passive_only`` never REMOVE a step. The base plan is always the full
+    surface (WHOIS / DIG / DNS depth / crt.sh / subdomain / Shodan / kal-DNS /
+    nmap / HTTP surface / security headers / dependency manifests); optional heavy
+    steps are added additively by their own flags. A step whose tool is missing is
+    skipped at run time by the pipeline (logged), not pruned here.
     """
-    base = list(dict.fromkeys(_base_steps_for_mode(cfg.mode)))  # stable dedup
+    base = list(dict.fromkeys(_base_steps_for_mode("full")))  # always the full surface
     extras = [e for e in _optional_full_steps(cfg) if e not in base]
-
-    if cfg.tool_selection is not None:
-        sel = set(cfg.tool_selection)
-        for alias, step in _OPTIONAL_TS_ALIASES.items():
-            if alias in sel:
-                sel.add(step.value)
-        extras = [e for e in extras if e.value in sel]
-
     return base + extras

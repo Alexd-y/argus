@@ -25,7 +25,9 @@ def test_full_mode_includes_nmap_and_http_surface() -> None:
     assert ReconStepId.SUBDOMAIN_PASSIVE in steps
 
 
-def test_passive_mode_skips_nmap_and_http() -> None:
+def test_mode_never_reduces_the_plan() -> None:
+    # Policy: the plan is the full recon surface regardless of mode — mode (and
+    # passive_only) never REMOVE a step. Even in "passive" the full surface runs.
     cfg = ReconRuntimeConfig(
         mode="passive",
         active_depth=1,
@@ -38,12 +40,17 @@ def test_passive_mode_skips_nmap_and_http() -> None:
         rate_limit_rps=10,
     )
     steps = plan_recon_steps(cfg)
-    assert ReconStepId.NMAP_PORT_SCAN not in steps
-    assert ReconStepId.HTTP_SURFACE not in steps
-    assert ReconStepId.DIG in steps
-    assert ReconStepId.DNS_DEPTH in steps
-    assert ReconStepId.SUBDOMAIN_PASSIVE in steps
-    assert ReconStepId.KAL_DNS_BUNDLE in steps
+    for essential in (
+        ReconStepId.NMAP_PORT_SCAN,
+        ReconStepId.HTTP_SURFACE,
+        ReconStepId.DIG,
+        ReconStepId.DNS_DEPTH,
+        ReconStepId.WHOIS,
+        ReconStepId.SUBDOMAIN_PASSIVE,
+        ReconStepId.KAL_DNS_BUNDLE,
+        ReconStepId.SECURITY_HEADERS,
+    ):
+        assert essential in steps
 
 
 def test_tool_selection_does_not_drop_base_ti_steps() -> None:
@@ -116,9 +123,10 @@ def test_nested_recon_options_override_mode() -> None:
         {"ports": "443", "recon": {"mode": "passive"}},
         app_settings=Settings(recon_mode="full", recon_passive_only=False),
     )
+    # mode still resolves from options (config concern)...
     assert cfg.mode == "passive"
-    steps = plan_recon_steps(cfg)
-    assert ReconStepId.NMAP_PORT_SCAN not in steps
+    # ...but the plan is never reduced by it: the full surface runs regardless.
+    assert ReconStepId.NMAP_PORT_SCAN in plan_recon_steps(cfg)
 
 
 def test_passive_only_override_in_options() -> None:
@@ -243,33 +251,26 @@ def test_settings_defaults_when_scan_options_empty() -> None:
     assert cfg.rate_limit_rps == 7
 
 
-def test_full_mode_base_same_as_active_plus_optional_only_in_full() -> None:
-    active_steps = plan_recon_steps(
-        ReconRuntimeConfig(
-            mode="active",
-            active_depth=1,
-            enable_content_discovery=True,
-            deep_port_scan=True,
-            js_analysis=True,
-            screenshots=True,
-            tool_selection=None,
-            wordlist_path="",
-            rate_limit_rps=10,
+def test_optional_extras_are_flag_gated_in_every_mode() -> None:
+    # Extras are additive by their own flags and are no longer "full-only": the
+    # same flags produce the same extras in active and full (mode never gates them).
+    def _plan(mode: str):
+        return plan_recon_steps(
+            ReconRuntimeConfig(
+                mode=mode,
+                active_depth=1,
+                enable_content_discovery=True,
+                deep_port_scan=True,
+                js_analysis=True,
+                screenshots=True,
+                tool_selection=None,
+                wordlist_path="",
+                rate_limit_rps=10,
+            )
         )
-    )
-    full_steps = plan_recon_steps(
-        ReconRuntimeConfig(
-            mode="full",
-            active_depth=1,
-            enable_content_discovery=True,
-            deep_port_scan=True,
-            js_analysis=True,
-            screenshots=True,
-            tool_selection=None,
-            wordlist_path="",
-            rate_limit_rps=10,
-        )
-    )
+
+    active_steps = _plan("active")
+    full_steps = _plan("full")
     for s in (
         ReconStepId.CONTENT_DISCOVERY,
         ReconStepId.JS_ANALYSIS,
@@ -277,7 +278,7 @@ def test_full_mode_base_same_as_active_plus_optional_only_in_full() -> None:
         ReconStepId.SCREENSHOTS,
         ReconStepId.DEEP_PORT_SCAN,
     ):
-        assert s not in active_steps
+        assert s in active_steps
         assert s in full_steps
 
 
@@ -338,7 +339,10 @@ def test_tool_selection_asnmap_alias_selects_asn_map() -> None:
     assert ReconStepId.SCREENSHOTS not in steps
 
 
-def test_tool_selection_url_history_alias_selects_content_discovery() -> None:
+def test_tool_selection_is_ignored_extras_governed_by_flags() -> None:
+    # tool_selection no longer filters anything: extras are governed only by their
+    # flags. asnmap defaults on, so ASN_MAP is present even though it is not named
+    # in tool_selection; flag-off extras stay out; base always runs.
     cfg = ReconRuntimeConfig(
         mode="full",
         active_depth=1,
@@ -351,13 +355,15 @@ def test_tool_selection_url_history_alias_selects_content_discovery() -> None:
         rate_limit_rps=10,
     )
     steps = plan_recon_steps(cfg)
-    assert ReconStepId.CONTENT_DISCOVERY in steps
+    assert ReconStepId.CONTENT_DISCOVERY in steps  # flag on
+    assert ReconStepId.ASN_MAP in steps  # asnmap default on; tool_selection cannot exclude
+    assert ReconStepId.JS_ANALYSIS not in steps  # flag off
+    assert ReconStepId.SCREENSHOTS not in steps  # flag off
     assert ReconStepId.WHOIS in steps and ReconStepId.DIG in steps
-    # asnmap defaults on but was not selected -> excluded from the extras
-    assert ReconStepId.ASN_MAP not in steps
 
 
-def test_tool_selection_narrows_extras_only_keeps_base() -> None:
+def test_tool_selection_does_not_narrow_extras() -> None:
+    # A narrow tool_selection must NOT cut any flag-enabled extra (no filtering).
     cfg = ReconRuntimeConfig(
         mode="full",
         active_depth=1,
@@ -370,15 +376,13 @@ def test_tool_selection_narrows_extras_only_keeps_base() -> None:
         rate_limit_rps=10,
     )
     steps = plan_recon_steps(cfg)
-    # only content_discovery is selected among the extras
-    assert ReconStepId.CONTENT_DISCOVERY in steps
-    for unselected in (
+    for extra in (
+        ReconStepId.CONTENT_DISCOVERY,
         ReconStepId.JS_ANALYSIS,
         ReconStepId.ASN_MAP,
         ReconStepId.SCREENSHOTS,
         ReconStepId.DEEP_PORT_SCAN,
     ):
-        assert unselected not in steps
-    # base TI foundation always runs
+        assert extra in steps
     for essential in (ReconStepId.WHOIS, ReconStepId.DIG, ReconStepId.DNS_DEPTH, ReconStepId.HTTP_SURFACE):
         assert essential in steps
