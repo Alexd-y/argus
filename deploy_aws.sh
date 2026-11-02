@@ -113,6 +113,20 @@ log "Building images (backend, admin-frontend)"
 "${DC[@]}" build backend admin-frontend
 ok "images built"
 
+# --- 4b. Re-tag built images into the localhost/ namespace -----------------
+# Under rootless Podman (the docker CLI talks to the podman socket), `docker
+# compose build` tags the images docker.io/library/argus-*:latest, but the
+# running containers resolve the unqualified compose `image: argus-*` to
+# localhost/argus-*:latest. Without this re-tag, `up -d` below sees
+# localhost/*:latest unchanged and never recreates backend + workers, so they
+# keep running the PREVIOUS image (a silent stale deploy). Harmless on real
+# Docker: the source tag is the same image and the extra localhost/ tag is
+# simply never referenced.
+log "Re-tagging built images into localhost/ namespace (compose/podman parity)"
+docker tag docker.io/library/argus-backend:latest localhost/argus-backend:latest 2>/dev/null || true
+docker tag docker.io/library/argus-admin-frontend:latest localhost/argus-admin-frontend:latest 2>/dev/null || true
+ok "images re-tagged"
+
 # --- 5. Validate settings actually load (runs every pydantic validator) ----
 log "Validating backend settings load"
 "${DC[@]}" run --rm --no-deps backend \
