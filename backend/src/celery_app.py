@@ -172,6 +172,7 @@ app.conf.update(
         # Dark Web Monitoring sweeps on a dedicated egress-limited queue.
         "argus.darkweb.sweep": {"queue": "argus.darkweb"},
         "argus.darkweb.correlate": {"queue": "argus.darkweb"},
+        "argus.darkweb.scheduled_resweep": {"queue": "argus.darkweb"},
     },
     task_default_queue="argus.default",
 )

@@ -52,6 +52,18 @@ def _schedule(hour: int, minute: int) -> Any:
     return crontab(hour=hour, minute=minute)
 
 
+def _dwm_resweep_seconds() -> int:
+    """Re-sweep cadence from settings (hours→seconds), fallback 24h. Lazy + guarded
+    so this module stays importable in slim test images with no settings env."""
+    try:
+        from src.core.config import settings
+
+        hours = int(getattr(settings, "dwm_resweep_interval_hours", 24) or 24)
+    except Exception:  # noqa: BLE001
+        hours = 24
+    return max(1, hours) * 3600
+
+
 def _interval(seconds: int) -> Any:
     """Return a ``timedelta`` schedule (``None`` if Celery is missing).
 
@@ -123,6 +135,15 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": "argus.cairn.sweep",
         "schedule": _interval(seconds=60),
         "options": {"queue": "argus.cairn"},
+    },
+    # §6 — periodic Dark Web re-sweep of recently monitored targets. The entry is
+    # always registered; the task self-gates (no-op unless the global DWM flag AND
+    # dwm_scheduled_resweep_enabled are on) and each re-enqueued sweep re-checks all
+    # three authoritative gates. Cadence from dwm_resweep_interval_hours (default 24h).
+    "argus.darkweb.scheduled_resweep": {
+        "task": "argus.darkweb.scheduled_resweep",
+        "schedule": _interval(seconds=_dwm_resweep_seconds()),
+        "options": {"queue": "argus.darkweb"},
     },
 }
 

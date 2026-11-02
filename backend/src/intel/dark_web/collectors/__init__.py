@@ -15,6 +15,11 @@ from src.intel.dark_web.collectors.breach_leak_apis import (
     DehashedCollector,
     LeakCheckCollector,
 )
+from src.intel.dark_web.collectors.ct_logs import (
+    CertSpotterCollector,
+    CrtShCollector,
+    ShodanInternetDbCollector,
+)
 from src.intel.dark_web.collectors.feeds import FeedsCollector
 from src.intel.dark_web.collectors.hidden_networks import (
     ForumMonitorCollector,
@@ -32,9 +37,12 @@ from src.intel.dark_web.collectors.paste_github import (
 __all__ = [
     "AhmiaSearchCollector",
     "BaseCollector",
+    "CertSpotterCollector",
+    "CrtShCollector",
     "DarkWebCollector",
     "DehashedCollector",
     "FeedsCollector",
+    "ShodanInternetDbCollector",
     "ForumMonitorCollector",
     "GithubLeakCollector",
     "HibpBreachCollector",
@@ -62,6 +70,10 @@ def default_breach_first_collectors() -> list[BaseCollector]:
         GithubLeakCollector(),
         IntelxSearchCollector(),
         FeedsCollector(),
+        # §6 free, keyless infrastructure-exposure sources (CT logs + Shodan InternetDB).
+        CrtShCollector(),
+        CertSpotterCollector(),
+        ShodanInternetDbCollector(),
     ]
 
 

@@ -46,17 +46,30 @@ def build_observations_from_raw(
     """Pure: classify + redact + hash each raw record into an observation."""
 
     out: list[DarkWebObservation] = []
+    # De-dup identical observations (§6): the same locator found for the same
+    # selector on the same network with identical content is ONE finding — e.g. a
+    # subdomain surfaced by both crt.sh and certspotter, or a selector swept twice.
+    # Keyed on (selector hash, network, source_ref, raw_sha256) so only exact
+    # duplicates collapse; genuinely distinct hits (distinct ref/content) are kept.
+    seen: set[tuple[str, str, str, str]] = set()
+    dropped = 0
     for selector, records in records_by_selector:
         for rec in records:
             c = classify(rec, classifier_rules)
             raw_sha = _sha256(rec.content)
+            sel_hash = selector.value_hash or selector_hash(selector.value)
+            dedup_key = (sel_hash, rec.source_network.value, rec.source_ref or "", raw_sha)
+            if dedup_key in seen:
+                dropped += 1
+                continue
+            seen.add(dedup_key)
             summary = build_redacted_summary(
                 rec.content, prefix=f"[{c.exposure_type.value}/{rec.source_network.value}]"
             )
             out.append(
                 DarkWebObservation(
                     selector_kind=selector.kind,
-                    selector_value_hash=selector.value_hash or selector_hash(selector.value),
+                    selector_value_hash=sel_hash,
                     finding_id=selector.finding_id or rec.extra.get("finding_id", "") or "",
                     source_network=rec.source_network,
                     source_ref=rec.source_ref,
@@ -75,6 +88,11 @@ def build_observations_from_raw(
                     },
                 )
             )
+    if dropped:
+        logger.info(
+            "darkweb_observations_deduped",
+            extra={"event": "darkweb_observations_deduped", "dropped": dropped, "kept": len(out)},
+        )
     return out
 
 

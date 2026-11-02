@@ -85,3 +85,28 @@ sources:
     requires_key: ""         # public feed; no key
     base_url: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
     notes: "CISA KEV — correlate findings' CVEs with known-exploited catalogue."
+
+  # --- Free, keyless infrastructure-exposure sources (§6) -------------------
+  # Each runs only inside an already triple-gated sweep; a settings flag (not a
+  # key) controls egress. They feed subdomain + exposed-service observations.
+  - id: crtsh
+    network: clearnet_index
+    enabled: true
+    requires_key: ""         # keyless Certificate Transparency search
+    client: CrtShClient
+    base_url: "https://crt.sh"
+    notes: "crt.sh CT-log search — subdomains issued a certificate for the target. Gated by dwm_ct_logs_enabled."
+  - id: certspotter
+    network: clearnet_index
+    enabled: true
+    requires_key: ""         # keyless; CERTSPOTTER_API_TOKEN optional for rate limits
+    client: CertSpotterClient
+    base_url: "https://api.certspotter.com"
+    notes: "SSLMate certspotter CT issuances (include_subdomains). Gated by dwm_ct_logs_enabled."
+  - id: shodan_internetdb
+    network: feed
+    enabled: true
+    requires_key: ""         # keyless Shodan InternetDB
+    client: ShodanInternetDbClient
+    base_url: "https://internetdb.shodan.io"
+    notes: "Open ports + known CVEs per resolved IP. Gated by dwm_shodan_internetdb_enabled."

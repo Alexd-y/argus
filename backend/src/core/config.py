@@ -1618,6 +1618,41 @@ class Settings(BaseSettings):
             "ARGUS_DARK_WEB_MONITORING_ENABLED", "dark_web_monitoring_enabled"
         ),
     )
+    # Free, keyless DWM sources (§6). Each runs ONLY inside an already triple-gated
+    # sweep; these flags let an operator disable that source's network egress without
+    # turning off DWM entirely. Default on — they are free CT-log / Shodan-InternetDB
+    # queries that feed subdomain + exposed-service observations.
+    dwm_ct_logs_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("DWM_CT_LOGS_ENABLED", "dwm_ct_logs_enabled"),
+    )
+    dwm_shodan_internetdb_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "DWM_SHODAN_INTERNETDB_ENABLED", "dwm_shodan_internetdb_enabled"
+        ),
+    )
+    # Scheduled DWM re-sweep (§6). OFF by default — when on, a beat task re-enqueues a
+    # sweep for each recently-monitored (tenant, target) so exposures are tracked over
+    # time. Every re-enqueued sweep still re-checks all three authoritative gates.
+    dwm_scheduled_resweep_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "DWM_SCHEDULED_RESWEEP_ENABLED", "dwm_scheduled_resweep_enabled"
+        ),
+    )
+    dwm_resweep_lookback_days: int = Field(
+        default=7,
+        validation_alias=AliasChoices("DWM_RESWEEP_LOOKBACK_DAYS", "dwm_resweep_lookback_days"),
+    )
+    dwm_resweep_max_targets: int = Field(
+        default=50,
+        validation_alias=AliasChoices("DWM_RESWEEP_MAX_TARGETS", "dwm_resweep_max_targets"),
+    )
+    dwm_resweep_interval_hours: int = Field(
+        default=24,
+        validation_alias=AliasChoices("DWM_RESWEEP_INTERVAL_HOURS", "dwm_resweep_interval_hours"),
+    )
     perplexity_intel_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices("PERPLEXITY_INTEL_ENABLED", "perplexity_intel_enabled"),

@@ -55,6 +55,26 @@ rules:
     severity: critical
     evidence_tier: 2
     confidence: possible
+  # §6 free infrastructure-exposure sources (Shodan InternetDB + CT logs).
+  # Order matters: a service with a known CVE escalates above a bare open port.
+  - id: exposed_service_cve
+    match: ["known cves", "cve-"]
+    exposure_type: mention
+    severity: medium
+    evidence_tier: 2
+    confidence: possible
+  - id: exposed_service
+    match: ["exposed service", "open ports"]
+    exposure_type: mention
+    severity: low
+    evidence_tier: 1
+    confidence: advisory
+  - id: ct_subdomain
+    match: ["certificate transparency"]
+    exposure_type: mention
+    severity: info
+    evidence_tier: 1
+    confidence: advisory
   - id: brand_mention
     match: ["mention", "reference", "discussed"]
     exposure_type: mention
