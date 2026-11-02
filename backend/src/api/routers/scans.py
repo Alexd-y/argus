@@ -1428,6 +1428,54 @@ async def get_scan_report(
     return await download_report(str(report.id), fmt, regenerate, redirect, tenant_id)
 
 
+@router.get("/{scan_id}/report-context-debug")
+async def report_context_debug(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> dict[str, Any]:
+    """Diagnostic view of the Target-Intelligence inputs (§7 debug-render).
+
+    Returns the *exact* TI block the Midgard/Asgard renderers produce
+    (``build_midgard_intel``, including the per-field ``_provenance`` map) beside
+    the raw ``ownership_evidence`` / ``ssl_tls_analysis`` subtrees it is derived
+    from — so an empty or partial report (missing DNSSEC/SPF/DMARC/DKIM, blank
+    TLS, no subdomains/tech) can be diagnosed to recon-not-collected vs
+    renderer-dropped without re-running the context builder by hand. Reads only;
+    no AI, no generation, no side effects.
+    """
+    from src.reports.midgard_free import build_midgard_intel
+    from src.services.reporting import ReportGenerator, recon_summary_for_jinja
+
+    gen = ReportGenerator()
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        data = await gen.collect_scan_report_data(
+            session, tenant_id, scan_id, include_minio=True
+        )
+
+    vcd = data.valhalla_context.model_dump(mode="json")
+    jinja_context = {
+        "valhalla_context": vcd,
+        "recon_summary": recon_summary_for_jinja(data),
+    }
+    report_data = gen.to_generator_report_data(data, {})
+    intel = build_midgard_intel(jinja_context, report_data)
+    return {
+        "scan_id": scan_id,
+        "target_intelligence": intel,
+        "raw_ownership_evidence": vcd.get("ownership_evidence"),
+        "raw_ssl_tls_analysis": vcd.get("ssl_tls_analysis"),
+    }
+
+
 @router.get("/{scan_id}/cost", response_model=ScanCostApiResponse)
 async def get_scan_cost(
     scan_id: str,

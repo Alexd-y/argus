@@ -6,14 +6,64 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import String, cast, select
+from sqlalchemy import String, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS
+from src.core.config import settings
 from src.db.models import Report as ReportModel
 from src.db.models import Scan
 
 logger = logging.getLogger(__name__)
+
+
+async def _gc_prior_reports(session: AsyncSession, tenant_id: str, scan_id: str) -> int:
+    """Delete the scan's PRIOR report rows + their MinIO objects before a new bundle.
+
+    Idempotency/GC (§1): each generate-all created a fresh set of rows/objects and
+    never removed the old ones, so a scan accumulated N report_ids per tier and N×
+    objects. Keep only the newest bundle. Best-effort on storage; the reports.id FK
+    is ON DELETE SET NULL, so dropping rows is safe. Gated by report_gc_enabled.
+    """
+    if not getattr(settings, "report_gc_enabled", True):
+        return 0
+    rows = (
+        await session.execute(
+            select(ReportModel.id, ReportModel.tier).where(
+                cast(ReportModel.scan_id, String) == scan_id,
+                cast(ReportModel.tenant_id, String) == tenant_id,
+            )
+        )
+    ).all()
+    if not rows:
+        return 0
+    try:
+        from src.storage.s3 import _get_client
+
+        client = _get_client()
+        bucket = getattr(settings, "reports_bucket", "argus-reports") or "argus-reports"
+        for rid, tier in rows:
+            prefix = f"{tenant_id}/{scan_id}/reports/{tier}/{rid}"
+            listed = client.list_objects_v2(Bucket=bucket, Prefix=prefix).get("Contents", [])
+            for obj in listed:
+                with __import__("contextlib").suppress(Exception):
+                    client.delete_object(Bucket=bucket, Key=obj["Key"])
+    except Exception:  # noqa: BLE001 — storage GC is best-effort; row GC still proceeds
+        logger.warning(
+            "report_gc_object_delete_failed",
+            extra={"event": "report_gc_object_delete_failed", "scan_id": scan_id},
+        )
+    await session.execute(
+        delete(ReportModel).where(
+            cast(ReportModel.scan_id, String) == scan_id,
+            cast(ReportModel.tenant_id, String) == tenant_id,
+        )
+    )
+    logger.info(
+        "report_gc_prior_bundle",
+        extra={"event": "report_gc_prior_bundle", "scan_id": scan_id, "removed": len(rows)},
+    )
+    return len(rows)
 
 GENERATE_ALL_REPORT_TIERS: tuple[str, ...] = ("midgard", "asgard", "valhalla")
 
@@ -71,6 +121,9 @@ async def enqueue_generate_all_bundle(
     opts: dict[str, Any] = dict(scan.options or {})
     if set_post_scan_idempotency_flag and opts.get(POST_SCAN_GENERATE_ALL_BUNDLE_OPTION_KEY):
         return None
+
+    # GC prior bundles for this scan so report rows/objects do not accumulate (×N).
+    await _gc_prior_reports(session, tenant_id, scan_id)
 
     bundle_id = str(uuid.uuid4())
     if set_post_scan_idempotency_flag:

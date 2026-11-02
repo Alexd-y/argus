@@ -87,6 +87,12 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("SCAN_SCOPE_ENFORCEMENT", "scan_scope_enforcement"),
     )
+    # GC prior report rows + MinIO objects when a new generate-all bundle is enqueued,
+    # so a scan keeps only its latest bundle (no N× report_id/object accumulation).
+    report_gc_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("REPORT_GC_ENABLED", "report_gc_enabled"),
+    )
     # Hard cap for the report-generation LLM path (cloud reasoner). Report workers
     # have no scan ledger (the registry is process-local to the scan worker), so a
     # bounded, isolated in-memory ledger is registered per report run under these

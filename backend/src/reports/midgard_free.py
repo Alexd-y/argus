@@ -407,6 +407,20 @@ def build_midgard_intel(
         "org": _nonempty_str(_own("ip_whois_org")) or INTEL_NOT_COLLECTED,
     }
 
+    # Provenance (§7): where each TI field came from + when collected. Additive
+    # metadata — distinguishes "not collected / not assessed" (source ran, found
+    # nothing) from "never reached the report" (a wiring gap), and shows which
+    # collector a value is attributable to. ``collected_at`` is the scan timestamp.
+    collected_at = str(getattr(report_data, "created_at", None) or "")
+    provenance = {
+        "whois": {"source": "recon:ownership_evidence(whois)", "collected_at": collected_at},
+        "dns": {"source": "recon:ownership_evidence(dig/dnspython)", "collected_at": collected_at},
+        "email_auth": {"source": "recon:dns_security_findings", "collected_at": collected_at},
+        "tls": {"source": "recon:ssl_tls_analysis(testssl)", "collected_at": collected_at},
+        "technologies": {"source": "recon:tech_profile(whatweb/httpx)", "collected_at": collected_at},
+        "subdomains": {"source": "recon:subdomain_enum", "collected_at": collected_at},
+        "asn": {"source": "recon:asnmap", "collected_at": collected_at},
+    }
     return {
         "whois": whois,
         "dns": dns,
@@ -416,6 +430,7 @@ def build_midgard_intel(
         "technologies": technologies,
         "subdomains": subdomains,
         "asn": asn,
+        "_provenance": provenance,
     }
 
 

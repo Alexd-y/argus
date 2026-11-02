@@ -468,7 +468,10 @@ services:
     image: argus-backend
     container_name: argus-worker-reports
     restart: unless-stopped
-    command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
+    # concurrency 2: Midgard/Asgard are light (cloud report AI ~1-3s) so two render
+    # in parallel; heavy Valhalla is offloaded to worker-reports-valhalla (its own
+    # command overrides this to concurrency 1).
+    command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 2
     user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
