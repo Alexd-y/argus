@@ -55,6 +55,8 @@ def validate_startup_config() -> list[str]:
 
     # --- Report budget cap must not be silently ignored (fail-open) -----------
     try:
+        from src.core.config import settings
+
         cap = float(getattr(settings, "report_ledger_max_cost_usd", 0.0) or 0.0)
         if cap > 0 and not getattr(settings, "budget_ledger_enabled", False):
             warnings.append(
