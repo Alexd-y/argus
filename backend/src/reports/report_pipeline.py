@@ -666,19 +666,29 @@ async def _upsert_report_object(
     object_key: str,
     size_bytes: int,
 ) -> None:
-    """One row per (report_id, format): overwrite object_key and size."""
+    """One row per (report_id, format): overwrite object_key and size.
+
+    Tolerant of pre-existing duplicates: there is no unique constraint on
+    (report_id, format), so a race or a prior double-write can leave more than one
+    row — ``scalar_one_or_none`` would then raise ``MultipleResultsFound`` and abort
+    the whole canonical bundle (observed as ``canonical_snapshot_llm_merge_failed`` →
+    "no PDF"). Update the first row, collapse any extras, so the invariant self-heals.
+    """
     result = await session.execute(
         select(ReportObject).where(
             cast(ReportObject.report_id, String) == report_id,
             ReportObject.format == fmt,
         )
     )
-    existing = result.scalar_one_or_none()
-    if existing:
+    rows = list(result.scalars().all())
+    if rows:
+        existing = rows[0]
         existing.object_key = object_key
         existing.size_bytes = size_bytes
         existing.scan_id = scan_id
         existing.tenant_id = tenant_id
+        for extra in rows[1:]:
+            await session.delete(extra)
     else:
         session.add(
             ReportObject(
@@ -1316,15 +1326,31 @@ def _align_valhalla_wstg_display(
     if not isinstance(pct, (int, float)) or isinstance(pct, bool):
         return
     auth = round(float(pct), 4)
+
+    # Collect every wstg_coverage dict the readable Valhalla render can read from —
+    # the markdown/HTML path rebuilds its context from ``template_context["valhalla_context"]``
+    # (a nested dict/object), NOT the top-level ``wstg_coverage`` key, so overwriting only
+    # the latter misses the figure that actually renders. Walk all plausible carriers.
     display_dicts: list[dict[str, Any]] = []
-    vc = getattr(report_data, "valhalla_context", None)
-    cov = getattr(vc, "wstg_coverage", None)
-    if isinstance(cov, dict):
-        display_dicts.append(cov)
+    seen: set[int] = set()
+
+    def _carrier_cov(carrier: Any) -> None:
+        if carrier is None:
+            return
+        cov = carrier.get("wstg_coverage") if isinstance(carrier, dict) else getattr(
+            carrier, "wstg_coverage", None
+        )
+        if isinstance(cov, dict) and id(cov) not in seen:
+            seen.add(id(cov))
+            display_dicts.append(cov)
+
+    _carrier_cov(getattr(report_data, "valhalla_context", None))
     if isinstance(template_context, dict):
         tcov = template_context.get("wstg_coverage")
-        if isinstance(tcov, dict) and tcov is not cov:
+        if isinstance(tcov, dict) and id(tcov) not in seen:
+            seen.add(id(tcov))
             display_dicts.append(tcov)
+        _carrier_cov(template_context.get("valhalla_context"))
     for d in display_dicts:
         d["coverage_percentage"] = auth
         d["coverage_pct"] = auth
