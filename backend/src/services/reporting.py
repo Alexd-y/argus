@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -1697,13 +1698,29 @@ class ReportGenerator:
 
                 _wblock = _build_wstg_block(data, None, scan_meta={"tier": "valhalla"})
                 _wpct = _wblock.get("coverage_pct") if isinstance(_wblock, dict) else None
-                _vcov = getattr(getattr(data, "valhalla_context", None), "wstg_coverage", None)
-                if isinstance(_wpct, (int, float)) and not isinstance(_wpct, bool) and isinstance(
-                    _vcov, dict
-                ):
+                if isinstance(_wpct, (int, float)) and not isinstance(_wpct, bool):
                     _auth = round(float(_wpct), 4)
-                    _vcov["coverage_percentage"] = _auth
-                    _vcov["coverage_pct"] = _auth
+                    _vc = getattr(data, "valhalla_context", None)
+                    _vcov = getattr(_vc, "wstg_coverage", None)
+                    if isinstance(_vcov, dict):
+                        _vcov["coverage_percentage"] = _auth
+                        _vcov["coverage_pct"] = _auth
+                    # The scalar some renderers / AI-grounding read directly.
+                    if _vc is not None and hasattr(_vc, "wstg_coverage_pct"):
+                        # frozen/model field — best-effort
+                        with contextlib.suppress(Exception):
+                            _vc.wstg_coverage_pct = _auth
+                    # Ground any WSTG percentage already written into AI section prose
+                    # (the sections were generated upstream with the legacy value) so the
+                    # narrative can never disagree with the canonical coverage — same
+                    # pattern the R-12 gate flags with.
+                    _wre = re.compile(
+                        r"(WSTG[^%\d]{0,40}?)(\d+(?:\.\d+)?)(\s*%)", re.IGNORECASE
+                    )
+                    _fmt = f"{_auth:.2f}"
+                    for _k, _v in list(texts.items()):
+                        if _v and "wstg" in _v.lower() and "%" in _v:
+                            texts[_k] = _wre.sub(lambda m: f"{m.group(1)}{_fmt}{m.group(3)}", _v)
             except Exception:  # noqa: BLE001 — alignment must never break generation
                 pass
         quality_gate = build_report_quality_gate(data)
