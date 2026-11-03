@@ -12,6 +12,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.reports.llm_remediation.schemas import (
+    FindingClosureConclusion,
+    FindingRemediationAnalysis,
+)
+
 # Version tags — bump when prompt semantics change so caches invalidate.
 REMEDIATION_PROMPT_VERSION = "vhl-remediation-v1"
 CLOSURE_PROMPT_VERSION = "vhl-closure-v1"
@@ -88,13 +93,32 @@ def _dump(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
+def _schema_spec(model: type) -> str:
+    """Compact JSON Schema (names, types, required) so the model emits the EXACT structure.
+
+    Naming the schema is not enough: a cloud model guesses field names/types and returns
+    objects where a list[str] is expected, omits required nested keys (e.g. retest_plan
+    test_id) or invents fields — all of which fail the strict ``extra="forbid"`` contract.
+    Embedding the real JSON Schema removes the guesswork."""
+    return json.dumps(model.model_json_schema(), ensure_ascii=False, sort_keys=True)
+
+
+# Computed once: the exact contracts the model must satisfy.
+_REMEDIATION_SCHEMA_SPEC = _schema_spec(FindingRemediationAnalysis)
+_CLOSURE_SCHEMA_SPEC = _schema_spec(FindingClosureConclusion)
+
+
 def get_remediation_prompt(context_json: dict[str, Any]) -> tuple[str, str, str]:
     """Return (system_prompt, user_prompt, version) for the remediation task."""
 
     user = (
         "Сформируй полный план устранения finding из context_json.\n"
-        "Схема ответа: FindingRemediationAnalysis версии " + SCHEMA_VERSION + ".\n"
-        "Входные данные: " + _dump(context_json)
+        "Верни JSON СТРОГО по этой JSON Schema — точные имена полей и типы, все required-"
+        "поля обязательны (включая вложенные, напр. retest_plan[].test_id), НИКАКИХ лишних "
+        "полей, list[str] это массив строк (не объектов):\n"
+        + _REMEDIATION_SCHEMA_SPEC
+        + "\nВходные данные: "
+        + _dump(context_json)
     )
     return REMEDIATION_SYSTEM_PROMPT, user, REMEDIATION_PROMPT_VERSION
 
@@ -104,9 +128,12 @@ def get_closure_prompt(context_json: dict[str, Any]) -> tuple[str, str, str]:
 
     user = (
         "Сформируй вывод по закрытию finding из context_json.\n"
-        "Схема ответа: FindingClosureConclusion версии " + SCHEMA_VERSION + ".\n"
-        "permitted_closure_status уже вычислен приложением — не усиливай его.\n"
-        "Входные данные: " + _dump(context_json)
+        "Верни JSON СТРОГО по этой JSON Schema — точные имена полей и типы, все required-"
+        "поля обязательны, НИКАКИХ лишних полей:\n"
+        + _CLOSURE_SCHEMA_SPEC
+        + "\npermitted_closure_status уже вычислен приложением — не усиливай его.\n"
+        "Входные данные: "
+        + _dump(context_json)
     )
     return CLOSURE_SYSTEM_PROMPT, user, CLOSURE_PROMPT_VERSION
 
