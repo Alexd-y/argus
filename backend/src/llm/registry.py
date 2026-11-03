@@ -311,10 +311,16 @@ class AliasRegistry:
             {
                 "alias": "report_writer",
                 "role": "report",
+                # Cloud-first for the mandatory Valhalla report LLM (remediation / closure):
+                # these demand strict, schema-valid JSON, and the local 9B frequently emits
+                # truncated / schema-invalid output (observed llm_schema_invalid on every
+                # finding → assessment FAILED → report stuck in honest-draft). The cloud
+                # report carve-out already permits these tasks to reach cloud; prefer it, and
+                # keep the local model as a zero-cost fallback when cloud is unavailable.
                 "provider_model_keys": [
-                    "local_qwythos",
                     "cloud_deepseek",
                     "cloud_openai",
+                    "local_qwythos",
                 ],
             },
             {
