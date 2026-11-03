@@ -1686,6 +1686,26 @@ class ReportGenerator:
                 if not has_any_llm_key()
                 else REPORT_AI_SKIPPED_GENERATION_FAILED
             )
+        # R-12: align the displayed/grounded WSTG headline to the authoritative
+        # evidence-gated coverage BEFORE the quality gate reads it. gate.wstg_coverage_pct
+        # feeds safe_section_text ("WSTG coverage: N%") and the coverage table; left as the
+        # legacy capability heuristic (coverage_percentage), it leaks a figure that
+        # disagrees with the release gate's canonical value and forces honest-draft (R-12).
+        if tier_norm == "valhalla":
+            try:
+                from src.reports.snapshot_builder import _build_wstg_block
+
+                _wblock = _build_wstg_block(data, None, scan_meta={"tier": "valhalla"})
+                _wpct = _wblock.get("coverage_pct") if isinstance(_wblock, dict) else None
+                _vcov = getattr(getattr(data, "valhalla_context", None), "wstg_coverage", None)
+                if isinstance(_wpct, (int, float)) and not isinstance(_wpct, bool) and isinstance(
+                    _vcov, dict
+                ):
+                    _auth = round(float(_wpct), 4)
+                    _vcov["coverage_percentage"] = _auth
+                    _vcov["coverage_pct"] = _auth
+            except Exception:  # noqa: BLE001 — alignment must never break generation
+                pass
         quality_gate = build_report_quality_gate(data)
         texts, ai_quality_warnings = sanitize_ai_sections_for_quality(
             texts,
