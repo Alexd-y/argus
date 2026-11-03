@@ -191,6 +191,15 @@ class EvidenceRowData(BaseModel):
     finding_id: str
     object_key: str
     description: str | None = None
+    # R-16 integrity/provenance: the ``evidence`` row already stores a sha256
+    # checksum and a collection timestamp at write time; carry them forward so the
+    # snapshot's evidence references are not blank (the release gate blocks a
+    # Valhalla report when an evidence ref has no sha256 / collected_at_utc).
+    sha256: str | None = None
+    created_at: Any = None
+    kind: str | None = None
+    content_type: str | None = None
+    tool_run_id: str | None = None
 
 
 def _first_sentence(text: str) -> str:
@@ -884,6 +893,11 @@ class ReportDataCollector:
                 finding_id=str(row.finding_id),
                 object_key=str(row.object_key),
                 description=row.description,
+                sha256=row.checksum_value,
+                created_at=row.created_at,
+                kind=row.kind,
+                content_type=row.content_type,
+                tool_run_id=row.tool_run_id,
             )
             for row in ev_result.scalars().all()
         ]

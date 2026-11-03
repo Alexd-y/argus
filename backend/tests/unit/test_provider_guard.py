@@ -176,3 +176,41 @@ async def test_paid_call_without_scan_scope_is_passthrough(monkeypatch):
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+async def test_local_provider_not_cost_denied_but_token_bounded(_ledger):
+    """Keystone (report-budget): a zero-cost local engine (non-``cloud``) must NOT be
+    denied by an exhausted COST budget — otherwise the free local fallback is starved
+    and the Valhalla report blocks on 'LLM analysis not complete'. Its TOKEN cap still
+    applies (runaway bounding preserved)."""
+    # Cost budget fully exhausted (max_cost_usd=0), tokens plentiful.
+    await _ledger.set_limits("scan:s1", max_tokens=100_000, max_cost_usd=0.0)
+
+    # Paid 'cloud' is denied on cost.
+    token = set_call_scope(_scope())
+    try:
+        with pytest.raises(BudgetDeniedError):
+            async with provider_guard("cloud"):
+                pytest.fail("paid cloud must be cost-denied when the cost budget is 0")
+    finally:
+        reset_call_scope(token)
+
+    # Local 'wrb' passes the cost gate (enforce_cost=False) and books its tokens.
+    token = set_call_scope(_scope())
+    try:
+        async with provider_guard("wrb") as run:
+            run.record_usage(AgentUsage(input_tokens=40, output_tokens=20, estimated=False))
+    finally:
+        reset_call_scope(token)
+    snap = await _ledger.snapshot("scan:s1")
+    assert snap.used_tokens == 60  # local usage still booked (bounding/telemetry intact)
+
+    # But the TOKEN cap still bounds the local engine.
+    await _ledger.set_limits("scan:s1", max_tokens=60)  # already at 60 used
+    token = set_call_scope(_scope(est_tokens=50))
+    try:
+        with pytest.raises(BudgetDeniedError):
+            async with provider_guard("wrb"):
+                pytest.fail("local engine must still be denied over the TOKEN cap")
+    finally:
+        reset_call_scope(token)

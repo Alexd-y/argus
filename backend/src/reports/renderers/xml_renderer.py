@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from src.reports.renderers._redact import redact_internal_paths
 from src.reports.report_document import ReportDocumentV1
 from src.reports.section_registry import iter_sections
 
@@ -331,7 +332,7 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _text(se, "title", st.title)
 
     xml_bytes = tostring(root, encoding="utf-8", xml_declaration=True)
-    return xml_bytes.decode("utf-8")
+    return redact_internal_paths(xml_bytes.decode("utf-8"))
 
 
 def _render_v2_sections_xml(root: Element, doc: ReportDocumentV1) -> None:

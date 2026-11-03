@@ -58,6 +58,14 @@ async def collect_artifact_records(
                 .where(
                     cast(EvidenceModel.tenant_id, String) == str(tenant_id),
                     cast(EvidenceModel.scan_id, String) == str(scan_id),
+                    # Scope to finding-linked evidence — the same finding-centric view
+                    # the report carries (data_collector filters finding_id IS NOT NULL).
+                    # Unlinked raw recon/intel evidence is internal, never a client-report
+                    # deliverable, and is surfaced via the Evidence Register, not here; so
+                    # it must not be enumerated and then mislabelled UNPROCESSED. A
+                    # finding-linked row that is still unreferenced remains UNPROCESSED
+                    # (a genuine completeness loss the gate should keep catching).
+                    EvidenceModel.finding_id.isnot(None),
                 )
                 .order_by(EvidenceModel.created_at.asc().nullsfirst(), EvidenceModel.id.asc())
             )

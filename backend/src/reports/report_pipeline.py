@@ -10,12 +10,14 @@ from pathlib import Path
 from typing import Any
 
 import jinja2
+from pydantic import ValidationError
 from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.db.models import Finding, Report, ReportObject
 from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
+from src.orchestration.scan_policy import registry_versions
 from src.reports.canonical_bundle import assert_canonical_parity, render_canonical_bundle
 from src.reports.generators import (
     VALHALLA_SECTIONS_CSV_FORMAT,
@@ -52,6 +54,7 @@ from src.reports.valhalla_completeness import (
 from src.reports.valhalla_llm_merge import merge_llm_into_document
 from src.reports.valhalla_severity_review_gate import severity_review_blockers
 from src.reports.verification_kit import build_verification_kit
+from src.reports.wstg_coverage import build_test_limitations
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -81,7 +84,20 @@ def _snapshot_pdf_bytes(html: str, completed_at: str) -> bytes | None:
             )
             if ok and out.exists():
                 return out.read_bytes()
-    except Exception:  # noqa: BLE001 — PDF is best-effort, never break the pipeline
+        # Rendered-but-empty / disabled backend: surface it (RC-17 "no PDF" blocks
+        # the Valhalla release, so a silent failure here is a dead end to debug).
+        logger.warning(
+            "canonical_pdf_unavailable",
+            extra={
+                "event": "canonical_pdf_unavailable",
+                "backend": type(backend).__name__,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 — PDF is best-effort, never break the pipeline
+        logger.warning(
+            "canonical_pdf_render_error",
+            extra={"event": "canonical_pdf_render_error", "error_type": type(exc).__name__},
+        )
         return None
     return None
 
@@ -128,6 +144,26 @@ def _scan_meta_for_snapshot(
         "completed_at": getattr(report_data, "created_at", None),
         "failures": failures,
         "skipped_reasons": skipped,
+        # R-13 passport DICTS must be non-empty, and R-14 requires non-empty
+        # ``limitations`` when the WSTG coverage gate fails. Populate them from
+        # authoritative sources so the snapshot passport is complete and truthful
+        # (not forced): the signed-catalog/profile registry versions, a scope
+        # summary derived from the scan, and the standard NIST SP 800-115 test
+        # limitations. Callers may still override via their own meta.
+        "registry_versions": registry_versions(
+            tool_registry_version=getattr(scan_row, "tool_registry_version", None),
+            payload_registry_version=getattr(scan_row, "payload_registry_version", None),
+            prompt_registry_version=getattr(scan_row, "prompt_registry_version", None),
+        ),
+        "scope_summary": {
+            "target": getattr(report_data, "target", None),
+            "scan_profile": getattr(scan_row, "scan_profile", None),
+            "execution_mode": getattr(scan_row, "execution_mode", None),
+            "resolved_scan_mode": getattr(scan_row, "resolved_scan_mode", None)
+            or getattr(scan_row, "scan_mode", None),
+            "authorized_targets_only": True,
+        },
+        "limitations": build_test_limitations({}),
     }
 
 
@@ -300,6 +336,7 @@ def _compute_valhalla_release_blockers(
     ai_section_failed: bool = False,
     pdf_missing: bool = False,
     ledger_blockers: list[str] | None = None,
+    scan_meta: dict[str, Any] | None = None,
 ) -> list[str]:
     """Evaluate the Valhalla release blockers fail-closed (Phase G, RC-01…RC-04).
 
@@ -349,7 +386,12 @@ def _compute_valhalla_release_blockers(
     # --- Canonical snapshot (built once; several checks consume it). Guarded (RC-01).
     snapshot: Any = None
     try:
-        snapshot = build_snapshot_from_report_data(report_data, scan_meta={"tier": actual_tier})
+        # Build the snapshot with the FULL scan-meta (passport scalars + dicts +
+        # limitations), not just the tier — otherwise the passport is empty and the
+        # gate blocks itself on R-13/R-14 for data that exists upstream (RC-03).
+        _snap_meta = dict(scan_meta or {})
+        _snap_meta["tier"] = actual_tier
+        snapshot = build_snapshot_from_report_data(report_data, scan_meta=_snap_meta)
     except Exception as exc:  # noqa: BLE001 — fail-closed
         blockers.append(f"GATE-ERROR: snapshot build failed: {type(exc).__name__}")
         logger.warning(
@@ -540,6 +582,17 @@ async def _build_artifact_ledger_blockers(
             doc=snapshot,
         )
         return ledger_release_blockers(entries)
+    except ValidationError as exc:  # surface the offending field, don't discard it
+        logger.warning(
+            "artifact_ledger_errored",
+            extra={
+                "event": "artifact_ledger_errored",
+                "report_id": report_id,
+                "error_type": "ValidationError",
+                "errors": exc.errors()[:20],
+            },
+        )
+        return [f"GATE-ERROR: artifact_ledger failed: ValidationError: {str(exc)[:300]}"]
     except Exception as exc:  # noqa: BLE001 — fail-closed: an errored ledger blocks release
         logger.warning(
             "artifact_ledger_errored",
@@ -1583,6 +1636,7 @@ async def run_generate_report_pipeline(
                 ai_section_failed=ai_section_failed,
                 pdf_missing=pdf_missing,
                 ledger_blockers=(ledger_blockers if settings.artifact_ledger_enforced else None),
+                scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
             )
             if blockers:
                 logger.warning(

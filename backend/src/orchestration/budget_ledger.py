@@ -129,7 +129,12 @@ class BudgetStore(Protocol):
     ) -> None: ...
 
     async def try_reserve(
-        self, scope: BudgetScope, tokens: int, cost_usd: float, lease_seconds: int
+        self,
+        scope: BudgetScope,
+        tokens: int,
+        cost_usd: float,
+        lease_seconds: int,
+        enforce_cost: bool = True,
     ) -> Reservation | None: ...
 
     async def settle(self, reservation_id: str, usage: AgentUsage) -> bool: ...
@@ -179,16 +184,25 @@ class InMemoryBudgetStore:
                 c.limit_cost = max_cost_usd
 
     async def try_reserve(
-        self, scope: BudgetScope, tokens: int, cost_usd: float, lease_seconds: int
+        self,
+        scope: BudgetScope,
+        tokens: int,
+        cost_usd: float,
+        lease_seconds: int,
+        enforce_cost: bool = True,
     ) -> Reservation | None:
         keys = scope.keys()
         async with self._lock:
-            # All-or-nothing: every constrained scope level must fit.
+            # All-or-nothing: every constrained scope level must fit. The TOKEN cap
+            # always applies (it bounds runaway local loops too). The COST cap is
+            # skipped when ``enforce_cost`` is False — a zero-cost local engine spends
+            # compute, not money, so an exhausted *cost* budget must not deny it; its
+            # tokens are still reserved and booked (bounding + telemetry preserved).
             for key in keys:
                 c = self._counter(key)
                 if c.reserved_tokens + c.used_tokens + tokens > c.limit_tokens:
                     return None
-                if c.reserved_cost + c.used_cost + cost_usd > c.limit_cost:
+                if enforce_cost and c.reserved_cost + c.used_cost + cost_usd > c.limit_cost:
                     return None
             for key in keys:
                 c = self._counter(key)
@@ -313,10 +327,13 @@ class BudgetLedger:
         tokens: int,
         est_cost_usd: float = 0.0,
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
+        enforce_cost: bool = True,
     ) -> Reservation:
         if self._store is None:
             raise BudgetUnavailableError("budget store unavailable — denying paid call")
-        res = await self._store.try_reserve(scope, tokens, est_cost_usd, lease_seconds)
+        res = await self._store.try_reserve(
+            scope, tokens, est_cost_usd, lease_seconds, enforce_cost=enforce_cost
+        )
         if res is None:
             raise BudgetDeniedError(
                 f"budget denied for {scope.keys()} (tokens={tokens}, est_cost={est_cost_usd})"
@@ -361,6 +378,7 @@ class BudgetLedger:
         tokens: int,
         est_cost_usd: float = 0.0,
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
+        enforce_cost: bool = True,
     ):
         """`reserve → execute → settle | release | mark_uncertain` in one block.
 
@@ -377,7 +395,9 @@ class BudgetLedger:
           (the reservation is NOT freed as if it were free);
         * never started   → release (no charge).
         """
-        res = await self.reserve(scope, tokens, est_cost_usd, lease_seconds)
+        res = await self.reserve(
+            scope, tokens, est_cost_usd, lease_seconds, enforce_cost=enforce_cost
+        )
         handle = BudgetedReservation(res)
         try:
             yield handle

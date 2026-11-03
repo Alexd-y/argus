@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from html import escape
 
+from src.reports.renderers._redact import redact_internal_paths
 from src.reports.renderers.markdown_renderer import severity_distribution
 from src.reports.report_document import ReportDocumentV1
 from src.reports.section_registry import iter_sections
@@ -736,7 +737,7 @@ def render_html(doc: ReportDocumentV1) -> str:
 
     parts.append("</main>")
     parts.append("</body></html>")
-    return "".join(parts)
+    return redact_internal_paths("".join(parts))
 
 
 __all__ = ["render_html"]

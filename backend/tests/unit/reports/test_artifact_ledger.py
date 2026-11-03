@@ -136,7 +136,10 @@ def test_tool_run_output_presented_via_execution_log() -> None:
     assert entries[0].state == LedgerState.PRESENTED
 
 
-def test_tool_run_output_not_in_log_is_unprocessed() -> None:
+def test_unreferenced_tool_run_output_is_excluded_raw_scan_artifact() -> None:
+    # A full scan stores hundreds of raw tool-run outputs; an unreferenced one is NOT a
+    # dropped report deliverable (only finding-linked evidence is surfaced), so it is
+    # excluded by policy (raw_scan_artifact) rather than flagged as a completeness loss.
     art = _rec(
         evidence_id=None,
         object_key="t/s/tool/orphan-out.bin",
@@ -149,6 +152,27 @@ def test_tool_run_output_not_in_log_is_unprocessed() -> None:
         referenced_keys=set(),
         referenced_evidence_ids=set(),
         referenced_tool_run_ids=frozenset({"TR-1"}),
+    )
+    assert entries[0].state == LedgerState.EXCLUDED
+    assert entries[0].exclusion_reason == ExclusionReason.RAW_SCAN_ARTIFACT
+
+
+def test_unreferenced_finding_linked_evidence_is_still_unprocessed() -> None:
+    # The gate's real purpose is preserved: a finding-linked EVIDENCE artifact (the
+    # proof) that never made it into the report is a genuine completeness loss and
+    # must still block, not be silently excluded.
+    art = _rec(
+        evidence_id="E-7",
+        object_key="t/s/evidence/raw-7.bin",
+        kind="parsed",
+        source="evidence",
+        tool_run_id=None,
+    )
+    entries = build_artifact_ledger(
+        [art],
+        referenced_keys=set(),
+        referenced_evidence_ids=set(),
+        referenced_tool_run_ids=frozenset(),
     )
     assert entries[0].state == LedgerState.UNPROCESSED
 
@@ -188,4 +212,5 @@ def test_exclusion_reasons_are_a_closed_enum() -> None:
         "tenant_policy",
         "service_output",
         "empty_artifact",
+        "raw_scan_artifact",
     }

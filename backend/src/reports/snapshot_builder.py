@@ -236,6 +236,14 @@ def _map_finding(
         or getattr(finding, "tool_name", None)
         or getattr(finding, "source_tool", None)
     )
+    if not validator:
+        # R-18 honest fallback: the finding carries no dedicated validator/tool_run
+        # column, but its PoC dict names the real producer tool (sqlmap/dalfox/nuclei/…)
+        # under "tool"/"validator". Use that so a medium+ finding traces to a producer
+        # instead of blanking the evidence chain — no invented value, no DB migration.
+        _poc = getattr(finding, "proof_of_concept", None)
+        if isinstance(_poc, dict):
+            validator = _poc.get("tool") or _poc.get("validator") or validator
     raw_ref = getattr(finding, "raw_artifact_ref", None)
     if not raw_ref:
         poc = getattr(finding, "proof_of_concept", None)
@@ -696,10 +704,17 @@ def _build_dark_web_rows(dwm: Any) -> list[ReportDarkWebRow]:
                 exposure_type=str(o.get("exposure_type", "")),
                 severity=str(o.get("severity", "")),
                 source_network=str(o.get("source_network", "")),
-                source_ref=o.get("source_ref") or None,
-                confidence=o.get("confidence") or None,
+                # Coerce the optional string fields: a DWM observation's confidence
+                # is frequently a float (e.g. 0.85) and source_ref/summary can be
+                # non-string; ReportDarkWebRow types them str|None with extra="forbid",
+                # and pydantic v2 does NOT coerce float→str, so a raw numeric value
+                # raised a ValidationError that killed the whole snapshot build —
+                # taking the canonical PDF, the artifact ledger and the LLM remediation
+                # down with it and blocking the Valhalla release.
+                source_ref=_str_or_none(o.get("source_ref")),
+                confidence=_str_or_none(o.get("confidence")),
                 evidence_tier=int(o.get("evidence_tier", 1) or 1),
-                summary=o.get("redacted_summary") or o.get("summary") or None,
+                summary=_str_or_none(o.get("redacted_summary") or o.get("summary")),
             )
         )
     return rows

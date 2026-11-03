@@ -215,3 +215,53 @@ def test_snapshot_release_blockers_aggregates():
     empty = build_report_document(scan_id="s", tenant_id="t", target="x", generated_at=_TS)
     problems = snapshot_release_blockers(empty)
     assert any("R-13" in p for p in problems)
+
+
+def test_evidence_row_carries_sha256_and_timestamp_r16():
+    """R-16: the persisted evidence row already stores a sha256 + created_at; the
+    report collector must carry them forward so the snapshot evidence ref is not blank."""
+    from types import SimpleNamespace
+
+    from src.reports.data_collector import EvidenceRowData
+    from src.reports.snapshot_builder import _map_evidence
+
+    ev = EvidenceRowData(
+        finding_id="f1",
+        object_key="t/s/poc/x.json",
+        description="poc",
+        sha256="deadbeef",
+        created_at=datetime(2026, 11, 2, tzinfo=UTC),
+        kind="parsed",
+        content_type="application/json",
+    )
+    refs = _map_evidence(SimpleNamespace(evidence=[ev]))
+    assert refs[0].sha256 == "deadbeef"
+    assert refs[0].collected_at_utc
+    assert not evidence_blockers(SimpleNamespace(evidence_references=refs))
+
+
+def test_finding_validator_falls_back_to_poc_tool_r18():
+    """R-18: a medium+ finding with no validator column still traces to its PoC's
+    producer tool (sqlmap/dalfox/…) instead of blanking the evidence chain."""
+    from types import SimpleNamespace
+
+    from src.reports.snapshot_builder import _map_finding
+
+    finding = SimpleNamespace(
+        cwe="CWE-89",
+        severity="medium",
+        title="SQLi",
+        description="d",
+        validator_id=None,
+        tool_name=None,
+        source_tool=None,
+        tool_run_id=None,
+        raw_artifact_ref=None,
+        proof_of_concept={"tool": "sqlmap"},
+        evidence_ids=["t/s/poc/x.json"],
+        finding_id="f1",
+        verification_status="confirmed",
+    )
+    rf = _map_finding(finding, 0)
+    assert rf.validator_id == "sqlmap"
+    assert not [b for b in finding_chain_blockers(SimpleNamespace(findings=[rf])) if "R-18" in b]

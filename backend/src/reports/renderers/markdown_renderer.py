@@ -7,6 +7,7 @@ JSON/XML (parity test asserts this).
 
 from __future__ import annotations
 
+from src.reports.renderers._redact import redact_internal_paths
 from src.reports.report_document import ReportDocumentV1
 from src.reports.section_registry import iter_sections
 
@@ -721,7 +722,7 @@ def render_markdown(doc: ReportDocumentV1) -> str:
 
     _render_section_coverage_md(lines, doc)
 
-    return "\n".join(lines).rstrip() + "\n"
+    return redact_internal_paths("\n".join(lines).rstrip() + "\n")
 
 
 def _render_section_coverage_md(lines: list[str], doc: ReportDocumentV1) -> None:

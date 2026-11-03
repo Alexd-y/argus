@@ -96,8 +96,16 @@ async def provider_guard(provider: str):
         ledger = get_scan_ledger(scope.scan_id)
         if ledger is not None and ledger.available:
             budget_scope = BudgetScope(tenant_id=scope.tenant_id, scan_id=scope.scan_id)
+            # Only paid providers reserve against the COST budget. A zero-cost local
+            # engine (WhiteRabbitNeo / qwythos) still reserves TOKENS (bounded, booked)
+            # but is never cost-denied — otherwise an exhausted report-cost budget would
+            # also starve the free local fallback, leaving the reporting phase with no
+            # analysis and blocking the Valhalla release on "LLM analysis not complete".
             async with ledger.budgeted(
-                budget_scope, scope.est_tokens, scope.est_cost_usd
+                budget_scope,
+                scope.est_tokens,
+                scope.est_cost_usd,
+                enforce_cost=provider in _PAID_PROVIDERS,
             ) as reservation:
                 reservation.mark_started()
                 yield run

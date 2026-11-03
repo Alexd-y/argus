@@ -50,6 +50,11 @@ class ExclusionReason(StrEnum):
     TENANT_POLICY = "tenant_policy"
     SERVICE_OUTPUT = "service_output"
     EMPTY_ARTIFACT = "empty_artifact"
+    #: A raw scan artifact (e.g. a tool-run's raw stdout/stderr blob) that is never a
+    #: client-report deliverable. These are produced in bulk by a full scan and are
+    #: surfaced via the Evidence Register, not the report body — so an *unreferenced*
+    #: one is excluded by policy, not a silently-dropped completeness loss (R-6.1.1).
+    RAW_SCAN_ARTIFACT = "raw_scan_artifact"
 
 
 @dataclass(frozen=True)
@@ -169,6 +174,13 @@ def build_artifact_ledger(
             reason = ExclusionReason.TENANT_POLICY
         elif art.kind is not None and art.kind in service_output_kinds:
             reason = ExclusionReason.SERVICE_OUTPUT
+        elif art.source == "tool_run":
+            # An unreferenced tool-run output is a raw scan artifact, not a dropped
+            # report deliverable: a full 8-phase scan stores hundreds of these and
+            # only finding-linked evidence is ever surfaced in the client report.
+            # Excluding them by policy keeps the UNPROCESSED blocker meaningful
+            # (real losses only) instead of firing on every normal scan.
+            reason = ExclusionReason.RAW_SCAN_ARTIFACT
 
         if reason is not None:
             entries.append(

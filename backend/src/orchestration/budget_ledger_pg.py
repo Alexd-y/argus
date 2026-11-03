@@ -127,7 +127,12 @@ class PostgresBudgetStore:
             await session.execute(stmt)
 
     async def try_reserve(
-        self, scope: BudgetScope, tokens: int, cost_usd: float, lease_seconds: int
+        self,
+        scope: BudgetScope,
+        tokens: int,
+        cost_usd: float,
+        lease_seconds: int,
+        enforce_cost: bool = True,
     ) -> Reservation | None:
         keys = scope.keys()
         if not keys:
@@ -152,9 +157,10 @@ class PostgresBudgetStore:
                 lim_t = _limit(row["limit_tokens"])
                 if row["reserved_tokens"] + row["used_tokens"] + tokens > lim_t:
                     return None
-                lim_c = _limit(row["limit_cost"])
-                if row["reserved_cost"] + row["used_cost"] + cost_usd > lim_c:
-                    return None
+                if enforce_cost:
+                    lim_c = _limit(row["limit_cost"])
+                    if row["reserved_cost"] + row["used_cost"] + cost_usd > lim_c:
+                        return None
 
             for key in keys:
                 await session.execute(

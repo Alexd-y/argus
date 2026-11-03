@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from src.reports.renderers._redact import redact_internal_paths
 from src.reports.report_document import ReportDocumentV1
 from src.reports.section_registry import iter_sections
 
@@ -31,7 +32,9 @@ def render_json(doc: ReportDocumentV1, *, indent: int | None = 2) -> str:
         }
         for st in iter_sections(doc)
     ]
-    return json.dumps(payload, indent=indent, sort_keys=True, ensure_ascii=False)
+    return redact_internal_paths(
+        json.dumps(payload, indent=indent, sort_keys=True, ensure_ascii=False)
+    )
 
 
 __all__ = ["VALHALLA_REPORT_JSON_SCHEMA_ID", "render_json"]
