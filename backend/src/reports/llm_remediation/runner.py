@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+import types
+import typing
 import uuid
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -32,7 +34,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from src.reports.ai_text_generation import canonical_payload_hash
 from src.reports.llm_remediation.closure_status import (
@@ -247,38 +249,82 @@ def _parse_json(text: str) -> dict[str, Any]:
     return json.loads(_strip_json_fence(text))
 
 
-def _drop_unknown_fields(data: dict[str, Any], fields: set[str]) -> dict[str, Any]:
-    """Keep only the schema's declared fields. A cloud model sometimes invents fields
-    (e.g. ``criteria_assessment``) that the strict ``extra="forbid"`` contract rejects;
-    dropping them lets a semantically-complete answer validate instead of failing whole."""
-    return {k: v for k, v in data.items() if k in fields}
+def _nested_model_of(annotation: Any) -> tuple[type[BaseModel] | None, bool]:
+    """Resolve a field annotation to its nested ``BaseModel`` (and whether it is a list of
+    them), unwrapping ``Optional`` / ``X | None`` / ``list[...]``."""
+    origin = typing.get_origin(annotation)
+    args = typing.get_args(annotation)
+    if origin is typing.Union or origin is types.UnionType:
+        for a in args:
+            if a is type(None):
+                continue
+            model, is_list = _nested_model_of(a)
+            if model is not None:
+                return model, is_list
+        return None, False
+    if origin in (list, tuple, set, frozenset):
+        if args:
+            model, _ = _nested_model_of(args[0])
+            if model is not None:
+                return model, True
+        return None, False
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation, False
+    return None, False
+
+
+def _strip_unknown_recursive(data: Any, model: type[BaseModel]) -> Any:
+    """Drop every key the schema does not declare, at every nesting level. A cloud model
+    invents extra fields both at the top level (``criteria_assessment``) and inside nested
+    objects (``root_cause.required_information``); with ``extra="forbid"`` any one of them
+    fails the whole finding. Keep only declared fields and recurse into nested models."""
+    if not (isinstance(data, dict) and isinstance(model, type) and issubclass(model, BaseModel)):
+        return data
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        field = model.model_fields.get(key)
+        if field is None:
+            continue  # invented field → drop
+        nested, is_list = _nested_model_of(field.annotation)
+        if nested is not None and is_list and isinstance(value, list):
+            out[key] = [
+                _strip_unknown_recursive(item, nested) if isinstance(item, dict) else item
+                for item in value
+            ]
+        elif nested is not None and isinstance(value, dict):
+            out[key] = _strip_unknown_recursive(value, nested)
+        else:
+            out[key] = value
+    return out
 
 
 def _normalize_remediation_data(data: dict[str, Any]) -> dict[str, Any]:
     """Coerce common cloud-model deviations into the FindingRemediationAnalysis shape."""
     if not isinstance(data, dict):
         return data
-    out = _drop_unknown_fields(data, set(FindingRemediationAnalysis.model_fields))
-    pr = out.get("priority_rationale")
+    pr = data.get("priority_rationale")
     if pr is not None and not isinstance(pr, dict):
         # The model returned a bare string / list instead of the PriorityRationale object.
         if isinstance(pr, (list, tuple)):
             text = "; ".join(str(x) for x in pr if str(x).strip())
         else:
             text = str(pr)
-        out["priority_rationale"] = {
-            "text": (text.strip() or "n/a")[:1900],
-            "fact_refs": [],
-            "assumptions": [],
+        data = {
+            **data,
+            "priority_rationale": {
+                "text": (text.strip() or "n/a")[:1900],
+                "fact_refs": [],
+                "assumptions": [],
+            },
         }
-    return out
+    return _strip_unknown_recursive(data, FindingRemediationAnalysis)
 
 
 def _normalize_closure_data(data: dict[str, Any]) -> dict[str, Any]:
     """Drop invented fields so a valid-JSON closure answer meets the strict schema."""
     if not isinstance(data, dict):
         return data
-    return _drop_unknown_fields(data, set(FindingClosureConclusion.model_fields))
+    return _strip_unknown_recursive(data, FindingClosureConclusion)
 
 
 def _make_provenance(
