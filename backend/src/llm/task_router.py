@@ -229,7 +229,11 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_env_key="DEEPSEEK_API_KEY",
         fallback_base_url="https://api.deepseek.com",
         fallback_model="deepseek-chat",
-        max_tokens=2000,
+        # The structured per-finding remediation JSON (root cause + staged remediation +
+        # reproduction + classification) overran a 2000-token cap and was truncated
+        # mid-string ("Unterminated string"), so every finding failed llm_schema_invalid
+        # and the report was stuck in honest-draft. Give it room for the full object.
+        max_tokens=8000,
         temperature=0.1,
     ),
     LLMTask.CLOSURE_ASSESSMENT: LLMRoute(
@@ -239,7 +243,8 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_env_key="DEEPSEEK_API_KEY",
         fallback_base_url="https://api.deepseek.com",
         fallback_model="deepseek-chat",
-        max_tokens=2000,
+        # Closure conclusion + criteria assessment is likewise a large structured object.
+        max_tokens=8000,
         temperature=0.1,
     ),
     LLMTask.ZERO_DAY_ANALYSIS: LLMRoute(
