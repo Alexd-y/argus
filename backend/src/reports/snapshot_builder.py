@@ -159,7 +159,18 @@ def _map_poc(finding: Any) -> ReportPoC | None:
         "command": root.get("curl_command") or root.get("replay_command"),
         "http_request": req,
         "http_response": resp,
-        "observation": root.get("command_output") or root.get("cmd_output") or root.get("context"),
+        "observation": (
+            root.get("command_output")
+            or root.get("cmd_output")
+            or root.get("context")
+            # Recon/passive findings record the observed artefact under
+            # ``observed_record`` (the DMARC TXT value, the dig answer, …); it is
+            # the concrete evidence the remediation LLM needs, so surface it onto
+            # the PoC card instead of dropping it to an empty observation.
+            or root.get("observed_record")
+            or root.get("observation")
+            or root.get("detail")
+        ),
         "oast_callback": root.get("oast_callback") or root.get("oast"),
         "negative_control": neg,
         "screenshot_ref": root.get("screenshot_key") or root.get("poc_screenshot_url"),

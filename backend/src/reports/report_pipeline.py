@@ -775,7 +775,37 @@ async def _rgp_valhalla_llm_remediation(
                         "hypothesis": f.exploit_summary or f.potential_impact,
                     }
                 )
-                frag = {eid: _evidence_text[eid] for eid in ev_ids if eid in _evidence_text}
+                # The concrete observed artefact (DMARC TXT, dig answer, captured
+                # request/response, replay command) lives on the PoC, not in the
+                # evidence-row label — without it the model only sees "Finding PoC
+                # JSON" and asks for the actual value. Fold the PoC evidence into
+                # the finding's allowed evidence fragment so the plan can ground a
+                # validated fix + retest (context.build_finding_context filters by
+                # allowed id and redacts again).
+                poc = f.poc
+                poc_bits: list[str] = []
+                if poc is not None:
+                    for label, val in (
+                        ("observed", poc.observation),
+                        ("command", poc.command),
+                        ("payload", poc.payload),
+                        ("request", poc.http_request),
+                        ("response", poc.http_response),
+                    ):
+                        if val:
+                            poc_bits.append(f"{label}: {val}")
+                poc_text = "\n".join(poc_bits)
+                frag: dict[str, str] = {}
+                for i, eid in enumerate(ev_ids):
+                    parts = []
+                    if eid in _evidence_text:
+                        parts.append(_evidence_text[eid])
+                    # Attach the PoC evidence to the finding's first evidence id so
+                    # it rides an allowed ref rather than being filtered out.
+                    if poc_text and i == 0:
+                        parts.append(poc_text)
+                    if parts:
+                        frag[eid] = "\n".join(parts)
                 if frag:
                     vfragments[f.finding_id] = frag
             vmeta = {
