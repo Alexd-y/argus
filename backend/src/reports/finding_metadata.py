@@ -281,6 +281,22 @@ def _has_real_poc_evidence(poc: Any) -> bool:
     return bool(poc.get("request") and poc.get("response"))
 
 
+def _has_captured_observation(poc: Any) -> bool:
+    """A finding that captured its raw artefact directly (the DMARC TXT value, the
+    dig answer, a tool's command output) is a direct OBSERVATION, not a threat-model
+    hypothesis. Such recon/passive findings must be typed ``observed`` so they stay
+    provable, instead of falling through to the ``threat_model_inference`` default,
+    which is reserved for reasoning-derived findings with no captured artefact."""
+    if not isinstance(poc, dict):
+        return False
+    return bool(
+        poc.get("observed_record")
+        or poc.get("observation")
+        or poc.get("command_output")
+        or poc.get("cmd_output")
+    )
+
+
 def apply_default_finding_metadata(f: dict[str, Any]) -> None:
     """Fill confidence / evidence_type / evidence_refs when absent (in-place)."""
     src = f.get("source")
@@ -310,6 +326,8 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
             f["evidence_type"] = "version_match"
         elif extract_cve_ids_from_finding(f):
             f["evidence_type"] = "cve_correlation"
+        elif _has_captured_observation(f.get("proof_of_concept")):
+            f["evidence_type"] = "observed"
         else:
             f["evidence_type"] = "threat_model_inference"
 
