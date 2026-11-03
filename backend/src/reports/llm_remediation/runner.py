@@ -247,6 +247,40 @@ def _parse_json(text: str) -> dict[str, Any]:
     return json.loads(_strip_json_fence(text))
 
 
+def _drop_unknown_fields(data: dict[str, Any], fields: set[str]) -> dict[str, Any]:
+    """Keep only the schema's declared fields. A cloud model sometimes invents fields
+    (e.g. ``criteria_assessment``) that the strict ``extra="forbid"`` contract rejects;
+    dropping them lets a semantically-complete answer validate instead of failing whole."""
+    return {k: v for k, v in data.items() if k in fields}
+
+
+def _normalize_remediation_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Coerce common cloud-model deviations into the FindingRemediationAnalysis shape."""
+    if not isinstance(data, dict):
+        return data
+    out = _drop_unknown_fields(data, set(FindingRemediationAnalysis.model_fields))
+    pr = out.get("priority_rationale")
+    if pr is not None and not isinstance(pr, dict):
+        # The model returned a bare string / list instead of the PriorityRationale object.
+        if isinstance(pr, (list, tuple)):
+            text = "; ".join(str(x) for x in pr if str(x).strip())
+        else:
+            text = str(pr)
+        out["priority_rationale"] = {
+            "text": (text.strip() or "n/a")[:1900],
+            "fact_refs": [],
+            "assumptions": [],
+        }
+    return out
+
+
+def _normalize_closure_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop invented fields so a valid-JSON closure answer meets the strict schema."""
+    if not isinstance(data, dict):
+        return data
+    return _drop_unknown_fields(data, set(FindingClosureConclusion.model_fields))
+
+
 def _make_provenance(
     *,
     prompt_version: str,
@@ -401,7 +435,7 @@ class RemediationRunner:
                 return None, [exc.detail]
 
             try:
-                data = _parse_json(raw)
+                data = _normalize_remediation_data(_parse_json(raw))
                 model_obj = FindingRemediationAnalysis.model_validate(
                     {
                         **data,
@@ -500,7 +534,7 @@ class RemediationRunner:
                 return None, [exc.detail]
 
             try:
-                data = _parse_json(raw)
+                data = _normalize_closure_data(_parse_json(raw))
                 # Clamp status BEFORE validation so the model can never publish
                 # a stronger claim than the evidence permits (prompt §7, L08).
                 clamp_notes = _clamp_closure_status(data, permitted)
