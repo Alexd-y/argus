@@ -102,6 +102,16 @@ def _snapshot_pdf_bytes(html: str, completed_at: str) -> bytes | None:
     return None
 
 
+def _iso_or_none(value: Any) -> str | None:
+    """Stringify a timestamp for the snapshot passport (``started_at``/``completed_at``
+    are typed ``str | None`` with ``extra="forbid"`` — a raw ``datetime`` raises a
+    ValidationError that kills the whole snapshot build)."""
+    if value is None:
+        return None
+    iso = getattr(value, "isoformat", None)
+    return iso() if callable(iso) else str(value)
+
+
 def _scan_meta_for_snapshot(
     built: Any, report_data: Any, scan_id: str, tenant_id: str
 ) -> dict[str, Any]:
@@ -140,8 +150,8 @@ def _scan_meta_for_snapshot(
         # R-13 passport scalar: the scans table has no started_at column, so the
         # scan's created_at is its start time. Without this the release gate blocks
         # every Valhalla report on "passport field 'started_at' is empty".
-        "started_at": getattr(scan_row, "created_at", None),
-        "completed_at": getattr(report_data, "created_at", None),
+        "started_at": _iso_or_none(getattr(scan_row, "created_at", None)),
+        "completed_at": _iso_or_none(getattr(report_data, "created_at", None)),
         "failures": failures,
         "skipped_reasons": skipped,
         # R-13 passport DICTS must be non-empty, and R-14 requires non-empty
@@ -163,7 +173,15 @@ def _scan_meta_for_snapshot(
             or getattr(scan_row, "scan_mode", None),
             "authorized_targets_only": True,
         },
-        "limitations": build_test_limitations({}),
+        # ReportDocumentV1.limitations is list[str]; build_test_limitations returns
+        # structured dicts (category/description/impact) for the readable renderers, so
+        # flatten each to a sentence here.
+        "limitations": [
+            f"{lim.get('description', '')} (scope: {lim.get('category', '')}; "
+            f"impact: {lim.get('impact', '')})".strip()
+            for lim in build_test_limitations({})
+            if isinstance(lim, dict) and lim.get("description")
+        ],
     }
 
 

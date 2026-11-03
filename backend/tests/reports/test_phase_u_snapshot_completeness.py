@@ -265,3 +265,63 @@ def test_finding_validator_falls_back_to_poc_tool_r18():
     rf = _map_finding(finding, 0)
     assert rf.validator_id == "sqlmap"
     assert not [b for b in finding_chain_blockers(SimpleNamespace(findings=[rf])) if "R-18" in b]
+
+
+def test_snapshot_coerces_datetime_passport_timestamps():
+    """R-13: a raw datetime started_at/completed_at (ORM created_at) must be coerced to
+    a string — ReportDocumentV1 types them str|None with extra='forbid', so a datetime
+    raised a ValidationError that killed the whole snapshot build (no PDF, ledger error)."""
+    from types import SimpleNamespace
+
+    from src.reports.snapshot_builder import build_snapshot_from_report_data
+
+    rd = SimpleNamespace(
+        scan_id="s1",
+        tenant_id="t1",
+        target="https://x",
+        created_at=datetime(2026, 11, 2, tzinfo=UTC),
+        findings=[],
+        evidence=[],
+        tool_runs=[],
+        timeline=[],
+        dark_web_monitoring=None,
+        valhalla_context=SimpleNamespace(wstg_coverage={}),
+    )
+    doc = build_snapshot_from_report_data(
+        rd,
+        scan_meta={
+            "tier": "valhalla",
+            "started_at": datetime(2026, 11, 2, 8, tzinfo=UTC),
+            "completed_at": datetime(2026, 11, 2, 9, tzinfo=UTC),
+        },
+    )
+    assert isinstance(doc.started_at, str)
+    assert isinstance(doc.completed_at, str)
+
+
+def test_scan_meta_passport_is_release_gate_clean():
+    """The gate builds its snapshot from _scan_meta_for_snapshot; its passport must
+    satisfy R-13 (scalars + dicts) and R-14 (limitations) with real, well-typed values."""
+    from types import SimpleNamespace
+
+    from src.reports import report_pipeline as rp
+
+    scan_row = SimpleNamespace(
+        scan_profile="full",
+        resolved_scan_mode="deep",
+        execution_mode="production",
+        quick_profile=None,
+        nuclei_profile=None,
+        created_at=datetime(2026, 11, 2, tzinfo=UTC),
+        tool_registry_version="t3",
+        payload_registry_version="p7",
+        prompt_registry_version="pr2",
+    )
+    built = SimpleNamespace(
+        scan_report_data=SimpleNamespace(scan=scan_row), ai_section_results={}, template_context={}
+    )
+    rd = SimpleNamespace(target="https://svalbard.ca", created_at=datetime(2026, 11, 2, 9, tzinfo=UTC))
+    meta = rp._scan_meta_for_snapshot(built, rd, "s1", "t1")
+    assert isinstance(meta["started_at"], str)
+    assert meta["registry_versions"] and meta["scope_summary"]
+    assert meta["limitations"] and all(isinstance(x, str) for x in meta["limitations"])

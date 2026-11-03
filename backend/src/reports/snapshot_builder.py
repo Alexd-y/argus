@@ -791,8 +791,13 @@ def build_snapshot_from_report_data(
         execution_mode=_meta("execution_mode", "execution_mode"),
         quick_profile=_meta("quick_profile", "quick_profile"),
         nuclei_profile=_meta("nuclei_profile", "nuclei_profile"),
-        started_at=meta.get("started_at"),
-        completed_at=meta.get("completed_at") or getattr(report_data, "created_at", None),
+        # started_at/completed_at are str|None with extra="forbid": a raw datetime
+        # (ORM created_at / the report_data fallback) raises a ValidationError that
+        # kills the whole snapshot build, so coerce any timestamp to a string here.
+        started_at=_str_or_none(meta.get("started_at")),
+        completed_at=_str_or_none(
+            meta.get("completed_at") or getattr(report_data, "created_at", None)
+        ),
         scope_summary=meta.get("scope_summary") or {},
         profile_limits=meta.get("profile_limits") or {},
         failures=failures,
