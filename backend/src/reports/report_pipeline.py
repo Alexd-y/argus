@@ -747,6 +747,20 @@ async def _rgp_valhalla_llm_remediation(
                 for e in (vsnapshot.evidence_references or [])
                 if e.description
             }
+            # Provability partition (VHL-PROVABLE-001): only a provable finding is
+            # required to reach a validated remediation for the release to be a
+            # completed final; a non-provable "unconfirmed — requires manual
+            # verification" observation is reported honestly and does not hold the
+            # release in draft. Computed on report_data.findings (the shape
+            # is_provable_from_raw expects, same objects the main render partitions)
+            # and keyed by finding_id, which the snapshot preserves.
+            from src.reports.evidence_partition import is_provable_from_raw
+
+            _provable_by_id: dict[str, bool] = {}
+            for _rf in report_data.findings or []:
+                _fid = str(getattr(_rf, "finding_id", "") or "")
+                if _fid:
+                    _provable_by_id[_fid] = is_provable_from_raw(_rf)
             vfindings = []
             vfragments: dict[str, dict[str, str]] = {}
             for f in vsnapshot.findings:
@@ -760,6 +774,8 @@ async def _rgp_valhalla_llm_remediation(
                         "evidence_refs": ev_ids,
                         "description": f.description,
                         "cwe": f.cwe,
+                        # provability gate for the completeness assessment
+                        "is_provable": _provable_by_id.get(f.finding_id, True),
                         # location / asset so the plan can name a concrete control
                         "asset": f.asset or vsnapshot.target,
                         "endpoint": f.url or f.path,

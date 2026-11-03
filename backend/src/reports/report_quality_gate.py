@@ -759,6 +759,15 @@ def _has_poc(finding: Any) -> bool:
         "raw_response",
         "screenshot_key",
         "payload",
+        # Recon/passive findings capture their raw artefact here (the DMARC TXT
+        # value, the dig answer, a tool's command output) rather than as an HTTP
+        # request/response pair. It is a captured observation, so it counts as
+        # real PoC evidence — without this such findings score "none" and are
+        # wrongly classified inconclusive despite carrying their proof.
+        "observed_record",
+        "observation",
+        "command_output",
+        "cmd_output",
     )
     return any(poc.get(k) not in (None, "", [], {}) for k in meaningful)
 
@@ -880,8 +889,19 @@ def classify_evidence(finding: Any) -> EvidenceClassification:
         "429" in str(poc.get("response_status") or "") or "rate" in title or "throttl" in title
     )
     is_banner_only = quality == "weak" and validated_criteria_count <= 1 and not has_payload
+    # A captured observed artefact (the DMARC TXT value, the dig answer, a tool's
+    # command output) is itself a demonstrated technical observation — the same
+    # provability class as a missing-header or 429 observation, and the exact
+    # evidence a remediation can be validated against. A bare {"url": ...} PoC
+    # carries no such artefact and stays inconclusive.
+    has_observed_record = bool(
+        poc.get("observed_record")
+        or poc.get("observation")
+        or poc.get("command_output")
+        or poc.get("cmd_output")
+    )
 
-    if is_header_observation or is_rate_limit_signal or is_banner_only:
+    if is_header_observation or is_rate_limit_signal or is_banner_only or has_observed_record:
         return "observed"
 
     # CANDIDATE: some evidence but not fully validated

@@ -201,6 +201,11 @@ class FindingAnalysisResult:
     errors: list[str] = field(default_factory=list)
     from_cache: bool = False
     failure_kind: str | None = None
+    #: Whether the finding is provable from raw evidence (VHL-PROVABLE-001). A
+    #: non-provable finding (an "unconfirmed — requires manual verification"
+    #: observation) is not expected to yield a fully validated remediation, so it
+    #: must not demote the whole report from a completed release to a draft.
+    provable: bool = True
 
 
 @dataclass
@@ -669,6 +674,7 @@ class RemediationRunner:
             locale=locale,
         )
         finding_id = ctx.finding_id or closure_input.finding_id
+        provable = bool(finding.get("is_provable", True))
 
         known_evidence = set(allowed_evidence_ids or []) | set(permitted.supporting_evidence_ids)
         known_retests = {r.test_id for r in closure_input.retests}
@@ -687,6 +693,7 @@ class RemediationRunner:
                 permitted_status=permitted.permitted_status,
                 context_hash=ctx.context_hash,
                 from_cache=True,
+                provable=provable,
             )
 
         errors: list[str] = []
@@ -728,6 +735,7 @@ class RemediationRunner:
                 if status == AnalysisStatus.GENERATED_VALIDATED.value
                 else classify_failure(errors)
             ),
+            provable=provable,
         )
 
         if status == AnalysisStatus.GENERATED_VALIDATED.value:
@@ -808,6 +816,7 @@ class RemediationRunner:
                             llm_analysis_status="failed",
                             errors=[f"{kind}: stage=probe skipped per-finding call"],
                             failure_kind=kind,
+                            provable=bool(finding.get("is_provable", True)),
                         )
                     )
                 run_result = RemediationRunResult(

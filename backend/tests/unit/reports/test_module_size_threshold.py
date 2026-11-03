@@ -30,7 +30,11 @@ OVERSIZED_ALLOWLIST: dict[str, int] = {
     # (exploit_demonstrated/exploit_summary) surfaced in the Valhalla findings table.
     # Decomposition remains tracked debt — only shrink from here.
     "generators.py": 3977,
-    "report_quality_gate.py": 3120,
+    # +16 for VHL-PROVABLE-001: classify_evidence/_has_poc now recognise a
+    # recon/passive finding's captured artefact (observed_record / observation /
+    # command output) as real evidence, so such findings are no longer misjudged
+    # inconclusive. Decomposition remains tracked debt — only shrink from here.
+    "report_quality_gate.py": 3136,
 }
 
 

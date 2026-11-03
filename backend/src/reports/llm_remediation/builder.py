@@ -44,18 +44,31 @@ def assess_llm_completeness(run_result: RemediationRunResult) -> CompletenessAss
 
     total = len(run_result.results)
     validated = needs_review = insufficient = failed = 0
+    # A provable finding that is not validated blocks a completed release; a
+    # non-provable finding (an "unconfirmed — requires manual verification"
+    # observation, VHL-PROVABLE-001) is NOT expected to yield a validated
+    # remediation, so its needs_review/insufficient_context is honest, documented,
+    # and must not demote the whole report to a draft. Only a hard ``failed``
+    # (a real analysis error) blocks regardless of provability.
+    blocking_unvalidated = 0
     reasons: list[str] = []
 
     for res in run_result.results:
         status = res.llm_analysis_status
+        provable = getattr(res, "provable", True)
+        suffix = "" if provable else " (unconfirmed finding — manual verification; not blocking)"
         if status == AnalysisStatus.GENERATED_VALIDATED.value:
             validated += 1
         elif status == AnalysisStatus.NEEDS_REVIEW.value:
             needs_review += 1
-            reasons.append(f"{res.finding_id}: needs_review")
+            if provable:
+                blocking_unvalidated += 1
+            reasons.append(f"{res.finding_id}: needs_review{suffix}")
         elif status == AnalysisStatus.INSUFFICIENT_CONTEXT.value:
             insufficient += 1
-            reasons.append(f"{res.finding_id}: insufficient_context")
+            if provable:
+                blocking_unvalidated += 1
+            reasons.append(f"{res.finding_id}: insufficient_context{suffix}")
         else:  # failed / incomplete
             failed += 1
             reasons.append(f"{res.finding_id}: {status}")
@@ -65,7 +78,7 @@ def assess_llm_completeness(run_result: RemediationRunResult) -> CompletenessAss
         reasons.append("no findings analysed")
     elif failed > 0:
         status = AssessmentCompleteness.FAILED
-    elif needs_review > 0 or insufficient > 0:
+    elif blocking_unvalidated > 0:
         status = AssessmentCompleteness.INCOMPLETE
     else:
         status = AssessmentCompleteness.COMPLETE
