@@ -139,6 +139,7 @@ def generate_valhalla_llm_release(
     model: str = "unknown",
     cache: dict[str, Any] | None = None,
     locale: str = "ru",
+    evidence_fragments: dict[str, dict[str, str]] | None = None,
     health_probe: bool = False,
 ) -> tuple[ValhallaLlmDocument, ValhallaRelease]:
     """Run the analysis and build the multi-format release for a report.
@@ -153,12 +154,14 @@ def generate_valhalla_llm_release(
     valid = [f for f in findings if _finding_id(f)]
     closure_inputs = {_finding_id(f): finding_to_closure_input(f) for f in valid}
     allowed_evidence = {_finding_id(f): _evidence_ids(f) for f in valid}
+    fragments = evidence_fragments or {}
 
     run_result = runner.run(
         valid,
         report_meta=report_meta,
         closure_inputs=closure_inputs,
         allowed_evidence_ids=allowed_evidence,
+        evidence_fragments=fragments,
         locale=locale,
         health_probe=health_probe,
     )

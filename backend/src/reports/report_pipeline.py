@@ -734,18 +734,50 @@ async def _rgp_valhalla_llm_remediation(
                 scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
                 scan_report_data=getattr(built, "scan_report_data", None),
             )
-            vfindings = [
-                {
-                    "finding_id": f.finding_id,
-                    "title": f.title,
-                    "severity": f.severity,
-                    "verification_status": f.verification_status,
-                    "evidence_refs": list(f.evidence_ids),
-                    "description": f.description,
-                    "cwe": f.cwe,
-                }
-                for f in vsnapshot.findings
-            ]
+            # The remediation LLM needs concrete grounding to produce a VALIDATED
+            # fix (endpoint, component/version, demonstrated impact, evidence text),
+            # not just a title + CWE. Without it every finding honestly returns
+            # insufficient_context and the release can never leave draft — the
+            # context package was being starved, not the findings. Forward the
+            # snapshot finding's resolvable location/stack/impact fields and the
+            # redacted evidence descriptions (build_finding_context redacts again,
+            # so no raw secret reaches the model) into the per-finding context.
+            _evidence_text = {
+                e.evidence_id: e.description
+                for e in (vsnapshot.evidence_references or [])
+                if e.description
+            }
+            vfindings = []
+            vfragments: dict[str, dict[str, str]] = {}
+            for f in vsnapshot.findings:
+                ev_ids = list(f.evidence_ids)
+                vfindings.append(
+                    {
+                        "finding_id": f.finding_id,
+                        "title": f.title,
+                        "severity": f.severity,
+                        "verification_status": f.verification_status,
+                        "evidence_refs": ev_ids,
+                        "description": f.description,
+                        "cwe": f.cwe,
+                        # location / asset so the plan can name a concrete control
+                        "asset": f.asset or vsnapshot.target,
+                        "endpoint": f.url or f.path,
+                        "port": f.port,
+                        "parameter": f.parameter,
+                        # stack so the plan stops guessing (the insufficient_context trigger)
+                        "components": [f.component] if f.component else [],
+                        "confirmed_versions": [f.observed_version] if f.observed_version else [],
+                        "cvss": f.cvss_vector,
+                        "confidence": f.confidence,
+                        # demonstrated exploitation → the plan can ground the retest
+                        "demonstrated": f.exploit_demonstrated,
+                        "hypothesis": f.exploit_summary or f.potential_impact,
+                    }
+                )
+                frag = {eid: _evidence_text[eid] for eid in ev_ids if eid in _evidence_text}
+                if frag:
+                    vfragments[f.finding_id] = frag
             vmeta = {
                 "report_id": report_id,
                 "report_version": vsnapshot.snapshot_hash or report_id,
@@ -767,6 +799,7 @@ async def _rgp_valhalla_llm_remediation(
                 canonical_snapshot_hash=vsnapshot.snapshot_hash,
                 provider=llm_identity.provider_id if llm_identity else "unresolved",
                 model=llm_identity.model if llm_identity else "unresolved",
+                evidence_fragments=vfragments,
                 health_probe=True,
             )
 
