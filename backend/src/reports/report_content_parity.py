@@ -100,7 +100,13 @@ def _walk_value(value: Any, label: str, norm_texts: dict[str, str], problems: li
     if isinstance(value, (bool, int, float)):
         return  # bool is an int subclass; numeric formatting differs per format
     if isinstance(value, str) and _checkable(value):
-        nv = _norm(value, unescape=False)
+        # The readable renderers redact a leaked internal storage key to its basename
+        # (C-29). Redact the snapshot value the SAME way before comparing, so a field
+        # carrying an internal key still has its (redacted) value verified across formats
+        # instead of false-positiving as "not rendered" — parity stays strong and the
+        # redaction can never drift from this check (same regex, same transform).
+        redacted = _INTERNAL_PATH_RE.sub(lambda m: m.group(0).rsplit("/", 1)[-1], value)
+        nv = _norm(redacted, unescape=False)
         missing = sorted(fmt for fmt, text in norm_texts.items() if nv not in text)
         if missing:
             problems.append(f"parity: {label} value not rendered in {','.join(missing)}")
