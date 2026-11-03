@@ -121,6 +121,10 @@ def _scan_meta_for_snapshot(
         "execution_mode": getattr(scan_row, "execution_mode", None),
         "quick_profile": getattr(scan_row, "quick_profile", None),
         "nuclei_profile": getattr(scan_row, "nuclei_profile", None),
+        # R-13 passport scalar: the scans table has no started_at column, so the
+        # scan's created_at is its start time. Without this the release gate blocks
+        # every Valhalla report on "passport field 'started_at' is empty".
+        "started_at": getattr(scan_row, "created_at", None),
         "completed_at": getattr(report_data, "created_at", None),
         "failures": failures,
         "skipped_reasons": skipped,
@@ -1206,6 +1210,55 @@ async def _rgp_generate_formats(
     return (vfmt,)
 
 
+def _align_valhalla_wstg_display(
+    report_data: Any,
+    template_context: dict[str, Any] | None,
+    *,
+    tier: str,
+) -> None:
+    """Make the displayed WSTG headline equal the authoritative evidence-gated coverage.
+
+    The Valhalla WSTG table historically rendered ``wstg_coverage.coverage_percentage``,
+    which is the *legacy capability heuristic* (:func:`build_wstg_coverage`) — explicitly
+    NOT the headline per its own docstring (it maps executed tool names to WSTG tests).
+    The honest-draft gate (R-12) compares the rendered coverage against the authoritative
+    ``build_wstg_block`` value the canonical snapshot carries, so the two disagreed and
+    every Valhalla report was forced to ``draft`` over a cosmetic figure.
+
+    Recompute the authoritative percentage from the SAME ``report_data`` the release gate
+    snapshots (identical inputs → identical value) and write it back onto the display
+    dict(s). Idempotent and fail-safe: any error, a disabled strict gate, or an undefined
+    (``None``) coverage leaves the legacy value untouched — the report then stays an
+    honest draft, never shows a wrong number.
+    """
+    if str(tier or "").strip().lower() != "valhalla":
+        return
+    try:
+        from src.reports.snapshot_builder import _build_wstg_block
+
+        block = _build_wstg_block(report_data, None, scan_meta={"tier": tier})
+    except Exception:  # noqa: BLE001 — display alignment must never break generation
+        return
+    if not isinstance(block, dict):
+        return
+    pct = block.get("coverage_pct")
+    if not isinstance(pct, (int, float)) or isinstance(pct, bool):
+        return
+    auth = round(float(pct), 4)
+    display_dicts: list[dict[str, Any]] = []
+    vc = getattr(report_data, "valhalla_context", None)
+    cov = getattr(vc, "wstg_coverage", None)
+    if isinstance(cov, dict):
+        display_dicts.append(cov)
+    if isinstance(template_context, dict):
+        tcov = template_context.get("wstg_coverage")
+        if isinstance(tcov, dict) and tcov is not cov:
+            display_dicts.append(tcov)
+    for d in display_dicts:
+        d["coverage_percentage"] = auth
+        d["coverage_pct"] = auth
+
+
 async def run_generate_report_pipeline(
     session: AsyncSession,
     *,
@@ -1351,6 +1404,11 @@ async def run_generate_report_pipeline(
         report_data.findings = retain_findings_despite_ai_classification(report_data.findings)
 
         tier_str = str(report.tier or "midgard")
+        # R-12 — align the displayed WSTG headline to the authoritative evidence-gated
+        # coverage the release gate treats as truth, so a Valhalla report is not forced
+        # to honest-draft over the legacy capability-heuristic percentage. Must run
+        # before the per-format renders and the gate below both consume the context.
+        _align_valhalla_wstg_display(report_data, built.template_context, tier=tier_str)
         validation = validate_report_data(
             report_data,
             tier=tier_str,

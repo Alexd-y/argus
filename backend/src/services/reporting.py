@@ -1398,7 +1398,10 @@ class ReportGenerator:
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
             "report_language": settings.report_language,
-            "finding_count": len(data.findings),
+            # Count the SAME headline population the severity breakdown is built from, so
+            # the prose gate never sees ``finding_count`` disagree with the band totals
+            # (R-10). ``executive_severity_totals`` sums to the headline population.
+            "finding_count": sum(executive_severity_totals.values()),
             "severity_counts": severity_counts,
             "executive_severity_totals": executive_severity_totals,
             "findings": findings_short,

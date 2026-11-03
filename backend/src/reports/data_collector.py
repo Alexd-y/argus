@@ -117,6 +117,13 @@ class ScanRowData(BaseModel):
     progress: int
     phase: str
     options: dict[str, Any] | None = None
+    # Immutable-profile columns needed for the snapshot passport (R-13). Without
+    # them the Valhalla release gate blocks every report as an honest-draft on
+    # "passport field 'execution_mode'/'scan_profile'/... is empty".
+    execution_mode: str | None = None
+    scan_profile: str | None = None
+    resolved_scan_mode: str | None = None
+    scan_mode: str | None = None
     created_at: Any = None
     updated_at: Any = None
 
@@ -498,6 +505,10 @@ def _scan_row_from_orm(row: ScanModel) -> ScanRowData:
         progress=row.progress,
         phase=row.phase,
         options=row.options,
+        execution_mode=getattr(row, "execution_mode", None),
+        scan_profile=getattr(row, "scan_profile", None),
+        resolved_scan_mode=getattr(row, "resolved_scan_mode", None),
+        scan_mode=getattr(row, "scan_mode", None),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

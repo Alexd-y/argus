@@ -401,9 +401,12 @@ _SEV_PATTERNS: list[tuple[str, str]] = _SEV_PATTERNS_EN + _SEV_PATTERNS_RU
 def _int_totals_from_payload(payload: dict[str, Any]) -> dict[str, int]:
     raw = payload.get("executive_severity_totals")
     if not isinstance(raw, dict):
-        return {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        return {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0}
     out: dict[str, int] = {}
-    for k in ("critical", "high", "medium", "low", "info"):
+    # ``unknown`` is a first-class severity bucket (a finding whose severity label is
+    # unrecognised is counted here, not silently dropped) so ``sum(out.values())``
+    # equals the finding population — see docs/finding-severity-and-counting.md.
+    for k in ("critical", "high", "medium", "low", "info", "unknown"):
         try:
             out[k] = max(0, int(raw.get(k) or 0))
         except (TypeError, ValueError):
@@ -504,11 +507,16 @@ def validate_executive_ai_text_against_payload(
 def grounded_executive_summary_fallback_text(payload: dict[str, Any]) -> str:
     """Safe replacement when generated executive text fails structured fact checks."""
     totals = _int_totals_from_payload(payload)
-    fc = _finding_count_from_payload(payload)
+    # The stated total MUST equal the sum of the per-severity bands printed below, or
+    # the prose gate's counter check (R-10) blocks the report as inconsistent. Derive
+    # it from the same buckets we print (``unknown`` included) instead of a separately
+    # sourced ``finding_count`` that could count findings the breakdown omits.
+    fc = sum(totals.values())
     parts = [
         f"Structured results: {fc} finding(s) recorded. "
         f"Severity totals — critical: {totals['critical']}, high: {totals['high']}, "
-        f"medium: {totals['medium']}, low: {totals['low']}, informational: {totals['info']}."
+        f"medium: {totals['medium']}, low: {totals['low']}, "
+        f"informational: {totals['info']}, unknown: {totals['unknown']}."
     ]
     hibp = payload.get("hibp_pwned_password_summary")
     if isinstance(hibp, dict) and hibp:

@@ -297,7 +297,7 @@ def _parse_counts(text: str) -> tuple[int, dict[str, int]] | None:
     if not total_m:
         return None
     bands: dict[str, int] = {}
-    for band in ("critical", "high", "medium", "low", "informational", "info"):
+    for band in ("critical", "high", "medium", "low", "informational", "info", "unknown"):
         bm = re.search(rf"{band}\s*:\s*(\d+)", text or "", re.IGNORECASE)
         if bm:
             bands[band] = int(bm.group(1))

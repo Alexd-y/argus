@@ -344,3 +344,46 @@ def test_evidence_inventory_has_parsed_summaries() -> None:
     assert "Certificate issuer" in summaries
     assert "HTTP response headers parsed" in summaries
     assert "443/tcp" in summaries or "443/tcp open" in summaries
+
+
+def test_align_valhalla_wstg_display_matches_authoritative_coverage() -> None:
+    """R-12 — the displayed WSTG headline is rewritten to the authoritative,
+    evidence-gated coverage (``build_wstg_block``) the release gate treats as truth,
+    instead of the legacy capability heuristic (``coverage_percentage``). A mismatch
+    there used to force every Valhalla report to honest-draft over a cosmetic figure."""
+    from src.reports import report_pipeline as rp
+    from src.reports import snapshot_builder as sb
+
+    legacy = {"coverage_percentage": 26.0, "covered": 5, "partial": 2, "total_tests": 32}
+    report_data = SimpleNamespace(
+        valhalla_context=SimpleNamespace(wstg_coverage=legacy),
+        findings=[],
+        evidence=[],
+    )
+    template_context = {"wstg_coverage": legacy}
+
+    with patch.object(
+        sb, "_build_wstg_block", return_value={"coverage_pct": 3.125}
+    ):
+        rp._align_valhalla_wstg_display(report_data, template_context, tier="valhalla")
+    assert legacy["coverage_percentage"] == 3.125
+    assert template_context["wstg_coverage"]["coverage_percentage"] == 3.125
+
+    # Non-valhalla tiers and an undefined (None) canonical coverage leave the legacy
+    # value untouched (the report then stays an honest draft, never a wrong number).
+    other = {"coverage_percentage": 26.0}
+    rp._align_valhalla_wstg_display(
+        SimpleNamespace(valhalla_context=SimpleNamespace(wstg_coverage=other), findings=[], evidence=[]),
+        {"wstg_coverage": other},
+        tier="midgard",
+    )
+    assert other["coverage_percentage"] == 26.0
+
+    none_cov = {"coverage_percentage": 26.0}
+    with patch.object(sb, "_build_wstg_block", return_value=None):
+        rp._align_valhalla_wstg_display(
+            SimpleNamespace(valhalla_context=SimpleNamespace(wstg_coverage=none_cov), findings=[], evidence=[]),
+            {"wstg_coverage": none_cov},
+            tier="valhalla",
+        )
+    assert none_cov["coverage_percentage"] == 26.0

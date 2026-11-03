@@ -278,6 +278,34 @@ def test_grounded_executive_fallback_contains_totals() -> None:
     assert "HIBP" in text or "check" in text.lower()
 
 
+def test_grounded_executive_fallback_counter_consistent_with_unknown() -> None:
+    """R-10 — the stated total must equal the sum of the printed severity bands even
+    when an ``unknown``-severity finding is present (previously ``finding_count``
+    counted it but the breakdown dropped it, so the prose gate's counter check fired
+    and forced the Valhalla report to honest-draft)."""
+    from src.reports.prose_gate import _parse_counts, check_output_consistency
+
+    text = grounded_executive_summary_fallback_text(
+        {
+            "finding_count": 6,
+            "executive_severity_totals": {
+                "critical": 1,
+                "high": 2,
+                "medium": 1,
+                "low": 1,
+                "info": 0,
+                "unknown": 1,
+            },
+        }
+    )
+    total, bands = _parse_counts(text)
+    assert sum(bands.values()) == total == 6
+    assert "unknown: 1" in text
+    assert not any(
+        v.rule == "counter_mismatch" for v in check_output_consistency(text)
+    )
+
+
 def test_report_validation_failure_payload_shape() -> None:
     p = report_validation_failure_payload(
         report_id="rid",
