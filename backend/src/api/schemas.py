@@ -1049,6 +1049,9 @@ class Finding(BaseModel):
     # main report; unconfirmed ones are listed separately with the reason below.
     is_provable: bool = True
     unconfirmed_reason: str | None = None
+    # R-18 — producer provenance (e.g. {"source_tool": "sqlmap"}) carried through to the
+    # snapshot so a medium+ finding traces to a validator / producing tool.
+    provenance: dict[str, Any] | None = None
     # Evidence gate fields (VHL-EVIDENCE-001)
     affected_asset: str | None = None
     affected_endpoint: str | None = None

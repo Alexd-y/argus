@@ -1105,6 +1105,16 @@ async def _persist_report_and_findings(
             cvss_vector=_cvss_vec,
             dedup_status=_dedup,
             compliance=f.get("compliance") if isinstance(f.get("compliance"), list) else None,
+            # R-18 evidence chain: persist the producing tool so a medium+ finding
+            # traces to a validator in the report (the Finding table has no dedicated
+            # tool_run_id/validator column, so it goes in the provenance JSONB). Only
+            # set when a producer is known — a finding with no source_tool honestly
+            # stays unattributed and the provability gate still flags it.
+            provenance=(
+                {"source_tool": str(f.get("source_tool"))}
+                if f.get("source_tool")
+                else None
+            ),
         )
         # Idempotent persist: stable UUID5 finding ids mean a phase retry / resume
         # can re-run this persist with the same ids. merge() upserts by primary

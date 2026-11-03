@@ -395,6 +395,9 @@ class FindingRow(BaseModel):
     is_provable: bool = True
     unconfirmed_reason: str | None = None
     created_at: Any = None
+    #: R-18 — producer provenance (e.g. {"source_tool": "sqlmap"}); lets a medium+
+    #: finding trace to a validator in the snapshot without a dedicated ORM column.
+    provenance: dict[str, Any] | None = None
 
 
 def finding_rows_from_models(rows: list[Any]) -> list[FindingRow]:
@@ -430,6 +433,9 @@ def finding_rows_from_models(rows: list[Any]) -> list[FindingRow]:
             reproducible_steps=getattr(row, "reproducible_steps", None),
             applicability_notes=getattr(row, "applicability_notes", None),
             created_at=row.created_at,
+            provenance=(
+                row.provenance if isinstance(getattr(row, "provenance", None), dict) else None
+            ),
         )
         for row in rows
     ]

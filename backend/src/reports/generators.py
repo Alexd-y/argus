@@ -371,6 +371,7 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
         evidence_classification=_effective_evidence_classification(row),
         is_provable=bool(getattr(row, "is_provable", True)),
         unconfirmed_reason=getattr(row, "unconfirmed_reason", None),
+        provenance=getattr(row, "provenance", None),
     )
 
 

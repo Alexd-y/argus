@@ -325,3 +325,30 @@ def test_scan_meta_passport_is_release_gate_clean():
     assert isinstance(meta["started_at"], str)
     assert meta["registry_versions"] and meta["scope_summary"]
     assert meta["limitations"] and all(isinstance(x, str) for x in meta["limitations"])
+
+
+def test_finding_validator_from_provenance_source_tool_r18():
+    """R-18: the producing tool recorded at finding creation (provenance.source_tool)
+    flows ORM→FindingRow→schema Finding→snapshot so a medium+ finding traces to a
+    validator — no dedicated tool_run_id column, no migration."""
+    from types import SimpleNamespace
+
+    from src.reports.data_collector import FindingRow
+    from src.reports.generators import _finding_row_to_schema
+    from src.reports.snapshot_builder import _map_finding
+
+    fr = FindingRow(
+        id="f1",
+        tenant_id="t",
+        scan_id="s",
+        severity="high",
+        title="SQLi",
+        proof_of_concept=None,
+        provenance={"source_tool": "sqlmap"},
+        evidence_refs=["t/s/poc/x.json"],
+    )
+    schema_f = _finding_row_to_schema(fr)
+    assert schema_f.provenance == {"source_tool": "sqlmap"}
+    rf = _map_finding(schema_f, 0)
+    assert rf.validator_id == "sqlmap"
+    assert not [b for b in finding_chain_blockers(SimpleNamespace(findings=[rf])) if "R-18" in b]

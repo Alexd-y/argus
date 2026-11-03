@@ -238,12 +238,17 @@ def _map_finding(
     )
     if not validator:
         # R-18 honest fallback: the finding carries no dedicated validator/tool_run
-        # column, but its PoC dict names the real producer tool (sqlmap/dalfox/nuclei/…)
-        # under "tool"/"validator". Use that so a medium+ finding traces to a producer
-        # instead of blanking the evidence chain — no invented value, no DB migration.
-        _poc = getattr(finding, "proof_of_concept", None)
-        if isinstance(_poc, dict):
-            validator = _poc.get("tool") or _poc.get("validator") or validator
+        # column, but the producing tool (sqlmap/dalfox/nuclei/…) is recorded either in
+        # the provenance JSONB (persisted at finding creation as ``source_tool``) or in
+        # the PoC dict ("tool"/"validator"). Use that so a medium+ finding traces to a
+        # producer instead of blanking the evidence chain — no invented value, no migration.
+        _prov = getattr(finding, "provenance", None)
+        if isinstance(_prov, dict):
+            validator = _prov.get("source_tool") or _prov.get("tool") or validator
+        if not validator:
+            _poc = getattr(finding, "proof_of_concept", None)
+            if isinstance(_poc, dict):
+                validator = _poc.get("tool") or _poc.get("validator") or validator
     raw_ref = getattr(finding, "raw_artifact_ref", None)
     if not raw_ref:
         poc = getattr(finding, "proof_of_concept", None)
