@@ -291,16 +291,34 @@ def truncated_finding_ids(text: str, known_finding_ids: set[str]) -> list[str]:
     return offenders
 
 
+#: Severity-band labels → canonical bucket. ``informational`` and ``info`` are the SAME
+#: severity: one report section may print "informational: 3" (executive totals) while
+#: another prints "INFO: 3" (severity breakdown). Counting both inflated the sum (3+3=6
+#: for the same 3 findings) and produced a spurious R-10 "sum ≠ total" — collapse aliases
+#: to one bucket, first label wins.
+_SEVERITY_BAND_ALIASES: tuple[tuple[str, str], ...] = (
+    ("critical", "critical"),
+    ("high", "high"),
+    ("medium", "medium"),
+    ("low", "low"),
+    ("informational", "info"),
+    ("info", "info"),
+    ("unknown", "unknown"),
+)
+
+
 def _parse_counts(text: str) -> tuple[int, dict[str, int]] | None:
     """Parse ``N finding(s) recorded`` + ``critical: X, high: Y…`` (R-10)."""
     total_m = re.search(r"(\d+)\s+finding\(?s?\)?\s+recorded", text or "", re.IGNORECASE)
     if not total_m:
         return None
     bands: dict[str, int] = {}
-    for band in ("critical", "high", "medium", "low", "informational", "info", "unknown"):
-        bm = re.search(rf"{band}\s*:\s*(\d+)", text or "", re.IGNORECASE)
+    for label, bucket in _SEVERITY_BAND_ALIASES:
+        if bucket in bands:
+            continue  # alias already counted (informational wins over a later info)
+        bm = re.search(rf"\b{label}\s*:\s*(\d+)", text or "", re.IGNORECASE)
         if bm:
-            bands[band] = int(bm.group(1))
+            bands[bucket] = int(bm.group(1))
     if not bands:
         return None
     return int(total_m.group(1)), bands

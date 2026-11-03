@@ -123,3 +123,21 @@ def test_wstg_coverage_single_value():
     v = check_output_consistency(text, wstg_coverage_pct=2.0833)
     assert any(x.rule == "wstg_coverage_mismatch" for x in v)
     assert not check_output_consistency("WSTG coverage: 2% here", wstg_coverage_pct=2.0)
+
+
+def test_parse_counts_collapses_info_informational_aliases():
+    """R-10: one report section prints "informational: N" (executive totals) and another
+    prints "INFO: N" (severity breakdown) for the SAME findings. _parse_counts must count
+    that severity once, not sum both — otherwise the bands over-count and fire a spurious
+    counter_mismatch (the real 64a8105d "sum to 12 but total is 9")."""
+    from src.reports.prose_gate import _parse_counts, check_output_consistency
+
+    text = (
+        "9 finding(s) recorded. Severity totals — critical: 0, high: 0, medium: 3, "
+        "low: 3, informational: 3, unknown: 0. "
+        "**Severity Breakdown:** CRITICAL: 0, HIGH: 0, MEDIUM: 3, LOW: 3, INFO: 3"
+    )
+    total, bands = _parse_counts(text)
+    assert total == 9
+    assert sum(bands.values()) == 9  # info counted once, not 3+3
+    assert not any(v.rule == "counter_mismatch" for v in check_output_consistency(text))
