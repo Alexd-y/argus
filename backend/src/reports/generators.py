@@ -179,6 +179,13 @@ class EvidenceEntry:
     finding_id: str
     object_key: str
     description: str | None
+    # R-16 integrity/provenance — carried from the persisted evidence row through to
+    # the canonical snapshot's evidence references (the release gate blocks when a ref
+    # has no sha256 / collected_at_utc). Defaulted so older callers keep working.
+    sha256: str | None = None
+    created_at: Any = None
+    kind: str | None = None
+    content_type: str | None = None
 
 
 @dataclass
@@ -468,6 +475,10 @@ def build_report_data_from_scan_report(
                 finding_id=str(e.finding_id),
                 object_key=str(e.object_key),
                 description=getattr(e, "description", None),
+                sha256=getattr(e, "sha256", None),
+                created_at=getattr(e, "created_at", None),
+                kind=getattr(e, "kind", None),
+                content_type=getattr(e, "content_type", None),
             )
             for e in getattr(data, "evidence", None) or []
             if getattr(e, "finding_id", None) and getattr(e, "object_key", None)
