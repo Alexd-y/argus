@@ -837,22 +837,23 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
+    # vhq017: + anti-stub system rule (no 'pending'/'TODO'/'TBD' placeholder words).
     # vhq016: effort tags moved out of square brackets (prose_gate no longer trips
     # on the legitimate "[Quick Fix]"/"[Moderate]"/"[Complex Refactor]" tag). Bumped
     # so cached prose produced by the old bracketed prompt is regenerated.
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq016-20261104",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq016-20261104",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq016-20261104",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq016-20261104",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq016-20261104",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq016-20261104",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq016-20261104",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq016-20261104",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq016-20261104",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq016-20261104",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq016-20261104",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq016-20261104",
-    REPORT_AI_SECTION_COST_SUMMARY: "vhq016-20261104",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq017-20261104",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq017-20261104",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq017-20261104",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq017-20261104",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq017-20261104",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq017-20261104",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq017-20261104",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq017-20261104",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq017-20261104",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq017-20261104",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq017-20261104",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq017-20261104",
+    REPORT_AI_SECTION_COST_SUMMARY: "vhq017-20261104",
 }
 
 REPORT_AI_SYSTEM = (
@@ -919,7 +920,11 @@ REPORT_AI_SYSTEM = (
     "unauthorized transactions; regulatory fines; financial fraud; data breach; zero-day potential; "
     "significant vulnerability; critical HTTP headers; could be exploited by attackers; compromise the application; "
     "absence of effective rate limiting; does not implement rate limiting; allowing attackers to perform rapid login attempts; "
-    "comprehensive penetration test. Use not assessed / inconclusive limitation language instead."
+    "comprehensive penetration test. Use not assessed / inconclusive limitation language instead.\n"
+    "11. NEVER emit placeholder / stub words. Do not write 'pending', 'TODO', 'TBD', 'to be "
+    "determined', 'to be assigned', 'not implemented', or 'анализ будет выполнен'. State the concrete fact "
+    "from the context, or if a value is genuinely unknown name it precisely (e.g. 'owner not "
+    "specified in scope') — never a stub token."
 )
 
 # ---------------------------------------------------------------------------

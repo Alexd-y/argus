@@ -12,8 +12,18 @@ Conservative policy (see the product decision recorded in
 ``docs/finding-severity-and-counting.md``):
 
 * Missing / incomplete security response headers (CWE-693) → **HIGH**.
-* DNSSEC not enabled → **HIGH**.
+* DNSSEC not enabled → **MEDIUM** (defense-in-depth misconfiguration; see note).
 * DKIM not detected → **MEDIUM**.
+
+Note (2026-11-04): DNSSEC-not-enabled was lowered HIGH→MEDIUM. A ``high``/
+``critical`` band triggers the §20 release gates (a real CVSS *vector* and analyst
+review-approval are then required). A defense-in-depth DNS hardening gap carries no
+real CVSS vector (only a representative band score), so flooring it to ``high`` made
+every report with it un-finalizable on O-CVSS/O-REVIEW. ``medium`` keeps it
+appropriately elevated without asserting a high-impact band it cannot substantiate.
+The same tension applies to the CWE-693 security-header HIGH floor — left as-is
+pending an explicit product decision; if it should also finalize automatically it
+must either drop to ``medium`` or carry a real CVSS vector + analyst review.
 
 Pure module: stdlib only, no I/O, no logging. A single source of truth applied
 on BOTH the persist path (pipeline → DB) and the read path (public findings
@@ -73,7 +83,7 @@ _CWE_FLOORS: dict[str, SeverityBand] = {
 #: Title-signature → floor. First match wins. Used only when no CWE floor hit.
 _TITLE_FLOORS: tuple[tuple[Callable[[str], bool], SeverityBand], ...] = (
     (_sig_security_headers, SeverityBand.HIGH),
-    (_sig_dnssec, SeverityBand.HIGH),
+    (_sig_dnssec, SeverityBand.MEDIUM),
     (_sig_dkim, SeverityBand.MEDIUM),
 )
 

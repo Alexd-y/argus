@@ -27,9 +27,12 @@ class TestSeverityFloorBand:
         band = severity_floor_band("low", "CWE-16", "X-Frame-Options header missing")
         assert band is not None and band.value == "high"
 
-    def test_dnssec_not_enabled_raised_to_high(self):
+    def test_dnssec_not_enabled_raised_to_medium(self):
+        # DNSSEC-not-enabled is a defense-in-depth gap with no real CVSS vector;
+        # it is floored to MEDIUM (not HIGH) so it does not trip the §20 high/critical
+        # release gates (O-CVSS vector + O-REVIEW) that genuine high findings carry.
         band = severity_floor_band("low", "CWE-350", "DNSSEC not enabled — alleksy.com")
-        assert band is not None and band.value == "high"
+        assert band is not None and band.value == "medium"
 
     def test_dkim_not_detected_raised_to_medium(self):
         band = severity_floor_band("low", "CWE-16", "DKIM not detected — alleksy.com")
@@ -67,8 +70,8 @@ class TestResolveDisplaySeverity:
 
     def test_does_not_lower_existing_higher_cvss(self):
         severity, cvss = resolve_display_severity("low", "CWE-350", "DNSSEC not enabled", 8.5)
-        assert severity == "high"
-        assert cvss == 8.5  # already above the high midpoint — keep it
+        assert severity == "medium"
+        assert cvss == 8.5  # already above the medium midpoint — keep it
 
     def test_none_cvss_gets_representative(self):
         severity, cvss = resolve_display_severity("low", "CWE-16", "DKIM not detected", None)
@@ -113,8 +116,8 @@ class TestApplyFloorToDict:
         }
         apply_floor_to_dict(finding)
         apply_floor_to_dict(finding)
-        assert finding["severity"] == "high"
-        assert finding["cvss"] == 7.5
+        assert finding["severity"] == "medium"
+        assert finding["cvss"] == 5.5
 
     def test_non_dict_is_noop(self):
         apply_floor_to_dict(None)  # type: ignore[arg-type]
