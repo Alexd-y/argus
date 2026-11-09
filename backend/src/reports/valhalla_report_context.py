@@ -34,6 +34,11 @@ from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
 )
+from src.reports.auth_context_helpers import (
+    ANON_NOTE,
+    default_matrix_role,
+    derive_auth_scan_flags,
+)
 from src.reports.tls_parser_v2 import (
     WEAK_TLS_VERSIONS,
     _display_tls_version,
@@ -6129,13 +6134,11 @@ def _parse_auth_testing_context(
 ) -> AuthTestingContext:
     """Parse authenticated testing context from phase outputs and findings (Step 3)."""
     ctx = AuthTestingContext()
-    scan_opts = scan_options or {}
-    ctx.auth_testing_enabled = bool(scan_opts.get("auth_testing_enabled", False))
-    ctx.auth_credentials_provided = bool(scan_opts.get("auth_credentials_provided", False))
-    ctx.auth_method_used = str(scan_opts.get("auth_method", ""))[:128]
-    roles_tested = scan_opts.get("roles_tested", [])
-    if isinstance(roles_tested, list):
-        ctx.roles_tested = [str(r)[:128] for r in roles_tested if str(r).strip()][:16]
+    _af = derive_auth_scan_flags(scan_options or {})
+    ctx.auth_testing_enabled = _af["enabled"]
+    ctx.auth_credentials_provided = _af["creds_provided"]
+    ctx.auth_method_used = _af["method"]
+    ctx.roles_tested = _af["roles"]
     for _ph, od in phase_outputs:
         if not isinstance(od, dict):
             continue
@@ -6176,13 +6179,17 @@ def _parse_auth_testing_context(
     for f in auth_findings:
         if str(f.get("severity", "")).lower() in ("critical", "high"):
             ctx.auth_bypass_attempts += 1
+    # The role the scanner ACTUALLY operated as — honest and definitive, never "unknown".
+    authenticated = ctx.auth_credentials_provided or ctx.auth_testing_enabled
+    default_role = default_matrix_role(authenticated, ctx.auth_method_used)
     matrix_rows: list[AuthMatrixRow] = []
     for f in auth_findings:
-        role = (
-            str(f.get("auth_state", {}).get("role", "unknown"))[:128]
-            if isinstance(f.get("auth_state"), dict)
-            else "unknown"
-        )
+        role = default_role
+        auth_state = f.get("auth_state")
+        if isinstance(auth_state, dict):
+            explicit_role = str(auth_state.get("role") or "").strip()
+            if explicit_role:
+                role = explicit_role[:128]
         resource = str(f.get("target_url", f.get("title", "")))[:256]
         access = "not_tested"
         sev = str(f.get("severity", "")).lower()
@@ -6208,6 +6215,8 @@ def _parse_auth_testing_context(
             )
         )
     ctx.auth_matrix = matrix_rows[:64]
+    if not authenticated and not ctx.notes:
+        ctx.notes = ANON_NOTE
     return ctx
 
 

@@ -375,7 +375,8 @@
         </tbody>
     </table>
     {% else %}
-    <p class="empty">No dark-web exposure collected ({{ dwm.get('status', 'not_collected') }}).</p>
+    {% set _dwm_status = dwm.get('status', 'not_collected') %}
+    <p class="empty">{% if _dwm_status in ("not_collected", "disabled", "", none) %}Dark-web monitoring did not run for this scan, so no exposure data was collected. Enable Dark Web Monitoring (scan option dark_web.enabled) with HIBP_API_KEY configured to breach-check discovered domain emails.{% else %}No dark-web exposure was found ({{ _dwm_status | e }}).{% endif %}</p>
     {% endif %}
 
     {# ARG-044 — KEV-listed findings (CISA Known Exploited Vulnerabilities). #}

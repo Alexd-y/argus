@@ -76,7 +76,8 @@
             <tbody>
                 <tr><th scope="row">Sample values checked (API responses)</th><td>{{ hbe.checks_run | default(0) | int }}</td></tr>
                 <tr><th scope="row">Matches in Pwned Passwords corpus</th><td>{{ hbe.pwned_count | default(0) | int }}</td></tr>
-                <tr><th scope="row">Exposure signal</th><td>{{ hbe.data_breach_password_exposure | default("—") | e }}</td></tr>
+                {% set _hbe_sig = hbe.data_breach_password_exposure %}
+                <tr><th scope="row">Exposure signal</th><td>{% if _hbe_sig == "yes" %}Exposed — a sampled credential matched the Pwned Passwords corpus{% elif _hbe_sig == "no" %}No match in the Pwned Passwords corpus{% elif _hbe_sig in ("unknown", "", none) %}Not determined — no credential material was available to check (see note below){% else %}{{ _hbe_sig | e }}{% endif %}</td></tr>
             </tbody>
         </table>
         {% if hbe.breach_signal_note %}

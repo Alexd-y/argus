@@ -233,7 +233,8 @@
             <tbody>
                 <tr><th scope="row">Sample values checked (k-anonymity API)</th><td>{{ hp.checks_run | default(0) | int }}</td></tr>
                 <tr><th scope="row">Matches in Pwned Passwords corpus</th><td>{{ hp.pwned_count | default(0) | int }}</td></tr>
-            <tr><th scope="row">Password exposure signal</th><td>{{ hp.data_breach_password_exposure | default("—") | e }}</td></tr>
+            {% set _sig = hp.data_breach_password_exposure %}
+            <tr><th scope="row">Password exposure signal</th><td>{% if _sig == "yes" %}Exposed — a sampled credential matched the Pwned Passwords corpus{% elif _sig == "no" %}No match in the Pwned Passwords corpus{% elif _sig in ("unknown", "", none) %}Not determined — no credential material was available to check (see note below){% else %}{{ _sig | e }}{% endif %}</td></tr>
             </tbody>
         </table>
         {% if hp.breach_signal_note %}
