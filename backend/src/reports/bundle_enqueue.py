@@ -268,31 +268,33 @@ async def enqueue_generate_all_bundle(
     report_ids: list[str] = []
     meta_extra = "post_scan_complete" if set_post_scan_idempotency_flag else None
     for tier in report_tiers_for_scan(scan):
-        # Valhalla is pinned to its four-format contract (one report per format);
+        # ONE report row per tier, carrying ALL its formats in requested_formats —
+        # the pipeline renders every requested format from a single row, so a scan
+        # ends with exactly one report_id per tier instead of one per (tier×format).
+        # Valhalla is pinned to its four-format contract (json/pdf/xml/html);
         # dict.fromkeys dedups while preserving order for the other tiers.
         tier_formats = (
             list(VALHALLA_REPORT_FORMATS) if tier == "valhalla" else list(dict.fromkeys(formats))
         )
-        for fmt in tier_formats:
-            rid = str(uuid.uuid4())
-            report_ids.append(rid)
-            md: dict[str, Any] = {"bundle_id": bundle_id, "generate_all": True}
-            if meta_extra:
-                md["source"] = meta_extra
-            session.add(
-                ReportModel(
-                    id=rid,
-                    tenant_id=tenant_id,
-                    scan_id=scan_id,
-                    target=scan.target_url,
-                    tier=tier,
-                    generation_status="pending",
-                    requested_formats=[fmt],
-                    summary={},
-                    technologies=None,
-                    report_metadata=md,
-                )
+        rid = str(uuid.uuid4())
+        report_ids.append(rid)
+        md: dict[str, Any] = {"bundle_id": bundle_id, "generate_all": True}
+        if meta_extra:
+            md["source"] = meta_extra
+        session.add(
+            ReportModel(
+                id=rid,
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                target=scan.target_url,
+                tier=tier,
+                generation_status="pending",
+                requested_formats=tier_formats,
+                summary={},
+                technologies=None,
+                report_metadata=md,
             )
+        )
     return bundle_id, report_ids
 
 

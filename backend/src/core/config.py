@@ -403,6 +403,23 @@ class Settings(BaseSettings):
             "valhalla_legacy_pdf",
         ),
     )
+    # valhalla_single_artifact_per_format — ship EXACTLY ONE file per format for the
+    # Valhalla tier (json/xml/html/pdf), rendered with the user-facing "secreport"
+    # Jinja design (valhalla_secreport_base.html.j2). The canonical ReportDocumentV1
+    # snapshot stays the provability record but is kept IN-MEMORY only: the release
+    # gate, content parity and the verification kit are all computed in-memory, so
+    # provability is unaffected while the duplicate ``canonical_<fmt>`` and
+    # ``valhalla_llm_<fmt>`` objects are no longer persisted (the verification kit +
+    # llm manifest are still stored). The Jinja PDF becomes the single Valhalla PDF.
+    # Default True — a scan then yields one json/xml/html/pdf each, not three
+    # divergent variants. Set False to restore the canonical_* / valhalla_llm_* set.
+    valhalla_single_artifact_per_format: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_VALHALLA_SINGLE_ARTIFACT_PER_FORMAT",
+            "valhalla_single_artifact_per_format",
+        ),
+    )
     # valhalla_senior_poc_gate_enabled — §15.2 per-class confirmation bar. When on, a
     # provable finding whose PoC does not meet its class rule (e.g. XSS reflection
     # without browser execution, SQLi timing without a boolean/error control) is

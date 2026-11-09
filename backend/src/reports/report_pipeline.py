@@ -873,6 +873,9 @@ async def _rgp_valhalla_llm_remediation(
                 assert_canonical_parity(merged_artifacts)
                 for artifact in merged_artifacts:
                     canon_fmt = f"canonical_{artifact.format}"
+                    # Single-artifact mode: in-memory parity + gate only; ship only Jinja.
+                    if settings.valhalla_single_artifact_per_format:
+                        continue
                     canon_key = upload(
                         tenant_id,
                         scan_id,
@@ -966,6 +969,9 @@ async def _rgp_valhalla_llm_remediation(
                     assert_canonical_parity(degraded_artifacts)
                     for artifact in degraded_artifacts:
                         canon_fmt = f"canonical_{artifact.format}"
+                        # Single-artifact mode: in-memory parity only; ship only Jinja.
+                        if settings.valhalla_single_artifact_per_format:
+                            continue
                         canon_key = upload(
                             tenant_id,
                             scan_id,
@@ -998,6 +1004,11 @@ async def _rgp_valhalla_llm_remediation(
                     )
             for vfmt, artifact in vrelease.artifacts.items():
                 llm_fmt = f"valhalla_llm_{vfmt}"
+                # Single-artifact mode: the LLM remediation/closure is already merged
+                # into the canonical snapshot and recorded via the verification kit +
+                # llm manifest; do NOT persist the standalone valhalla_llm_<fmt> duplicate.
+                if settings.valhalla_single_artifact_per_format:
+                    continue
                 llm_key = upload(
                     tenant_id,
                     scan_id,
@@ -1141,6 +1152,11 @@ async def _rgp_canonical_snapshot(
             assert_canonical_parity(artifacts)
             for artifact in artifacts:
                 canon_fmt = f"canonical_{artifact.format}"
+                # Single-artifact mode (valhalla): the parity check above validated the
+                # bundle in-memory; the gate re-renders canonical itself, so do NOT
+                # persist the duplicate canonical_<fmt> object — ship only the Jinja design.
+                if tier_str == "valhalla" and settings.valhalla_single_artifact_per_format:
+                    continue
                 canon_key = upload(
                     tenant_id,
                     scan_id,
@@ -1237,9 +1253,13 @@ async def _rgp_generate_formats(
             # only skipped when a canonical PDF will actually be produced.
             if (
                 tier_str == "valhalla"
+                and not settings.valhalla_single_artifact_per_format
                 and not settings.valhalla_legacy_pdf
                 and settings.canonical_report_snapshot_enabled
             ):
+                # Legacy: the canonical bundle emits the single Valhalla PDF. In
+                # single-artifact mode the Jinja "secreport" PDF IS the single
+                # Valhalla PDF, so it is NOT skipped here.
                 continue
             content = generate_pdf(
                 report_data,

@@ -468,14 +468,15 @@ def test_normalize_generation_formats_requested_formats_string_scalar() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_generate_all_bundle_creates_twelve_rows() -> None:
-    """OWASP-006: 3 tiers × 4 formats = 12 Report rows (same as generate-all API default)."""
+async def test_enqueue_generate_all_bundle_creates_one_row_per_tier() -> None:
+    """ONE Report row per tier (3 rows), each carrying ALL its formats — the pipeline
+    renders every requested format from a single row, so a scan ends with exactly one
+    report_id per tier instead of one per (tier×format)."""
     from src.reports.bundle_enqueue import (
         GENERATE_ALL_REPORT_TIERS,
+        VALHALLA_REPORT_FORMATS,
         enqueue_generate_all_bundle,
     )
-
-    assert len(GENERATE_ALL_REPORT_TIERS) * len(DEFAULT_GENERATE_ALL_API) == 12
 
     tenant_id = "00000000-0000-0000-0000-000000000001"
     scan_id = str(uuid.uuid4())
@@ -490,22 +491,20 @@ async def test_enqueue_generate_all_bundle_creates_twelve_rows() -> None:
         )
     assert out is not None
     _bundle_id, rids = out
-    assert len(rids) == 12
-    assert len(added) == 12
-    assert {row.tier for row in added} == {"midgard", "asgard", "valhalla"}
-    assert all(len(row.requested_formats or []) == 1 for row in added)
+    assert len(rids) == len(GENERATE_ALL_REPORT_TIERS)  # one report_id per tier
+    assert len(added) == len(GENERATE_ALL_REPORT_TIERS)
+    by_tier = {row.tier: row for row in added}
+    assert set(by_tier) == {"midgard", "asgard", "valhalla"}
+    # Valhalla is pinned to its four-format contract; others carry the requested set.
+    assert tuple(by_tier["valhalla"].requested_formats or []) == VALHALLA_REPORT_FORMATS
+    assert list(by_tier["midgard"].requested_formats or []) == list(DEFAULT_GENERATE_ALL_API)
+    # One object key per (report_id × format); all distinct and well-formed.
     object_keys = [
-        build_report_object_key(
-            tenant_id,
-            scan_id,
-            row.tier,
-            row.id,
-            (row.requested_formats or ["json"])[0],
-        )
+        build_report_object_key(tenant_id, scan_id, row.tier, row.id, fmt)
         for row in added
+        for fmt in (row.requested_formats or ["json"])
     ]
-    assert len(object_keys) == 12
-    assert len(set(object_keys)) == 12
+    assert len(set(object_keys)) == len(object_keys)
     for key in object_keys:
         assert key.startswith(f"{tenant_id}/{scan_id}/reports/")
         segs = key.split("/")
