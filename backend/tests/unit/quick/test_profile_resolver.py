@@ -38,12 +38,12 @@ def _tenant(**overrides) -> TenantQuickLimits:
 @pytest.mark.parametrize(
     ("profile", "wall_clock", "ai_budget", "reserve_percent"),
     [
-        (QuickProfileName.COMPACT, 300, 30, 15),
-        (QuickProfileName.BALANCED, 900, 90, 20),
-        (QuickProfileName.EXTENDED, 1800, 180, 25),
-        ("compact", 300, 30, 15),
-        ("balanced", 900, 90, 20),
-        ("extended", 1800, 180, 25),
+        (QuickProfileName.COMPACT, 3600, 30, 15),
+        (QuickProfileName.BALANCED, 7200, 90, 20),
+        (QuickProfileName.EXTENDED, 10800, 180, 25),
+        ("compact", 3600, 30, 15),
+        ("balanced", 7200, 90, 20),
+        ("extended", 10800, 180, 25),
     ],
 )
 def test_compact_balanced_extended_wall_clock_defaults(
