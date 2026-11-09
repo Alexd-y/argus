@@ -625,14 +625,81 @@
                 white-space: pre-wrap;
             }
         }
+
+        /* ---- Shared tier components (Midgard / Asgard panels reuse these) ---- */
+        .cover { background: linear-gradient(180deg, var(--surface) 0%, var(--surface3) 100%); border: 1px solid var(--border); border-radius: 10px; padding: 26px 26px 22px; margin: 0 0 18px; }
+        .cover .kicker { color: var(--accent); letter-spacing: 0.22em; text-transform: uppercase; font-size: 11px; }
+        .cover .title { font-family: var(--font-head); font-size: 28px; font-weight: 800; margin: 0.35rem 0 0.1rem; color: var(--text); }
+        .cover .target { font-size: 15px; color: var(--text-muted); }
+        .cover .target b { color: var(--low); }
+        .badges { margin: 14px 0 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 0.28rem 0.7rem; border-radius: 5px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--border2); }
+        .badge.tier { background: rgba(0, 255, 157, 0.08); border-color: rgba(0, 255, 157, 0.4); color: var(--accent); }
+        .badge.free { background: rgba(0, 200, 255, 0.08); border-color: rgba(0, 200, 255, 0.4); color: var(--low); }
+        .badge.paid { background: rgba(255, 215, 0, 0.08); border-color: rgba(255, 215, 0, 0.4); color: var(--accent3); }
+        .tagline { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px 14px; color: var(--text-muted); font-size: 12.5px; }
+        .tagline b { color: var(--text); }
+        .scanmeta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 16px; }
+        .scanmeta div { background: var(--surface); padding: 10px 14px; }
+        .scanmeta .l { color: var(--text-dim); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+        .scanmeta .v { color: var(--text); font-size: 13px; margin-top: 2px; }
+        .sev-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 0.4rem 0 0; }
+        .sev-tile { background: var(--surface2); border: 1px solid var(--border); border-top: 3px solid var(--border2); border-radius: 8px; padding: 14px 12px; text-align: center; }
+        .sev-tile .n { font-family: var(--font-head); font-size: 30px; font-weight: 800; line-height: 1; }
+        .sev-tile .lbl { margin-top: 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+        .sev-tile.crit { border-top-color: var(--crit); } .sev-tile.crit .n { color: var(--crit); }
+        .sev-tile.high { border-top-color: var(--high); } .sev-tile.high .n { color: var(--high); }
+        .sev-tile.med { border-top-color: var(--med); } .sev-tile.med .n { color: var(--med); }
+        .sev-tile.low { border-top-color: var(--low); } .sev-tile.low .n { color: var(--low); }
+        .sev-tile.info { border-top-color: var(--info); } .sev-tile.info .n { color: var(--info); }
+        .intel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+        .card h3 { margin-top: 0; }
+        .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; font-size: 12px; }
+        .kv .k { color: var(--text-dim); }
+        .kv .v { color: var(--text); word-break: break-word; }
+        .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 20px; font-size: 10.5px; letter-spacing: 0.04em; border: 1px solid var(--border2); margin: 2px 4px 2px 0; color: var(--text-muted); }
+        .lead { margin-top: -0.3rem; }
+        .sublist { margin: 0.2rem 0 0; padding-left: 1.1rem; color: var(--text); columns: 2; font-size: 11.5px; }
+        .sev-dot { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+        .d-crit { background: rgba(255, 62, 108, 0.14); color: var(--crit); }
+        .d-high { background: rgba(255, 107, 43, 0.14); color: var(--high); }
+        .d-med { background: rgba(255, 215, 0, 0.14); color: var(--med); }
+        .d-low { background: rgba(0, 200, 255, 0.14); color: var(--low); }
+        .d-info { background: rgba(160, 168, 184, 0.14); color: var(--info); }
+        .writeup { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--low); border-radius: 8px; padding: 16px 18px; margin-top: 10px; }
+        .writeup .wh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .writeup .wt { font-family: var(--font-head); font-size: 16px; font-weight: 700; color: var(--text); margin: 0; }
+        .writeup .sample-tag { margin-left: auto; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(0, 255, 157, 0.4); border-radius: 5px; padding: 0.2rem 0.5rem; }
+        .writeup .metaline { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text-dim); font-size: 11px; margin: 8px 0 14px; }
+        .writeup .metaline b { color: var(--text-muted); font-weight: 600; }
+        .blk { margin: 12px 0; }
+        .blk .lbl { font-family: var(--font-head); font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+        .evidence { background: #06070a; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; color: #cfd3dd; font-size: 11.5px; white-space: pre-wrap; word-break: break-word; }
+        .upsell { background: linear-gradient(135deg, rgba(0, 255, 157, 0.06), rgba(0, 200, 255, 0.05)); border: 1px dashed var(--border2); border-radius: 8px; padding: 16px 18px; margin-top: 12px; }
+        .upsell .lbl { color: var(--accent); font-family: var(--font-head); letter-spacing: 0.1em; text-transform: uppercase; font-size: 11px; }
+        .upsell ul { margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--text-muted); }
+        .upsell li b { color: var(--text); }
+        .ok { color: var(--accent); } .bad { color: var(--accent2); }
+        .finding { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--border2); border-radius: 8px; padding: 16px 18px; margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
+        .finding.crit { border-left-color: var(--crit); } .finding.high { border-left-color: var(--high); }
+        .finding.med { border-left-color: var(--med); } .finding.low { border-left-color: var(--low); } .finding.info { border-left-color: var(--info); }
+        .finding .fh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .finding .ft { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: 0; text-transform: none; }
+        .finding .fid { margin-left: auto; font-size: 10px; color: var(--text-dim); }
+        .metaline { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-dim); font-size: 11px; margin: 8px 0 12px; }
+        .metaline b { color: var(--text-muted); font-weight: 600; }
+        ol.fix { margin: 0.2rem 0 0; padding-left: 1.15rem; } ol.fix li { margin: 0.22rem 0; }
+        .footnote { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent3); border-radius: 6px; padding: 12px 14px; color: var(--text-muted); font-size: 12px; margin-top: 14px; }
+        .footnote b { color: var(--text); }
     </style>
 </head>
 <body>
 <div id="app" class="valhalla-secreport">
     <header class="app-header">
         <h1>Svalbard Security Inc. <span>Security Report</span></h1>
-        {% set header_title = (valhalla_context.valhalla_engagement_title if valhalla_context is defined and valhalla_context.valhalla_engagement_title is defined and valhalla_context.valhalla_engagement_title else (report_quality.report_mode_label if report_quality is defined and report_quality.report_mode_label is defined and report_quality.report_mode_label else "Valhalla Security Assessment")) %}
-        <div class="subtitle">{{ header_title | e }}</div>
+        {% set header_title = (valhalla_context.valhalla_engagement_title if valhalla_context is defined and valhalla_context.valhalla_engagement_title is defined and valhalla_context.valhalla_engagement_title else (report_quality.report_mode_label if report_quality is defined and report_quality.report_mode_label is defined and report_quality.report_mode_label else ((tier | default("valhalla") | capitalize) ~ " Security Assessment"))) %}
+        <div class="subtitle">{% block header_subtitle %}{{ header_title | e }}{% endblock %}</div>
         <div class="header-meta">
             <span class="tier-badge">{{ tier | default("valhalla") }}</span>
             <span>{{ (report_quality.coverage_label | capitalize) if report_quality is defined and report_quality.coverage_label is defined else "Evidence-bound" }} coverage</span>
@@ -642,6 +709,7 @@
 
     <div class="main-container">
         <nav id="sidebar" aria-label="Report sections">
+            {% block sidebar %}
             <div class="nav-section-label">Report</div>
             <a class="nav-item" href="#valhalla-title"><span class="nav-num">01</span>Title</a>
             <a class="nav-item" href="#executive-summary"><span class="nav-num">02</span>Executive Summary</a>
@@ -660,12 +728,13 @@
             <div class="nav-section-label">Back matter</div>
             <a class="nav-item" href="#valhalla-executive-report"><span class="nav-num">14</span>Business Lens</a>
             <a class="nav-item" href="#evidence-inventory"><span class="nav-num">15</span>Evidence</a>
+            {% endblock %}
         </nav>
 
         <main id="form-area" class="report-area rpt-body">
             {% set tier_hint = tier_stubs.get(tier) if tier_stubs is defined else none %}
             <div class="report-kicker">
-                <strong>{{ target_label }}</strong>
+                <strong>{{ target_label | default(target, true) | default("—", true) }}</strong>
                 {% if tier_hint %}
                     <span> / {{ tier_hint.label }} ({{ tier_hint.focus }})</span>
                 {% endif %}
@@ -675,8 +744,8 @@
     </div>
 
     <footer class="rpt-footer">
-        <span>Svalbard Security Inc. Valhalla</span>
-        <span>{{ scan_label }}</span>
+        <span>Svalbard Security Inc. {{ tier | default("valhalla") | capitalize }}</span>
+        <span>{{ scan_label | default(scan_id, true) | default("—", true) }}</span>
     </footer>
 </div>
 </body>
