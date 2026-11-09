@@ -9,12 +9,25 @@ conflated not-offered entries into the offered/weak lists). The report then show
 
 from __future__ import annotations
 
+from src.reports.tls_parser_v2 import clean_hsts_display
 from src.reports.valhalla_report_context import (
     SslTlsAnalysisModel,
     _ssl_from_testssl_json,
     _tls_version_cell,
     build_ssl_tls_table_rows,
 )
+
+
+def test_clean_hsts_strips_testssl_brace_artifact() -> None:
+    # Regression: the HSTS cell rendered the garbage "not offered,{" from testssl's
+    # stray brace/column formatting.
+    assert clean_hsts_display("not offered,{") == "not offered"
+    assert clean_hsts_display("not offered") == "not offered"
+    assert clean_hsts_display("") == "—"
+    assert clean_hsts_display(None) == "—"
+    assert clean_hsts_display("max-age=63072000; includeSubDomains") == (
+        "max-age=63072000; includeSubDomains"
+    )
 
 # testssl.sh --jsonfile-pretty scanResult for a hardened Vercel/Let's Encrypt host:
 # only TLS 1.2 / 1.3 are offered; the legacy versions are explicitly "not offered".

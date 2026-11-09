@@ -43,6 +43,7 @@ from src.reports.tls_parser_v2 import (
     WEAK_TLS_VERSIONS,
     _display_tls_version,
     canon_tls_version,
+    clean_hsts_display,
     parse_testssl_cert_fields,
     reconcile_tls_protocols,
     tls_version_cell as _tls_version_cell,
@@ -4670,7 +4671,7 @@ def build_ssl_tls_table_rows(
                     na = str(c.get("validity_not_after") or "").strip()
                     dates = f"{nb} — {na}" if nb and na else (na or nb or "—")
                     iss = str(c.get("issuer") or "").strip() or "—"
-                    hsts_v = (ssl_out.hsts or "—")[:500]
+                    hsts_v = clean_hsts_display(ssl_out.hsts)
                     rows_out.append(
                         SslTlsTableRowModel(
                             domain=_truncate(str(host), 512),
@@ -4703,7 +4704,7 @@ def build_ssl_tls_table_rows(
                 tls_1_2=_tls_version_cell(proto_lines, "1.2", not_offered),
                 tls_1_3=_tls_version_cell(proto_lines, "1.3", not_offered),
                 weak_ciphers=weak_joined,
-                hsts=(ssl_out.hsts or "—")[:500],
+                hsts=clean_hsts_display(ssl_out.hsts),
                 chain_issues="not evaluated by parser",
                 evidence_id=f"EV-SSL-{n:04d}",
             )

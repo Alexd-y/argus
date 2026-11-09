@@ -45,6 +45,19 @@ def _display_tls_version(canon: str) -> str:
     return canon
 
 
+def clean_hsts_display(value: Any) -> str:
+    """Presentation-safe HSTS cell: strip testssl's stray trailing ``,{`` / brace
+    artifacts and normalise a negative result to a clean ``"not offered"`` (never
+    the garbage ``"not offered,{"``). Empty -> ``"—"``."""
+    s = re.sub(r"[\s,{}]+$", "", str(value or "").strip())
+    if not s:
+        return "—"
+    low = s.lower()
+    if "not offered" in low or "not present" in low or "not supported" in low or low in ("no", "none"):
+        return "not offered"
+    return s[:500]
+
+
 def tls_version_cell(
     proto_blobs: list[str],
     version: str,
