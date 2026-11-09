@@ -172,7 +172,7 @@
                     <td>{{ row.latest_stable or "—" }}</td>
                     <td>{% if row.cves %}{{ row.cves | join(", ") | e }}{% else %}—{% endif %}</td>
                     <td>{{ row.cvss_max_score if row.cvss_max_score is not none else "—" }}</td>
-                    <td>{{ (row.eol_status or "—") | e }}</td>
+                    <td>{% if row.eol_status and row.eol_status != "unknown" %}{{ row.eol_status | e }}{% else %}—{% endif %}</td>
                     <td>{{ (row.upgrade_effort or "medium") | e }}</td>
                     <td>{{ (row.package_manager or "—") | e }}</td>
                     <td>{{ row.support_status or "—" }}</td>

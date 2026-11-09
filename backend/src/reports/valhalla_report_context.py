@@ -4890,11 +4890,11 @@ def build_remediation_matrix_rows(
         verification = "Re-test after fix applied"
         test_case = "Verify finding is no longer reproducible"
         owner = "Development team"
-        layer = "app/unknown"
-        component = "Unknown component"
+        layer = str(f.get("affected_layer") or "—")
+        component = "—"
         rollback = "Assess before deployment"
         acceptance = "Finding no longer reproducible under same conditions"
-        dependencies = "None"
+        dependencies = "—"
         business_impact = str(
             f.get("business_impact", f.get("impact", "Potential security compromise"))
         )[:200]

@@ -42,21 +42,21 @@
                 <td><code>{{ entry.finding_id | default(entry.id or "") | e }}</code></td>
                 <td>{{ entry.title | e }}</td>
                 <td>{{ entry.severity | e }}</td>
-                <td>{{ entry.cvss_score | default(entry.cvss or "") | e }}</td>
+                <td>{% if entry.cvss_score is not none %}{{ entry.cvss_score | e }}{% elif entry.cvss is not none %}{{ entry.cvss | e }}{% else %}—{% endif %}</td>
                 <td>{{ entry.priority | e }}</td>
                 <td>{{ entry.deadline | e }}</td>
                 <td>{{ entry.effort | e }}</td>
-                <td>{{ entry.estimated_hours | default("—") | e }}</td>
+                <td>{{ entry.estimated_hours | default("—", true) | e }}</td>
                 <td>{{ entry.affected_layer | e }}</td>
                 <td>{{ entry.owner_team | default(entry.owner or "") | e }}</td>
                 <td>{{ entry.config_component | default(entry.component or "") | e }}</td>
                 <td>{{ entry.fix_action | default(entry.fix or "") | e }}</td>
                 <td>{{ entry.rollback_risk | e }}</td>
                 <td>{{ entry.verification_step | default(entry.verification or "") | e }}</td>
-                <td>{{ entry.test_case | default("—") | e }}</td>
-                <td>{{ entry.acceptance_criteria | e }}</td>
-                <td>{{ entry.dependencies | default("—") | e }}</td>
-                <td>{{ entry.business_impact | default("—") | e }}</td>
+                <td>{{ entry.test_case | default("—", true) | e }}</td>
+                <td>{{ (entry.acceptance_criteria or "—") | e }}</td>
+                <td>{{ entry.dependencies | default("—", true) | e }}</td>
+                <td>{{ entry.business_impact | default("—", true) | e }}</td>
             </tr>
             {% endfor %}
         </tbody>
