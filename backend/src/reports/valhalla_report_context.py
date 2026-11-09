@@ -1674,7 +1674,7 @@ def build_evidence_inventory_rows(
         if ssl_tls.protocols:
             sm_parts.append("TLS protocols observed: " + ", ".join(ssl_tls.protocols[:4]))
         if ssl_tls.hsts:
-            sm_parts.append(f"HSTS: {ssl_tls.hsts}")
+            sm_parts.append(f"HSTS: {clean_hsts_display(ssl_tls.hsts)}")
         sm = "; ".join(sm_parts)
         rows.append(
             EvidenceInventoryRowModel(
