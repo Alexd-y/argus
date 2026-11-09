@@ -837,23 +837,24 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
+    # vhq018: hardening prompt stops emitting bracketed placeholder tokens ([Layer]/[Config/file]/[specific value]).
     # vhq017: + anti-stub system rule (no 'pending'/'TODO'/'TBD' placeholder words).
     # vhq016: effort tags moved out of square brackets (prose_gate no longer trips
     # on the legitimate "[Quick Fix]"/"[Moderate]"/"[Complex Refactor]" tag). Bumped
     # so cached prose produced by the old bracketed prompt is regenerated.
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq017-20261104",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq017-20261104",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq017-20261104",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq017-20261104",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq017-20261104",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq017-20261104",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq017-20261104",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq017-20261104",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq017-20261104",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq017-20261104",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq017-20261104",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq017-20261104",
-    REPORT_AI_SECTION_COST_SUMMARY: "vhq017-20261104",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq018-20261104",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq018-20261104",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq018-20261104",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq018-20261104",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq018-20261104",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq018-20261104",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq018-20261104",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq018-20261104",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq018-20261104",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq018-20261104",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq018-20261104",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq018-20261104",
+    REPORT_AI_SECTION_COST_SUMMARY: "vhq018-20261104",
 }
 
 REPORT_AI_SYSTEM = (
@@ -1138,9 +1139,12 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "\n\nSTRICT RULES:\n"
         "1. For EVERY recommendation, specify: EXACT config file/path, EXACT parameter, ROLLBACK command, "
         "VERIFICATION command, and ACCEPTANCE CRITERIA.\n"
-        "2. Format: [Layer] [Config/file] → Change: [specific value] → Verify: [curl command]\n"
-        "3. Example: '[CloudFront] Distribution E2ABCXYZ → Response Headers Policy → Add header: "
-        "Content-Security-Policy: default-src … → Verify: curl -sSI https://target | grep CSP'\n"
+        "2. Write each recommendation as plain text in the form: "
+        "<layer> <config file/path> -> Change: <exact value> -> Verify: <command>. "
+        "Use concrete real values, NEVER bracketed placeholder tokens like [Layer], "
+        "[Config/file], [specific value] or [curl command].\n"
+        "3. Example: 'CloudFront distribution E2ABCXYZ -> Response Headers Policy -> Add header: "
+        "Content-Security-Policy: default-src ... -> Verify: curl -sSI https://target | grep CSP'\n"
         "4. NEVER write 'Review and remediate' or 'Apply security best practices' without a specific "
         "configuration directive.\n"
         "5. Match recommendations to tech_stack_structured: if web_server = 'CloudFront', write "
