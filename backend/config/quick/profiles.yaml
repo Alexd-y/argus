@@ -7,10 +7,10 @@ schema_version: 1
 
 profiles:
   compact:
-    # Raised 300 -> 3600 (1h): on a GPU-less host even the lightest quick pass
-    # needs more than 5 minutes to finish recon+report without hitting the
-    # deadline. Deployment can clamp lower via QUICK_COMPACT_WALL_CLOCK_SECONDS.
-    wall_clock_budget_seconds: 3600
+    # Raised to 7200 (2h): on a GPU-less host even the lightest quick pass needs
+    # well over a few minutes to finish recon+report without hitting the deadline.
+    # Deployment can clamp lower via QUICK_COMPACT_WALL_CLOCK_SECONDS.
+    wall_clock_budget_seconds: 7200
     ai_budget_seconds: 30
     reserve_for_validation_percent: 15
     max_targets: 25
@@ -31,12 +31,11 @@ profiles:
       verification: 20
       report: 15
   balanced:
-    # Raised 900 -> 7200 (2h): the free/Overview tier maps to the balanced quick
-    # profile, and on a GPU-less host a full recon+phases+report pass does not fit
-    # the old 15-minute budget, so the scan hit its deadline and failed. The
-    # sub-phase budgets derive proportionally from this wall clock. Deployment can
-    # still clamp lower via QUICK_BALANCED_WALL_CLOCK_SECONDS.
-    wall_clock_budget_seconds: 7200
+    # Raised to 14400 (4h): the free/Overview tier maps to the balanced quick
+    # profile, and on a GPU-less host a full recon+phases+report pass needs hours.
+    # The sub-phase budgets derive proportionally from this wall clock. Deployment
+    # can still clamp lower via QUICK_BALANCED_WALL_CLOCK_SECONDS.
+    wall_clock_budget_seconds: 14400
     ai_budget_seconds: 90
     reserve_for_validation_percent: 20
     max_targets: 100
@@ -57,10 +56,10 @@ profiles:
       verification: 20
       report: 15
   extended:
-    # Raised 1800 -> 10800 (3h): the deepest quick profile must run a full
+    # Raised to 36000 (10h): the deepest quick profile must run a full
     # recon+phases+report pass to completion on a GPU-less host. Deployment can
     # clamp lower via QUICK_EXTENDED_WALL_CLOCK_SECONDS.
-    wall_clock_budget_seconds: 10800
+    wall_clock_budget_seconds: 36000
     ai_budget_seconds: 180
     reserve_for_validation_percent: 25
     max_targets: 250

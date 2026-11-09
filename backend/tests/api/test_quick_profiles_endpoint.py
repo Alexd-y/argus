@@ -90,9 +90,9 @@ def test_list_quick_profiles_returns_three_named_budgets() -> None:
     names = [item["name"] for item in body["profiles"]]
     assert names == ["compact", "balanced", "extended"]
     by_name = {item["name"]: item for item in body["profiles"]}
-    assert by_name["compact"]["wall_clock_budget_seconds"] == 3600
-    assert by_name["balanced"]["wall_clock_budget_seconds"] == 7200
-    assert by_name["extended"]["wall_clock_budget_seconds"] == 10800
+    assert by_name["compact"]["wall_clock_budget_seconds"] == 7200
+    assert by_name["balanced"]["wall_clock_budget_seconds"] == 14400
+    assert by_name["extended"]["wall_clock_budget_seconds"] == 36000
     for item in body["profiles"]:
         for field in _CATALOG_FIELDS:
             assert field in item, f"missing catalog field {field}"
