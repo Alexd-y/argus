@@ -34,7 +34,14 @@ from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
 )
-from src.reports.tls_parser_v2 import parse_testssl_cert_fields, reconcile_tls_protocols
+from src.reports.tls_parser_v2 import (
+    WEAK_TLS_VERSIONS,
+    _display_tls_version,
+    canon_tls_version,
+    parse_testssl_cert_fields,
+    reconcile_tls_protocols,
+    tls_version_cell as _tls_version_cell,
+)
 from src.reports.valhalla_sections._common import _finding_id_for_risk, _truncate
 from src.reports.valhalla_sections.branding import (  # noqa: F401 — re-export
     BRAND_NAME,
@@ -243,6 +250,11 @@ class SslTlsAnalysisModel(BaseModel):
     chain_length: int = 0
     protocols: list[str] = Field(default_factory=list)
     weak_protocols: list[str] = Field(default_factory=list)
+    #: Canonical lower-case protocol labels testssl explicitly reported "not
+    #: offered" (e.g. ``"tls 1.0"``, ``"sslv3"``). These are authoritative
+    #: NEGATIVES from a real probe — they let the SSL/TLS table render a
+    #: definitive "no" (disabled = good) instead of an indeterminate "unknown".
+    not_offered: list[str] = Field(default_factory=list)
     cipher_suites: list[str] = Field(default_factory=list)
     weak_ciphers: list[str] = Field(default_factory=list)
     hsts: str | None = None
@@ -2592,6 +2604,7 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
     protocols: list[str] = []
     weak: list[str] = []
     weak_proto: list[str] = []
+    not_offered_canon: list[str] = []
     hsts: str | None = None
     issuer: str | None = None
     scan_result = blob.get("scanResult")
@@ -2608,26 +2621,24 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
                 hsts = _truncate(finding, 500)
             if "issuer" in fid or "certificate issuer" in low:
                 issuer = issuer or _truncate(finding, 512)
+            # Protocol-version entries: testssl emits id=SSLv2/SSLv3/TLS1/TLS1_1/
+            # TLS1_2/TLS1_3 with finding "offered" / "not offered". Classify into
+            # authoritative offered vs. not-offered (the latter is a GOOD negative
+            # from a real probe — never a weakness). ``TLS1`` means TLS 1.0.
+            proto_canon = canon_tls_version(fid.replace("_", "."))
+            if proto_canon and "offer" in low:
+                if "not offer" in low:
+                    if proto_canon not in not_offered_canon:
+                        not_offered_canon.append(proto_canon)
+                else:
+                    label = _display_tls_version(proto_canon)
+                    if label not in protocols:
+                        protocols.append(label)
+                    if proto_canon in WEAK_TLS_VERSIONS and label not in weak_proto:
+                        weak_proto.append(label)
+                continue
             if "protocol" in fid or fid.startswith("sslv") or "tls1" in fid:
                 protocols.append(_truncate(finding, 240))
-            if (
-                any(
-                    x in low or x in fid
-                    for x in (
-                        "sslv2",
-                        "sslv3",
-                        "tls1",
-                        "tls 1.0",
-                        "tls1_0",
-                        "tls1.0",
-                        "tls 1.1",
-                        "tls1_1",
-                        "tls1.1",
-                    )
-                )
-                and len(weak_proto) < 32
-            ):
-                weak_proto.append(_truncate(finding, 400))
             if (
                 any(x in low for x in ("cbc", "rc4", "weak", "deprecated", "sslv2", "sslv3"))
                 and len(weak) < 48
@@ -2696,6 +2707,7 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
         validity=None,
         protocols=protocols[:32],
         weak_protocols=weak_proto[:32],
+        not_offered=not_offered_canon[:16],
         weak_ciphers=weak[:32],
         hsts=hsts,
         tls_versions=tls_versions[:32],
@@ -3119,6 +3131,7 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         validity=validity,
         protocols=protocols[:32],
         weak_protocols=weak_protocols[:32],
+        not_offered=list(_cf.get("not_offered") or [])[:16],
         weak_ciphers=weak_ciphers[:48],
         hsts=hsts,
         tls_versions=tls_versions_tt[:32],
@@ -4575,25 +4588,6 @@ def _join_weak(lines: list[str] | None, cap: int = 8) -> str:
     return _truncate("; ".join(lines[:cap]), 1200)
 
 
-def _tls_version_cell(proto_blobs: list[str], version: str) -> str:
-    b = " ".join(proto_blobs or []).lower()
-    if not b.strip() and not proto_blobs:
-        return "n/a"
-    needles = {
-        "1.0": ("tls1.0", "tls 1.0", "tls1_0", "ssl3", "1.0"),
-        "1.1": ("tls1.1", "tls 1.1", "tls1_1", "1.1"),
-        "1.2": ("tls1.2", "tls 1.2", "tls1_2", "1.2"),
-        "1.3": ("tls1.3", "tls 1.3", "tls1_3", "1.3"),
-    }
-    for needle in needles.get(version, ()):
-        if needle in b:
-            snip = b[max(0, b.find(needle) - 24) : b.find(needle) + 40]
-            if "not" in snip and "offer" in snip:
-                return "no"
-            return "yes (see scan)"
-    return "unknown"
-
-
 def _header_row_risk_rec(header_display: str, present: bool) -> tuple[str, str]:
     h = (header_display or "").lower()
     if present:
@@ -4644,6 +4638,7 @@ def build_ssl_tls_table_rows(
 ) -> list[SslTlsTableRowModel]:
     """VH-008 — rows from ``ssl_certs`` + aggregate testssl fields."""
     proto_lines = list(ssl_out.protocols or []) + list(ssl_out.weak_protocols or [])
+    not_offered = list(ssl_out.not_offered or [])
     weak_joined = _join_weak(list(ssl_out.weak_ciphers or []), 8)
     rows_out: list[SslTlsTableRowModel] = []
     n = 0
@@ -4678,10 +4673,10 @@ def build_ssl_tls_table_rows(
                             issuer=_truncate(iss, 500),
                             dates=_truncate(dates, 500),
                             days_remaining=_days_remaining_label(na),
-                            tls_1_0=_tls_version_cell(proto_lines, "1.0"),
-                            tls_1_1=_tls_version_cell(proto_lines, "1.1"),
-                            tls_1_2=_tls_version_cell(proto_lines, "1.2"),
-                            tls_1_3=_tls_version_cell(proto_lines, "1.3"),
+                            tls_1_0=_tls_version_cell(proto_lines, "1.0", not_offered),
+                            tls_1_1=_tls_version_cell(proto_lines, "1.1", not_offered),
+                            tls_1_2=_tls_version_cell(proto_lines, "1.2", not_offered),
+                            tls_1_3=_tls_version_cell(proto_lines, "1.3", not_offered),
                             weak_ciphers=weak_joined,
                             hsts=hsts_v,
                             chain_issues="not evaluated by parser",
@@ -4698,10 +4693,10 @@ def build_ssl_tls_table_rows(
                 issuer=(ssl_out.issuer or "—")[:500],
                 dates=(ssl_out.validity or "—")[:500],
                 days_remaining="—",
-                tls_1_0=_tls_version_cell(proto_lines, "1.0"),
-                tls_1_1=_tls_version_cell(proto_lines, "1.1"),
-                tls_1_2=_tls_version_cell(proto_lines, "1.2"),
-                tls_1_3=_tls_version_cell(proto_lines, "1.3"),
+                tls_1_0=_tls_version_cell(proto_lines, "1.0", not_offered),
+                tls_1_1=_tls_version_cell(proto_lines, "1.1", not_offered),
+                tls_1_2=_tls_version_cell(proto_lines, "1.2", not_offered),
+                tls_1_3=_tls_version_cell(proto_lines, "1.3", not_offered),
                 weak_ciphers=weak_joined,
                 hsts=(ssl_out.hsts or "—")[:500],
                 chain_issues="not evaluated by parser",
@@ -6778,6 +6773,7 @@ _SSL_MERGE_FIELDS: tuple[str, ...] = (
     "validity",
     "protocols",
     "weak_protocols",
+    "not_offered",
     "weak_ciphers",
     "hsts",
     "tls_versions",

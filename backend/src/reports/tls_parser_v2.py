@@ -45,6 +45,40 @@ def _display_tls_version(canon: str) -> str:
     return canon
 
 
+def tls_version_cell(
+    proto_blobs: list[str],
+    version: str,
+    not_offered: list[str] | None = None,
+) -> str:
+    """Definitive per-version protocol cell from a real testssl probe — no "unknown".
+
+    Precedence: explicit "offered" -> "yes (see scan)"; explicit "not offered"
+    (via the offered-line text OR the authoritative ``not_offered`` negatives) ->
+    "no" (disabled = good); a probe ran but this version is in neither list ->
+    "not tested" (honest: never assert "no"/secure for an unexercised version);
+    no TLS surface at all -> "n/a". ``not_offered`` holds canonical labels
+    (e.g. ``"tls 1.0"``) that testssl reported, turning the old-version columns
+    from an indeterminate blank into a confirmed "no".
+    """
+    b = " ".join(proto_blobs or []).lower()
+    not_off = {str(x).strip().lower() for x in (not_offered or [])}
+    if not (b.strip() or not_off):
+        return "n/a"
+    needles = {
+        "1.0": ("tls1.0", "tls 1.0", "tls1_0", "ssl3", "1.0"),
+        "1.1": ("tls1.1", "tls 1.1", "tls1_1", "1.1"),
+        "1.2": ("tls1.2", "tls 1.2", "tls1_2", "1.2"),
+        "1.3": ("tls1.3", "tls 1.3", "tls1_3", "1.3"),
+    }
+    for needle in needles.get(version, ()):
+        if needle in b:  # positive evidence wins
+            snip = b[max(0, b.find(needle) - 24) : b.find(needle) + 40]
+            return "no" if ("not" in snip and "offer" in snip) else "yes (see scan)"
+    if f"tls {version}" in not_off:  # authoritative negative -> confirmed disabled
+        return "no"
+    return "not tested"  # probed, but this version unrecorded — do not fabricate a verdict
+
+
 def reconcile_tls_protocols(
     legacy_protocols: Any, legacy_weak: Any, cf: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
