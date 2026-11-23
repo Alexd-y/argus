@@ -11,6 +11,7 @@ from src.celery_app import app
 from src.core.config import settings
 from src.db.models import Report, Scan
 from src.db.session import create_task_engine_and_session, set_session_tenant
+from src.governance.engagement import ScopeViolation
 from src.orchestration.distributed_lease import LeaseContendedError
 from src.orchestration.state_machine import (
     ExploitationApprovalRequiredError,
@@ -215,6 +216,34 @@ def scan_phase_task(
                         "scan_id": scan_id,
                         "error": "lab_lease_required",
                     }
+                except ScopeViolation as scope_exc:
+                    # WP D — fail-closed governance deny. Not a crash and never a
+                    # retry: mark the scan failed with a user-safe reason and stop.
+                    logger.warning(
+                        "scan_denied_out_of_scope",
+                        extra={
+                            "event": "scan_denied_out_of_scope",
+                            "scan_id": scan_id,
+                            "reason": str(scope_exc),
+                        },
+                    )
+                    async with session_factory() as err_session:
+                        await set_session_tenant(err_session, tenant_id)
+                        await err_session.execute(
+                            update(Scan)
+                            .where(cast(Scan.id, String) == scan_id)
+                            .values(
+                                status="failed",
+                                phase="denied_out_of_scope",
+                                error_message=(
+                                    "Scan denied: target or action is outside the "
+                                    "authorized engagement scope."
+                                ),
+                            )
+                        )
+                        await err_session.commit()
+                    await notify_scan_finished(tenant_id)
+                    return {"status": "denied_out_of_scope", "scan_id": scan_id}
                 except Exception as exc:
                     if _is_transient_error(exc) and _quick_retry_allowed(
                         options if isinstance(options, dict) else {},

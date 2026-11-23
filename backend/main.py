@@ -51,7 +51,10 @@ from src.api.routers import (
     unified_ai_lab,
     ws,
 )
+from src.api.routers.admin_approvals import router as admin_approvals_router
+from src.api.routers.admin_engagements import router as admin_engagements_router
 from src.api.routers.admin_gateway import router as admin_gateway_router
+from src.api.routers.admin_rotation import router as admin_rotation_router
 from src.api.routers.analysis import router as analysis_router
 from src.api.routers.benchmarks import router as benchmarks_router
 from src.api.routers.binary_triage import router as binary_router
@@ -362,6 +365,9 @@ app.include_router(incidents_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")
 app.include_router(compliance_router, prefix="/api/v1")
 app.include_router(admin_gateway_router, prefix="/api/v1")
+app.include_router(admin_engagements_router, prefix="/api/v1")
+app.include_router(admin_approvals_router, prefix="/api/v1")
+app.include_router(admin_rotation_router, prefix="/api/v1")
 app.include_router(benchmarks_router, prefix="/api/v1")
 app.include_router(release_router, prefix="/api/v1")
 app.include_router(research_router, prefix="/api/v1")

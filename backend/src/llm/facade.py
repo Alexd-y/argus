@@ -46,6 +46,7 @@ from src.llm.provider_guard import (
     reset_call_scope,
     set_call_scope,
 )
+from src.llm.report_rotation import pick_report_rotation_alias
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.schemas import (
     ContentClass,
@@ -152,6 +153,10 @@ _CLOUD_KEY_ENVS: tuple[str, ...] = (
     "KIMI_API_KEY",
     "PERPLEXITY_API_KEY",
     "GOOGLE_API_KEY",
+    # WP C — hosted NVIDIA is a cloud key for NON-sensitive tasks only (reports /
+    # OSINT / rotation). It is deliberately NOT added to any pentest-analysis task
+    # set, so WRB-001 fail-closed is preserved (hosted NVIDIA never does analysis).
+    "NVIDIA_API_KEY",
 )
 
 _ROLE_TO_PREFERRED_ALIAS: dict[str, str] = {
@@ -1222,6 +1227,20 @@ async def _call_llm_unified_impl(
     Returns the model's text response.
     """
     _safety_check_prompt(user_prompt, task.value if task else "none")
+
+    # WP C — live multi-LLM rotation. For report/cloud-eligible tasks ONLY (never
+    # pentest analysis — WRB-001), rotate ``preferred_alias`` across the configured
+    # chain (``ScanOptions.llm``: ``llm_rotate`` + ``llm_profile_ids``) so report
+    # generation spreads across cloud providers for cost/resilience. An explicit
+    # caller ``preferred_alias`` always wins (no override); the cursor is per-scan.
+    if task is not None and not (preferred_alias or "").strip():
+        _rot_alias = pick_report_rotation_alias(
+            scan_options.get("llm") if isinstance(scan_options, dict) else None,
+            scan_id=scan_id,
+            eligible=_cloud_fallback_allowed(task),
+        )
+        if _rot_alias:
+            preferred_alias = _rot_alias
 
     # Phase-aware routing (opt-in via ARGUS_PHASE_ROUTING_ENABLED) takes
     # precedence over the generic unified gateway: when an operator explicitly

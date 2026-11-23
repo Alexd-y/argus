@@ -84,6 +84,22 @@ class ScanOptionsDarkWeb(BaseModel):
     )
 
 
+class ScanOptionsLLM(BaseModel):
+    """Multi-LLM rotation controls (WP C).
+
+    Rotation applies ONLY to roles where it is safe (reports / OSINT triage /
+    non-sensitive rotation members). WRB-001 keeps sensitive pentest *analysis*
+    WRB-first and never rotates it onto a hosted cloud model — these options cannot
+    override that. ``llm_profile_ids`` is the ordered rotation chain (alias ids);
+    ``llm_rotate`` turns rotation on.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    llm_rotate: bool = False
+    llm_profile_ids: list[str] = Field(default_factory=list)
+
+
 class ScanOptions(BaseModel):
     """Full scan options per api-contracts."""
 
@@ -100,12 +116,18 @@ class ScanOptions(BaseModel):
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
     kal: ScanOptionsKal = Field(default_factory=ScanOptionsKal)
     dark_web: ScanOptionsDarkWeb = Field(default_factory=ScanOptionsDarkWeb)
+    llm: ScanOptionsLLM = Field(default_factory=ScanOptionsLLM)
     active_injection_mode: str | None = None
     intentional_vulnerable_lab: bool = False
     lab_profile: str | None = None
     lab_allowed_targets: list[str] = Field(default_factory=list)
     argus_lab_allowed_targets: str | None = None
     scan_approval_flags: dict[str, bool] = Field(default_factory=dict)
+    # WP D — governance engagement id for the fail-closed scope gate. DISTINCT from
+    # the recon-campaign ``engagement_id``: when set, the scan's target/action must
+    # fall inside this governance engagement's scope or the scan is denied up front
+    # (``src.governance.scope_enforcement.enforce_engagement_scope``). Absent → inert.
+    governance_engagement_id: str | None = None
     # Operator-provided known-injectable endpoints, merged into the active-scan
     # input surface so the injection planner targets them even when the crawler
     # cannot discover them (e.g. a SPA's XHR login endpoint). Each entry:

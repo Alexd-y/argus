@@ -1631,3 +1631,98 @@ class LlmModelAlias(Base):
     __table_args__ = (
         Index("ix_llm_model_aliases_tenant_alias", "tenant_id", "alias", unique=True),
     )
+
+
+# --------------------------------------------------------------------------- #
+# WP C/D governance + rotation persistence (cross-dialect JSON via variant).
+# --------------------------------------------------------------------------- #
+
+_JSON_VARIANT = JSON().with_variant(JSONB, "postgresql")
+
+
+class LLMRotationState(Base):
+    """Persisted multi-LLM rotation cursor (WP C).
+
+    Stores the serialised :meth:`src.llm.rotation.LLMRotation.state` for a
+    (tenant, scan, role) rotation chain so the A,B,A,B position survives restarts.
+    """
+
+    __tablename__ = "llm_rotation_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=True
+    )
+    role: Mapped[str] = mapped_column(String(64), nullable=False, default="report")
+    profile_ids: Mapped[list[Any]] = mapped_column(_JSON_VARIANT, nullable=False, default=list)
+    cursor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    excluded: Mapped[list[Any]] = mapped_column(_JSON_VARIANT, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_llm_rotation_states_scope", "tenant_id", "scan_id", "role"),
+    )
+
+
+class EngagementRecord(Base):
+    """Signed-engagement authorization envelope (WP A/D), append-only by convention.
+
+    Mirrors :class:`src.governance.engagement.Engagement`. Rows are never edited in
+    place — a revocation sets ``revoked=True`` rather than deleting, keeping the audit
+    trail intact. ``signature`` holds an optional detached JWS/Ed25519 signature.
+
+    Named ``governance_engagements`` to avoid colliding with the recon-campaign
+    ``engagements`` table (:class:`src.db.models_recon.Engagement`), a different concept.
+    """
+
+    __tablename__ = "governance_engagements"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    allowed_targets: Mapped[list[Any]] = mapped_column(_JSON_VARIANT, nullable=False, default=list)
+    allowed_tenants: Mapped[list[Any]] = mapped_column(_JSON_VARIANT, nullable=False, default=list)
+    allowed_actions: Mapped[list[Any]] = mapped_column(_JSON_VARIANT, nullable=False, default=list)
+    window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_rate_per_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_governance_engagements_tenant", "tenant_id"),)
+
+
+class ApprovalRecord(Base):
+    """Human-in-the-loop approval item (WP D), fail-closed.
+
+    A destructive/sensitive action is enqueued here and is not executable until a human
+    approves it (status ``approved``). Both approve and deny carry a decision reason.
+    """
+
+    __tablename__ = "approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    scan_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(128), nullable=False)
+    target: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'"))
+    decided_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_approvals_tenant_status", "tenant_id", "status"),)

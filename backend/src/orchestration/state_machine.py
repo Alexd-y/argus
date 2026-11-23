@@ -36,6 +36,8 @@ from src.db.models import (
     ScanTimeline,
 )
 from src.findings.cvss_auto_score import CVSSAutoScorer
+from src.governance.engagement import ScopeViolation
+from src.governance.scope_enforcement import enforce_engagement_scope
 from src.llm.invocation_outcome import OutcomeRecord, persist_invocation_outcomes
 from src.llm.telemetry import llm_telemetry_scope
 from src.mcp.services.notifications import (
@@ -617,6 +619,39 @@ async def _check_exploitation_approval_required(
     return scan.status != "approved"
 
 
+async def _enqueue_exploitation_approval(
+    session: AsyncSession, *, tenant_id: str, scan_id: str, target: str
+) -> None:
+    """WP D — surface a pending exploitation approval in the human-in-the-loop queue.
+
+    This does NOT add a second gate: the existing ``exploit_approval`` Policy gate
+    (:func:`_check_exploitation_approval_required`) stays the sole blocker. This only
+    records the pending approval (idempotently) in the WP D approvals surface so an
+    operator can see + act on it; approving there sets ``scan.status='approved'`` and
+    resumes the scan through the SAME mechanism. Best-effort — never breaks a scan
+    (e.g. governance tables absent on an un-migrated DB).
+    """
+    try:
+        from src.governance import stores as _gov_stores
+
+        await _gov_stores.enqueue_approval_once(
+            session,
+            tenant_id=tenant_id,
+            action="exploitation",
+            target=target,
+            scan_id=scan_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — audit/visibility must never block a scan
+        logger.debug(
+            "exploitation_approval_enqueue_skipped",
+            extra={
+                "event": "exploitation_approval_enqueue_skipped",
+                "scan_id": scan_id,
+                "error": str(exc),
+            },
+        )
+
+
 def _build_summary_from_findings(findings: list[dict]) -> ReportSummary:
     """Aggregate severity counts from findings."""
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
@@ -869,10 +904,10 @@ async def _persist_report_and_findings(
     #       times accumulates N duplicate reports.
     # If a Report already exists for this scan, finalize has nothing to do.
     existing_report_id = (
-        await session.execute(
-            select(Report.id).where(Report.scan_id == scan_id).limit(1)
-        )
-    ).scalars().first()
+        (await session.execute(select(Report.id).where(Report.scan_id == scan_id).limit(1)))
+        .scalars()
+        .first()
+    )
     if existing_report_id is not None:
         logger.info(
             "persist_report_skipped_already_finalized",
@@ -1111,9 +1146,7 @@ async def _persist_report_and_findings(
             # set when a producer is known — a finding with no source_tool honestly
             # stays unattributed and the provability gate still flags it.
             provenance=(
-                {"source_tool": str(f.get("source_tool"))}
-                if f.get("source_tool")
-                else None
+                {"source_tool": str(f.get("source_tool"))} if f.get("source_tool") else None
             ),
         )
         # Idempotent persist: stable UUID5 finding ids mean a phase retry / resume
@@ -3072,6 +3105,33 @@ async def run_scan_state_machine(
     post_exploitation -> reporting.
     Records scan_steps, scan_events, updates scan.phase/status.
     """
+    # 0. WP D — fail-closed governance scope gate (runs before anything else).
+    # Inert unless the scan carries a ``governance_engagement_id`` (distinct from the
+    # recon-campaign ``engagement_id``); when present, an out-of-scope target/action,
+    # a revoked/expired/unknown/cross-tenant engagement denies the whole scan up front.
+    if settings.governance_scope_enforcement_enabled and isinstance(options, dict):
+        _gov_engagement_id = options.get("governance_engagement_id")
+        if _gov_engagement_id:
+            try:
+                await enforce_engagement_scope(
+                    session,
+                    governance_engagement_id=str(_gov_engagement_id),
+                    tenant_id=tenant_id,
+                    target=target,
+                    action="scan",
+                )
+            except ScopeViolation:
+                logger.warning(
+                    "governance_scope_denied",
+                    extra={
+                        "event": "governance_scope_denied",
+                        "scan_id": scan_id,
+                        "governance_engagement_id": str(_gov_engagement_id),
+                        "target": target,
+                    },
+                )
+                raise
+
     # 1. Initialize subsystems (non-blocking on failure)
     subsystems = await _init_scan_subsystems(scan_id, tenant_id, target, options)
 
@@ -3312,6 +3372,9 @@ async def run_scan_state_machine(
                     progress,
                     message="Exploitation requires approval",
                     data={"code": "approval_required"},
+                )
+                await _enqueue_exploitation_approval(
+                    session, tenant_id=tenant_id, scan_id=scan_id, target=target
                 )
                 await session.commit()
                 raise ExploitationApprovalRequiredError(

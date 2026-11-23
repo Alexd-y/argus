@@ -208,4 +208,107 @@ export const adminApi = {
         fetch("/api/v1/llm/health/all").then(r => r.json()),
     },
   },
+  engagements: {
+    create: (body: EngagementCreate) =>
+      fetchAdmin<Engagement>("/engagements", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    get: (id: string, tenant_id: string) => {
+      const q = new URLSearchParams({ tenant_id });
+      return fetchAdmin<Engagement>(`/engagements/${id}?${q}`);
+    },
+    revoke: (id: string, tenant_id: string) => {
+      const q = new URLSearchParams({ tenant_id });
+      return fetchAdmin<Engagement>(`/engagements/${id}/revoke?${q}`, {
+        method: "POST",
+      });
+    },
+  },
+  rotation: {
+    get: (params: { tenant_id: string; role?: string; scan_id?: string }) => {
+      const q = new URLSearchParams({ tenant_id: params.tenant_id });
+      if (params.role) q.set("role", params.role);
+      if (params.scan_id) q.set("scan_id", params.scan_id);
+      return fetchAdmin<RotationState>(`/rotation?${q}`);
+    },
+    set: (body: RotationSet) =>
+      fetchAdmin<RotationState>("/rotation", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  },
+  approvals: {
+    list: (params: { tenant_id: string; status?: string }) => {
+      const q = new URLSearchParams({ tenant_id: params.tenant_id });
+      if (params.status) q.set("status", params.status);
+      return fetchAdmin<Approval[]>(`/approvals?${q}`);
+    },
+    decide: (id: string, body: ApprovalDecision) =>
+      fetchAdmin<Approval>(`/approvals/${id}/decide`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  },
+};
+
+// ---------------------------------------------------------------------------
+// WP D governance types (engagements / rotation / approvals)
+// ---------------------------------------------------------------------------
+
+export type Engagement = {
+  id: string;
+  tenant_id: string;
+  allowed_targets: string[];
+  allowed_tenants: string[];
+  allowed_actions: string[];
+  window_start: string | null;
+  window_end: string | null;
+  max_rate_per_target: number | null;
+  revoked: boolean;
+};
+
+export type EngagementCreate = {
+  tenant_id: string;
+  allowed_targets: string[];
+  allowed_tenants: string[];
+  allowed_actions: string[];
+  window_start?: string | null;
+  window_end?: string | null;
+  max_rate_per_target?: number | null;
+  signature?: string | null;
+};
+
+export type RotationState = {
+  role: string;
+  scan_id: string | null;
+  profile_ids: string[];
+  cursor: number;
+  excluded: string[];
+};
+
+export type RotationSet = {
+  tenant_id: string;
+  role: string;
+  profile_ids: string[];
+  scan_id?: string | null;
+};
+
+export type Approval = {
+  id: string;
+  tenant_id: string;
+  scan_id: string | null;
+  action: string;
+  target: string;
+  status: string;
+  reason: string | null;
+  decided_by: string | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+};
+
+export type ApprovalDecision = {
+  tenant_id: string;
+  approve: boolean;
+  reason: string;
 };

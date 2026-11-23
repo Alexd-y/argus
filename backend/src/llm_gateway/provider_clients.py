@@ -10,6 +10,7 @@ Algorithm:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -21,6 +22,11 @@ logger = logging.getLogger(__name__)
 _PROVIDER_TIMEOUT = 300.0
 _WRB_TIMEOUT = 120.0
 _CLOUD_TIMEOUT = 120.0
+
+
+def _nvidia_nim_base_url() -> str:
+    """Self-hosted NIM base URL from the environment (empty → provider disabled)."""
+    return (os.environ.get("NVIDIA_NIM_BASE_URL") or "").strip()
 
 
 ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
@@ -135,6 +141,41 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    # WP C — hosted NVIDIA NIM (build.nvidia.com). Cloud-fallback / rotation member
+    # for NON-sensitive tasks only (reports, OSINT triage). ``sensitive_allowed`` is
+    # False so it is never selected for pentest analysis (WRB-001). Egress passes the
+    # redaction gate (src.llm_gateway.redaction.redact_for_cloud_egress).
+    "argus-nvidia-hosted": {
+        "role": "report",
+        "providers": [
+            {
+                "key": "nvidia-hosted",
+                "base_url": "https://integrate.api.nvidia.com/v1",
+                "model": "meta/llama-3.3-70b-instruct",
+                "cloud_allowed": True,
+                "sensitive_allowed": False,
+                "price": {
+                    "input_per_million_usd": 0.0,
+                    "output_per_million_usd": 0.0,
+                },
+            },
+        ],
+    },
+    # Self-hosted NIM container: provider is LOCAL (``cloud_allowed=False``), so it
+    # may sit beside WRB in analysis rotations without breaking WRB-001. Disabled
+    # until ``NVIDIA_NIM_BASE_URL`` is set (empty base_url → skipped by select).
+    "argus-nvidia-nim-local": {
+        "role": "pentest",
+        "providers": [
+            {
+                "key": "nvidia-nim-local",
+                "base_url": _nvidia_nim_base_url(),
+                "model": "meta/llama-3.1-8b-instruct",
+                "cloud_allowed": False,
+                "price": {"input_per_million_usd": 0.0, "output_per_million_usd": 0.0},
+            },
+        ],
+    },
 }
 
 
@@ -154,9 +195,16 @@ class ProviderRouter:
 
         compliance = (policy or {}).get("compliance", {})
         airgapped = compliance.get("airgapped_only", False)
+        # WP C — a sensitive task (pentest analysis) must never select a provider that
+        # declares ``sensitive_allowed=False`` (hosted NVIDIA). Defence in depth over
+        # the facade's WRB-001 routing; ``sensitive_allowed`` defaults True so existing
+        # providers are unaffected.
+        sensitive = bool((policy or {}).get("sensitive", False))
 
         for provider in alias_cfg["providers"]:
             if airgapped and provider.get("cloud_allowed", True):
+                continue
+            if sensitive and not provider.get("sensitive_allowed", True):
                 continue
             if not provider.get("cloud_allowed", True) and not provider.get("base_url"):
                 continue
@@ -233,6 +281,9 @@ class ProviderRouter:
             "qwen3-coder-480b": "OPENROUTER_API_KEY",
             "qwen3-32b-local": "",
             "perplexity": "PERPLEXITY_API_KEY",
+            # WP C — hosted NVIDIA uses NVIDIA_API_KEY; self-hosted NIM is keyless.
+            "nvidia-hosted": "NVIDIA_API_KEY",
+            "nvidia-nim-local": "",
         }
         env_key = key_map.get(provider_key, "")
         return (os.environ.get(env_key) or "").strip() if env_key else ""

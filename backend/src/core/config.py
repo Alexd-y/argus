@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     kimi_api_key: str | None = None
     perplexity_api_key: str | None = None
+    # NVIDIA NIM (WP C). ``nvidia_api_key`` is the hosted build.nvidia.com key
+    # (``nvapi-…``) used only for NON-sensitive cloud tasks (reports / OSINT triage /
+    # rotation) behind the redaction gate — never pentest analysis (WRB-001).
+    # ``nvidia_nim_base_url`` points at a self-hosted NIM container; when set, that
+    # provider is LOCAL and may sit beside WRB in analysis chains.
+    nvidia_api_key: str | None = None
+    nvidia_nim_base_url: str | None = None
     llm_primary_provider: str = Field(
         default="",
         validation_alias=AliasChoices("LLM_PRIMARY_PROVIDER", "llm_primary_provider"),
@@ -1374,6 +1381,11 @@ class Settings(BaseSettings):
     # fingerprint-only hits) and collapse duplicates before reporting. Env:
     # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
     finding_evidence_gate_enabled: bool = True
+    # WP D — fail-closed governance scope gate at scan start. Inert unless the scan
+    # carries a ``governance_engagement_id`` (ScanOptions), so the default-on posture
+    # changes no existing behavior; set False to hard-disable the gate entirely.
+    # Env: GOVERNANCE_SCOPE_ENFORCEMENT_ENABLED.
+    governance_scope_enforcement_enabled: bool = True
     # Wave 3 (R-5.1.2) — let the artifact-driven evidence arbiter adjudicate
     # each finding's EvidenceTier at persistence, capping any tier the collected
     # artifacts do not justify (cap-only; in-domain findings only). When False
@@ -2402,6 +2414,7 @@ def _sync_llm_api_keys_to_environ() -> None:
         ("OPENAI_API_KEY", settings.openai_api_key),
         ("DEEPSEEK_API_KEY", settings.deepseek_api_key),
         ("OPENROUTER_API_KEY", settings.openrouter_api_key),
+        ("NVIDIA_API_KEY", settings.nvidia_api_key),
         ("GOOGLE_API_KEY", settings.google_api_key),
         ("KIMI_API_KEY", settings.kimi_api_key),
         ("PERPLEXITY_API_KEY", settings.perplexity_api_key),

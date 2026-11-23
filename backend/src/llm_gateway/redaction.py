@@ -6,6 +6,7 @@ Never logs raw API keys, bearer tokens, or credentials.
 
 import hashlib
 import re
+from dataclasses import dataclass
 
 
 def hash_prompt(prompt: str) -> str:
@@ -20,6 +21,9 @@ def redact_api_keys(text: str) -> str:
         # hyphen/underscore char class covers project keys such as ``sk-proj-…``.
         (r"\bsk-or-[a-zA-Z0-9\-_]{6,}", "<REDACTED:openrouter_key>"),
         (r"\bsk-[a-zA-Z0-9\-_]{6,}", "<REDACTED:openai_key>"),
+        # NVIDIA NIM / build.nvidia.com hosted keys (WP C). Masked in every log and
+        # before any cloud egress so an ``nvapi-…`` key can never leak.
+        (r"\bnvapi-[a-zA-Z0-9\-_]{6,}", "<REDACTED:nvidia_key>"),
         (r"\bpplx-[a-zA-Z0-9\-_]{6,}", "<REDACTED:perplexity_key>"),
         # Case-insensitive: real headers use "Bearer" but logs/tool output may
         # carry lowercase "bearer"; a leaked token must be masked either way.
@@ -41,6 +45,66 @@ def redact_api_keys(text: str) -> str:
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)
     return text
+
+
+#: Email PII — masked before any cloud egress.
+_EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
+
+
+@dataclass(frozen=True)
+class CloudRedactionResult:
+    """Outcome of the pre-cloud-egress content gate (WP C)."""
+
+    text: str
+    redactions_applied: int
+    categories: frozenset[str]
+
+
+def redact_for_cloud_egress(
+    text: str, *, targets: tuple[str, ...] | list[str] = ()
+) -> CloudRedactionResult:
+    """Redact secrets, PII and the engagement target *before* a cloud call (WP C).
+
+    WRB-001 keeps pentest *analysis* local; the cloud is only ever reached for
+    reports / OSINT triage / the non-sensitive rotation members (hosted NVIDIA,
+    DeepSeek, …). This gate is the last line before egress: it strips not only API
+    keys/secrets (via :func:`redact_api_keys`) but also email PII and every declared
+    engagement target (hostnames / IPs / URLs), so evidence never leaks to a third
+    party. Returns the redacted text plus how much was removed and which categories —
+    a caller may log or block on a non-zero count.
+    """
+    categories: set[str] = set()
+    total = 0
+    out = text
+
+    # 1. Secrets / API keys — reuse the single patterned redactor.
+    redacted = redact_api_keys(out)
+    if redacted != out:
+        total += redacted.count("<REDACTED:") - out.count("<REDACTED:")
+        categories.add("secret")
+        if "<REDACTED:nvidia_key>" in redacted and "<REDACTED:nvidia_key>" not in out:
+            categories.add("nvidia_key")
+        out = redacted
+
+    # 2. Email PII.
+    out, n_email = _EMAIL_RE.subn("<REDACTED:email>", out)
+    if n_email:
+        total += n_email
+        categories.add("email")
+
+    # 3. Engagement targets (literal hostnames / IPs / URLs supplied by the caller).
+    for target in targets:
+        needle = str(target).strip()
+        if not needle:
+            continue
+        out, n_target = re.subn(re.escape(needle), "<REDACTED:target>", out)
+        if n_target:
+            total += n_target
+            categories.add("target")
+
+    return CloudRedactionResult(
+        text=out, redactions_applied=total, categories=frozenset(categories)
+    )
 
 
 def redact_response(content: str) -> str:
