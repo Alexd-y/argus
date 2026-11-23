@@ -21,6 +21,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from src.api.routers.admin_approvals import _operator_subject
 from src.api.routers.admin_findings import (
     _admin_role_dep,
     _admin_tenant_dep,
@@ -29,6 +30,7 @@ from src.api.routers.admin_findings import (
 from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.db.session import async_session_factory, set_session_tenant
 from src.governance import stores
+from src.governance.audit import record_decision_audit
 
 router = APIRouter(prefix="/admin/engagements", tags=["admin_engagements"])
 
@@ -79,10 +81,26 @@ def _require_tenant(tenant_id: str) -> str:
     return tenant_id
 
 
+@router.get("", response_model=list[EngagementResponse])
+async def list_engagements(
+    _: Annotated[None, Depends(require_admin_mfa_passed)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
+    tenant_id: str = Query(...),
+) -> list[EngagementResponse]:
+    tenant_id = _require_tenant(tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        rows = await stores.list_engagements(session, tenant_id=tenant_id)
+        return [_to_response(r) for r in rows]
+
+
 @router.post("", response_model=EngagementResponse)
 async def create_engagement(
     body: EngagementCreate,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    operator_subject: Annotated[str, Depends(_operator_subject)],
     role: Annotated[str, Depends(_admin_role_dep)],
     role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
 ) -> EngagementResponse:
@@ -100,6 +118,21 @@ async def create_engagement(
             window_end=body.window_end,
             max_rate_per_target=body.max_rate_per_target,
             signature=body.signature,
+        )
+        # Immutable audit — atomic with the create (same transaction). An engagement
+        # is the scope authority for the fail-closed gate, so its creation is recorded.
+        await record_decision_audit(
+            session,
+            tenant_id=tenant_id,
+            user_id=operator_subject,
+            action="governance.engagement.created",
+            resource_type="engagement",
+            resource_id=row.id,
+            details={
+                "allowed_targets": list(body.allowed_targets),
+                "allowed_tenants": list(body.allowed_tenants),
+                "allowed_actions": list(body.allowed_actions),
+            },
         )
         resp = _to_response(row)
         await session.commit()
@@ -128,6 +161,7 @@ async def get_engagement(
 async def revoke_engagement(
     engagement_id: str,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    operator_subject: Annotated[str, Depends(_operator_subject)],
     role: Annotated[str, Depends(_admin_role_dep)],
     role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
     tenant_id: str = Query(...),
@@ -140,6 +174,17 @@ async def revoke_engagement(
         if row is None or row.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="engagement not found")
         row = await stores.revoke_engagement(session, engagement_id)
+        # Immutable audit — revoking an engagement narrows what the gate permits, so
+        # it is recorded atomically with the state change.
+        await record_decision_audit(
+            session,
+            tenant_id=tenant_id,
+            user_id=operator_subject,
+            action="governance.engagement.revoked",
+            resource_type="engagement",
+            resource_id=engagement_id,
+            details={"revoked": True},
+        )
         resp = _to_response(row)
         await session.commit()
     return resp

@@ -177,6 +177,83 @@ class TestEngagements:
         assert r.json()["revoked"] is True
         session.commit.assert_awaited()
 
+    def test_list_maps_rows(self, client: TestClient) -> None:
+        factory, _ = _session_factory()
+        rows = [_engagement_row(), _engagement_row()]
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_engagements.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_engagements.stores.list_engagements",
+                new=AsyncMock(return_value=rows),
+            ) as mock_list,
+        ):
+            r = client.get(f"{ENGAGEMENTS}?tenant_id={_TENANT}", headers=_ADMIN_HEADERS)
+        assert r.status_code == 200
+        assert len(r.json()) == 2
+        assert mock_list.await_args.kwargs["tenant_id"] == _TENANT
+
+    def test_create_writes_audit(self, client: TestClient) -> None:
+        factory, session = _session_factory()
+        row = _engagement_row()
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_engagements.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_engagements.stores.create_engagement",
+                new=AsyncMock(return_value=row),
+            ),
+            patch(
+                "src.api.routers.admin_engagements.record_decision_audit",
+                new=AsyncMock(return_value=None),
+            ) as mock_audit,
+        ):
+            r = client.post(
+                ENGAGEMENTS,
+                headers=_ADMIN_HEADERS,
+                json={
+                    "tenant_id": _TENANT,
+                    "allowed_targets": ["victim.example.com"],
+                    "allowed_tenants": [_TENANT],
+                    "allowed_actions": ["recon"],
+                },
+            )
+        assert r.status_code == 200, r.text
+        # Immutable-audit row written in the same transaction as the create.
+        mock_audit.assert_awaited_once()
+        assert mock_audit.await_args.kwargs["action"] == "governance.engagement.created"
+        assert mock_audit.await_args.kwargs["resource_id"] == row.id
+        session.commit.assert_awaited()
+
+    def test_revoke_writes_audit(self, client: TestClient) -> None:
+        factory, session = _session_factory()
+        row = _engagement_row()
+        revoked = _engagement_row(tenant_id=_TENANT, revoked=True)
+        revoked.id = row.id
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_engagements.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_engagements.stores.get_engagement",
+                new=AsyncMock(return_value=row),
+            ),
+            patch(
+                "src.api.routers.admin_engagements.stores.revoke_engagement",
+                new=AsyncMock(return_value=revoked),
+            ),
+            patch(
+                "src.api.routers.admin_engagements.record_decision_audit",
+                new=AsyncMock(return_value=None),
+            ) as mock_audit,
+        ):
+            r = client.post(
+                f"{ENGAGEMENTS}/{row.id}/revoke?tenant_id={_TENANT}", headers=_ADMIN_HEADERS
+            )
+        assert r.status_code == 200
+        mock_audit.assert_awaited_once()
+        assert mock_audit.await_args.kwargs["action"] == "governance.engagement.revoked"
+        assert mock_audit.await_args.kwargs["resource_id"] == row.id
+
 
 # --------------------------------------------------------------------- rotation
 

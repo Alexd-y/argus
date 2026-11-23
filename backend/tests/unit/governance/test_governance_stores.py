@@ -90,6 +90,21 @@ async def test_engagement_revoke_is_denied_by_gate(session) -> None:
         assert_in_scope("https://x.example.com", "recon", eng, now=now)
 
 
+async def test_list_engagements_returns_only_tenant_rows(session) -> None:
+    await stores.create_engagement(
+        session, tenant_id="t1", allowed_targets=["a"], allowed_tenants=["t1"], allowed_actions=["recon"]
+    )
+    await stores.create_engagement(
+        session, tenant_id="t1", allowed_targets=["b"], allowed_tenants=["t1"], allowed_actions=["recon"]
+    )
+    await stores.create_engagement(
+        session, tenant_id="t2", allowed_targets=["c"], allowed_tenants=["t2"], allowed_actions=["recon"]
+    )
+    rows = await stores.list_engagements(session, tenant_id="t1")
+    assert len(rows) == 2
+    assert all(r.tenant_id == "t1" for r in rows)
+
+
 async def test_approval_enqueue_is_pending_then_approved(session) -> None:
     row = await stores.enqueue_approval(
         session, tenant_id="t1", action="secretsdump", target="dc01"

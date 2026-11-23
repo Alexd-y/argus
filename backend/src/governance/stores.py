@@ -33,6 +33,7 @@ __all__ = [
     "get_approval",
     "get_engagement",
     "list_approvals",
+    "list_engagements",
     "load_rotation",
     "revoke_engagement",
     "save_rotation",
@@ -130,6 +131,14 @@ async def create_engagement(
 
 async def get_engagement(session: AsyncSession, engagement_id: str) -> EngagementRecord | None:
     return await session.get(EngagementRecord, engagement_id)
+
+
+async def list_engagements(
+    session: AsyncSession, *, tenant_id: str
+) -> list[EngagementRecord]:
+    """List all engagements for a tenant (revoked rows included for the audit view)."""
+    stmt = select(EngagementRecord).where(EngagementRecord.tenant_id == tenant_id)
+    return list((await session.execute(stmt)).scalars().all())
 
 
 async def revoke_engagement(session: AsyncSession, engagement_id: str) -> EngagementRecord | None:
