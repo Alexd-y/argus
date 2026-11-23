@@ -19,6 +19,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from src.api.routers.admin_findings import (
+    _admin_role_dep,
+    _admin_tenant_dep,
+    _enforce_rbac,
+)
 from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.auth.admin_sessions import SessionPrincipal
 from src.db.session import async_session_factory, set_session_tenant
@@ -91,10 +96,13 @@ async def _operator_subject(
 @router.get("", response_model=list[ApprovalResponse])
 async def list_approvals(
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
     tenant_id: str = Query(...),
     status: str | None = None,
 ) -> list[ApprovalResponse]:
     tenant_id = _require_tenant(tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         rows = await stores.list_approvals(session, tenant_id=tenant_id, status=status)
@@ -107,8 +115,11 @@ async def decide_approval(
     body: ApprovalDecision,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
     operator_subject: Annotated[str, Depends(_operator_subject)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
 ) -> ApprovalResponse:
     tenant_id = _require_tenant(body.tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
     if not body.reason.strip():
         raise HTTPException(status_code=400, detail="a decision reason is required")
 
@@ -118,13 +129,20 @@ async def decide_approval(
         if approval is None or approval.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="approval not found")
 
-        updated = await stores.decide_approval(
+        # Atomic decision — closes the TOCTOU race: a conditional UPDATE that only
+        # transitions a still-``pending`` row. ``None`` means another request already
+        # decided it (or it is no longer pending) → 409, with no state change / resume.
+        updated = await stores.decide_approval_if_pending(
             session,
             approval_id=approval_id,
+            tenant_id=tenant_id,
             approve=body.approve,
             decided_by=operator_subject,
             reason=body.reason,
         )
+        if updated is None:
+            raise HTTPException(status_code=409, detail="approval already decided")
+
         # Immutable audit — atomic with the decision (same transaction).
         await record_decision_audit(
             session,
@@ -143,18 +161,15 @@ async def decide_approval(
         )
 
         # WP D — approving an exploitation approval drives the EXISTING resume path
-        # (no second gate): set the scan's status to "approved" (exactly what
-        # ``_check_exploitation_approval_required`` checks) and re-dispatch the scan
-        # phase. The state machine's resume detector skips completed phases, reaches
-        # EXPLOITATION, finds it approved, and proceeds.
+        # (no second gate). The scan transition is itself atomic + conditional on
+        # ``awaiting_approval`` (``approve_scan_if_awaiting``): a scan in any other
+        # state is never force-transitioned and never double re-dispatched.
         resume: tuple[str, str, str, dict] | None = None
         if body.approve and updated.action == "exploitation" and updated.scan_id:
-            from src.db.models import Scan
-
-            scan = await session.get(Scan, updated.scan_id)
-            if scan is not None and scan.tenant_id == tenant_id:
-                scan.status = "approved"
-                await session.flush()
+            scan = await stores.approve_scan_if_awaiting(
+                session, scan_id=updated.scan_id, tenant_id=tenant_id
+            )
+            if scan is not None:
                 resume = (
                     str(scan.id),
                     scan.tenant_id,

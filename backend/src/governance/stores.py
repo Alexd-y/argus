@@ -15,16 +15,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import ApprovalRecord, EngagementRecord, LLMRotationState
+from src.db.models import ApprovalRecord, EngagementRecord, LLMRotationState, Scan
 from src.governance.engagement import Engagement
 from src.llm.rotation import LLMRotation
 
 __all__ = [
+    "approve_scan_if_awaiting",
     "create_engagement",
     "decide_approval",
+    "decide_approval_if_pending",
     "engagement_row_to_dataclass",
     "enqueue_approval",
     "enqueue_approval_once",
@@ -252,3 +254,68 @@ async def decide_approval(
     row.decided_at = datetime.now(UTC)
     await session.flush()
     return row
+
+
+async def decide_approval_if_pending(
+    session: AsyncSession,
+    *,
+    approval_id: str,
+    tenant_id: str,
+    approve: bool,
+    decided_by: str,
+    reason: str,
+) -> ApprovalRecord | None:
+    """Atomically decide an approval only while it is still ``pending``.
+
+    Closes the check-then-act (TOCTOU) race: the decision is a single conditional
+    ``UPDATE ... WHERE id=:id AND tenant_id=:t AND status='pending'``. Returns the
+    decided row when it won the transition, or ``None`` when no pending row matched
+    (already decided / concurrent decision / wrong tenant) — the caller maps that
+    to 409.
+    """
+    if not str(reason).strip():
+        raise ValueError("an approval/denial decision requires a non-empty reason")
+    new_status = "approved" if approve else "denied"
+    result = await session.execute(
+        update(ApprovalRecord)
+        .where(
+            cast(ApprovalRecord.id, String) == str(approval_id),
+            cast(ApprovalRecord.tenant_id, String) == str(tenant_id),
+            ApprovalRecord.status == "pending",
+        )
+        .values(
+            status=new_status,
+            decided_by=decided_by,
+            decision_reason=reason,
+            decided_at=datetime.now(UTC),
+        )
+    )
+    if not (result.rowcount and result.rowcount > 0):
+        return None
+    await session.flush()
+    return await session.get(ApprovalRecord, approval_id)
+
+
+async def approve_scan_if_awaiting(
+    session: AsyncSession, *, scan_id: str, tenant_id: str
+) -> Scan | None:
+    """Atomically transition a scan ``awaiting_approval`` -> ``approved``.
+
+    Single conditional ``UPDATE scans SET status='approved' WHERE id=:id AND
+    tenant_id=:t AND status='awaiting_approval'``. Returns the scan row (for the
+    re-dispatch args) when it won the transition, else ``None`` — so a scan in any
+    other state is never force-transitioned and never double re-dispatched.
+    """
+    result = await session.execute(
+        update(Scan)
+        .where(
+            cast(Scan.id, String) == str(scan_id),
+            cast(Scan.tenant_id, String) == str(tenant_id),
+            Scan.status == "awaiting_approval",
+        )
+        .values(status="approved")
+    )
+    if not (result.rowcount and result.rowcount > 0):
+        return None
+    await session.flush()
+    return await session.get(Scan, scan_id)

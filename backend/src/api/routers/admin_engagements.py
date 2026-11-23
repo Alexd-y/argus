@@ -21,6 +21,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from src.api.routers.admin_findings import (
+    _admin_role_dep,
+    _admin_tenant_dep,
+    _enforce_rbac,
+)
 from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.db.session import async_session_factory, set_session_tenant
 from src.governance import stores
@@ -78,8 +83,11 @@ def _require_tenant(tenant_id: str) -> str:
 async def create_engagement(
     body: EngagementCreate,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
 ) -> EngagementResponse:
     tenant_id = _require_tenant(body.tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         row = await stores.create_engagement(
@@ -102,9 +110,12 @@ async def create_engagement(
 async def get_engagement(
     engagement_id: str,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
     tenant_id: str = Query(...),
 ) -> EngagementResponse:
     tenant_id = _require_tenant(tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         row = await stores.get_engagement(session, engagement_id)
@@ -117,9 +128,12 @@ async def get_engagement(
 async def revoke_engagement(
     engagement_id: str,
     _: Annotated[None, Depends(require_admin_mfa_passed)],
+    role: Annotated[str, Depends(_admin_role_dep)],
+    role_tenant: Annotated[str | None, Depends(_admin_tenant_dep)],
     tenant_id: str = Query(...),
 ) -> EngagementResponse:
     tenant_id = _require_tenant(tenant_id)
+    _enforce_rbac(role=role, role_tenant=role_tenant, query_tenant=tenant_id)
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         row = await stores.get_engagement(session, engagement_id)

@@ -122,6 +122,37 @@ async def test_enqueue_approval_once_is_idempotent(session) -> None:
     assert len([r for r in pending if r.scan_id == "scan-1"]) == 1
 
 
+async def test_decide_if_pending_is_atomic_and_single_winner(session) -> None:
+    row = await stores.enqueue_approval(
+        session, tenant_id="t1", action="exploitation", target="h", scan_id="scan-9"
+    )
+    won = await stores.decide_approval_if_pending(
+        session, approval_id=row.id, tenant_id="t1", approve=True, decided_by="lead", reason="ok"
+    )
+    assert won is not None and won.status == "approved"
+    # A second decision (the row is no longer pending) loses → None, not a re-decide.
+    lost = await stores.decide_approval_if_pending(
+        session, approval_id=row.id, tenant_id="t1", approve=False, decided_by="x", reason="no"
+    )
+    assert lost is None
+
+
+async def test_decide_if_pending_wrong_tenant_loses(session) -> None:
+    row = await stores.enqueue_approval(session, tenant_id="t1", action="exploitation", target="h")
+    lost = await stores.decide_approval_if_pending(
+        session, approval_id=row.id, tenant_id="t2", approve=True, decided_by="x", reason="r"
+    )
+    assert lost is None
+
+
+async def test_decide_if_pending_requires_reason(session) -> None:
+    row = await stores.enqueue_approval(session, tenant_id="t1", action="exploitation", target="h")
+    with pytest.raises(ValueError):
+        await stores.decide_approval_if_pending(
+            session, approval_id=row.id, tenant_id="t1", approve=True, decided_by="x", reason=" "
+        )
+
+
 async def test_enqueue_approval_once_requeues_after_decided(session) -> None:
     first = await stores.enqueue_approval_once(
         session, tenant_id="t1", action="exploitation", target="h", scan_id="scan-2"

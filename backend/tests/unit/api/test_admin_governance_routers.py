@@ -238,6 +238,56 @@ class TestRotation:
 # -------------------------------------------------------------------- approvals
 
 
+class TestGovernanceRbac:
+    """Tenant-scope RBAC: X-Admin-Key alone = super-admin (back-compat); an explicit
+    ``X-Admin-Role: admin`` is bound to its ``X-Admin-Tenant`` and cannot cross."""
+
+    def test_admin_role_cross_tenant_denied(self, client: TestClient) -> None:
+        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+            r = client.post(
+                ENGAGEMENTS,
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "admin", "X-Admin-Tenant": _TENANT},
+                json={
+                    "tenant_id": _OTHER_TENANT,  # different tenant than X-Admin-Tenant
+                    "allowed_targets": [],
+                    "allowed_tenants": [],
+                    "allowed_actions": [],
+                },
+            )
+        assert r.status_code == 403
+
+    def test_admin_role_own_tenant_allowed(self, client: TestClient) -> None:
+        factory, _ = _session_factory()
+        row = _engagement_row()
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_engagements.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_engagements.stores.create_engagement",
+                new=AsyncMock(return_value=row),
+            ),
+        ):
+            r = client.post(
+                ENGAGEMENTS,
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "admin", "X-Admin-Tenant": _TENANT},
+                json={
+                    "tenant_id": _TENANT,
+                    "allowed_targets": ["victim.example.com"],
+                    "allowed_tenants": [_TENANT],
+                    "allowed_actions": ["recon"],
+                },
+            )
+        assert r.status_code == 200, r.text
+
+    def test_unknown_role_denied(self, client: TestClient) -> None:
+        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+            r = client.get(
+                f"{APPROVALS}?tenant_id={_TENANT}",
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "wizard"},
+            )
+        assert r.status_code == 403
+
+
 class TestApprovals:
     def test_list_maps_rows(self, client: TestClient) -> None:
         factory, _ = _session_factory()
@@ -273,7 +323,7 @@ class TestApprovals:
                 new=AsyncMock(return_value=row),
             ),
             patch(
-                "src.api.routers.admin_approvals.stores.decide_approval",
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
                 new=AsyncMock(return_value=decided),
             ) as mock_decide,
             patch(
@@ -307,9 +357,8 @@ class TestApprovals:
             tenant_id=_TENANT,
             target_url="https://victim.example.com",
             options={"k": "v"},
-            status="awaiting_approval",
+            status="approved",
         )
-        session.get = AsyncMock(return_value=fake_scan)
         with (
             patch.object(settings, "admin_api_key", _ADMIN_KEY),
             patch("src.api.routers.admin_approvals.async_session_factory", factory),
@@ -318,9 +367,13 @@ class TestApprovals:
                 new=AsyncMock(return_value=row),
             ),
             patch(
-                "src.api.routers.admin_approvals.stores.decide_approval",
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
                 new=AsyncMock(return_value=decided),
             ),
+            patch(
+                "src.api.routers.admin_approvals.stores.approve_scan_if_awaiting",
+                new=AsyncMock(return_value=fake_scan),
+            ) as mock_scan,
             patch(
                 "src.api.routers.admin_approvals.record_decision_audit",
                 new=AsyncMock(return_value=None),
@@ -333,8 +386,8 @@ class TestApprovals:
                 json={"tenant_id": _TENANT, "approve": True, "reason": "authorized in scope"},
             )
         assert r.status_code == 200, r.text
-        # Drives the EXISTING gate: scan marked approved + re-dispatched.
-        assert fake_scan.status == "approved"
+        # Drives the EXISTING gate: atomic scan transition won → re-dispatched.
+        mock_scan.assert_awaited_once()
         mock_dispatch.assert_called_once()
         assert mock_dispatch.call_args.kwargs["scan_id"] == "scan-xyz"
 
@@ -344,7 +397,6 @@ class TestApprovals:
         decided = _approval_row(status="approved")
         decided.id = row.id
         decided.scan_id = "scan-xyz"
-        session.get = AsyncMock(return_value=None)
         with (
             patch.object(settings, "admin_api_key", _ADMIN_KEY),
             patch("src.api.routers.admin_approvals.async_session_factory", factory),
@@ -353,9 +405,13 @@ class TestApprovals:
                 new=AsyncMock(return_value=row),
             ),
             patch(
-                "src.api.routers.admin_approvals.stores.decide_approval",
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
                 new=AsyncMock(return_value=decided),
             ),
+            patch(
+                "src.api.routers.admin_approvals.stores.approve_scan_if_awaiting",
+                new=AsyncMock(return_value=None),
+            ) as mock_scan,
             patch(
                 "src.api.routers.admin_approvals.record_decision_audit",
                 new=AsyncMock(return_value=None),
@@ -368,6 +424,8 @@ class TestApprovals:
                 json={"tenant_id": _TENANT, "approve": True, "reason": "ok"},
             )
         assert r.status_code == 200
+        # Non-exploitation action: the scan-resume path is never consulted.
+        mock_scan.assert_not_awaited()
         mock_dispatch.assert_not_called()
 
     def test_decide_deny_exploitation_does_not_dispatch(self, client: TestClient) -> None:
@@ -385,7 +443,7 @@ class TestApprovals:
                 new=AsyncMock(return_value=row),
             ),
             patch(
-                "src.api.routers.admin_approvals.stores.decide_approval",
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
                 new=AsyncMock(return_value=decided),
             ),
             patch(
@@ -398,6 +456,68 @@ class TestApprovals:
                 f"{APPROVALS}/{row.id}/decide",
                 headers=_ADMIN_HEADERS,
                 json={"tenant_id": _TENANT, "approve": False, "reason": "out of scope"},
+            )
+        assert r.status_code == 200
+        mock_dispatch.assert_not_called()
+
+    def test_decide_already_decided_returns_409(self, client: TestClient) -> None:
+        factory, _ = _session_factory()
+        row = _approval_row()  # exists (passes 404), but the atomic decide loses
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_approvals.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_approvals.stores.get_approval",
+                new=AsyncMock(return_value=row),
+            ),
+            patch(
+                # Atomic conditional UPDATE matched no pending row → race/already decided.
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("src.policy.scan_queue._dispatch_scan_phase") as mock_dispatch,
+        ):
+            r = client.post(
+                f"{APPROVALS}/{row.id}/decide",
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": _TENANT, "approve": True, "reason": "retry"},
+            )
+        assert r.status_code == 409
+        mock_dispatch.assert_not_called()
+
+    def test_decide_resume_only_when_awaiting_approval(self, client: TestClient) -> None:
+        factory, session = _session_factory()
+        row = _approval_row()
+        decided = _approval_row(status="approved")
+        decided.id = row.id
+        decided.action = "exploitation"
+        decided.scan_id = "scan-xyz"
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch("src.api.routers.admin_approvals.async_session_factory", factory),
+            patch(
+                "src.api.routers.admin_approvals.stores.get_approval",
+                new=AsyncMock(return_value=row),
+            ),
+            patch(
+                "src.api.routers.admin_approvals.stores.decide_approval_if_pending",
+                new=AsyncMock(return_value=decided),
+            ),
+            patch(
+                # Scan not in awaiting_approval → atomic transition matches nothing.
+                "src.api.routers.admin_approvals.stores.approve_scan_if_awaiting",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "src.api.routers.admin_approvals.record_decision_audit",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("src.policy.scan_queue._dispatch_scan_phase") as mock_dispatch,
+        ):
+            r = client.post(
+                f"{APPROVALS}/{row.id}/decide",
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": _TENANT, "approve": True, "reason": "authorized"},
             )
         assert r.status_code == 200
         mock_dispatch.assert_not_called()
