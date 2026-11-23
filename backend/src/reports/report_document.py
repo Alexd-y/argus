@@ -335,6 +335,13 @@ class ReportFinding(BaseModel):
     #: One-line human summary of the exploitation outcome (tool used + observed
     #: effect), rendered beside the finding when present.
     exploit_summary: str | None = None
+    #: Counterevidence — "what we tried that did not work" (ARTEX honesty, WP B).
+    #: Explicit negative results for this observation (failed payloads, controls
+    #: that did not reproduce, reasons a stronger claim was withheld). Rendered
+    #: beside the finding so an honest gap is *printed, not hidden*. Distinct from
+    #: ``poc.negative_control`` (a control that *proves* the finding). Additive /
+    #: defaulted → snapshot-compatible.
+    counterevidence: list[str] = Field(default_factory=list)
 
 
 class ReportToolRun(BaseModel):
@@ -434,6 +441,13 @@ class ReportDocumentV1(BaseModel):
 
     started_at: str | None = None
     completed_at: str | None = None
+
+    #: Version of the evidence corpus this report was built against (WP B — ARTEX
+    #: stale-report detection). When it differs from the live evidence version at
+    #: render/export time, a "written against older evidence" banner is printed.
+    #: The comparison is the single ``proof_strength.evidence_version_is_stale``
+    #: predicate shared by the report and every exporter so they never disagree.
+    evidence_version: str | None = None
 
     # Scope / limits
     scope_summary: dict[str, Any] = Field(default_factory=dict)
@@ -627,6 +641,7 @@ def build_report_document(
     nuclei_profile: str | None = None,
     started_at: str | None = None,
     completed_at: str | None = None,
+    evidence_version: str | None = None,
     scope_summary: dict[str, Any] | None = None,
     profile_limits: dict[str, Any] | None = None,
     tool_runs: list[ReportToolRun] | None = None,
@@ -690,6 +705,7 @@ def build_report_document(
         nuclei_profile=nuclei_profile,
         started_at=started_at,
         completed_at=completed_at,
+        evidence_version=evidence_version,
         scope_summary=scope_summary or {},
         profile_limits=profile_limits or {},
         tool_runs=list(tool_runs or []),

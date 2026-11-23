@@ -2,6 +2,7 @@
 {# VHL-004 — main narrative order; executive lens (ARG-031) key order: ``valhalla_executive_section_order`` in Jinja. #}
 {% block report_body %}
 {% if tier == 'valhalla' %}
+    {% include "partials/valhalla/stale_evidence_banner.html.j2" %}
     {% include "partials/valhalla/sections_01_02_title_executive.html.j2" %}
     {% include "partials/valhalla/sections_03_05_objectives_methodology.html.j2" %}
     {% include "partials/valhalla/section_06_results_overview.html.j2" %}

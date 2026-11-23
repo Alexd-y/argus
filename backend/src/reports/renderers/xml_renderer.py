@@ -90,6 +90,7 @@ def render_xml(doc: ReportDocumentV1) -> str:
         "nuclei_profile",
         "started_at",
         "completed_at",
+        "evidence_version",
         "generated_at",
     ):
         _text(meta, tag, getattr(doc, tag))
@@ -117,6 +118,8 @@ def render_xml(doc: ReportDocumentV1) -> str:
         _list_el(fe, "taint_path", f.taint_path, "step")
         _text(fe, "payload_attempted", f.payload_attempted)
         _text(fe, "payload_successful", f.payload_successful)
+        # Counterevidence (WP B / ARTEX honesty): what was tried that did not work.
+        _list_el(fe, "counterevidence", f.counterevidence, "item")
         # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
         _text(fe, "exploit_demonstrated", "true" if f.exploit_demonstrated else None)
         _text(fe, "exploit_summary", f.exploit_summary)

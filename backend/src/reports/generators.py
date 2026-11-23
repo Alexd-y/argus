@@ -54,6 +54,7 @@ from src.reports.limits import (
     cap_with_overflow,
     overflow_note,
 )
+from src.reports.proof_strength import build_finding_proof_strength
 from src.reports.report_quality_gate import (
     classify_evidence,
     score_evidence_quality,
@@ -1343,6 +1344,11 @@ def _finding_to_dict(
         "evidence_classification": _effective_evidence_classification(f),
         "is_provable": bool(getattr(f, "is_provable", True)),
         "unconfirmed_reason": getattr(f, "unconfirmed_reason", None),
+        # Proof-strength honesty block (WP B / ARTEX): PoE level, three-state
+        # (present/missing/unavailable), confidence rationale, counterevidence and
+        # bound-evidence count. Lookup/shaping errors degrade to UNAVAILABLE, never
+        # a blank or "not vulnerable" — rendered by partials/valhalla/proof_strength.
+        "proof_strength": build_finding_proof_strength(f).as_dict(),
     }
     oc = getattr(f, "owasp_category", None)
     if oc is not None:
@@ -2601,6 +2607,11 @@ def generate_csv(
             "retest_status",
             "is_provable",
             "unconfirmed_reason",
+            # Proof-strength honesty columns (WP B / ARTEX).
+            "proof_state",
+            "proof_poe_level",
+            "bound_evidence",
+            "counterevidence",
         ]
     )
     for f in csv_findings:
@@ -2612,6 +2623,7 @@ def generate_csv(
         vs = getattr(f, "validation_status", "unverified")
         status = str(ec or vs or "candidate").upper()
         provable = is_provable_from_raw(f)
+        ps = build_finding_proof_strength(f)
         row = [
             data.report_id or "",
             data.scan_id or "",
@@ -2670,6 +2682,12 @@ def generate_csv(
             _safe_attr(f, "retest_result") or "",
             "true" if provable else "false",
             ("" if provable else (unconfirmed_reason(f) or "")),
+            # Proof-strength honesty (WP B): three-state + PoE + bound count +
+            # counterevidence. UNAVAILABLE on lookup error, never blank-as-safe.
+            ps.state.value,
+            ps.poe_level,
+            str(ps.bound_evidence_count),
+            "; ".join(ps.counterevidence),
         ]
         for i in range(len(row)):
             if row[i] is None or (isinstance(row[i], str) and not row[i].strip()):

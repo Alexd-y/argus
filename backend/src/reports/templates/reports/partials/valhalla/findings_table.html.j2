@@ -94,6 +94,8 @@
                     {% endif %}
                 </div>
 
+                {% include "partials/valhalla/proof_strength.html.j2" %}
+
                 {% if row.remediation_text is defined and row.remediation_text %}
                 <div class="finding-block">
                     <h4>Recommended remediation</h4>

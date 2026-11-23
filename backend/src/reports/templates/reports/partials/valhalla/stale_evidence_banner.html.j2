@@ -1,0 +1,12 @@
+{# WP B — stale-evidence banner (ARTEX stale-report detection).                        #}
+{# Prints an explicit "written against older evidence" notice, driven by the single    #}
+{# shared predicate src.reports.proof_strength.stale_banner (same predicate the         #}
+{# exporters use, so report and export never disagree). Uses the existing .panel theme  #}
+{# class; no colour/font change. Renders nothing when not stale.                        #}
+{% set banner = evidence_stale_banner if evidence_stale_banner is defined else none %}
+{% if banner %}
+<div class="panel stale-evidence-banner" role="note">
+    <strong>Evidence version notice.</strong>
+    {{ banner.message | e }}
+</div>
+{% endif %}

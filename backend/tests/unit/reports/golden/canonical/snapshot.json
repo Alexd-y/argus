@@ -55,6 +55,7 @@
       "size": null
     }
   ],
+  "evidence_version": null,
   "execution_mode": "production",
   "exploit_chains": [],
   "failures": [],
@@ -69,6 +70,7 @@
       "component": null,
       "confidence": 0.95,
       "confirmation_class": null,
+      "counterevidence": [],
       "cvss_score": null,
       "cvss_vector": null,
       "cvss_version": null,
@@ -123,6 +125,7 @@
       "component": null,
       "confidence": 0.95,
       "confirmation_class": null,
+      "counterevidence": [],
       "cvss_score": null,
       "cvss_vector": null,
       "cvss_version": null,
@@ -175,6 +178,7 @@
       "component": null,
       "confidence": 0.5,
       "confirmation_class": null,
+      "counterevidence": [],
       "cvss_score": null,
       "cvss_vector": null,
       "cvss_version": null,
@@ -415,7 +419,7 @@
     }
   ],
   "skipped_reasons": [],
-  "snapshot_hash": "d1aba3f66d511703b3b857e50e2a7e7bb5119832054faae26c3b0df780cd1aa1",
+  "snapshot_hash": "3fcd82ab8ba3c8a0743cd8f8a5d72c8cca392f390fcdbe85096ee018943271c7",
   "started_at": null,
   "surface_inventory": [
     {

@@ -95,6 +95,9 @@ def _render_finding_html(parts: list[str], f) -> None:  # noqa: ANN001 - ReportF
         parts.append(f"<li>taint_path: {escape(' → '.join(f.taint_path))}</li>")
     _li(parts, "payload_attempted", f.payload_attempted)
     _li(parts, "payload_successful", f.payload_successful)
+    # Counterevidence (WP B / ARTEX honesty): what was tried that did not work.
+    if f.counterevidence:
+        parts.append(f"<li>counterevidence: {escape('; '.join(f.counterevidence))}</li>")
     # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
     if f.exploit_demonstrated:
         parts.append("<li>exploit_demonstrated: <code>true</code></li>")
@@ -546,6 +549,7 @@ def render_html(doc: ReportDocumentV1) -> str:
         ("nuclei_profile", doc.nuclei_profile),
         ("started_at", doc.started_at),
         ("completed_at", doc.completed_at),
+        ("evidence_version", doc.evidence_version),
         ("schema_version", doc.schema_version),
         ("snapshot_hash", doc.snapshot_hash),
         ("generated_at", doc.generated_at),

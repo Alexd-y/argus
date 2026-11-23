@@ -74,11 +74,7 @@ def _cvss_cell(f) -> str | None:  # noqa: ANN001 - ReportFinding
     if f.cvss_vector:
         ver = f.cvss_version or "CVSS"
         prefix = f"{score} " if score is not None else ""
-        body = (
-            f"({ver}/{f.cvss_vector})"
-            if ":" not in str(f.cvss_vector)
-            else f"({f.cvss_vector})"
-        )
+        body = f"({ver}/{f.cvss_vector})" if ":" not in str(f.cvss_vector) else f"({f.cvss_vector})"
         return f"{prefix}{body}"
     return f"{score} (severity_basis: heuristic — no vector)"
 
@@ -155,6 +151,9 @@ def _render_finding_md(lines: list[str], f, index: int) -> None:  # noqa: ANN001
         lines.append("| Taint path | " + _esc_md(" → ".join(f.taint_path)) + " |")
     _mrow(lines, "Payload (попытка)", f.payload_attempted)
     _mrow(lines, "Payload (успех)", f.payload_successful)
+    # Counterevidence (WP B / ARTEX honesty): what was tried that did not work.
+    if f.counterevidence:
+        lines.append("| Контр-доказательства | " + _esc_md("; ".join(f.counterevidence)) + " |")
     # Exploitation outcome (C2): proven-exploitable marker + one-line summary.
     if f.exploit_demonstrated:
         lines.append("| Эксплуатация | подтверждена |")
@@ -541,6 +540,7 @@ def render_markdown(doc: ReportDocumentV1) -> str:
         ("nuclei_profile", doc.nuclei_profile),
         ("started_at", doc.started_at),
         ("completed_at", doc.completed_at),
+        ("evidence_version", doc.evidence_version),
     ):
         if value not in (None, ""):
             lines.append(f"- {label}: `{value}`")

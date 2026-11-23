@@ -1,0 +1,36 @@
+{# WP B — proof-strength honesty block (ported from ARTEX report/quality.go).        #}
+{# Renders the three-state proof-strength row for a finding using the EXISTING theme   #}
+{# classes (.finding-block / .panel / .finding-poc-block). No colour/font changes.     #}
+{# Expects `row` in scope with an optional `proof_strength` dict:                       #}
+{#   {state, poe_level, verification_status, verification_note, confidence_rationale,   #}
+{#    counterevidence[], bound_evidence_count, label}.                                  #}
+{# An honest gap is printed, never hidden; a lookup error renders as                    #}
+{# "proof strength unavailable", never "not vulnerable" / "unverified".                 #}
+{% set ps = row.proof_strength if row.proof_strength is defined else none %}
+{% if ps %}
+<div class="finding-block finding-proof-strength">
+    <h4>Proof strength</h4>
+    <div class="panel proof-strength proof-strength-{{ (ps.state or 'missing') | lower | e }}">
+        <p class="proof-strength-head">
+            <strong>{{ (ps.label or 'proof strength') | e }}</strong>
+            {% if ps.poe_level %}<span class="proof-poe"> · PoE: {{ ps.poe_level | e }}</span>{% endif %}
+        </p>
+        <ul class="proof-strength-bullets">
+            {% if ps.verification_status %}
+            <li>Verification status: {{ ps.verification_status | e }}{% if ps.verification_note %} — {{ ps.verification_note | e }}{% endif %}</li>
+            {% endif %}
+            {% if ps.confidence_rationale %}
+            <li>Confidence rationale: {{ ps.confidence_rationale | e }}</li>
+            {% endif %}
+            <li>Bound evidence: {{ ps.bound_evidence_count if ps.bound_evidence_count is not none else 0 }}</li>
+            {% if ps.counterevidence %}
+            <li>Counterevidence (what we tried that did not work):
+                <ul class="proof-counterevidence">
+                    {% for c in ps.counterevidence %}<li>{{ c | e }}</li>{% endfor %}
+                </ul>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+{% endif %}

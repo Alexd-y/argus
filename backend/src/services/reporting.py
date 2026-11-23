@@ -75,6 +75,7 @@ from src.reports.generators import (
     build_report_data_from_scan_report,
     safe_phase_summary_text,
 )
+from src.reports.proof_strength import stale_banner
 from src.reports.report_quality_gate import (
     build_report_quality_gate,
     is_http_header_gap_topic,
@@ -1783,6 +1784,16 @@ class ReportGenerator:
             "phase_outputs_count": len(data.phase_outputs),
             "findings": confirmed_rows,
             "unconfirmed_findings": unconfirmed_rows,
+            # WP B — stale-evidence banner via the single shared predicate. Shows the
+            # "written against older evidence" notice only when both the built-against
+            # and the current evidence versions are known and differ (honest, not
+            # alarmist). The live current version is threaded by a re-generation that
+            # runs against a newer evidence corpus; absent that, both are None → no
+            # banner. One predicate for report + export so they never disagree.
+            "evidence_stale_banner": stale_banner(
+                getattr(data, "evidence_version", None),
+                getattr(data, "current_evidence_version", None),
+            ),
             "owasp_compliance_rows": build_owasp_compliance_rows(
                 confirmed_rows,
                 owasp_summary=data.owasp_summary if data.owasp_summary else None,

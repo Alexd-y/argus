@@ -181,6 +181,39 @@ def find_stop_list_violations(text: str) -> list[str]:
     return [phrase for phrase in STOP_LIST_PHRASES if phrase in lowered]
 
 
+#: Explicit marker a renderer must emit for an UNAVAILABLE proof-strength row
+#: (``src.reports.proof_strength``). Kept here so the gate and the renderers agree.
+PROOF_UNAVAILABLE_MARKER = "proof strength unavailable"
+
+
+def proof_state_release_blockers(*, proof_states: list[str], report_text: str) -> list[str]:
+    """Three-state honesty release rule (WP B — ARTEX ``report/quality.go``).
+
+    A proof-strength *lookup error* (state ``unavailable``) must be printed as such;
+    it may never be silently dropped or rendered as "not vulnerable". Given the
+    per-finding proof states and the rendered report text, return a blocking reason
+    when an ``unavailable`` state is present without its explicit marker, or when the
+    report conflates that availability error with a "not vulnerable" verdict.
+    """
+    blockers: list[str] = []
+    n_unavailable = sum(1 for s in proof_states if str(s).strip().lower() == "unavailable")
+    if not n_unavailable:
+        return blockers
+    lowered = report_text.lower()
+    marker_present = PROOF_UNAVAILABLE_MARKER in lowered
+    if not marker_present:
+        blockers.append(
+            f"three-state: {n_unavailable} finding(s) have an UNAVAILABLE proof-strength row "
+            f"but the report prints no '{PROOF_UNAVAILABLE_MARKER}' marker"
+        )
+    if "not vulnerable" in lowered and not marker_present:
+        blockers.append(
+            "three-state: proof-strength UNAVAILABLE must not render as 'not vulnerable' "
+            "(a lookup error is a data-availability problem, not a safety verdict)"
+        )
+    return blockers
+
+
 _UNCLASSIFIED_RE = re.compile(r"unclassified|not[_ ]assessed|cannot be interpreted", re.IGNORECASE)
 
 
@@ -257,12 +290,14 @@ def valhalla_release_blockers(
 
 
 __all__ = [
+    "PROOF_UNAVAILABLE_MARKER",
     "STOP_LIST_PHRASES",
     "VALHALLA_REQUIRED_SOURCES",
     "CompletenessReport",
     "CompletenessViolation",
     "RequiredSource",
     "find_stop_list_violations",
+    "proof_state_release_blockers",
     "unclassified_findings_in_registry",
     "validate_valhalla_completeness",
     "valhalla_release_blockers",
